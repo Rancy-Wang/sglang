@@ -410,6 +410,8 @@ class Scheduler(
         self.cur_batch: Optional[ScheduleBatch] = None
         # The last forward batch
         self.last_batch: Optional[ScheduleBatch] = None
+        # The batch that cannot be scheduled
+        self.batch_not_need: Optional[ScheduleBatch] = None
         self.forward_ct = 0
         self.forward_ct_decode = 0
         self.num_generated_tokens = 0
@@ -1453,6 +1455,15 @@ class Scheduler(
             swa_evictable_size,
         )
 
+    def check_batch_status(self, batch: ScheduleBatch):
+        """Check the status of requests in the batch and move not-need requests into batch-not-need."""
+        self.batch_not_need.merge_batch(batch)
+        keep_indices = [i for (i, req) in enumerate(batch.reqs) if req.status == "need"]
+        batch.filter_batch(keep_indices=keep_indices)
+        not_keep_indices = [i for (i, req) in enumerate(self.batch_not_need.reqs) if req.status == "notneed"]
+        self.batch_not_need.filter_batch(keep_indices=not_keep_indices)
+        return batch
+
     def get_next_batch_to_run(self) -> Optional[ScheduleBatch]:
         # Merge the prefill batch into the running batch
         chunked_req_to_exclude = set()
@@ -1485,6 +1496,8 @@ class Scheduler(
                 else:
                     # Merge running_batch with prefill batch
                     self.running_batch.merge_batch(self.last_batch)
+                if self.batch_not_need is not None:
+                    self.running_batch = self.check_batch_status(self.running_batch)
 
         new_batch = self.get_new_batch_prefill()
 
@@ -1502,6 +1515,8 @@ class Scheduler(
         else:
             # Run decode
             if not self.running_batch.is_empty():
+                if self.batch_not_need is not None:
+                    self.running_batch = self.check_batch_status(self.running_batch)
                 self.running_batch = self.update_running_batch(self.running_batch)
                 ret = self.running_batch if not self.running_batch.is_empty() else None
             else:
@@ -1534,6 +1549,9 @@ class Scheduler(
             self.running_batch.batch_is_full or len(self.waiting_queue) == 0
         ) and self.chunked_req is None:
             return None
+        
+        waiting_queue_tmp = self.waiting_queue
+        self.waiting_queue = [req for req in self.waiting_queue if req.status == "need"]
 
         running_bs = len(self.running_batch.reqs)
         # Ignore the check if self.chunked_req is not None.
@@ -1623,7 +1641,7 @@ class Scheduler(
                 req.queue_time_end = time.perf_counter()
 
         self.waiting_queue = [
-            x for x in self.waiting_queue if x not in set(can_run_list)
+            x for x in waiting_queue_tmp if x not in set(can_run_list)
         ]
 
         if adder.new_chunked_req is not None:
@@ -1653,6 +1671,12 @@ class Scheduler(
             new_batch.hicache_consumer_index = (
                 self.tree_cache.ready_to_load_host_cache()
             )
+
+        # For reference model, we will change prefix indices
+        for req in new_batch.reqs:
+            if req.last_cached_loc is not None:
+                req.prefix_indices = torch.tensor(req.last_cached_loc, device=new_batch.device)
+                req.extend_input_len = len(req.fill_ids)-len(req.prefix_indices)
 
         new_batch.prepare_for_extend()
 

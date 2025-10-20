@@ -434,6 +434,9 @@ class Req:
         bootstrap_room: Optional[int] = None,
         data_parallel_rank: Optional[int] = None,
         vocab_size: Optional[int] = None,
+        status: Optional[str] = "need",
+        last_cached_loc: Optional[List[int]] = None,
+        last_llm_loc: Optional[int] = None,
     ):
         # Input and output info
         self.rid = rid
@@ -484,6 +487,9 @@ class Req:
         self.stream = stream
         self.eos_token_ids = eos_token_ids
         self.vocab_size = vocab_size
+        self.status = status
+        self.last_cached_loc = last_cached_loc
+        self.last_llm_loc = last_llm_loc
 
         # For incremental decoding
         # ----- | --------- read_ids -------|
@@ -1273,6 +1279,12 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             out_cache_loc = self.alloc_paged_token_slots_extend(
                 prefix_lens_tensor, seq_lens_tensor, last_loc, extend_num_tokens
             )
+        
+        tmp_index = 0
+        for req in self.reqs:
+            if req.last_cached_loc is not None:
+                req.last_cached_loc.extend(out_cache_loc[tmp_index : tmp_index + req.extend_input_len].tolist())
+            tmp_index += req.extend_input_len
 
         # Set fields
         self.input_ids = input_ids_tensor
@@ -1624,13 +1636,11 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
                 i
                 for i in range(len(self.reqs))
                 if not self.reqs[i].finished()
-                and self.reqs[i] not in chunked_req_to_exclude
+                and self.reqs[i] not in chunked_req_to_exclude and self.reqs[i].status != "finished"
             ]
 
         if keep_indices is None or len(keep_indices) == 0:
-            # Filter out all requests
-            self.reqs = []
-            return
+            keep_indices = []
 
         if len(keep_indices) == len(self.reqs):
             # No need to filter
@@ -1652,7 +1662,8 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
         self.orig_seq_lens = self.orig_seq_lens[keep_indices_device]
         self.out_cache_loc = None
         self.seq_lens_sum = self.seq_lens.sum().item()
-        self.output_ids = self.output_ids[keep_indices_device]
+        if self.output_ids is not None:
+            self.output_ids = self.output_ids[keep_indices_device]
         self.return_logprob = any(req.return_logprob for req in self.reqs)
         if self.return_logprob:
             self.top_logprobs_nums = [self.top_logprobs_nums[i] for i in keep_indices]
@@ -1667,7 +1678,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
         self.sampling_info.filter_batch(keep_indices, keep_indices_device)
         if self.spec_info:
             self.spec_info.filter_batch(keep_indices_device)
-
+    
     def merge_batch(self, other: "ScheduleBatch"):
         # Penalizer orchestrator must be merged before Batch.reqs is merged. This is because
         # orchestrator.merge() depends on Batch.reqs during preparation of each penalizers, so it
@@ -1797,6 +1808,31 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             can_run_dp_cuda_graph=self.can_run_dp_cuda_graph,
             is_extend_in_batch=self.is_extend_in_batch,
             is_prefill_only=self.is_prefill_only,
+        )
+
+    def deep_copy(self):
+        return ScheduleBatch(
+            reqs=copy.deepcopy(self.reqs),
+            model_config=self.model_config,
+            forward_mode=self.forward_mode,
+            out_cache_loc=self.out_cache_loc.clone() if self.out_cache_loc is not None else None,
+            return_logprob=self.return_logprob,
+            decoding_reqs=copy.deepcopy(self.decoding_reqs),
+            spec_algorithm=self.spec_algorithm,
+            global_num_tokens=copy.deepcopy(self.global_num_tokens),
+            global_num_tokens_for_logprob=copy.deepcopy(self.global_num_tokens_for_logprob),
+            can_run_dp_cuda_graph=self.can_run_dp_cuda_graph,
+            is_extend_in_batch=self.is_extend_in_batch,
+            is_prefill_only=self.is_prefill_only,
+            req_to_token_pool=self.req_to_token_pool,
+            token_to_kv_pool_allocator=self.token_to_kv_pool_allocator,
+            tree_cache=self.tree_cache,
+            device=self.device,
+            enable_overlap=self.enable_overlap,
+            sampling_info=self.sampling_info,
+            seq_lens=self.seq_lens.clone() if self.seq_lens is not None else None,
+            orig_seq_lens=self.orig_seq_lens.clone() if self.orig_seq_lens is not None else None,
+            req_pool_indices=self.req_pool_indices.clone() if self.req_pool_indices is not None else None,
         )
 
     def _evict_tree_cache_if_needed(self, num_tokens: int):
