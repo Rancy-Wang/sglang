@@ -1672,12 +1672,14 @@ class Scheduler(
                 self.tree_cache.ready_to_load_host_cache()
             )
 
+        """
         # For reference model, we will change prefix indices
         for req in new_batch.reqs:
             if req.last_cached_loc is not None:
                 req.prefix_indices = torch.tensor(req.last_cached_loc, device=new_batch.device)
                 req.extend_input_len = len(req.fill_ids)-len(req.prefix_indices)
-
+        """
+        
         new_batch.prepare_for_extend()
 
         # Mixed-style chunked prefill

@@ -661,6 +661,8 @@ class Req:
                 ) = tree_cache.match_prefix(
                     key=self.adjust_max_prefix_ids(),
                 )
+        if self.last_cached_loc is not None:
+            self.prefix_indices = torch.tensor(self.last_cached_loc, device=self.device)
         self.extend_input_len = len(self.fill_ids) - len(self.prefix_indices)
 
     def adjust_max_prefix_ids(self):
@@ -1144,7 +1146,16 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
 
         # Allocate req slots
         bs = len(self.reqs)
-        req_pool_indices = self.alloc_req_slots(bs)
+
+        is_call_llm = False
+        for req in self.reqs:
+            if req.last_cached_loc is not None:
+                is_call_llm = True
+                break
+        if is_call_llm:
+            req_pool_indices = [req.rid for req in self.reqs]
+        else:
+            req_pool_indices = self.alloc_req_slots(bs)
 
         # Init tensors
         reqs = self.reqs
