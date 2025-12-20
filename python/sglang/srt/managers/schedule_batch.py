@@ -769,6 +769,9 @@ class Req:
         self.is_chunked = 0
         self.req_pool_idx = None
         self.already_computed = 0
+        if self.last_cached_loc is not None:
+            self.last_cached_loc = []
+        self.last_llm_loc = None
 
     def offload_kv_cache(self, req_to_token_pool, token_to_kv_pool_allocator):
         token_indices = req_to_token_pool.req_to_token[
@@ -1149,11 +1152,16 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
 
         is_call_llm = False
         for req in self.reqs:
-            if req.last_cached_loc is not None:
+            if req.req_pool_idx is not None:
                 is_call_llm = True
                 break
         if is_call_llm:
-            req_pool_indices = [req.rid for req in self.reqs]
+            req_pool_indices = []
+            for req in self.reqs:
+                if req.req_pool_idx is not None:
+                    req_pool_indices.append(req.req_pool_idx)
+                else:
+                    req_pool_indices += self.alloc_req_slots(1)
         else:
             req_pool_indices = self.alloc_req_slots(bs)
 
