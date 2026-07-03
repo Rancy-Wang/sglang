@@ -128,6 +128,7 @@ class DDTreeVerifyInput(SpecInput):
                 paged_kernel_lens_sum * self.draft_token_num
                 + (self.draft_token_num**2) * bs
             )
+            mask = mask.contiguous().view(-1).to(dtype=torch.bool)
             if mask.numel() < mask_numel:
                 mask = torch.cat(
                     [
@@ -141,7 +142,8 @@ class DDTreeVerifyInput(SpecInput):
                     ],
                     dim=0,
                 )
-                self.custom_mask = mask
+            else:
+                mask = mask[:mask_numel]
         return kv_indices, cum_kv_seq_len, qo_indptr, mask
 
     def verify(self, *, batch, logits_output, page_size, model_runner=None):
@@ -149,6 +151,7 @@ class DDTreeVerifyInput(SpecInput):
             follow_verified_tree,
         )
         from sglang.srt.speculative.dflash_utils import (
+            compute_dflash_correct_drafts_and_bonus,
             is_dflash_sampling_verify_available,
         )
 
@@ -190,27 +193,25 @@ class DDTreeVerifyInput(SpecInput):
                 ]
                 self.next_tokens = bonus
             else:
-                # Spine greedy: chain comparison on GPU.
-                candidates = target_predict[:, :-1]
-                targets = target_predict[:, 1:]
-                matches = (candidates == targets).to(torch.int32)
-                correct = matches.cumprod(dim=1).sum(dim=1)
+                candidates = self.draft_token.view(bs, self.draft_token_num)
+                correct, bonus = compute_dflash_correct_drafts_and_bonus(
+                    candidates=candidates,
+                    target_predict=target_predict,
+                )
                 commit_lens = (correct + 1).tolist()
                 num_correct_drafts_per_req = [max(0, cl - 1) for cl in commit_lens]
                 self.accepted_indices = [list(range(cl)) for cl in commit_lens]
-                next_tokens_list = [
-                    int(target_predict[b_i, cl - 1]) if cl > 0
-                    else int(target_predict[b_i, 0])
-                    for b_i, cl in enumerate(commit_lens)
-                ]
-                self.next_tokens = torch.tensor(
-                    next_tokens_list, dtype=torch.long, device=device
-                )
+                self.next_tokens = bonus
         else:
             # Full tree path: greedy-only for now (tree sampling requires
             # sgl_kernel tree topology which is expensive to build per-step).
-            self.accepted_indices, self.next_tokens = follow_verified_tree(
-                self.child_maps, target_predict
+            (
+                self.accepted_indices,
+                self.next_tokens,
+                next_tokens_cpu,
+            ) = follow_verified_tree(self.child_maps, target_predict)
+            draft_tokens_cpu = (
+                self.draft_token.view(bs, self.draft_token_num).cpu().tolist()
             )
             commit_lens = []
             num_correct_drafts_per_req = []
@@ -218,14 +219,14 @@ class DDTreeVerifyInput(SpecInput):
                 accepted = self.accepted_indices[i]
                 appended = 0
                 for idx in accepted[1:]:
-                    token_id = int(self.draft_token[i * self.draft_token_num + idx])
+                    token_id = int(draft_tokens_cpu[i][idx])
                     req.output_ids.append(token_id)
                     appended += 1
                     req.update_finish_state()
                     if req.finished():
                         break
                 if not req.finished():
-                    bonus = int(self.next_tokens[i].item())
+                    bonus = int(next_tokens_cpu[i])
                     req.output_ids.append(bonus)
                     appended += 1
                     req.update_finish_state()
@@ -254,46 +255,99 @@ class DDTreeVerifyInput(SpecInput):
             commit_lens, dtype=torch.long, device=device
         )
 
-        # --- KV cache compaction (skip entirely if all paths are contiguous) ---
+        # --- KV cache retention ---
         if model_runner is not None:
-            # Fast check: if every accepted path is contiguous from 0, no compaction needed.
-            need_compaction = False
-            for accepted in self.accepted_indices:
-                if accepted != list(range(len(accepted))):
-                    need_compaction = True
-                    break
+            out_cache_loc_2d = batch.out_cache_loc.view(bs, self.draft_token_num)
 
-            if need_compaction:
-                model = model_runner.model
-                model_layers = getattr(model, "model", model)
-                model_layers = getattr(model_layers, "layers", None)
-                if model_layers is None:
-                    model_layers = []
+            # For the token-granular KV pool, SGLang accesses target KV through
+            # req_to_token indirection.  A branched DDTree path therefore does
+            # not need to physically compact KV slots; keep the accepted cache
+            # locations in generation order and free everything else.
+            if page_size == 1:
+                kept_locs: List[torch.Tensor] = []
+                free_locs: List[torch.Tensor] = []
 
-                from sglang.srt.speculative.ddtree_utils import compact_ddtree_kv_cache
-                token_to_kv_pool = model_runner.token_to_kv_pool
-                past_lengths = batch.seq_lens.clone()
+                for i, commit_len in enumerate(commit_lens):
+                    if commit_len <= 0:
+                        keep_t = torch.empty((0,), dtype=torch.long, device=device)
+                        keep_is_contiguous = True
+                    elif self.tree_is_spine:
+                        keep_t = None
+                        keep_is_contiguous = True
+                    else:
+                        keep = self.accepted_indices[i][:commit_len]
+                        if len(keep) != commit_len:
+                            raise RuntimeError(
+                                "DDTree accepted path shorter than commit_len: "
+                                f"accepted={self.accepted_indices[i]}, "
+                                f"commit_len={commit_len}."
+                            )
+                        keep_is_contiguous = keep == list(range(commit_len))
+                        keep_t = (
+                            None
+                            if keep_is_contiguous
+                            else torch.tensor(keep, dtype=torch.long, device=device)
+                        )
 
-                for layer in model_layers:
-                    attn_layer = layer.self_attn.attn
-                    compact_ddtree_kv_cache(
-                        token_to_kv_pool,
-                        attn_layer,
-                        batch.out_cache_loc.view(bs, self.draft_token_num),
-                        self.accepted_indices,
-                        past_lengths,
-                        self.actual_tree_sizes,
+                    row_locs = out_cache_loc_2d[i]
+                    if keep_is_contiguous:
+                        if commit_len > 0:
+                            kept_locs.append(row_locs[:commit_len])
+                        free_locs.append(row_locs[commit_len:])
+                    else:
+                        if keep_t.numel() > 0:
+                            kept_locs.append(row_locs.index_select(0, keep_t))
+
+                        free_mask = torch.ones(
+                            (self.draft_token_num,), dtype=torch.bool, device=device
+                        )
+                        if keep_t.numel() > 0:
+                            free_mask[keep_t] = False
+                        free_locs.append(row_locs[free_mask])
+
+                if free_locs:
+                    free_loc_tensor = (
+                        free_locs[0] if len(free_locs) == 1 else torch.cat(free_locs)
+                    )
+                    batch.token_to_kv_pool_allocator.free(free_loc_tensor)
+                batch.out_cache_loc = (
+                    kept_locs[0] if len(kept_locs) == 1 else torch.cat(kept_locs)
+                    if kept_locs
+                    else batch.out_cache_loc[:0]
+                )
+            else:
+                # Paged KV allocators free at page granularity.  Preserve the
+                # existing physical-compaction path here.
+                need_compaction = False
+                for accepted in self.accepted_indices:
+                    if accepted != list(range(len(accepted))):
+                        need_compaction = True
+                        break
+
+                if need_compaction:
+                    model = model_runner.model
+                    model_layers = getattr(model, "model", model)
+                    model_layers = getattr(model_layers, "layers", None)
+                    if model_layers is None:
+                        model_layers = []
+
+                    from sglang.srt.speculative.ddtree_utils import (
+                        compact_ddtree_kv_cache,
                     )
 
-            # Free uncommitted KV cache slots.
-            if page_size == 1:
-                out_cache_loc = batch.out_cache_loc.view(bs, self.draft_token_num)
-                keep_mask = (
-                    torch.arange(self.draft_token_num, device=device)[None, :]
-                    < commit_lens_tensor[:, None]
-                )
-                batch.token_to_kv_pool_allocator.free(out_cache_loc[~keep_mask])
-                batch.out_cache_loc = out_cache_loc[keep_mask]
+                    token_to_kv_pool = model_runner.token_to_kv_pool
+                    past_lengths = batch.seq_lens.clone()
+
+                    for layer in model_layers:
+                        attn_layer = layer.self_attn.attn
+                        compact_ddtree_kv_cache(
+                            token_to_kv_pool,
+                            attn_layer,
+                            out_cache_loc_2d,
+                            self.accepted_indices,
+                            past_lengths,
+                            self.actual_tree_sizes,
+                        )
 
             # Update req-level KV cache accounting.
             for req, commit_len in zip(batch.reqs, commit_lens, strict=True):
@@ -328,8 +382,23 @@ class DDTreeVerifyInput(SpecInput):
             hidden = hidden.view(bs, self.draft_token_num, -1)
             segments = []
             for i, n in enumerate(commit_lens):
-                segments.append(hidden[i, :n, :])
-            next_target_hidden = torch.cat(segments, dim=0)
+                if n <= 0:
+                    continue
+                if self.tree_is_spine:
+                    segments.append(hidden[i, :n, :])
+                else:
+                    keep = self.accepted_indices[i][:n]
+                    if keep == list(range(n)):
+                        segments.append(hidden[i, :n, :])
+                    else:
+                        keep_t = torch.tensor(keep, dtype=torch.long, device=device)
+                        segments.append(hidden[i].index_select(0, keep_t))
+            if not segments:
+                next_target_hidden = hidden[:0]
+            elif len(segments) == 1:
+                next_target_hidden = segments[0]
+            else:
+                next_target_hidden = torch.cat(segments, dim=0)
         else:
             next_target_hidden = None
 

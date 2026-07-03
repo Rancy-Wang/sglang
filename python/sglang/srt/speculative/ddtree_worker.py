@@ -69,6 +69,9 @@ class DDTreeWorker(DFlashWorker):
         self._tree_visibility_buf: torch.Tensor = torch.zeros(
             _max_bs, _mn, _mn, dtype=torch.bool, device=dev
         )
+        self._ddtree_vocab_id_cache_key = None
+        self._ddtree_org_token_ids: Optional[torch.Tensor] = None
+        self._ddtree_added_token_ids: Optional[torch.Tensor] = None
 
         if self.tp_rank == 0:
             logger.info(
@@ -112,40 +115,53 @@ class DDTreeWorker(DFlashWorker):
         )
 
         # --- 3) Spine-mode fast path: delegate to DFLASH verify. ---
-        if self.tree_budget <= self.block_size - 1:
+        if self.tree_budget <= self.block_size:
             # Spine mode: linear chain, identical to DFLASH.  Skip all DDTree
             # overhead (tree building, child_maps, custom masks) and reuse
             # DFLASH's battle-tested verify path with CUDA graph support.
             from sglang.srt.speculative.dflash_info import DFlashVerifyInput
+            from sglang.srt.speculative.dflash_utils import (
+                resolve_dflash_verify_mask_policy,
+            )
 
-            draft_tokens = self._greedy_sample_draft_tokens(
+            num_verify_tokens = min(self.tree_budget + 1, self.block_size)
+            draft_tokens = self._greedy_sample_from_vocab_parallel_head(
                 hidden_states=draft_hidden[:, 1:, :].reshape(-1, draft_hidden.shape[-1]),
                 lm_head=lm_head,
             ).view(bs, self.block_size - 1)
 
-            # Build verify IDs: [bonus, draft_0, ..., draft_{budget-1}]
+            # Build verify IDs: [bonus, draft_0, ...].  For budget==block_size,
+            # clamp to the DFLASH verify window so the comparison is exactly
+            # DFLASH-compatible.
             draft_ids = torch.zeros(
-                bs, self.max_tree_nodes, dtype=torch.long, device=batch.device
+                bs, num_verify_tokens, dtype=torch.long, device=batch.device
             )
             draft_ids[:, 0] = draft_input.bonus_tokens
-            draft_ids[:, 1:] = draft_tokens[:, : self.tree_budget]
+            draft_ids[:, 1:] = draft_tokens[:, : num_verify_tokens - 1]
 
             positions = torch.zeros(
-                bs, self.max_tree_nodes, dtype=torch.long, device=batch.device
+                bs, num_verify_tokens, dtype=torch.long, device=batch.device
             )
             positions[:, 0] = batch.seq_lens
             positions[:, 1:] = (
                 batch.seq_lens.unsqueeze(1)
-                + torch.arange(1, self.tree_budget + 1, device=batch.device)
+                + torch.arange(1, num_verify_tokens, device=batch.device)
             )
 
             verify_input = DFlashVerifyInput(
                 draft_token=draft_ids.reshape(-1),
                 positions=positions.reshape(-1),
-                draft_token_num=self.max_tree_nodes,
+                draft_token_num=num_verify_tokens,
                 capture_hidden_mode=CaptureHiddenMode.FULL,
             )
-            verify_input.prepare_for_verify(batch, self.page_size)
+            _, build_custom_mask = resolve_dflash_verify_mask_policy(
+                self.model_runner.attn_backend
+            )
+            verify_input.prepare_for_verify(
+                batch,
+                self.page_size,
+                build_custom_mask=build_custom_mask,
+            )
 
             batch.forward_mode = (
                 ForwardMode.TARGET_VERIFY
@@ -156,11 +172,29 @@ class DDTreeWorker(DFlashWorker):
             batch.return_hidden_states = False
             return
 
-        # --- 4) Full tree path (budget > L): compute logits, beam search, compile mask. ---
-        draft_logits = self._compute_draft_logits(
-            hidden_states=draft_hidden[:, 1:, :].reshape(-1, draft_hidden.shape[-1]),
-            lm_head=lm_head,
-        ).view(bs, self.block_size - 1, -1)
+        # --- 4) Full tree path (budget > block_size): compute TP-safe top-K
+        # proposal ids/logprobs, beam search, compile mask.
+        #
+        # DDTree Algorithm 1 uses K = min(B, |V|).  In practice |V| is much
+        # larger than the small budgets we tune here (especially B=32), so use
+        # B directly and let the local top-k helper clamp to the available shard
+        # size if needed.
+        proposal_topk = self.tree_budget
+        draft_top_log_probs, draft_top_token_ids = (
+            self._compute_draft_topk_log_probs_and_token_ids(
+                hidden_states=draft_hidden[:, 1:, :].reshape(
+                    -1, draft_hidden.shape[-1]
+                ),
+                lm_head=lm_head,
+                topk=proposal_topk,
+            )
+        )
+        draft_top_log_probs = draft_top_log_probs.view(
+            bs, self.block_size - 1, proposal_topk
+        )
+        draft_top_token_ids = draft_top_token_ids.view(
+            bs, self.block_size - 1, proposal_topk
+        )
 
         (
             node_token_ids,
@@ -169,8 +203,11 @@ class DDTreeWorker(DFlashWorker):
             child_maps,
             visibility,
             actual_tree_sizes,
+            actual_tree_sizes_cpu,
         ) = build_ddtree_tree(
-            draft_logits=draft_logits,
+            draft_logits=None,
+            draft_top_log_probs=draft_top_log_probs,
+            draft_top_token_ids=draft_top_token_ids,
             tree_budget=self.tree_budget,
             device=batch.device,
             _out_node_token_ids=self._tree_node_token_ids_buf,
@@ -193,8 +230,9 @@ class DDTreeWorker(DFlashWorker):
             past_lengths=batch.seq_lens,
             tree_budget=self.tree_budget,
             actual_tree_sizes=actual_tree_sizes,
-            dtype=torch.bfloat16,
             device=batch.device,
+            past_lens_cpu=batch.seq_lens_cpu.tolist(),
+            actual_sizes_cpu=actual_tree_sizes_cpu,
         )
 
         tree_is_spine = all(
@@ -377,63 +415,37 @@ class DDTreeWorker(DFlashWorker):
             can_run_cuda_graph=can_run_cuda_graph,
         )
 
-    def _greedy_sample_draft_tokens(
+    def _compute_draft_topk_log_probs_and_token_ids(
         self,
         hidden_states: torch.Tensor,  # [total_tokens, hidden]
         lm_head,
-    ) -> torch.Tensor:
-        """Return argmax token IDs (long).  Used by spine fast path."""
-        tp_group = get_tp_group()
-        tp_size = int(tp_group.world_size)
-        weight = lm_head.weight
-        weight_dtype = weight.dtype
+        topk: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return TP-safe draft top-k log-probs and true global token ids.
 
-        if hidden_states.dtype != weight_dtype:
-            hidden_states = hidden_states.to(weight_dtype)
-
-        local_logits = torch.mm(hidden_states, weight.t())
-
-        if tp_size == 1:
-            return local_logits.argmax(dim=-1)
-
-        # TP > 1: per-rank argmax + all-gather of max/argmax
-        shard = lm_head.shard_indices
-        local_max, local_argmax = local_logits.max(dim=-1)
-
-        gathered_max = torch.empty(
-            tp_size, hidden_states.shape[0],
-            dtype=local_max.dtype, device=local_max.device,
-        )
-        tp_group.all_gather_into_tensor(gathered_max, local_max)
-        global_max_idx = gathered_max.argmax(dim=0)
-
-        gathered_argmax = torch.empty(
-            tp_size, hidden_states.shape[0],
-            dtype=local_argmax.dtype, device=local_argmax.device,
-        )
-        tp_group.all_gather_into_tensor(gathered_argmax, local_argmax)
-        global_argmax = gathered_argmax[
-            global_max_idx, torch.arange(hidden_states.shape[0], device=hidden_states.device)
-        ]
-
-        # Adjust for per-rank vocab shard offset
-        num_org = int(shard.num_org_elements)
-        return torch.where(
-            global_argmax < num_org,
-            global_argmax + int(shard.padding_offset),
-            global_argmax - num_org + int(shard.org_vocab_start_index),
-        )
-
-    def _compute_draft_logits(
-        self,
-        hidden_states: torch.Tensor,
-        lm_head,
-    ) -> torch.Tensor:
-        """Compute global draft logits (raw, not log-softmax).
-
-        Returns raw float logits.  build_ddtree_tree will compute log-probs
-        itself via logsumexp, so we skip the exp→log chain here.
+        This follows DFLASH's vocab-parallel greedy sampling pattern: each rank
+        first converts local candidate indices into global token ids, then TP
+        ranks exchange only candidate scores/ids.  DDTree must never use the
+        concatenated TP-shard column number as a token id, because that column
+        number includes per-rank padding layout rather than tokenizer ids.
         """
+        if topk <= 0:
+            raise ValueError(f"DDTree topk must be positive, got {topk}.")
+
+        if hidden_states.numel() == 0:
+            return (
+                torch.empty(
+                    (0, topk),
+                    dtype=torch.float32,
+                    device=hidden_states.device,
+                ),
+                torch.empty(
+                    (0, topk),
+                    dtype=torch.long,
+                    device=hidden_states.device,
+                ),
+            )
+
         tp_group = get_tp_group()
         tp_size = int(tp_group.world_size)
 
@@ -444,37 +456,147 @@ class DDTreeWorker(DFlashWorker):
         if hidden_states.dtype != weight_dtype:
             hidden_states = hidden_states.to(weight_dtype)
 
-        local_logits = torch.mm(hidden_states, weight.t())
-
-        # Fast path: single-GPU — return raw logits directly.
-        if tp_size == 1:
-            return local_logits.float()
-
-        # TP > 1: compute global log-probs (the exp→log path is needed
-        # here because vocab shard sizes may differ across ranks).
         num_org = int(shard.num_org_elements)
         num_org_padded = int(shard.num_org_elements_padded)
         num_added = int(shard.num_added_elements)
+        org_vocab_start = int(shard.org_vocab_start_index)
+        added_vocab_start = int(shard.added_vocab_start_index)
 
-        local_max = local_logits.amax(dim=-1, keepdim=True)
-        gathered_max = torch.empty(
-            tp_size, hidden_states.shape[0], dtype=local_max.dtype, device=local_max.device
+        num_tokens = int(hidden_states.shape[0])
+        device = hidden_states.device
+
+        vocab_id_cache_key = (
+            str(device),
+            num_org,
+            org_vocab_start,
+            num_added,
+            added_vocab_start,
         )
-        tp_group.all_gather_into_tensor(gathered_max, local_max.squeeze(-1))
-        global_max = gathered_max.amax(dim=0, keepdim=True)
+        if self._ddtree_vocab_id_cache_key != vocab_id_cache_key:
+            self._ddtree_org_token_ids = (
+                torch.arange(num_org, dtype=torch.long, device=device)
+                + org_vocab_start
+                if num_org > 0
+                else None
+            )
+            self._ddtree_added_token_ids = (
+                torch.arange(num_added, dtype=torch.long, device=device)
+                + added_vocab_start
+                if num_added > 0
+                else None
+            )
+            self._ddtree_vocab_id_cache_key = vocab_id_cache_key
 
-        local_exp = torch.exp(local_logits - global_max.unsqueeze(-1))
+        local_logits_parts = []
+        local_token_id_parts = []
 
-        gathered_exp = torch.empty(
-            tp_size, hidden_states.shape[0], local_logits.shape[-1],
-            dtype=local_exp.dtype, device=local_exp.device,
-        )
-        tp_group.all_gather_into_tensor(gathered_exp, local_exp)
-        global_sum = gathered_exp.sum(dim=(0, 2), keepdim=True)
+        if num_org > 0:
+            base_logits = torch.mm(hidden_states, weight[:num_org].t()).float()
+            base_ids = self._ddtree_org_token_ids
+            local_logits_parts.append(base_logits)
+            local_token_id_parts.append(base_ids)
 
-        global_logits = torch.cat(
-            [gathered_exp[i] for i in range(tp_size)], dim=-1
-        )
-        global_log_probs = torch.log(global_logits / global_sum.unsqueeze(-1))
+        if num_added > 0:
+            added_slice_start = num_org_padded
+            added_slice_end = num_org_padded + num_added
+            added_logits = torch.mm(
+                hidden_states, weight[added_slice_start:added_slice_end].t()
+            ).float()
+            added_ids = self._ddtree_added_token_ids
+            local_logits_parts.append(added_logits)
+            local_token_id_parts.append(added_ids)
 
-        return global_log_probs.float()
+        if len(local_logits_parts) == 1:
+            local_logits = local_logits_parts[0]
+            local_token_ids = local_token_id_parts[0]
+            local_max = local_logits.amax(dim=-1)
+        elif local_logits_parts:
+            local_logits = torch.cat(local_logits_parts, dim=-1)
+            local_token_ids = torch.cat(local_token_id_parts, dim=0)
+            local_max = local_logits.amax(dim=-1)
+        else:
+            local_logits = torch.empty(
+                (num_tokens, 0), dtype=torch.float32, device=device
+            )
+            local_token_ids = torch.empty((0,), dtype=torch.long, device=device)
+            local_max = torch.full(
+                (num_tokens,), -float("inf"), dtype=torch.float32, device=device
+            )
+
+        if tp_size > 1:
+            gathered_max = torch.empty(
+                (tp_size, num_tokens), dtype=torch.float32, device=device
+            )
+            tp_group.all_gather_into_tensor(gathered_max, local_max.contiguous())
+            global_max = gathered_max.amax(dim=0)
+        else:
+            global_max = local_max
+
+        if local_logits.shape[-1] > 0:
+            local_exp_sum = torch.exp(local_logits - global_max[:, None]).sum(dim=-1)
+        else:
+            local_exp_sum = torch.zeros(
+                (num_tokens,), dtype=torch.float32, device=device
+            )
+
+        if tp_size > 1:
+            gathered_exp_sum = torch.empty(
+                (tp_size, num_tokens), dtype=torch.float32, device=device
+            )
+            tp_group.all_gather_into_tensor(
+                gathered_exp_sum, local_exp_sum.contiguous()
+            )
+            global_exp_sum = gathered_exp_sum.sum(dim=0)
+        else:
+            global_exp_sum = local_exp_sum
+
+        log_z = global_max + torch.log(global_exp_sum.clamp_min(1e-38))
+
+        if local_logits.shape[-1] > 0:
+            local_k = min(topk, int(local_logits.shape[-1]))
+            vals, idx = torch.topk(local_logits, k=local_k, dim=-1)
+            if local_k == topk:
+                local_top_vals = vals
+                local_top_ids = local_token_ids[idx]
+            else:
+                local_top_vals = torch.full(
+                    (num_tokens, topk),
+                    -float("inf"),
+                    dtype=torch.float32,
+                    device=device,
+                )
+                local_top_ids = torch.zeros(
+                    (num_tokens, topk), dtype=torch.long, device=device
+                )
+                local_top_vals[:, :local_k] = vals
+                local_top_ids[:, :local_k] = local_token_ids[idx]
+        else:
+            local_top_vals = torch.full(
+                (num_tokens, topk), -float("inf"), dtype=torch.float32, device=device
+            )
+            local_top_ids = torch.zeros((num_tokens, topk), dtype=torch.long, device=device)
+
+        if tp_size > 1:
+            gathered_top_vals = torch.empty(
+                (tp_size, num_tokens, topk), dtype=torch.float32, device=device
+            )
+            gathered_top_ids = torch.empty(
+                (tp_size, num_tokens, topk), dtype=torch.long, device=device
+            )
+            tp_group.all_gather_into_tensor(
+                gathered_top_vals, local_top_vals.contiguous()
+            )
+            tp_group.all_gather_into_tensor(
+                gathered_top_ids, local_top_ids.contiguous()
+            )
+        else:
+            gathered_top_vals = local_top_vals.unsqueeze(0)
+            gathered_top_ids = local_top_ids.unsqueeze(0)
+
+        flat_top_vals = gathered_top_vals.permute(1, 0, 2).reshape(num_tokens, -1)
+        flat_top_ids = gathered_top_ids.permute(1, 0, 2).reshape(num_tokens, -1)
+        global_top_vals, global_top_idx = torch.topk(flat_top_vals, k=topk, dim=-1)
+        global_top_ids = flat_top_ids.gather(1, global_top_idx)
+        global_top_log_probs = global_top_vals - log_z[:, None]
+
+        return global_top_log_probs, global_top_ids

@@ -516,11 +516,24 @@ class CudaGraphRunner:
                 ):
                     raise RuntimeError("This should not happen")
             self.capture_forward_mode = ForwardMode.TARGET_VERIFY
-            self.num_tokens_per_bs = (
-                model_runner.spec_algorithm.get_num_tokens_per_bs_for_target_verify(
+            if (
+                model_runner.spec_algorithm.is_ddtree()
+                and not model_runner.is_draft_worker
+            ):
+                tree_budget = model_runner.server_args.speculative_ddtree_budget
+                if tree_budget is None:
+                    tree_budget = self.speculative_num_draft_tokens - 1
+                if int(tree_budget) <= int(self.speculative_num_draft_tokens):
+                    self.num_tokens_per_bs = min(
+                        int(tree_budget) + 1,
+                        int(self.speculative_num_draft_tokens),
+                    )
+                else:
+                    self.num_tokens_per_bs = int(tree_budget) + 1
+            else:
+                self.num_tokens_per_bs = model_runner.spec_algorithm.get_num_tokens_per_bs_for_target_verify(
                     self.speculative_num_draft_tokens, model_runner.is_draft_worker
                 )
-            )
         elif self.is_dllm:
             self.capture_forward_mode = ForwardMode.DLLM_EXTEND
             self.num_tokens_per_bs = self.dllm_config.block_size
@@ -529,6 +542,41 @@ class CudaGraphRunner:
         self.capture_bs, self.compile_bs = get_batch_sizes_to_capture(
             model_runner, self.num_tokens_per_bs
         )
+        if (
+            model_runner.spec_algorithm.is_ddtree()
+            and not model_runner.is_draft_worker
+            and self.num_tokens_per_bs > 1
+        ):
+            # DDTree verifies tree_budget + 1 tokens per request. Reusing the
+            # decode-oriented batch-size defaults can therefore capture several
+            # thousand tokens at once and OOM in the logits all-gather. Bound
+            # target graphs by the existing per-graph token budget; larger
+            # runtime batches safely fall back to eager execution. The draft
+            # worker keeps its normal block-size graph coverage.
+            # Multiple captured batch sizes retain separate graph-private
+            # activation/logits buffers. Keep the cumulative footprint bounded
+            # for vocab-wide DDTree verification while preserving the common
+            # batch-1 graph for large trees. Larger batches use eager execution.
+            capture_token_budget = min(
+                model_runner.server_args.piecewise_cuda_graph_max_tokens or 2048,
+                512,
+            )
+            max_ddtree_capture_bs = max(
+                1, int(capture_token_budget) // self.num_tokens_per_bs
+            )
+            self.capture_bs = [
+                bs for bs in self.capture_bs if bs <= max_ddtree_capture_bs
+            ]
+            self.compile_bs = [
+                bs for bs in self.compile_bs if bs <= max_ddtree_capture_bs
+            ]
+            log_info_on_rank0(
+                logger,
+                "Limit DDTree target CUDA graph capture to "
+                f"bs<={max_ddtree_capture_bs} "
+                f"({self.num_tokens_per_bs} verify tokens/request, "
+                f"token budget={capture_token_budget}).",
+            )
         log_info_on_rank0(logger, f"Capture cuda graph bs {self.capture_bs}")
         if KTRANSFORMERS_AVAILABLE:
             KTMoEWrapper.set_capture_batch_sizes(self.capture_bs)
@@ -1304,11 +1352,20 @@ class CudaGraphRunner:
             )
             if tree_budget is None:
                 tree_budget = self.model_runner.server_args.speculative_num_draft_tokens - 1
-            draft_token_num = tree_budget + 1
+            block_size = self.model_runner.server_args.speculative_num_draft_tokens
+            draft_token_num = (
+                min(tree_budget + 1, block_size)
+                if tree_budget <= block_size
+                else tree_budget + 1
+            )
 
-            # Spine mode (budget <= block_size-1) uses DFLASH verify for CUDA-graph
+            # Spine mode (budget <= block_size) uses DFLASH verify for CUDA-graph
             # compatibility.  Full-tree mode uses DDTree verify.
-            if tree_budget <= self.model_runner.server_args.speculative_num_draft_tokens - 1:
+            if (
+                self.model_runner.is_draft_worker
+                or tree_budget
+                <= block_size
+            ):
                 from sglang.srt.speculative.dflash_info import DFlashVerifyInput
                 from sglang.srt.speculative.dflash_utils import (
                     resolve_dflash_verify_mask_policy,
@@ -1319,7 +1376,11 @@ class CudaGraphRunner:
                 spec_info = DFlashVerifyInput(
                     draft_token=None,
                     positions=None,
-                    draft_token_num=draft_token_num,
+                    draft_token_num=(
+                        self.model_runner.server_args.speculative_num_draft_tokens
+                        if self.model_runner.is_draft_worker
+                        else draft_token_num
+                    ),
                     custom_mask=(
                         None
                         if (self.model_runner.is_draft_worker or not build_custom_mask)

@@ -26,7 +26,7 @@ from sglang.srt.layers.dp_attention import get_attention_tp_size
 from sglang.srt.layers.radix_attention import AttentionType
 from sglang.srt.mem_cache.allocator.swa import SWATokenToKVPoolAllocator
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
-from sglang.srt.speculative.spec_info import SpecInput
+from sglang.srt.speculative.spec_info import SpecInput, SpecInputType
 from sglang.srt.speculative.spec_utils import (
     draft_kv_indices_buffer_width,
     draft_kv_indices_used_len,
@@ -647,8 +647,17 @@ class FlashInferAttnBackend(AttentionBackend):
                 self.cuda_graph_kv_indices[i][0] = 0
 
         if not self.skip_prefill:
+            # FlashInfer stores a bit-packed uint8 custom mask in this CUDA graph
+            # buffer.  The previous uncompressed allocation was about 8x larger
+            # than necessary and becomes prohibitive for DDTree's large verify
+            # budgets. Each request is packed independently, hence the max_bs
+            # bytes of conservative per-segment rounding slack.
+            max_unpacked_mask_numel = max_num_tokens * self.max_context_len
+            max_packed_mask_numel = (
+                (max_unpacked_mask_numel + 7) // 8 + max_bs
+            )
             self.cuda_graph_custom_mask = torch.zeros(
-                (max_num_tokens * self.max_context_len),
+                (max_packed_mask_numel,),
                 dtype=torch.uint8,
                 device="cuda",
             )
@@ -717,6 +726,15 @@ class FlashInferAttnBackend(AttentionBackend):
             or forward_mode.is_draft_extend()
             or forward_mode.is_dllm_extend()
         ):
+            is_ddtree_verify = (
+                spec_info is not None
+                and spec_info.spec_input_type == SpecInputType.DDTREE_VERIFY
+            )
+            if is_ddtree_verify and getattr(spec_info, "custom_mask", None) is None:
+                raise ValueError(
+                    "DDTree target verify requires a custom attention mask "
+                    "during FlashInfer CUDA graph capture."
+                )
             use_custom_mask = (
                 forward_mode.is_target_verify()
                 and spec_info is not None
@@ -1420,6 +1438,125 @@ class FlashInferIndicesUpdaterPrefill:
                 ),
             )
 
+    def _build_ddtree_verify_args(
+        self,
+        spec_info: SpecInput,
+        req_pool_indices: torch.Tensor,
+        paged_kernel_lens: torch.Tensor,
+        paged_kernel_lens_sum: int,
+        kv_indptr: torch.Tensor,
+        qo_indptr: torch.Tensor,
+    ):
+        """Build FlashInfer-native metadata for a DDTree target verify.
+
+        FlashInfer expects a request-packed boolean custom mask whose length is
+        sum(q_len[i] * kv_len[i]). DDTree historically produced a padded 3-D
+        tensor, so keep a compatibility conversion here while making the normal
+        canonical 1-D path allocation-free apart from CUDA-graph tail padding.
+        """
+        bs = len(req_pool_indices)
+        draft_token_num = int(spec_info.draft_token_num)
+        if draft_token_num <= 0:
+            raise ValueError(
+                "DDTree draft_token_num must be positive, got "
+                f"{draft_token_num}."
+            )
+
+        device = req_pool_indices.device
+        qo_indptr = qo_indptr[: bs + 1]
+        qo_indptr.copy_(
+            torch.arange(
+                0,
+                (bs + 1) * draft_token_num,
+                step=draft_token_num,
+                dtype=torch.int32,
+                device=device,
+            )
+        )
+
+        paged_kernel_lens = paged_kernel_lens + draft_token_num
+        kv_indptr = kv_indptr[: bs + 1]
+        kv_indptr[0] = 0
+        kv_indptr[1:] = torch.cumsum(paged_kernel_lens, dim=0)
+
+        kv_indices = torch.empty(
+            paged_kernel_lens_sum + draft_token_num * bs,
+            dtype=torch.int32,
+            device=device,
+        )
+        create_flashinfer_kv_indices_triton[(bs,)](
+            self.req_to_token,
+            req_pool_indices,
+            paged_kernel_lens,
+            kv_indptr,
+            None,
+            kv_indices,
+            self.req_to_token.shape[1],
+        )
+
+        custom_mask = getattr(spec_info, "custom_mask", None)
+        if custom_mask is None:
+            raise ValueError("DDTree FlashInfer verify requires custom_mask.")
+
+        # Compatibility with the original DDTree [raw_bs, q, max_kv_len]
+        # representation. The canonical producer now emits a packed 1-D mask.
+        if custom_mask.ndim == 3:
+            raw_bs, mask_q_len, max_mask_kv_len = custom_mask.shape
+            if mask_q_len != draft_token_num or raw_bs > bs:
+                raise ValueError(
+                    "Invalid DDTree custom_mask shape for FlashInfer: "
+                    f"shape={tuple(custom_mask.shape)}, bs={bs}, "
+                    f"draft_token_num={draft_token_num}."
+                )
+            valid_kv = (
+                torch.arange(max_mask_kv_len, device=device)[None, :]
+                < paged_kernel_lens[:raw_bs, None]
+            )
+            custom_mask = custom_mask.to(dtype=torch.bool).masked_select(
+                valid_kv[:, None, :].expand(
+                    raw_bs, draft_token_num, max_mask_kv_len
+                )
+            )
+        elif custom_mask.ndim == 1:
+            custom_mask = custom_mask.to(dtype=torch.bool)
+        else:
+            raise ValueError(
+                "DDTree custom_mask must be a packed 1-D tensor or a legacy "
+                f"3-D tensor, got shape={tuple(custom_mask.shape)}."
+            )
+
+        expected_mask_numel = draft_token_num * (
+            paged_kernel_lens_sum + draft_token_num * bs
+        )
+        if custom_mask.numel() < expected_mask_numel:
+            # CUDA graph replay may pad the request batch to its capture bucket.
+            # Padded outputs are discarded; an all-allowed tail avoids empty rows.
+            custom_mask = torch.cat(
+                [
+                    custom_mask,
+                    torch.ones(
+                        (expected_mask_numel - custom_mask.numel(),),
+                        dtype=torch.bool,
+                        device=device,
+                    ),
+                ]
+            )
+        elif custom_mask.numel() > expected_mask_numel:
+            # Real DDTree masks are produced request-packed and should match
+            # FlashInfer's sum(q_len[i] * kv_len[i]) exactly.  Only synthetic
+            # capture/dummy metadata uses oversized graph buffers.
+            if getattr(spec_info, "draft_token", None) is not None:
+                raise ValueError(
+                    "DDTree FlashInfer custom_mask length mismatch: "
+                    f"got {custom_mask.numel()}, expected {expected_mask_numel} "
+                    f"(bs={bs}, draft_token_num={draft_token_num})."
+                )
+            custom_mask = custom_mask[:expected_mask_numel]
+        else:
+            custom_mask = custom_mask[:expected_mask_numel]
+
+        return kv_indices, kv_indptr, qo_indptr, custom_mask
+
     def call_begin_forward(
         self,
         wrapper_ragged: BatchPrefillWithRaggedKVCacheWrapper,
@@ -1463,6 +1600,20 @@ class FlashInferIndicesUpdaterPrefill:
             qo_indptr = qo_indptr[: bs + 1]
 
             custom_mask = cross_attention_custom_mask
+        elif spec_info.spec_input_type == SpecInputType.DDTREE_VERIFY:
+            (
+                kv_indices,
+                kv_indptr,
+                qo_indptr,
+                custom_mask,
+            ) = self._build_ddtree_verify_args(
+                spec_info,
+                req_pool_indices,
+                paged_kernel_lens,
+                paged_kernel_lens_sum,
+                kv_indptr,
+                qo_indptr,
+            )
         else:
             assert isinstance(spec_info, SpecInput)
             kv_indices, kv_indptr, qo_indptr, custom_mask = (

@@ -2562,11 +2562,24 @@ class ModelRunner(ModelRunnerKVCacheMixin):
                 if not self.spec_algorithm.supports_target_verify_for_draft():
                     raise RuntimeError("This should not happen")
             capture_forward_mode = ForwardMode.TARGET_VERIFY
-            num_tokens_per_bs = (
-                self.spec_algorithm.get_num_tokens_per_bs_for_target_verify(
-                    self.server_args.speculative_num_draft_tokens, self.is_draft_worker
+            if self.spec_algorithm.is_ddtree() and not self.is_draft_worker:
+                tree_budget = self.server_args.speculative_ddtree_budget
+                if tree_budget is None:
+                    tree_budget = self.server_args.speculative_num_draft_tokens - 1
+                if int(tree_budget) <= int(self.server_args.speculative_num_draft_tokens):
+                    num_tokens_per_bs = min(
+                        int(tree_budget) + 1,
+                        int(self.server_args.speculative_num_draft_tokens),
+                    )
+                else:
+                    num_tokens_per_bs = int(tree_budget) + 1
+            else:
+                num_tokens_per_bs = (
+                    self.spec_algorithm.get_num_tokens_per_bs_for_target_verify(
+                        self.server_args.speculative_num_draft_tokens,
+                        self.is_draft_worker,
+                    )
                 )
-            )
 
         if self.server_args.enable_return_hidden_states:
             capture_hidden_mode = CaptureHiddenMode.FULL
@@ -2719,22 +2732,55 @@ class ModelRunner(ModelRunnerKVCacheMixin):
                 )
 
             elif self.spec_algorithm.is_ddtree():
-                from sglang.srt.speculative.ddtree_info import DDTreeVerifyInput
-
                 tree_budget = getattr(self.server_args, "speculative_ddtree_budget", None)
                 if tree_budget is None:
                     tree_budget = self.server_args.speculative_num_draft_tokens - 1
-                draft_token_num = tree_budget + 1
-                spec_info = DDTreeVerifyInput(
-                    draft_token=torch.empty(
-                        (self.max_total_num_tokens,), dtype=torch.long, device=self.device
-                    ),
-                    positions=torch.empty(
-                        (self.max_total_num_tokens,), dtype=torch.int64, device=self.device
-                    ),
-                    draft_token_num=draft_token_num,
-                    tree_budget=tree_budget,
+                block_size = self.server_args.speculative_num_draft_tokens
+                draft_token_num = (
+                    min(tree_budget + 1, block_size)
+                    if tree_budget <= block_size
+                    else tree_budget + 1
                 )
+                if (
+                    self.is_draft_worker
+                    or tree_budget
+                    <= block_size
+                ):
+                    from sglang.srt.speculative.dflash_info import DFlashVerifyInput
+
+                    spec_info = DFlashVerifyInput(
+                        draft_token=None,
+                        positions=None,
+                        draft_token_num=(
+                            self.server_args.speculative_num_draft_tokens
+                            if self.is_draft_worker
+                            else draft_token_num
+                        ),
+                        custom_mask=None,
+                        capture_hidden_mode=(
+                            CaptureHiddenMode.NULL
+                            if self.is_draft_worker
+                            else CaptureHiddenMode.FULL
+                        ),
+                    )
+                else:
+                    from sglang.srt.speculative.ddtree_info import DDTreeVerifyInput
+
+                    spec_info = DDTreeVerifyInput(
+                        draft_token=torch.empty(
+                            (self.max_total_num_tokens,),
+                            dtype=torch.long,
+                            device=self.device,
+                        ),
+                        positions=torch.empty(
+                            (self.max_total_num_tokens,),
+                            dtype=torch.int64,
+                            device=self.device,
+                        ),
+                        draft_token_num=draft_token_num,
+                        tree_budget=tree_budget,
+                        custom_mask=buffers.custom_mask,
+                    )
 
             elif self.spec_algorithm.is_ngram():
                 from sglang.srt.speculative.ngram_info import NgramVerifyInput

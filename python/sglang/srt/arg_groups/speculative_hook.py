@@ -388,19 +388,24 @@ def _handle_ddtree(server_args: "ServerArgs") -> None:
 
     # DDTREE uses large verify token counts (max_tree_nodes = budget + 1).
     # Piecewise CUDA graph compilation pre-allocates workspace sized to
-    # ``piecewise_cuda_graph_max_tokens`` and easily OOMs on mid-range GPUs
-    # when budget is large.  Disable it only when budget > block_size-1
-    # (branching mode); spine mode has the same verify size as DFLASH.
+    # ``piecewise_cuda_graph_max_tokens`` and can OOM on mid-range GPUs when
+    # budget is large.  Keep it enabled for small branching budgets, otherwise
+    # DDTREE loses the same graph acceleration DFLASH uses even when verify
+    # size is only slightly larger than the block size (e.g. budget=17 with
+    # block_size=16).  Disable it only for clearly larger trees.
     if not server_args.disable_piecewise_cuda_graph:
         _ddtree_block_size = server_args.speculative_num_draft_tokens
-        if server_args.speculative_ddtree_budget > _ddtree_block_size - 1:
+        _ddtree_piecewise_budget_limit = max(
+            _ddtree_block_size * 2, _ddtree_block_size - 1
+        )
+        if server_args.speculative_ddtree_budget > _ddtree_piecewise_budget_limit:
             server_args.disable_piecewise_cuda_graph = True
             logger.warning(
                 "Piecewise CUDA graph is disabled when using DDTREE speculative "
-                "decoding with budget=%d > block_size-1=%d (large verify-token "
+                "decoding with budget=%d > safe_budget=%d (large verify-token "
                 "counts may OOM during compilation).",
                 server_args.speculative_ddtree_budget,
-                _ddtree_block_size - 1,
+                _ddtree_piecewise_budget_limit,
             )
 
 
