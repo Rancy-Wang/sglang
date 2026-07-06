@@ -20,6 +20,7 @@ from sglang.srt.server_args import (
     get_global_server_args,
     set_global_server_args_for_scheduler,
 )
+from sglang.srt.speculative.ddtree_profiler import DDTreeProfiler
 from sglang.srt.speculative.dflash_info import DFlashDraftInput, DFlashVerifyInput
 from sglang.srt.speculative.dflash_utils import (
     can_dflash_use_fused_qkv_proj,
@@ -77,14 +78,19 @@ class DFlashWorker:
         self.model_runner = target_worker.model_runner
         self.page_size = server_args.page_size
         # Normalized in arg_groups.speculative_hook.handle_speculative_decoding.
-        self.draft_window_size: Optional[int] = (
-            server_args.speculative_draft_window_size
-        )
+        self.draft_window_size: Optional[
+            int
+        ] = server_args.speculative_draft_window_size
         self.use_compact_draft_cache = self.draft_window_size is not None
         self.device = target_worker.device
 
         self._warned_sampling_fallback = False
         self._logged_first_verify = False
+        self.ddtree_profiler = DDTreeProfiler.from_server_args(
+            server_args,
+            name=str(server_args.speculative_algorithm or "DFLASH").upper(),
+            rank=tp_rank,
+        )
 
         # Draft runner (separate KV cache + attention backend).
         # Without draft windowing, the draft worker aliases the target request->token
@@ -92,9 +98,10 @@ class DFlashWorker:
         # keeps a private compact req->token table over the same global KV index space,
         # so radix-cache/prefix-hit KV remains reusable while draft attention sees only
         # the recent window.
-        target_req_to_token_pool, target_token_to_kv_pool_allocator = (
-            target_worker.get_memory_pool()
-        )
+        (
+            target_req_to_token_pool,
+            target_token_to_kv_pool_allocator,
+        ) = target_worker.get_memory_pool()
         shared_req_to_token_pool = (
             None if self.use_compact_draft_cache else target_req_to_token_pool
         )
@@ -206,12 +213,12 @@ class DFlashWorker:
             self.block_size, device=self.device, dtype=torch.int64
         )
         self._draft_block_ids_buf: Optional[torch.Tensor] = None  # [cap_bs, block_size]
-        self._draft_block_positions_buf: Optional[torch.Tensor] = (
-            None  # [cap_bs, block_size]
-        )
-        self._draft_block_tokens_buf: Optional[torch.Tensor] = (
-            None  # [cap_bs, block_size]
-        )
+        self._draft_block_positions_buf: Optional[
+            torch.Tensor
+        ] = None  # [cap_bs, block_size]
+        self._draft_block_tokens_buf: Optional[
+            torch.Tensor
+        ] = None  # [cap_bs, block_size]
         self._draft_block_end_buf: Optional[torch.Tensor] = None  # [cap_bs]
         self._draft_seq_lens_cpu_buf: Optional[torch.Tensor] = None  # [cap_bs] on CPU
         self._draft_block_spec_info = DFlashVerifyInput(
@@ -660,9 +667,11 @@ class DFlashWorker:
                 self._warned_sampling_fallback = True
 
         bs = batch.batch_size()
+        profiler = self.ddtree_profiler
 
         # --- 1) Append any newly committed tokens into the draft KV cache.
-        self._append_target_hidden_to_draft_kv(batch, draft_input)
+        with profiler.gpu("draft_kv_append_before"):
+            self._append_target_hidden_to_draft_kv(batch, draft_input)
 
         target_model = self.target_worker.model_runner.model
         lm_head = getattr(target_model, "lm_head", None)
@@ -677,14 +686,18 @@ class DFlashWorker:
             )
 
         # --- 2) Draft a non-causal block with the draft model.
-        draft_hidden, positions_2d, block_ids = self._run_draft_forward(
-            batch, draft_input
-        )
+        with profiler.gpu("draft_forward"):
+            draft_hidden, positions_2d, block_ids = self._run_draft_forward(
+                batch, draft_input
+            )
 
-        draft_next = self._greedy_sample_from_vocab_parallel_head(
-            hidden_states=draft_hidden[:, 1:, :].reshape(-1, draft_hidden.shape[-1]),
-            lm_head=lm_head,
-        ).view(bs, self.block_size - 1)
+        with profiler.gpu("draft_head_greedy"):
+            draft_next = self._greedy_sample_from_vocab_parallel_head(
+                hidden_states=draft_hidden[:, 1:, :].reshape(
+                    -1, draft_hidden.shape[-1]
+                ),
+                lm_head=lm_head,
+            ).view(bs, self.block_size - 1)
         draft_tokens = self._draft_block_tokens_buf[:bs]
         draft_tokens[:, 0].copy_(block_ids[:, 0])
         draft_tokens[:, 1:].copy_(draft_next)
@@ -698,11 +711,12 @@ class DFlashWorker:
         _, build_custom_mask = resolve_dflash_verify_mask_policy(
             self.model_runner.attn_backend
         )
-        verify_input.prepare_for_verify(
-            batch,
-            self.page_size,
-            build_custom_mask=build_custom_mask,
-        )
+        with profiler.cpu("prepare_verify"):
+            verify_input.prepare_for_verify(
+                batch,
+                self.page_size,
+                build_custom_mask=build_custom_mask,
+            )
 
         batch.forward_mode = (
             ForwardMode.TARGET_VERIFY
@@ -1204,24 +1218,26 @@ class DFlashWorker:
             batch.seq_lens.clone() if need_mamba_verify_commit else None
         )
 
-        batch_result = self.target_worker.forward_batch_generation(
-            batch, is_verify=True, **kwargs
-        )
+        with self.ddtree_profiler.gpu("target_verify"):
+            batch_result = self.target_worker.forward_batch_generation(
+                batch, is_verify=True, **kwargs
+            )
         logits_output, can_run_cuda_graph = (
             batch_result.logits_output,
             batch_result.can_run_cuda_graph,
         )
 
-        (
-            new_bonus_tokens,
-            commit_lens,
-            next_target_hidden,
-            num_correct_drafts_per_req_cpu,
-        ) = verify_input.verify(
-            batch=batch,
-            logits_output=logits_output,
-            page_size=self.page_size,
-        )
+        with self.ddtree_profiler.cpu("accept_follow_compact"):
+            (
+                new_bonus_tokens,
+                commit_lens,
+                next_target_hidden,
+                num_correct_drafts_per_req_cpu,
+            ) = verify_input.verify(
+                batch=batch,
+                logits_output=logits_output,
+                page_size=self.page_size,
+            )
         if need_mamba_verify_commit:
             assert seq_lens_pre_verify is not None
             self._update_target_mamba_state_after_verify(
@@ -1235,11 +1251,23 @@ class DFlashWorker:
         draft_input.bonus_tokens = new_bonus_tokens
         draft_input.target_hidden = next_target_hidden
         draft_input.ctx_lens = commit_lens
-        self._append_target_hidden_to_draft_kv(batch, draft_input)
+        with self.ddtree_profiler.gpu("draft_kv_append_after"):
+            self._append_target_hidden_to_draft_kv(batch, draft_input)
         batch.spec_info = draft_input
         batch.forward_mode = ForwardMode.DECODE
 
         num_correct_drafts = sum(num_correct_drafts_per_req_cpu)
+        bs = len(num_correct_drafts_per_req_cpu)
+        self.ddtree_profiler.record_round(
+            mode="dflash",
+            batch_size=bs,
+            block_size=int(self.block_size),
+            draft_token_num=int(self.block_size),
+            mean_num_correct_drafts=(float(num_correct_drafts) / bs if bs > 0 else 0.0),
+            mean_accept_len=(float(num_correct_drafts + bs) / bs if bs > 0 else 0.0),
+            round_output_tokens=int(num_correct_drafts + bs),
+            can_run_cuda_graph=bool(can_run_cuda_graph),
+        )
         if not self._logged_first_verify and self.tp_rank == 0:
             logger.info(
                 "DFLASH verify completed. num_correct_drafts_per_req=%s",

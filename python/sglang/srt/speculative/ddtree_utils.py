@@ -1,5 +1,6 @@
 import heapq
-from typing import Dict, List, Optional, Tuple
+from contextlib import nullcontext
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -7,7 +8,7 @@ import torch
 
 def build_ddtree_tree(
     draft_logits: torch.Tensor | None,  # [bs, L, vocab_size]
-    tree_budget: int,            # 节点预算 B
+    tree_budget: int,  # 节点预算 B
     device: torch.device,
     _out_node_token_ids: torch.Tensor | None = None,
     _out_node_depths: torch.Tensor | None = None,
@@ -15,6 +16,8 @@ def build_ddtree_tree(
     _out_visibility: torch.Tensor | None = None,
     draft_top_log_probs: torch.Tensor | None = None,  # [bs, L, topk]
     draft_top_token_ids: torch.Tensor | None = None,  # [bs, L, topk]
+    prune_to_deepest_chains: bool = False,
+    profiler: Optional[Any] = None,
 ) -> Tuple[
     torch.Tensor,
     torch.Tensor,
@@ -45,16 +48,19 @@ def build_ddtree_tree(
     max_nodes = tree_budget + 1
 
     # --- General tree path: best-first DDTree expansion with branching ---
-    if draft_top_log_probs is None or draft_top_token_ids is None:
-        topk = min(tree_budget, V)
-        top_logits, top_token_ids = torch.topk(logits, k=topk, dim=-1)
-        log_z = torch.logsumexp(logits, dim=-1, keepdim=True)
-        top_log_probs = (top_logits - log_z).to(device="cpu", dtype=torch.float32)
-        top_token_ids_cpu = top_token_ids.to(device="cpu", dtype=torch.long)
-    else:
-        top_log_probs = draft_top_log_probs.to(device="cpu", dtype=torch.float32)
-        top_token_ids_cpu = draft_top_token_ids.to(device="cpu", dtype=torch.long)
-        topk = int(top_log_probs.shape[-1])
+    cpu_ctx = profiler.cpu if profiler is not None else (lambda _stage: nullcontext())
+
+    with cpu_ctx("tree_to_cpu"):
+        if draft_top_log_probs is None or draft_top_token_ids is None:
+            topk = min(tree_budget, V)
+            top_logits, top_token_ids = torch.topk(logits, k=topk, dim=-1)
+            log_z = torch.logsumexp(logits, dim=-1, keepdim=True)
+            top_log_probs = (top_logits - log_z).to(device="cpu", dtype=torch.float32)
+            top_token_ids_cpu = top_token_ids.to(device="cpu", dtype=torch.long)
+        else:
+            top_log_probs = draft_top_log_probs.to(device="cpu", dtype=torch.float32)
+            top_token_ids_cpu = draft_top_token_ids.to(device="cpu", dtype=torch.long)
+            topk = int(top_log_probs.shape[-1])
 
     all_node_token_ids = []
     all_node_depths = []
@@ -63,54 +69,88 @@ def build_ddtree_tree(
     all_visibility = []
     actual_sizes = []
 
-    for b in range(bs):
-        node_ids, depths, parents, child_map, vis, actual = _build_single_tree(
-            top_log_probs[b], top_token_ids_cpu[b], topk, L, tree_budget
-        )
-        all_node_token_ids.append(node_ids)
-        all_node_depths.append(depths)
-        all_parents.append(parents)
-        all_child_maps.append(child_map)
-        all_visibility.append(vis)
-        actual_sizes.append(actual)
+    with cpu_ctx("tree_heap_cpu"):
+        for b in range(bs):
+            node_ids, depths, parents, child_map, vis, actual = _build_single_tree(
+                top_log_probs[b], top_token_ids_cpu[b], topk, L, tree_budget
+            )
+            if prune_to_deepest_chains:
+                (
+                    node_ids,
+                    depths,
+                    parents,
+                    child_map,
+                    vis,
+                    actual,
+                ) = _prune_tree_to_deepest_chains(
+                    node_ids,
+                    depths,
+                    parents,
+                    child_map,
+                    vis,
+                    actual,
+                )
+            all_node_token_ids.append(node_ids)
+            all_node_depths.append(depths)
+            all_parents.append(parents)
+            all_child_maps.append(child_map)
+            all_visibility.append(vis)
+            actual_sizes.append(actual)
 
     # Reuse or allocate padded output buffers.
     if _out_node_token_ids is None or _out_node_token_ids.shape[0] < bs:
-        padded_node_token_ids = torch.zeros(bs, tree_budget, dtype=torch.long, device=device)
+        padded_node_token_ids = torch.zeros(
+            bs, tree_budget, dtype=torch.long, device=device
+        )
     else:
         padded_node_token_ids = _out_node_token_ids[:bs]
         padded_node_token_ids.zero_()
 
     if _out_node_depths is None or _out_node_depths.shape[0] < bs:
-        padded_node_depths = torch.zeros(bs, tree_budget, dtype=torch.long, device=device)
+        padded_node_depths = torch.zeros(
+            bs, tree_budget, dtype=torch.long, device=device
+        )
     else:
         padded_node_depths = _out_node_depths[:bs]
         padded_node_depths.zero_()
 
     if _out_parents is None or _out_parents.shape[0] < bs:
-        padded_parents = torch.full((bs, max_nodes), -1, dtype=torch.long, device=device)
+        padded_parents = torch.full(
+            (bs, max_nodes), -1, dtype=torch.long, device=device
+        )
     else:
         padded_parents = _out_parents[:bs]
         padded_parents.fill_(-1)
 
     if _out_visibility is None or _out_visibility.shape[0] < bs:
-        padded_visibility = torch.zeros(bs, max_nodes, max_nodes, dtype=torch.bool, device=device)
+        padded_visibility = torch.zeros(
+            bs, max_nodes, max_nodes, dtype=torch.bool, device=device
+        )
     else:
         padded_visibility = _out_visibility[:bs]
         padded_visibility.zero_()
 
-    for b in range(bs):
-        n = actual_sizes[b] - 1
-        if n > 0:
-            padded_node_token_ids[b, :n] = torch.from_numpy(all_node_token_ids[b]).to(device)
-            padded_node_depths[b, :n] = torch.from_numpy(all_node_depths[b]).to(device)
-        padded_parents[b, :actual_sizes[b]] = torch.from_numpy(all_parents[b]).to(device)
-        vis = all_visibility[b]
-        padded_visibility[b, :actual_sizes[b], :actual_sizes[b]] = (
-            torch.from_numpy(vis).to(device=device, dtype=torch.bool)
-        )
+    with cpu_ctx("tree_to_gpu"):
+        for b in range(bs):
+            n = actual_sizes[b] - 1
+            if n > 0:
+                padded_node_token_ids[b, :n] = torch.from_numpy(
+                    all_node_token_ids[b]
+                ).to(device)
+                padded_node_depths[b, :n] = torch.from_numpy(all_node_depths[b]).to(
+                    device
+                )
+            padded_parents[b, : actual_sizes[b]] = torch.from_numpy(all_parents[b]).to(
+                device
+            )
+            vis = all_visibility[b]
+            padded_visibility[
+                b, : actual_sizes[b], : actual_sizes[b]
+            ] = torch.from_numpy(vis).to(device=device, dtype=torch.bool)
 
-    actual_tree_sizes_t = torch.tensor(actual_sizes, dtype=torch.long, device=device)
+        actual_tree_sizes_t = torch.tensor(
+            actual_sizes, dtype=torch.long, device=device
+        )
     return (
         padded_node_token_ids,
         padded_node_depths,
@@ -128,7 +168,9 @@ def _build_single_tree(
     topk: int,
     depth_limit: int,
     budget: int,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Dict[int, Dict[int, int]], np.ndarray, int]:
+) -> Tuple[
+    np.ndarray, np.ndarray, np.ndarray, Dict[int, Dict[int, int]], np.ndarray, int
+]:
     log_probs_np = top_log_probs.numpy().astype(np.float64)
     token_ids_np = top_token_ids.numpy().astype(np.int64)
 
@@ -163,7 +205,14 @@ def _build_single_tree(
             sibling_ranks = ranks[:-1] + (rank + 1,)
             heapq.heappush(
                 heap,
-                (-sibling_logw, sibling_ranks, parent_idx, depth, rank + 1, sibling_logw),
+                (
+                    -sibling_logw,
+                    sibling_ranks,
+                    parent_idx,
+                    depth,
+                    rank + 1,
+                    sibling_logw,
+                ),
             )
 
         if depth < depth_limit:
@@ -192,6 +241,83 @@ def _build_single_tree(
     )
 
 
+def _prune_tree_to_deepest_chains(
+    node_token_ids: np.ndarray,
+    node_depths: np.ndarray,
+    parents: np.ndarray,
+    child_map: Dict[int, Dict[int, int]],
+    visibility: np.ndarray,
+    actual_size: int,
+) -> Tuple[
+    np.ndarray, np.ndarray, np.ndarray, Dict[int, Dict[int, int]], np.ndarray, int
+]:
+    """Keep only nodes whose subtree reaches the deepest node depth."""
+    if actual_size <= 1:
+        return node_token_ids, node_depths, parents, child_map, visibility, actual_size
+
+    depths = np.zeros(actual_size, dtype=np.int32)
+    depths[1:] = node_depths[: actual_size - 1]
+    max_depth = int(depths.max())
+
+    children: List[List[int]] = [[] for _ in range(actual_size)]
+    for child in range(1, actual_size):
+        parent = int(parents[child])
+        if parent < 0 or parent >= actual_size:
+            raise ValueError(
+                f"Invalid DDTree parent index {parent} for child {child}."
+            )
+        children[parent].append(child)
+
+    subtree_max_depth = depths.copy()
+    for node in range(actual_size - 1, -1, -1):
+        for child in children[node]:
+            if subtree_max_depth[child] > subtree_max_depth[node]:
+                subtree_max_depth[node] = subtree_max_depth[child]
+
+    keep = subtree_max_depth == max_depth
+    keep[0] = True
+    if bool(keep.all()):
+        return node_token_ids, node_depths, parents, child_map, visibility, actual_size
+
+    kept_indices = [idx for idx in range(actual_size) if bool(keep[idx])]
+    old_to_new = np.full(actual_size, -1, dtype=np.int32)
+    for new_idx, old_idx in enumerate(kept_indices):
+        old_to_new[old_idx] = new_idx
+
+    new_actual_size = len(kept_indices)
+    new_node_token_ids = np.zeros(new_actual_size - 1, dtype=node_token_ids.dtype)
+    new_node_depths = np.zeros(new_actual_size - 1, dtype=node_depths.dtype)
+    new_parents = np.full(new_actual_size, -1, dtype=parents.dtype)
+    new_child_map: Dict[int, Dict[int, int]] = {idx: {} for idx in range(new_actual_size)}
+
+    for new_idx, old_idx in enumerate(kept_indices):
+        if old_idx == 0:
+            continue
+
+        old_parent = int(parents[old_idx])
+        new_parent = int(old_to_new[old_parent])
+        if new_parent < 0:
+            raise ValueError(
+                "DDTree pruning attempted to keep a node whose parent was pruned."
+            )
+
+        token_id = int(node_token_ids[old_idx - 1])
+        new_node_token_ids[new_idx - 1] = token_id
+        new_node_depths[new_idx - 1] = depths[old_idx]
+        new_parents[new_idx] = new_parent
+        new_child_map[new_parent][token_id] = new_idx
+
+    new_visibility = visibility[np.ix_(kept_indices, kept_indices)].copy()
+    return (
+        new_node_token_ids,
+        new_node_depths,
+        new_parents,
+        new_child_map,
+        new_visibility,
+        new_actual_size,
+    )
+
+
 def compile_ddtree_tree(
     root_token_ids: torch.Tensor,
     node_token_ids: torch.Tensor,
@@ -204,17 +330,24 @@ def compile_ddtree_tree(
     device: torch.device,
     past_lens_cpu: Optional[List[int]] = None,
     actual_sizes_cpu: Optional[List[int]] = None,
+    verify_token_num: Optional[int] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     bs = root_token_ids.shape[0]
-    max_nodes = tree_budget + 1
+    max_nodes = tree_budget + 1 if verify_token_num is None else int(verify_token_num)
+    if max_nodes <= 0:
+        raise ValueError(f"DDTree verify_token_num must be positive, got {max_nodes}.")
 
     verify_input_ids = torch.zeros(bs, max_nodes, dtype=torch.long, device=device)
     verify_input_ids[:, 0] = root_token_ids
-    verify_input_ids[:, 1:] = node_token_ids
+    if max_nodes > 1:
+        verify_input_ids[:, 1:] = node_token_ids[:, : max_nodes - 1]
 
     verify_position_ids = torch.zeros(bs, max_nodes, dtype=torch.long, device=device)
     verify_position_ids[:, 0] = start_positions
-    verify_position_ids[:, 1:] = start_positions.unsqueeze(1) + node_depths
+    if max_nodes > 1:
+        verify_position_ids[:, 1:] = (
+            start_positions.unsqueeze(1) + node_depths[:, : max_nodes - 1]
+        )
 
     # Attention backends consume the speculative custom mask as a request-packed
     # boolean allow-mask:
@@ -226,24 +359,24 @@ def compile_ddtree_tree(
     if past_lens_cpu is None:
         past_lens_cpu = [int(x) for x in past_lengths.detach().cpu().tolist()]
     if actual_sizes_cpu is None:
-        actual_sizes_cpu = [
-            int(x) for x in actual_tree_sizes.detach().cpu().tolist()
-        ]
-    mask_numel = sum(
-        max_nodes * (past_len + max_nodes) for past_len in past_lens_cpu
-    )
-    tree_attention_mask = torch.empty(
-        (mask_numel,), dtype=torch.bool, device=device
-    )
+        actual_sizes_cpu = [int(x) for x in actual_tree_sizes.detach().cpu().tolist()]
+    max_actual_size = max(actual_sizes_cpu) if actual_sizes_cpu else 1
+    if max_actual_size > max_nodes:
+        raise ValueError(
+            "DDTree verify_token_num is smaller than a pruned tree: "
+            f"verify_token_num={max_nodes}, max_actual_size={max_actual_size}."
+        )
+    mask_numel = sum(max_nodes * (past_len + max_nodes) for past_len in past_lens_cpu)
+    tree_attention_mask = torch.empty((mask_numel,), dtype=torch.bool, device=device)
 
     offset = 0
     for b, (past_len_i, actual_size) in enumerate(
         zip(past_lens_cpu, actual_sizes_cpu, strict=True)
     ):
         kv_len_i = past_len_i + max_nodes
-        request_mask = tree_attention_mask[
-            offset : offset + max_nodes * kv_len_i
-        ].view(max_nodes, kv_len_i)
+        request_mask = tree_attention_mask[offset : offset + max_nodes * kv_len_i].view(
+            max_nodes, kv_len_i
+        )
 
         # Real tree queries attend to the complete committed prefix.
         request_mask[:actual_size, :past_len_i] = True
@@ -253,9 +386,9 @@ def compile_ddtree_tree(
         # committed prefix is all-true and can avoid the previous full-mask
         # zero_() write.
         request_mask[:actual_size, past_len_i:] = False
-        request_mask[
-            :actual_size, past_len_i : past_len_i + actual_size
-        ].copy_(visibility[b, :actual_size, :actual_size])
+        request_mask[:actual_size, past_len_i : past_len_i + actual_size].copy_(
+            visibility[b, :actual_size, :actual_size]
+        )
         if actual_size < max_nodes:
             request_mask[actual_size:, :].fill_(False)
         offset += max_nodes * kv_len_i

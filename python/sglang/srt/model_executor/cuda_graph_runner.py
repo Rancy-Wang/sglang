@@ -523,13 +523,7 @@ class CudaGraphRunner:
                 tree_budget = model_runner.server_args.speculative_ddtree_budget
                 if tree_budget is None:
                     tree_budget = self.speculative_num_draft_tokens - 1
-                if int(tree_budget) <= int(self.speculative_num_draft_tokens):
-                    self.num_tokens_per_bs = min(
-                        int(tree_budget) + 1,
-                        int(self.speculative_num_draft_tokens),
-                    )
-                else:
-                    self.num_tokens_per_bs = int(tree_budget) + 1
+                self.num_tokens_per_bs = int(tree_budget) + 1
             else:
                 self.num_tokens_per_bs = model_runner.spec_algorithm.get_num_tokens_per_bs_for_target_verify(
                     self.speculative_num_draft_tokens, model_runner.is_draft_worker
@@ -750,12 +744,28 @@ class CudaGraphRunner:
             else True
         )
 
+        is_ddtree_verify_shape_supported = True
+        if (
+            self.model_runner.spec_algorithm.is_ddtree()
+            and not self.model_runner.is_draft_worker
+            and forward_batch.forward_mode.is_target_verify()
+        ):
+            runtime_tokens_per_req = getattr(
+                forward_batch.spec_info, "draft_token_num", self.num_tokens_per_bs
+            )
+            is_ddtree_verify_shape_supported = (
+                int(runtime_tokens_per_req) == self.num_tokens_per_bs
+                and forward_batch.input_ids.numel()
+                == forward_batch.batch_size * self.num_tokens_per_bs
+            )
+
         return (
             is_bs_supported
             and is_encoder_lens_supported
             and is_tbo_supported
             and capture_hidden_mode_matches
             and is_ngram_supported
+            and is_ddtree_verify_shape_supported
         )
 
     def _init_profile_context_and_memory_record(self):
@@ -1352,20 +1362,8 @@ class CudaGraphRunner:
             )
             if tree_budget is None:
                 tree_budget = self.model_runner.server_args.speculative_num_draft_tokens - 1
-            block_size = self.model_runner.server_args.speculative_num_draft_tokens
-            draft_token_num = (
-                min(tree_budget + 1, block_size)
-                if tree_budget <= block_size
-                else tree_budget + 1
-            )
 
-            # Spine mode (budget <= block_size) uses DFLASH verify for CUDA-graph
-            # compatibility.  Full-tree mode uses DDTree verify.
-            if (
-                self.model_runner.is_draft_worker
-                or tree_budget
-                <= block_size
-            ):
+            if self.model_runner.is_draft_worker:
                 from sglang.srt.speculative.dflash_info import DFlashVerifyInput
                 from sglang.srt.speculative.dflash_utils import (
                     resolve_dflash_verify_mask_policy,
@@ -1376,25 +1374,18 @@ class CudaGraphRunner:
                 spec_info = DFlashVerifyInput(
                     draft_token=None,
                     positions=None,
-                    draft_token_num=(
-                        self.model_runner.server_args.speculative_num_draft_tokens
-                        if self.model_runner.is_draft_worker
-                        else draft_token_num
-                    ),
+                    draft_token_num=self.model_runner.server_args.speculative_num_draft_tokens,
                     custom_mask=(
                         None
                         if (self.model_runner.is_draft_worker or not build_custom_mask)
                         else self.buffers.custom_mask
                     ),
-                    capture_hidden_mode=(
-                        CaptureHiddenMode.NULL
-                        if self.model_runner.is_draft_worker
-                        else CaptureHiddenMode.FULL
-                    ),
+                    capture_hidden_mode=CaptureHiddenMode.NULL,
                 )
             else:
                 from sglang.srt.speculative.ddtree_info import DDTreeVerifyInput
 
+                draft_token_num = int(tree_budget) + 1
                 spec_info = DDTreeVerifyInput(
                     draft_token=None,
                     positions=None,

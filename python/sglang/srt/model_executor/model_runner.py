@@ -2566,13 +2566,7 @@ class ModelRunner(ModelRunnerKVCacheMixin):
                 tree_budget = self.server_args.speculative_ddtree_budget
                 if tree_budget is None:
                     tree_budget = self.server_args.speculative_num_draft_tokens - 1
-                if int(tree_budget) <= int(self.server_args.speculative_num_draft_tokens):
-                    num_tokens_per_bs = min(
-                        int(tree_budget) + 1,
-                        int(self.server_args.speculative_num_draft_tokens),
-                    )
-                else:
-                    num_tokens_per_bs = int(tree_budget) + 1
+                num_tokens_per_bs = int(tree_budget) + 1
             else:
                 num_tokens_per_bs = (
                     self.spec_algorithm.get_num_tokens_per_bs_for_target_verify(
@@ -2735,37 +2729,20 @@ class ModelRunner(ModelRunnerKVCacheMixin):
                 tree_budget = getattr(self.server_args, "speculative_ddtree_budget", None)
                 if tree_budget is None:
                     tree_budget = self.server_args.speculative_num_draft_tokens - 1
-                block_size = self.server_args.speculative_num_draft_tokens
-                draft_token_num = (
-                    min(tree_budget + 1, block_size)
-                    if tree_budget <= block_size
-                    else tree_budget + 1
-                )
-                if (
-                    self.is_draft_worker
-                    or tree_budget
-                    <= block_size
-                ):
+                if self.is_draft_worker:
                     from sglang.srt.speculative.dflash_info import DFlashVerifyInput
 
                     spec_info = DFlashVerifyInput(
                         draft_token=None,
                         positions=None,
-                        draft_token_num=(
-                            self.server_args.speculative_num_draft_tokens
-                            if self.is_draft_worker
-                            else draft_token_num
-                        ),
+                        draft_token_num=self.server_args.speculative_num_draft_tokens,
                         custom_mask=None,
-                        capture_hidden_mode=(
-                            CaptureHiddenMode.NULL
-                            if self.is_draft_worker
-                            else CaptureHiddenMode.FULL
-                        ),
+                        capture_hidden_mode=CaptureHiddenMode.NULL,
                     )
                 else:
                     from sglang.srt.speculative.ddtree_info import DDTreeVerifyInput
 
+                    draft_token_num = int(tree_budget) + 1
                     spec_info = DDTreeVerifyInput(
                         draft_token=torch.empty(
                             (self.max_total_num_tokens,),

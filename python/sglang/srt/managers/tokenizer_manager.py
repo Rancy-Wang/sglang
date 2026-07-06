@@ -2302,6 +2302,9 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
                 meta_info["spec_accept_histogram"] = (
                     recv_obj.spec_correct_drafts_histogram[i]
                 )
+            # CODEX_DDTREE_ACCEPT_LENGTH_EXPORT disabled:
+            # if recv_obj.spec_accept_lengths:
+            #     meta_info["spec_accept_lengths"] = recv_obj.spec_accept_lengths[i]
 
     def _request_has_grammar(self, obj: GenerateReqInput) -> bool:
         return (

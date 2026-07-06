@@ -931,6 +931,8 @@ class Req(ReqDllmMixin):
         # List index = number of accepted tokens in a step, List value = count of steps with that many accepted tokens.
         # Example: histogram[0] = 5 means 5 steps with 0 accepted tokens, histogram[3] = 10 means 10 steps with 3 accepted tokens.
         self.spec_correct_drafts_histogram: List[int] = []
+        # CODEX_DDTREE_ACCEPT_LENGTH_EXPORT disabled:
+        # self.spec_accept_lengths: List[Dict[str, Any]] = []
 
         # The number of times this request has been retracted / preempted.
         self.retraction_count = 0
@@ -1051,6 +1053,10 @@ class Req(ReqDllmMixin):
                 [0] * (num_correct_drafts - len(self.spec_correct_drafts_histogram) + 1)
             )
         self.spec_correct_drafts_histogram[num_correct_drafts] += 1
+
+    # CODEX_DDTREE_ACCEPT_LENGTH_EXPORT disabled:
+    # def record_spec_verify_result(...):
+    #     Used to append per-verify accepted-length records to responses.
 
     def extend_image_inputs(self, image_inputs):
         if self.multimodal_inputs is None:

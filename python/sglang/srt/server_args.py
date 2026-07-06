@@ -608,6 +608,11 @@ class ServerArgs:
     speculative_num_draft_tokens: Optional[int] = None
     speculative_dflash_block_size: Optional[int] = None
     speculative_ddtree_budget: Optional[int] = None
+    is_ddtree_prune: bool = False
+    speculative_ddtree_profile: bool = False
+    speculative_ddtree_profile_interval: int = 50
+    speculative_ddtree_profile_warmup: int = 0
+    speculative_ddtree_profile_output: Optional[str] = None
     speculative_accept_threshold_single: float = 1.0
     speculative_accept_threshold_acc: float = 1.0
     speculative_token_map: Optional[str] = None
@@ -5837,6 +5842,36 @@ class ServerArgs:
             type=int,
             help="DDTREE only. Tree node budget B. Controls how many tree nodes are verified per round (excluding root). Defaults to speculative_num_draft_tokens - 1.",
             default=ServerArgs.speculative_ddtree_budget,
+        )
+        parser.add_argument(
+            "--is-ddtree-prune",
+            action="store_true",
+            default=ServerArgs.is_ddtree_prune,
+            help="DDTREE only. Prune draft tree nodes whose subtree cannot reach the deepest depth before target verification.",
+        )
+        parser.add_argument(
+            "--speculative-ddtree-profile",
+            action="store_true",
+            default=ServerArgs.speculative_ddtree_profile,
+            help="Enable low-overhead DFLASH/DDTREE speculative decode stage profiling on TP rank 0.",
+        )
+        parser.add_argument(
+            "--speculative-ddtree-profile-interval",
+            type=int,
+            default=ServerArgs.speculative_ddtree_profile_interval,
+            help="Number of profiled verify rounds to aggregate before logging/flushing DFLASH/DDTREE stage profiling.",
+        )
+        parser.add_argument(
+            "--speculative-ddtree-profile-warmup",
+            type=int,
+            default=ServerArgs.speculative_ddtree_profile_warmup,
+            help="Number of initial verify rounds to skip before collecting DFLASH/DDTREE stage profiling.",
+        )
+        parser.add_argument(
+            "--speculative-ddtree-profile-output",
+            type=str,
+            default=ServerArgs.speculative_ddtree_profile_output,
+            help="Optional JSONL file path for aggregated DFLASH/DDTREE stage profiling records.",
         )
         parser.add_argument(
             "--speculative-accept-threshold-single",

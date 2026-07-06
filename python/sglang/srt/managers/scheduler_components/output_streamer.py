@@ -273,6 +273,8 @@ class _GenerationStreamAccumulator:
     spec_verify_ct: list = field(default_factory=list)
     spec_num_correct_drafts: list = field(default_factory=list)
     spec_correct_drafts_histogram: list = field(default_factory=list)
+    # CODEX_DDTREE_ACCEPT_LENGTH_EXPORT disabled:
+    # spec_accept_lengths: list = field(default_factory=list)
     retraction_counts: list = field(default_factory=list)
     output_hidden_states: Optional[list] = None
     routed_experts: Optional[list] = None
@@ -385,6 +387,8 @@ class _GenerationStreamAccumulator:
             self.spec_verify_ct.append(req.spec_verify_ct)
             self.spec_num_correct_drafts.append(req.spec_num_correct_drafts)
             self.spec_correct_drafts_histogram.append(req.spec_correct_drafts_histogram)
+            # CODEX_DDTREE_ACCEPT_LENGTH_EXPORT disabled:
+            # self.spec_accept_lengths.append(list(req.spec_accept_lengths))
 
         if self.return_logprob:
             if (
@@ -490,6 +494,8 @@ class _GenerationStreamAccumulator:
             spec_verify_ct=self.spec_verify_ct,
             spec_num_correct_drafts=self.spec_num_correct_drafts,
             spec_correct_drafts_histogram=self.spec_correct_drafts_histogram,
+            # CODEX_DDTREE_ACCEPT_LENGTH_EXPORT disabled:
+            # spec_accept_lengths=self.spec_accept_lengths,
             time_stats=self.time_stats,
             finished_reasons=self.finished_reasons,
             decoded_texts=self.decoded_texts,

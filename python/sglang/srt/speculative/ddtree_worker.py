@@ -15,7 +15,7 @@ from sglang.srt.speculative.ddtree_utils import (
     build_ddtree_tree,
     compile_ddtree_tree,
 )
-from sglang.srt.speculative.dflash_info import DFlashDraftInput, DFlashVerifyInput
+from sglang.srt.speculative.dflash_info import DFlashDraftInput
 from sglang.srt.speculative.dflash_worker import DFlashWorker
 
 logger = logging.getLogger(__name__)
@@ -50,6 +50,7 @@ class DDTreeWorker(DFlashWorker):
         if self.tree_budget is None:
             self.tree_budget = self.block_size - 1
 
+        self.is_ddtree_prune = bool(getattr(server_args, "is_ddtree_prune", False))
         self.max_tree_nodes = self.tree_budget + 1
 
         # Pre-allocated tree-build output buffers (reused across steps).
@@ -75,10 +76,11 @@ class DDTreeWorker(DFlashWorker):
 
         if self.tp_rank == 0:
             logger.info(
-                "Initialized DDTree worker. block_size=%s, tree_budget=%s, max_tree_nodes=%s",
+                "Initialized DDTree worker. block_size=%s, tree_budget=%s, max_tree_nodes=%s, is_ddtree_prune=%s",
                 self.block_size,
                 self.tree_budget,
                 self.max_tree_nodes,
+                self.is_ddtree_prune,
             )
 
     def _prepare_for_speculative_decoding(
@@ -93,9 +95,11 @@ class DDTreeWorker(DFlashWorker):
             )
 
         bs = batch.batch_size()
+        profiler = self.ddtree_profiler
 
         # --- 1) Append target hidden to draft KV cache.
-        self._append_target_hidden_to_draft_kv(batch, draft_input)
+        with profiler.gpu("draft_kv_append_before"):
+            self._append_target_hidden_to_draft_kv(batch, draft_input)
 
         target_model = self.target_worker.model_runner.model
         lm_head = getattr(target_model, "lm_head", None)
@@ -110,85 +114,38 @@ class DDTreeWorker(DFlashWorker):
             )
 
         # --- 2) Draft a non-causal block (reuse parent's shared implementation).
-        draft_hidden, positions_2d, block_ids = self._run_draft_forward(
-            batch, draft_input
-        )
-
-        # --- 3) Spine-mode fast path: delegate to DFLASH verify. ---
-        if self.tree_budget <= self.block_size:
-            # Spine mode: linear chain, identical to DFLASH.  Skip all DDTree
-            # overhead (tree building, child_maps, custom masks) and reuse
-            # DFLASH's battle-tested verify path with CUDA graph support.
-            from sglang.srt.speculative.dflash_info import DFlashVerifyInput
-            from sglang.srt.speculative.dflash_utils import (
-                resolve_dflash_verify_mask_policy,
+        with profiler.gpu("draft_forward"):
+            draft_hidden, positions_2d, block_ids = self._run_draft_forward(
+                batch, draft_input
             )
 
-            num_verify_tokens = min(self.tree_budget + 1, self.block_size)
-            draft_tokens = self._greedy_sample_from_vocab_parallel_head(
-                hidden_states=draft_hidden[:, 1:, :].reshape(-1, draft_hidden.shape[-1]),
-                lm_head=lm_head,
-            ).view(bs, self.block_size - 1)
-
-            # Build verify IDs: [bonus, draft_0, ...].  For budget==block_size,
-            # clamp to the DFLASH verify window so the comparison is exactly
-            # DFLASH-compatible.
-            draft_ids = torch.zeros(
-                bs, num_verify_tokens, dtype=torch.long, device=batch.device
-            )
-            draft_ids[:, 0] = draft_input.bonus_tokens
-            draft_ids[:, 1:] = draft_tokens[:, : num_verify_tokens - 1]
-
-            positions = torch.zeros(
-                bs, num_verify_tokens, dtype=torch.long, device=batch.device
-            )
-            positions[:, 0] = batch.seq_lens
-            positions[:, 1:] = (
-                batch.seq_lens.unsqueeze(1)
-                + torch.arange(1, num_verify_tokens, device=batch.device)
-            )
-
-            verify_input = DFlashVerifyInput(
-                draft_token=draft_ids.reshape(-1),
-                positions=positions.reshape(-1),
-                draft_token_num=num_verify_tokens,
-                capture_hidden_mode=CaptureHiddenMode.FULL,
-            )
-            _, build_custom_mask = resolve_dflash_verify_mask_policy(
-                self.model_runner.attn_backend
-            )
-            verify_input.prepare_for_verify(
-                batch,
-                self.page_size,
-                build_custom_mask=build_custom_mask,
-            )
-
-            batch.forward_mode = (
-                ForwardMode.TARGET_VERIFY
-                if not batch.forward_mode.is_idle()
-                else ForwardMode.IDLE
-            )
-            batch.spec_info = verify_input
-            batch.return_hidden_states = False
-            return
-
-        # --- 4) Full tree path (budget > block_size): compute TP-safe top-K
+        # --- 3) Full tree path: compute TP-safe top-K
         # proposal ids/logprobs, beam search, compile mask.
         #
-        # DDTree Algorithm 1 uses K = min(B, |V|).  In practice |V| is much
-        # larger than the small budgets we tune here (especially B=32), so use
-        # B directly and let the local top-k helper clamp to the available shard
-        # size if needed.
-        proposal_topk = self.tree_budget
-        draft_top_log_probs, draft_top_token_ids = (
-            self._compute_draft_topk_log_probs_and_token_ids(
+        # DDTree Algorithm 1 uses K = min(B, |V|), where |V| is the global,
+        # unpadded target vocabulary size rather than a TP-local shard size.
+        vocab_size = getattr(lm_head, "num_embeddings", None)
+        if vocab_size is None:
+            vocab_size = getattr(
+                self.target_worker.model_runner.model_config, "vocab_size", None
+            )
+        if vocab_size is None or int(vocab_size) <= 0:
+            raise RuntimeError(
+                "DDTREE requires a positive target vocabulary size to compute "
+                "K = min(tree_budget, vocab_size)."
+            )
+        proposal_topk = min(int(self.tree_budget), int(vocab_size))
+        with profiler.gpu("draft_head_topk"):
+            (
+                draft_top_log_probs,
+                draft_top_token_ids,
+            ) = self._compute_draft_topk_log_probs_and_token_ids(
                 hidden_states=draft_hidden[:, 1:, :].reshape(
                     -1, draft_hidden.shape[-1]
                 ),
                 lm_head=lm_head,
                 topk=proposal_topk,
             )
-        )
         draft_top_log_probs = draft_top_log_probs.view(
             bs, self.block_size - 1, proposal_topk
         )
@@ -214,43 +171,49 @@ class DDTreeWorker(DFlashWorker):
             _out_node_depths=self._tree_node_depths_buf,
             _out_parents=self._tree_parents_buf,
             _out_visibility=self._tree_visibility_buf,
+            prune_to_deepest_chains=self.is_ddtree_prune,
+            profiler=profiler,
         )
 
-        (
-            verify_input_ids,
-            verify_position_ids,
-            tree_attention_mask,
-            actual_tree_sizes,
-        ) = compile_ddtree_tree(
-            root_token_ids=draft_input.bonus_tokens,
-            node_token_ids=node_token_ids,
-            node_depths=node_depths,
-            visibility=visibility,
-            start_positions=batch.seq_lens,
-            past_lengths=batch.seq_lens,
-            tree_budget=self.tree_budget,
-            actual_tree_sizes=actual_tree_sizes,
-            device=batch.device,
-            past_lens_cpu=batch.seq_lens_cpu.tolist(),
-            actual_sizes_cpu=actual_tree_sizes_cpu,
-        )
+        verify_token_num = max(1, max(int(x) for x in actual_tree_sizes_cpu))
+        with profiler.cpu("mask_compile"):
+            (
+                verify_input_ids,
+                verify_position_ids,
+                tree_attention_mask,
+                actual_tree_sizes,
+            ) = compile_ddtree_tree(
+                root_token_ids=draft_input.bonus_tokens,
+                node_token_ids=node_token_ids,
+                node_depths=node_depths,
+                visibility=visibility,
+                start_positions=batch.seq_lens,
+                past_lengths=batch.seq_lens,
+                tree_budget=self.tree_budget,
+                actual_tree_sizes=actual_tree_sizes,
+                device=batch.device,
+                past_lens_cpu=batch.seq_lens_cpu.tolist(),
+                actual_sizes_cpu=actual_tree_sizes_cpu,
+                verify_token_num=verify_token_num,
+            )
 
-        tree_is_spine = all(
-            all(len(children) <= 1 for children in cm.values())
-            for cm in child_maps
+        tree_is_spine = (
+            all(all(len(children) <= 1 for children in cm.values()) for cm in child_maps)
+            and all(int(size) == verify_token_num for size in actual_tree_sizes_cpu)
         )
 
         verify_input = DDTreeVerifyInput(
             draft_token=verify_input_ids.reshape(-1),
             positions=verify_position_ids.reshape(-1),
-            draft_token_num=self.max_tree_nodes,
+            draft_token_num=verify_token_num,
             tree_budget=self.tree_budget,
             child_maps=child_maps,
             actual_tree_sizes=actual_tree_sizes,
             custom_mask=tree_attention_mask,
             tree_is_spine=tree_is_spine,
         )
-        verify_input.prepare_for_verify(batch, self.page_size)
+        with profiler.cpu("prepare_verify"):
+            verify_input.prepare_for_verify(batch, self.page_size)
 
         batch.forward_mode = (
             ForwardMode.TARGET_VERIFY
@@ -333,50 +296,14 @@ class DDTreeWorker(DFlashWorker):
             self.target_worker.model_runner, "capture_mode", False
         )
 
-        batch_result = self.target_worker.forward_batch_generation(
-            batch, is_verify=True, **kwargs
-        )
+        with self.ddtree_profiler.gpu("target_verify"):
+            batch_result = self.target_worker.forward_batch_generation(
+                batch, is_verify=True, **kwargs
+            )
         logits_output, can_run_cuda_graph = (
             batch_result.logits_output,
             batch_result.can_run_cuda_graph,
         )
-
-        # Spine path: delegate to DFLASH verify (CUDA-graph compatible, handles
-        # KV, seq_lens, hidden states, etc. in one call).
-        if isinstance(verify_input, DFlashVerifyInput):
-            (
-                new_bonus_tokens,
-                commit_lens,
-                next_target_hidden,
-                num_correct_drafts_per_req_cpu,
-            ) = verify_input.verify(
-                batch=batch,
-                logits_output=logits_output,
-                page_size=self.page_size,
-            )
-
-            draft_input.bonus_tokens = new_bonus_tokens
-            draft_input.target_hidden = next_target_hidden
-            draft_input.ctx_lens = commit_lens
-            self._append_target_hidden_to_draft_kv(batch, draft_input)
-            batch.spec_info = draft_input
-            batch.forward_mode = ForwardMode.DECODE
-
-            num_correct_drafts = sum(num_correct_drafts_per_req_cpu)
-            if not self._logged_first_verify and self.tp_rank == 0:
-                logger.info(
-                    "DDTREE spine verify completed. num_correct_drafts_per_req=%s",
-                    num_correct_drafts_per_req_cpu,
-                )
-                self._logged_first_verify = True
-
-            return GenerationBatchResult(
-                logits_output=logits_output,
-                next_token_ids=new_bonus_tokens,
-                num_correct_drafts=num_correct_drafts,
-                num_correct_drafts_per_req_cpu=num_correct_drafts_per_req_cpu,
-                can_run_cuda_graph=can_run_cuda_graph,
-            )
 
         # Full tree path: use DDTree verify.
         assert isinstance(verify_input, DDTreeVerifyInput)
@@ -390,16 +317,30 @@ class DDTreeWorker(DFlashWorker):
             logits_output=logits_output,
             page_size=self.page_size,
             model_runner=self.target_worker.model_runner,
+            profiler=self.ddtree_profiler,
         )
 
         draft_input.bonus_tokens = new_bonus_tokens
         draft_input.target_hidden = next_target_hidden
         draft_input.ctx_lens = commit_lens
-        self._append_target_hidden_to_draft_kv(batch, draft_input)
+        with self.ddtree_profiler.gpu("draft_kv_append_after"):
+            self._append_target_hidden_to_draft_kv(batch, draft_input)
         batch.spec_info = draft_input
         batch.forward_mode = ForwardMode.DECODE
 
         num_correct_drafts = sum(num_correct_drafts_per_req_cpu)
+        bs = len(num_correct_drafts_per_req_cpu)
+        self.ddtree_profiler.record_round(
+            mode="ddtree_full",
+            batch_size=bs,
+            block_size=int(self.block_size),
+            tree_budget=int(self.tree_budget),
+            draft_token_num=int(verify_input.draft_token_num),
+            mean_num_correct_drafts=(float(num_correct_drafts) / bs if bs > 0 else 0.0),
+            mean_accept_len=(float(num_correct_drafts + bs) / bs if bs > 0 else 0.0),
+            round_output_tokens=int(num_correct_drafts + bs),
+            can_run_cuda_graph=bool(can_run_cuda_graph),
+        )
         if not self._logged_first_verify and self.tp_rank == 0:
             logger.info(
                 "DDTREE verify completed. num_correct_drafts_per_req=%s",
@@ -474,8 +415,7 @@ class DDTreeWorker(DFlashWorker):
         )
         if self._ddtree_vocab_id_cache_key != vocab_id_cache_key:
             self._ddtree_org_token_ids = (
-                torch.arange(num_org, dtype=torch.long, device=device)
-                + org_vocab_start
+                torch.arange(num_org, dtype=torch.long, device=device) + org_vocab_start
                 if num_org > 0
                 else None
             )
@@ -574,7 +514,9 @@ class DDTreeWorker(DFlashWorker):
             local_top_vals = torch.full(
                 (num_tokens, topk), -float("inf"), dtype=torch.float32, device=device
             )
-            local_top_ids = torch.zeros((num_tokens, topk), dtype=torch.long, device=device)
+            local_top_ids = torch.zeros(
+                (num_tokens, topk), dtype=torch.long, device=device
+            )
 
         if tp_size > 1:
             gathered_top_vals = torch.empty(
