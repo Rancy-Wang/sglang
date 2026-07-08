@@ -419,8 +419,6 @@ class DetokenizerManager(MultiHttpWorkerDetokenizerMixin):
             spec_verify_ct=recv_obj.spec_verify_ct,
             spec_num_correct_drafts=recv_obj.spec_num_correct_drafts,
             spec_correct_drafts_histogram=recv_obj.spec_correct_drafts_histogram,
-            # CODEX_DDTREE_ACCEPT_LENGTH_EXPORT disabled:
-            # spec_accept_lengths=recv_obj.spec_accept_lengths,
             input_token_logprobs_val=recv_obj.input_token_logprobs_val,
             input_token_logprobs_idx=recv_obj.input_token_logprobs_idx,
             output_token_logprobs_val=recv_obj.output_token_logprobs_val,

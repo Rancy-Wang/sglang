@@ -497,13 +497,16 @@ class FlashInferAttnBackend(AttentionBackend):
                 disable_split_kv=self.disable_cuda_graph_kv_split,
             )
         elif forward_mode.is_target_verify() or forward_mode.is_draft_extend():
+            prefill_key = self._prefill_cuda_graph_metadata_key(
+                bs, forward_mode, spec_info
+            )
             self.indices_updater_prefill.update(
                 req_pool_indices[:bs],
                 seq_lens[:bs],
                 seq_lens_cpu[:bs] if seq_lens_cpu is not None else None,
                 seq_lens_sum,
                 prefix_lens=None,
-                prefill_wrappers=self.prefill_cuda_graph_metadata[bs],
+                prefill_wrappers=self.prefill_cuda_graph_metadata[prefill_key],
                 use_ragged=False,
                 encoder_lens=encoder_lens[:bs] if encoder_lens is not None else None,
                 spec_info=spec_info,
@@ -515,7 +518,9 @@ class FlashInferAttnBackend(AttentionBackend):
                 seq_lens_cpu[:bs] if seq_lens_cpu is not None else None,
                 seq_lens_sum,
                 prefix_lens=seq_lens - self.dllm_config.block_size,
-                prefill_wrappers=self.prefill_cuda_graph_metadata[bs],
+                prefill_wrappers=self.prefill_cuda_graph_metadata[
+                    self._prefill_cuda_graph_metadata_key(bs, forward_mode, spec_info)
+                ],
                 use_ragged=not self.use_paged,
                 encoder_lens=encoder_lens[:bs] if encoder_lens is not None else None,
                 spec_info=None,
@@ -710,6 +715,22 @@ class FlashInferAttnBackend(AttentionBackend):
             )
         return wrappers
 
+    def _is_ddtree_verify_spec(self, spec_info: Optional[SpecInput]) -> bool:
+        return (
+            spec_info is not None
+            and getattr(spec_info, "spec_input_type", None) == SpecInputType.DDTREE_VERIFY
+        )
+
+    def _prefill_cuda_graph_metadata_key(
+        self,
+        bs: int,
+        forward_mode: ForwardMode,
+        spec_info: Optional[SpecInput],
+    ):
+        if forward_mode.is_target_verify() and self._is_ddtree_verify_spec(spec_info):
+            return (int(getattr(spec_info, "draft_token_num")), int(bs))
+        return int(bs)
+
     def _prepare_cuda_graph_metadata(
         self,
         bs: int,
@@ -741,7 +762,9 @@ class FlashInferAttnBackend(AttentionBackend):
                 and getattr(spec_info, "custom_mask", None) is not None
             )
             prefill_wrappers = self._create_prefill_wrappers(bs, use_custom_mask)
-            self.prefill_cuda_graph_metadata[bs] = prefill_wrappers
+            self.prefill_cuda_graph_metadata[
+                self._prefill_cuda_graph_metadata_key(bs, forward_mode, spec_info)
+            ] = prefill_wrappers
             self.forward_metadata = PrefillMetadata(
                 prefill_wrappers, forward_mode.is_dllm_extend(), False
             )

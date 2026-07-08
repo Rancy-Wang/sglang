@@ -4,10 +4,12 @@ import torch
 
 from sglang.srt.model_executor.forward_batch_info import CaptureHiddenMode
 from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.speculative.ddtree_info import DDTreeVerifyInput
 from sglang.srt.speculative.dflash_info import DFlashVerifyInput
 from sglang.srt.speculative.eagle_info import EagleVerifyInput
 from sglang.srt.speculative.frozen_kv_mtp_info import FrozenKVMTPVerifyInput
 from sglang.srt.speculative.ngram_info import NgramVerifyInput
+from sglang.srt.speculative.spec_info import SpeculativeAlgorithm
 
 from ..attention_methods.dense_attention import DEFAULT_DEVICE as DENSE_DEFAULT_DEVICE
 from ..attention_methods.dense_attention import DEFAULT_DTYPE as DENSE_DEFAULT_DTYPE
@@ -183,7 +185,17 @@ from .speculative_cuda_graph_runner import (
     run_speculative_cuda_graph_case,
 )
 
-SpecVerifyKind = Literal["eagle", "frozen_kv_mtp", "dflash", "ngram"]
+SpecVerifyKind = Literal["eagle", "frozen_kv_mtp", "dflash", "ddtree", "ngram"]
+
+
+def _spec_algorithm_for_kind(spec_kind: SpecVerifyKind) -> SpeculativeAlgorithm:
+    return {
+        "eagle": SpeculativeAlgorithm.EAGLE,
+        "frozen_kv_mtp": SpeculativeAlgorithm.FROZEN_KV_MTP,
+        "dflash": SpeculativeAlgorithm.DFLASH,
+        "ddtree": SpeculativeAlgorithm.DDTREE,
+        "ngram": SpeculativeAlgorithm.NGRAM,
+    }[spec_kind]
 
 
 def _check_target_verify_case(case) -> int:
@@ -200,6 +212,7 @@ def _draft_tree_mask(
     draft_token_num: int,
     topk: int,
     device: str,
+    spec_kind: SpecVerifyKind,
 ) -> torch.Tensor:
     if topk == 1:
         return torch.tril(
@@ -210,6 +223,15 @@ def _draft_tree_mask(
                 device=device,
             )
         )
+
+    if spec_kind == "ddtree" and draft_token_num >= 3:
+        # Root + two sibling children are real tree nodes. Rows beyond that are
+        # bucket-padding dummy queries; each attends only to itself so kernels
+        # never see an empty attention row and production discards the output.
+        mask = torch.eye(draft_token_num, dtype=torch.bool, device=device)
+        mask[1, 0] = True
+        mask[2, 0] = True
+        return mask
 
     if draft_token_num != 3:
         # The tree mask below hardcodes the root + two-branch tree shape used
@@ -232,12 +254,14 @@ def _make_custom_masks(
     *,
     topk: int,
     device: str,
+    spec_kind: SpecVerifyKind = "eagle",
 ) -> tuple[list[torch.Tensor], torch.Tensor]:
     draft_token_num = _check_target_verify_case(case)
     draft_mask = _draft_tree_mask(
         draft_token_num=draft_token_num,
         topk=topk,
         device=device,
+        spec_kind=spec_kind,
     )
     masks_by_req = []
     flattened_masks = []
@@ -289,11 +313,8 @@ def _make_spec_verify_input(
     spec_kind: SpecVerifyKind,
 ):
     draft_token_num = _check_target_verify_case(case)
-    _, custom_mask = _make_custom_masks(case, topk=topk, device=device)
-    retrieve_index, retrieve_next_token, retrieve_next_sibling = _make_retrieve_tensors(
-        case,
-        topk=topk,
-        device=device,
+    _, custom_mask = _make_custom_masks(
+        case, topk=topk, device=device, spec_kind=spec_kind
     )
 
     if spec_kind == "dflash":
@@ -307,6 +328,23 @@ def _make_spec_verify_input(
             custom_mask=custom_mask,
             capture_hidden_mode=CaptureHiddenMode.FULL,
         )
+
+    if spec_kind == "ddtree":
+        return DDTreeVerifyInput(
+            draft_token=batch.input_ids,
+            positions=batch.positions,
+            draft_token_num=draft_token_num,
+            tree_budget=max(0, draft_token_num - 1),
+            custom_mask=custom_mask,
+            capture_hidden_mode=CaptureHiddenMode.FULL,
+            tree_is_spine=(topk == 1),
+        )
+
+    retrieve_index, retrieve_next_token, retrieve_next_sibling = _make_retrieve_tensors(
+        case,
+        topk=topk,
+        device=device,
+    )
 
     if spec_kind == "ngram":
         return NgramVerifyInput(
@@ -377,7 +415,7 @@ def _target_verify_expected_output(
     topk: int,
     device: str,
 ):
-    masks_by_req, _ = _make_custom_masks(case, topk=topk, device=device)
+    masks_by_req, _ = _make_custom_masks(case, topk=topk, device=device, spec_kind=spec_kind)
     return reference_fn(
         fixture.reference_module,
         case,
@@ -396,6 +434,7 @@ def _prepare_spec_verify_batch(
     device: str,
 ) -> None:
     _prepare_target_verify_batch(batch, case, device)
+    batch.spec_algorithm = _spec_algorithm_for_kind(spec_kind)
     batch.spec_info = _make_spec_verify_input(
         case,
         batch,
@@ -498,6 +537,7 @@ def run_dense_spec_verify_case(
         device=device,
     )
     _prepare_target_verify_batch(fixture.forward_batch, case, device)
+    fixture.forward_batch.spec_algorithm = _spec_algorithm_for_kind(spec_kind)
     masks_by_req, _ = _make_custom_masks(case, topk=topk, device=device)
     fixture.forward_batch.spec_info = _make_spec_verify_input(
         case,

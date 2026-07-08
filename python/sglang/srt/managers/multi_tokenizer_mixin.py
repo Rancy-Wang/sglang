@@ -143,10 +143,6 @@ def _handle_output_by_index(output, i):
             spec_correct_drafts_histogram=_extract_field_by_index(
                 output, "spec_correct_drafts_histogram", i
             ),
-            # CODEX_DDTREE_ACCEPT_LENGTH_EXPORT disabled:
-            # spec_accept_lengths=_extract_field_by_index(
-            #     output, "spec_accept_lengths", i
-            # ),
             time_stats=_extract_field_by_index(output, "time_stats", i),
             finished_reasons=_extract_field_by_index(output, "finished_reasons", i),
             decoded_texts=_extract_field_by_index(output, "decoded_texts", i),
@@ -246,10 +242,6 @@ def _handle_output_by_index(output, i):
             spec_correct_drafts_histogram=_extract_field_by_index(
                 output, "spec_correct_drafts_histogram", i
             ),
-            # CODEX_DDTREE_ACCEPT_LENGTH_EXPORT disabled:
-            # spec_accept_lengths=_extract_field_by_index(
-            #     output, "spec_accept_lengths", i
-            # ),
             time_stats=_extract_field_by_index(output, "time_stats", i),
             finished_reasons=_extract_field_by_index(output, "finished_reasons", i),
             output_strs=_extract_field_by_index(output, "output_strs", i),

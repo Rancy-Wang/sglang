@@ -106,8 +106,6 @@ class SpeculativeDecodingMetricsMixin:
     # Empty list [] when speculative decoding is disabled.
     spec_correct_drafts_histogram: List[List[int]]
 
-    # CODEX_DDTREE_ACCEPT_LENGTH_EXPORT disabled:
-    # spec_accept_lengths: List[List[Dict[str, Any]]]
 
 
 # Parameters for a session

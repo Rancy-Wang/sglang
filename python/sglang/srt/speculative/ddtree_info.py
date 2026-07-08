@@ -13,10 +13,6 @@ from sglang.srt.speculative.spec_info import SpecInput, SpecInputType
 from sglang.srt.speculative.spec_utils import assign_req_to_token_pool_func
 
 
-# CODEX_DDTREE_ACCEPT_LENGTH_EXPORT disabled:
-# _build_ddtree_accept_round_info used to build per-round response metadata.
-
-
 @dataclass
 class DDTreeVerifyInput(SpecInput):
     draft_token: torch.Tensor
@@ -27,6 +23,7 @@ class DDTreeVerifyInput(SpecInput):
 
     child_maps: List[Dict[int, Dict[int, int]]] = field(default_factory=list)
     actual_tree_sizes: Optional[torch.Tensor] = None
+    parents: Optional[torch.Tensor] = None
 
     custom_mask: Optional[torch.Tensor] = None
     topk: int = 1
@@ -38,8 +35,8 @@ class DDTreeVerifyInput(SpecInput):
     # In this mode, cascade attention is unnecessary and a standard causal
     # mask suffices, matching DFLASH's verify pattern exactly.
     tree_is_spine: bool = False
-    # CODEX_DDTREE_ACCEPT_LENGTH_EXPORT disabled:
-    # block_size: Optional[int] = None
+    raw_tree_size: Optional[int] = None
+    cuda_graph_bucket_size: Optional[int] = None
 
     def __post_init__(self):
         super().__init__(spec_input_type=SpecInputType.DDTREE_VERIFY)
@@ -223,14 +220,37 @@ class DDTreeVerifyInput(SpecInput):
             # Full tree path: greedy-only for now (tree sampling requires
             # sgl_kernel tree topology which is expensive to build per-step).
             with cpu_ctx("follow_tree_cpu"):
+                draft_tokens_cpu = (
+                    self.draft_token.view(bs, self.draft_token_num).cpu().tolist()
+                )
+                child_maps = self.child_maps
+                if not child_maps:
+                    if self.parents is None:
+                        raise RuntimeError(
+                            "DDTree verify needs child_maps or parent metadata."
+                        )
+                    from sglang.srt.speculative.ddtree_utils import (
+                        build_child_maps_from_parent_metadata,
+                    )
+
+                    parents_cpu = (
+                        self.parents.view(bs, self.draft_token_num).cpu().tolist()
+                    )
+                    if self.actual_tree_sizes is None:
+                        actual_sizes_cpu = [self.draft_token_num] * bs
+                    else:
+                        actual_sizes_cpu = [
+                            int(x) for x in self.actual_tree_sizes.cpu().tolist()
+                        ]
+                    child_maps = build_child_maps_from_parent_metadata(
+                        draft_tokens_cpu, parents_cpu, actual_sizes_cpu
+                    )
+                    self.child_maps = child_maps
                 (
                     self.accepted_indices,
                     self.next_tokens,
                     next_tokens_cpu,
-                ) = follow_verified_tree(self.child_maps, target_predict)
-                draft_tokens_cpu = (
-                    self.draft_token.view(bs, self.draft_token_num).cpu().tolist()
-                )
+                ) = follow_verified_tree(child_maps, target_predict)
             commit_lens = []
             num_correct_drafts_per_req = []
             with cpu_ctx("commit_output_cpu"):
@@ -252,8 +272,6 @@ class DDTreeVerifyInput(SpecInput):
                     num_correct_drafts = max(0, appended - 1)
                     commit_lens.append(appended)
                     num_correct_drafts_per_req.append(num_correct_drafts)
-                    # CODEX_DDTREE_ACCEPT_LENGTH_EXPORT disabled:
-                    # Do not append per-verify accepted-length records.
                     req.spec_verify_ct += 1
                     req.spec_num_correct_drafts += num_correct_drafts
                     req.update_spec_correct_drafts_histogram(num_correct_drafts)
@@ -277,8 +295,6 @@ class DDTreeVerifyInput(SpecInput):
                 commit_lens[i] = appended
                 num_correct_drafts_per_req[i] = max(0, appended - 1)
                 self.accepted_indices[i] = list(range(appended))
-                # CODEX_DDTREE_ACCEPT_LENGTH_EXPORT disabled:
-                # Do not append per-verify accepted-length records.
                 req.spec_verify_ct += 1
                 req.spec_num_correct_drafts += num_correct_drafts_per_req[i]
                 req.update_spec_correct_drafts_histogram(

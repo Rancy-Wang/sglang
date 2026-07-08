@@ -70,6 +70,7 @@ from sglang.srt.model_executor.forward_batch_info import (
 from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
 from sglang.srt.model_executor.input_buffers import share_input_buffers_in
 from sglang.srt.multiplex.pdmux_context import get_current_stream_idx, get_stream_groups
+from sglang.srt.speculative.ddtree_utils import resolve_ddtree_cuda_graph_buckets
 from sglang.srt.utils import (
     empty_context,
     get_available_gpu_memory,
@@ -508,6 +509,10 @@ class CudaGraphRunner:
         self.capture_forward_mode = ForwardMode.DECODE
         self.capture_hidden_mode = CaptureHiddenMode.NULL
         self.num_tokens_per_bs = 1
+        self.is_ddtree_target_graph = False
+        self.ddtree_cuda_graph_buckets = None
+        self.ddtree_capture_bs_by_bucket = None
+        self.ddtree_compile_bs_by_bucket = None
         if model_runner.spec_algorithm.is_speculative():
             if self.model_runner.is_draft_worker:
                 # Draft workers can use TARGET_VERIFY mode.
@@ -523,7 +528,19 @@ class CudaGraphRunner:
                 tree_budget = model_runner.server_args.speculative_ddtree_budget
                 if tree_budget is None:
                     tree_budget = self.speculative_num_draft_tokens - 1
-                self.num_tokens_per_bs = int(tree_budget) + 1
+                self.is_ddtree_target_graph = True
+                self.ddtree_cuda_graph_buckets = resolve_ddtree_cuda_graph_buckets(
+                    tree_budget=int(tree_budget),
+                    is_ddtree_prune=bool(
+                        getattr(model_runner.server_args, "is_ddtree_prune", False)
+                    ),
+                    configured_buckets=getattr(
+                        model_runner.server_args,
+                        "speculative_ddtree_cuda_graph_buckets",
+                        None,
+                    ),
+                )
+                self.num_tokens_per_bs = max(self.ddtree_cuda_graph_buckets)
             else:
                 self.num_tokens_per_bs = model_runner.spec_algorithm.get_num_tokens_per_bs_for_target_verify(
                     self.speculative_num_draft_tokens, model_runner.is_draft_worker
@@ -533,43 +550,47 @@ class CudaGraphRunner:
             self.num_tokens_per_bs = self.dllm_config.block_size
 
         # Batch sizes to capture
-        self.capture_bs, self.compile_bs = get_batch_sizes_to_capture(
-            model_runner, self.num_tokens_per_bs
-        )
-        if (
-            model_runner.spec_algorithm.is_ddtree()
-            and not model_runner.is_draft_worker
-            and self.num_tokens_per_bs > 1
-        ):
-            # DDTree verifies tree_budget + 1 tokens per request. Reusing the
-            # decode-oriented batch-size defaults can therefore capture several
-            # thousand tokens at once and OOM in the logits all-gather. Bound
-            # target graphs by the existing per-graph token budget; larger
-            # runtime batches safely fall back to eager execution. The draft
-            # worker keeps its normal block-size graph coverage.
-            # Multiple captured batch sizes retain separate graph-private
-            # activation/logits buffers. Keep the cumulative footprint bounded
-            # for vocab-wide DDTree verification while preserving the common
-            # batch-1 graph for large trees. Larger batches use eager execution.
+        if self.is_ddtree_target_graph:
             capture_token_budget = min(
                 model_runner.server_args.piecewise_cuda_graph_max_tokens or 2048,
                 512,
             )
-            max_ddtree_capture_bs = max(
-                1, int(capture_token_budget) // self.num_tokens_per_bs
+            self.ddtree_capture_bs_by_bucket = {}
+            self.ddtree_compile_bs_by_bucket = {}
+            for bucket in self.ddtree_cuda_graph_buckets:
+                capture_bs, compile_bs = get_batch_sizes_to_capture(
+                    model_runner, bucket
+                )
+                max_ddtree_capture_bs = max(1, int(capture_token_budget) // bucket)
+                capture_bs = [bs for bs in capture_bs if bs <= max_ddtree_capture_bs]
+                compile_bs = [bs for bs in compile_bs if bs <= max_ddtree_capture_bs]
+                if not capture_bs:
+                    continue
+                self.ddtree_capture_bs_by_bucket[int(bucket)] = capture_bs
+                self.ddtree_compile_bs_by_bucket[int(bucket)] = compile_bs
+
+            if not self.ddtree_capture_bs_by_bucket:
+                raise RuntimeError(
+                    "DDTree target CUDA graph has no capturable buckets. "
+                    f"buckets={self.ddtree_cuda_graph_buckets}, "
+                    f"token_budget={capture_token_budget}."
+                )
+
+            self.capture_bs = sorted(
+                {bs for values in self.ddtree_capture_bs_by_bucket.values() for bs in values}
             )
-            self.capture_bs = [
-                bs for bs in self.capture_bs if bs <= max_ddtree_capture_bs
-            ]
-            self.compile_bs = [
-                bs for bs in self.compile_bs if bs <= max_ddtree_capture_bs
-            ]
+            self.compile_bs = sorted(
+                {bs for values in self.ddtree_compile_bs_by_bucket.values() for bs in values}
+            )
             log_info_on_rank0(
                 logger,
-                "Limit DDTree target CUDA graph capture to "
-                f"bs<={max_ddtree_capture_bs} "
-                f"({self.num_tokens_per_bs} verify tokens/request, "
-                f"token budget={capture_token_budget}).",
+                "Limit DDTree target CUDA graph capture by bucket: "
+                f"buckets={self.ddtree_capture_bs_by_bucket}, "
+                f"token budget={capture_token_budget}.",
+            )
+        else:
+            self.capture_bs, self.compile_bs = get_batch_sizes_to_capture(
+                model_runner, self.num_tokens_per_bs
             )
         log_info_on_rank0(logger, f"Capture cuda graph bs {self.capture_bs}")
         if KTRANSFORMERS_AVAILABLE:
@@ -581,7 +602,18 @@ class CudaGraphRunner:
 
         # Attention backend
         self.max_bs = max(self.capture_bs)
-        self.max_num_token = self.max_bs * self.num_tokens_per_bs
+        if self.is_ddtree_target_graph:
+            self.max_num_token = max(
+                bucket * max(batch_sizes)
+                for bucket, batch_sizes in self.ddtree_capture_bs_by_bucket.items()
+            )
+            setattr(
+                self.attn_backend,
+                "cuda_graph_target_verify_max_tokens_per_bs",
+                self.num_tokens_per_bs,
+            )
+        else:
+            self.max_num_token = self.max_bs * self.num_tokens_per_bs
         self.attn_backend.init_cuda_graph_state(self.max_bs, self.max_num_token)
 
         # Init PDMux if needed
@@ -675,18 +707,64 @@ class CudaGraphRunner:
         if self.enable_pdmux:
             self.stream_groups = get_stream_groups()
             for attn_backend in self.model_runner.decode_attn_backend_group:
+                if self.is_ddtree_target_graph:
+                    setattr(
+                        attn_backend,
+                        "cuda_graph_target_verify_max_tokens_per_bs",
+                        self.num_tokens_per_bs,
+                    )
                 attn_backend.init_cuda_graph_state(self.max_bs, self.max_num_token)
 
     def _cache_loc_dtype(self):
         return torch.int64
 
+    def _runtime_num_tokens_per_bs(self, forward_batch: ForwardBatch) -> int:
+        if (
+            self.is_ddtree_target_graph
+            and forward_batch.forward_mode.is_target_verify()
+            and forward_batch.spec_info is not None
+        ):
+            return int(getattr(forward_batch.spec_info, "draft_token_num"))
+        return int(self.num_tokens_per_bs)
+
+    def _capture_bs_for_tokens_per_bs(self, num_tokens_per_bs: int):
+        if self.is_ddtree_target_graph:
+            return self.ddtree_capture_bs_by_bucket.get(int(num_tokens_per_bs), [])
+        return self.capture_bs
+
+    def _compile_bs_for_tokens_per_bs(self, num_tokens_per_bs: int):
+        if self.is_ddtree_target_graph:
+            return self.ddtree_compile_bs_by_bucket.get(int(num_tokens_per_bs), [])
+        return self.compile_bs
+
+    def _make_graph_key(
+        self,
+        bs: int,
+        stream_idx: Optional[int] = None,
+        num_tokens_per_bs: Optional[int] = None,
+    ):
+        if self.is_ddtree_target_graph and num_tokens_per_bs is not None:
+            key = (int(num_tokens_per_bs), int(bs))
+            if stream_idx is not None:
+                key = (int(stream_idx), int(num_tokens_per_bs), int(bs))
+            return key
+        if stream_idx is not None:
+            return f"{stream_idx}_{bs}"
+        return bs
+
     def can_run(self, forward_batch: ForwardBatch):
         # Disable for token embedding overrides (dynamic per-request)
         if forward_batch.replace_embeds is not None:
             return False
+
+        num_tokens_per_bs = self._runtime_num_tokens_per_bs(forward_batch)
+        capture_bs = self._capture_bs_for_tokens_per_bs(num_tokens_per_bs)
+        if not capture_bs:
+            return False
+
         if self.require_mlp_tp_gather:
             cuda_graph_bs = (
-                max(forward_batch.global_num_tokens_cpu) // self.num_tokens_per_bs
+                max(forward_batch.global_num_tokens_cpu) // num_tokens_per_bs
                 if self.model_runner.spec_algorithm.is_eagle()
                 or self.model_runner.spec_algorithm.is_standalone()
                 or self.model_runner.spec_algorithm.is_dflash()
@@ -696,15 +774,16 @@ class CudaGraphRunner:
         else:
             cuda_graph_bs = forward_batch.batch_size
 
-        graph_key = cuda_graph_bs
-        if self.enable_pdmux:
-            graph_key = f"{get_current_stream_idx()}_{cuda_graph_bs}"
-
-        is_bs_supported = (
-            graph_key in self.graphs
-            if self.disable_padding
-            else cuda_graph_bs <= self.max_bs
-        )
+        if self.disable_padding:
+            stream_idx = get_current_stream_idx() if self.enable_pdmux else None
+            graph_key = self._make_graph_key(
+                cuda_graph_bs, stream_idx, num_tokens_per_bs
+            )
+            is_bs_supported = graph_key in self.graphs
+        else:
+            is_bs_supported = bisect.bisect_left(capture_bs, cuda_graph_bs) < len(
+                capture_bs
+            )
 
         if self.require_mlp_sync:
             is_bs_supported = is_bs_supported and forward_batch.can_run_dp_cuda_graph
@@ -737,7 +816,7 @@ class CudaGraphRunner:
 
         is_ngram_supported = (
             (
-                forward_batch.batch_size * self.num_tokens_per_bs
+                forward_batch.batch_size * num_tokens_per_bs
                 == forward_batch.input_ids.numel()
             )
             if self.model_runner.spec_algorithm.is_ngram()
@@ -746,17 +825,13 @@ class CudaGraphRunner:
 
         is_ddtree_verify_shape_supported = True
         if (
-            self.model_runner.spec_algorithm.is_ddtree()
-            and not self.model_runner.is_draft_worker
+            self.is_ddtree_target_graph
             and forward_batch.forward_mode.is_target_verify()
         ):
-            runtime_tokens_per_req = getattr(
-                forward_batch.spec_info, "draft_token_num", self.num_tokens_per_bs
-            )
             is_ddtree_verify_shape_supported = (
-                int(runtime_tokens_per_req) == self.num_tokens_per_bs
+                int(num_tokens_per_bs) in self.ddtree_capture_bs_by_bucket
                 and forward_batch.input_ids.numel()
-                == forward_batch.batch_size * self.num_tokens_per_bs
+                == forward_batch.batch_size * num_tokens_per_bs
             )
 
         return (
@@ -803,6 +878,49 @@ class CudaGraphRunner:
                 self.model_runner.gpu_id,
                 empty_cache=False,
             )
+            if self.is_ddtree_target_graph:
+                capture_items = [
+                    (bucket, bs)
+                    for bucket, batch_sizes in self.ddtree_capture_bs_by_bucket.items()
+                    for bs in batch_sizes
+                ]
+                capture_items = sorted(
+                    capture_items, key=lambda item: item[0] * item[1], reverse=True
+                )
+                capture_range = (
+                    tqdm.tqdm(capture_items)
+                    if get_tensor_model_parallel_rank() == 0
+                    else capture_items
+                )
+                for bucket, bs in capture_range:
+                    if get_tensor_model_parallel_rank() == 0:
+                        avail_mem = get_available_gpu_memory(
+                            self.model_runner.device,
+                            self.model_runner.gpu_id,
+                            empty_cache=False,
+                        )
+                        capture_range.set_description(
+                            f"Capturing batches (ddtree_q={bucket} {bs=} {avail_mem=:.2f} GB)"
+                        )
+
+                    compile_bs = self._compile_bs_for_tokens_per_bs(bucket)
+                    with patch_model(
+                        self.model_runner.model,
+                        bs in compile_bs,
+                        num_tokens=bs * bucket,
+                        tp_group=self.model_runner.tp_group,
+                    ) as forward:
+                        graph, output_buffers = self.capture_one_batch_size(
+                            bs,
+                            forward,
+                            stream_idx,
+                            num_tokens_per_bs=bucket,
+                        )
+                        key = self._make_graph_key(bs, stream_idx, bucket)
+                        self.graphs[key] = graph
+                        self.output_buffers[key] = output_buffers
+                return
+
             # Reverse the order to enable better memory sharing across cuda graphs.
             capture_range = (
                 tqdm.tqdm(list(reversed(self.capture_bs)))
@@ -831,7 +949,7 @@ class CudaGraphRunner:
                         output_buffers,
                     ) = self.capture_one_batch_size(bs, forward, stream_idx)
                     # For pd_multiplexing, we need to save the graph and output buffers
-                    key = bs if stream_idx is None else f"{stream_idx}_{bs}"
+                    key = self._make_graph_key(bs, stream_idx)
                     self.graphs[key] = graph
                     self.output_buffers[key] = output_buffers
 
@@ -897,12 +1015,17 @@ class CudaGraphRunner:
         return torch.cuda.CUDAGraph()
 
     def capture_one_batch_size(
-        self, bs: int, forward: Callable, stream_idx: Optional[int] = None
+        self,
+        bs: int,
+        forward: Callable,
+        stream_idx: Optional[int] = None,
+        num_tokens_per_bs: Optional[int] = None,
     ):
         buffers = self.buffers
         graph = self._create_device_graph()
         stream = self.stream
-        num_tokens = bs * self.num_tokens_per_bs
+        num_tokens_per_bs = int(num_tokens_per_bs or self.num_tokens_per_bs)
+        num_tokens = bs * num_tokens_per_bs
 
         # Graph inputs: owned slots come from the registry; the rest off `buffers`.
         registry = self.buffer_registry
@@ -965,7 +1088,7 @@ class CudaGraphRunner:
         else:
             global_dp_buffer_len = None
 
-        spec_info = self.get_spec_info(num_tokens)
+        spec_info = self.get_spec_info(num_tokens, num_tokens_per_bs=num_tokens_per_bs)
         if self.capture_hidden_mode != CaptureHiddenMode.FULL:
             self.capture_hidden_mode = (
                 spec_info.capture_hidden_mode if spec_info else CaptureHiddenMode.NULL
@@ -1154,30 +1277,37 @@ class CudaGraphRunner:
         self.recapture_if_needed(forward_batch)
 
         raw_bs = forward_batch.batch_size
-        raw_num_token = raw_bs * self.num_tokens_per_bs
+        num_tokens_per_bs = self._runtime_num_tokens_per_bs(forward_batch)
+        raw_num_token = raw_bs * num_tokens_per_bs
+        capture_bs = self._capture_bs_for_tokens_per_bs(num_tokens_per_bs)
+        if not capture_bs:
+            raise RuntimeError(
+                f"No CUDA graph capture bucket for num_tokens_per_bs={num_tokens_per_bs}."
+            )
 
         # Pad
         if self.require_mlp_tp_gather:
             max_num_tokens = max(forward_batch.global_num_tokens_cpu)
             max_batch_size = (
-                max_num_tokens / self.num_tokens_per_bs
+                max_num_tokens / num_tokens_per_bs
                 if self.model_runner.spec_algorithm.is_eagle()
                 or self.model_runner.spec_algorithm.is_standalone()
                 or self.model_runner.spec_algorithm.is_dflash()
                 or self.model_runner.spec_algorithm.is_ddtree()
                 else max_num_tokens
             )
-            index = bisect.bisect_left(self.capture_bs, max_batch_size)
+            index = bisect.bisect_left(capture_bs, max_batch_size)
         else:
-            index = bisect.bisect_left(self.capture_bs, raw_bs)
-        bs = self.capture_bs[index]
+            index = bisect.bisect_left(capture_bs, raw_bs)
+        bs = capture_bs[index]
+        padded_num_tokens = bs * num_tokens_per_bs
 
         self.buffer_registry.fill_from(
             forward_batch,
             raw_bs=raw_bs,
             padded_bs=bs,
             raw_num_tokens=raw_num_token,
-            padded_num_tokens=bs * self.num_tokens_per_bs,
+            padded_num_tokens=padded_num_tokens,
             pp_proxy_tensors=pp_proxy_tensors,
         )
 
@@ -1203,13 +1333,14 @@ class CudaGraphRunner:
             stream_idx = get_current_stream_idx()
             attn_backend = self.model_runner.decode_attn_backend_group[stream_idx]
         else:
+            stream_idx = None
             attn_backend = self.attn_backend
         fb_view = build_replay_fb_view(
             forward_batch=forward_batch,
             buffers=buffers,
             bs=bs,
             raw_bs=raw_bs,
-            num_tokens=bs * self.num_tokens_per_bs,
+            num_tokens=padded_num_tokens,
             seq_len_fill_value=self.seq_len_fill_value,
             capture_forward_mode=self.capture_forward_mode,
             is_encoder_decoder=self.is_encoder_decoder,
@@ -1220,6 +1351,8 @@ class CudaGraphRunner:
         self.raw_bs = raw_bs
         self.raw_num_token = raw_num_token
         self.bs = bs
+        self.replay_num_tokens_per_bs = num_tokens_per_bs
+        self.graph_key = self._make_graph_key(bs, stream_idx, num_tokens_per_bs)
 
         if self.model_runner.hisparse_coordinator is not None:
             self.model_runner.hisparse_coordinator.num_real_reqs.fill_(raw_bs)
@@ -1249,10 +1382,14 @@ class CudaGraphRunner:
                 )
 
         # Replay
-        if self.enable_pdmux:
-            graph_key = f"{get_current_stream_idx()}_{self.bs}"
-        else:
-            graph_key = self.bs
+        graph_key = getattr(self, "graph_key", None)
+        if graph_key is None:
+            stream_idx = get_current_stream_idx() if self.enable_pdmux else None
+            graph_key = self._make_graph_key(
+                self.bs,
+                stream_idx,
+                getattr(self, "replay_num_tokens_per_bs", self.num_tokens_per_bs),
+            )
         ctx = (
             self.model_runner.device_timer.wrap(
                 metadata={
@@ -1297,7 +1434,8 @@ class CudaGraphRunner:
             assert isinstance(output, PPProxyTensors)
             return PPProxyTensors({k: v[: self.bs] for k, v in output.tensors.items()})
 
-    def get_spec_info(self, num_tokens: int):
+    def get_spec_info(self, num_tokens: int, num_tokens_per_bs: Optional[int] = None):
+        num_tokens_per_bs = int(num_tokens_per_bs or self.num_tokens_per_bs)
         spec_info = None
         if (
             self.model_runner.spec_algorithm.is_eagle()
@@ -1385,7 +1523,7 @@ class CudaGraphRunner:
             else:
                 from sglang.srt.speculative.ddtree_info import DDTreeVerifyInput
 
-                draft_token_num = int(tree_budget) + 1
+                draft_token_num = num_tokens_per_bs
                 spec_info = DDTreeVerifyInput(
                     draft_token=None,
                     positions=None,
@@ -1404,7 +1542,7 @@ class CudaGraphRunner:
                 retrieve_index=None,
                 retrieve_next_token=None,
                 retrieve_next_sibling=None,
-                draft_token_num=self.num_tokens_per_bs,
+                draft_token_num=num_tokens_per_bs,
             )
             spec_info.capture_hidden_mode = CaptureHiddenMode.NULL
 

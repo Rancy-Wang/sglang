@@ -187,6 +187,19 @@ class TestFA4DenseAttentionBackendCorrectness(CustomTestCase):
             ),
             "ngram",
         ),
+        (
+            DenseAttentionCase(
+                name="runner_fa4_ddtree_verify_spine",
+                backend="fa4",
+                forward_mode=ForwardMode.TARGET_VERIFY,
+                num_heads=4,
+                num_kv_heads=4,
+                page_size=16,
+                prefix_lens=(4, 7),
+                extend_lens=(3, 3),
+            ),
+            "ddtree",
+        ),
     )
     SPEC_VERIFY_CHAIN_CUDA_GRAPH_CASES = (
         (
@@ -240,6 +253,63 @@ class TestFA4DenseAttentionBackendCorrectness(CustomTestCase):
                 extend_lens=(3, 3),
             ),
             "ngram",
+        ),
+        (
+            DenseAttentionCase(
+                name="runner_cuda_graph_fa4_ddtree_verify_spine",
+                backend="fa4",
+                forward_mode=ForwardMode.TARGET_VERIFY,
+                num_heads=4,
+                num_kv_heads=4,
+                page_size=16,
+                prefix_lens=(4, 7),
+                extend_lens=(3, 3),
+            ),
+            "ddtree",
+        ),
+    )
+    SPEC_VERIFY_DDTREE_FULL_TREE_CASES = (
+        DenseAttentionCase(
+            name="runner_fa4_ddtree_verify_full_tree",
+            backend="fa4",
+            forward_mode=ForwardMode.TARGET_VERIFY,
+            num_heads=4,
+            num_kv_heads=4,
+            page_size=16,
+            prefix_lens=(4, 7),
+            extend_lens=(3, 3),
+        ),
+        DenseAttentionCase(
+            name="runner_fa4_ddtree_verify_bucket_padding",
+            backend="fa4",
+            forward_mode=ForwardMode.TARGET_VERIFY,
+            num_heads=4,
+            num_kv_heads=4,
+            page_size=16,
+            prefix_lens=(4, 7),
+            extend_lens=(8, 8),
+        ),
+    )
+    SPEC_VERIFY_DDTREE_FULL_TREE_CUDA_GRAPH_CASES = (
+        DenseAttentionCase(
+            name="runner_cuda_graph_fa4_ddtree_verify_full_tree",
+            backend="fa4",
+            forward_mode=ForwardMode.TARGET_VERIFY,
+            num_heads=4,
+            num_kv_heads=4,
+            page_size=16,
+            prefix_lens=(4, 7),
+            extend_lens=(3, 3),
+        ),
+        DenseAttentionCase(
+            name="runner_cuda_graph_fa4_ddtree_verify_bucket_padding",
+            backend="fa4",
+            forward_mode=ForwardMode.TARGET_VERIFY,
+            num_heads=4,
+            num_kv_heads=4,
+            page_size=16,
+            prefix_lens=(4, 7),
+            extend_lens=(8, 8),
         ),
     )
     EAGLE_DRAFT_EXTEND_RUNNER_CASES = (
@@ -531,6 +601,30 @@ class TestFA4DenseAttentionBackendCorrectness(CustomTestCase):
                     case,
                     topk=1,
                     spec_kind=spec_kind,
+                    head_dim=self.HEAD_DIM,
+                    hidden_size=self.HIDDEN_SIZE,
+                )
+
+    def test_runner_mode_ddtree_full_tree_spec_verify_cases(self):
+        for case in self.SPEC_VERIFY_DDTREE_FULL_TREE_CASES:
+            with self.subTest(case=case.name, backend=case.backend):
+                run_dense_spec_verify_case(
+                    self,
+                    case,
+                    topk=2,
+                    spec_kind="ddtree",
+                    head_dim=self.HEAD_DIM,
+                    hidden_size=self.HIDDEN_SIZE,
+                )
+
+    def test_runner_mode_ddtree_full_tree_spec_verify_cuda_graph_cases(self):
+        for case in self.SPEC_VERIFY_DDTREE_FULL_TREE_CUDA_GRAPH_CASES:
+            with self.subTest(case=case.name, backend=case.backend):
+                run_dense_spec_verify_cuda_graph_case(
+                    self,
+                    case,
+                    topk=2,
+                    spec_kind="ddtree",
                     head_dim=self.HEAD_DIM,
                     hidden_size=self.HIDDEN_SIZE,
                 )

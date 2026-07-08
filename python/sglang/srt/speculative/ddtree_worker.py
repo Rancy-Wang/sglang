@@ -13,7 +13,10 @@ from sglang.srt.model_executor.forward_batch_info import (
 from sglang.srt.speculative.ddtree_info import DDTreeVerifyInput
 from sglang.srt.speculative.ddtree_utils import (
     build_ddtree_tree,
+    build_ddtree_tree_gpu,
     compile_ddtree_tree,
+    resolve_ddtree_cuda_graph_buckets,
+    select_ddtree_cuda_graph_bucket,
 )
 from sglang.srt.speculative.dflash_info import DFlashDraftInput
 from sglang.srt.speculative.dflash_worker import DFlashWorker
@@ -51,7 +54,20 @@ class DDTreeWorker(DFlashWorker):
             self.tree_budget = self.block_size - 1
 
         self.is_ddtree_prune = bool(getattr(server_args, "is_ddtree_prune", False))
+        self.force_ddtree_cpu_build = bool(
+            getattr(server_args, "speculative_ddtree_cpu_build", False)
+        )
         self.max_tree_nodes = self.tree_budget + 1
+        self.ddtree_cuda_graph_buckets = resolve_ddtree_cuda_graph_buckets(
+            tree_budget=self.tree_budget,
+            is_ddtree_prune=self.is_ddtree_prune,
+            configured_buckets=getattr(
+                server_args, "speculative_ddtree_cuda_graph_buckets", None
+            ),
+        )
+        self.use_ddtree_cuda_graph_buckets = self.is_ddtree_prune and not bool(
+            getattr(server_args, "disable_cuda_graph", False)
+        )
 
         # Pre-allocated tree-build output buffers (reused across steps).
         _max_bs = getattr(server_args, "cuda_graph_max_bs", None) or 64
@@ -70,17 +86,35 @@ class DDTreeWorker(DFlashWorker):
         self._tree_visibility_buf: torch.Tensor = torch.zeros(
             _max_bs, _mn, _mn, dtype=torch.bool, device=dev
         )
+        self._tree_actual_sizes_buf: torch.Tensor = torch.zeros(
+            _max_bs, dtype=torch.long, device=dev
+        )
+        _heap_cap = 1 << (max(1, 2 * _budget + 3) - 1).bit_length()
+        self._tree_heap_scores_buf: torch.Tensor = torch.empty(
+            _max_bs, _heap_cap, dtype=torch.float64, device=dev
+        )
+        self._tree_heap_parents_buf: torch.Tensor = torch.empty(
+            _max_bs, _heap_cap, dtype=torch.int32, device=dev
+        )
+        self._tree_heap_depths_buf: torch.Tensor = torch.empty(
+            _max_bs, _heap_cap, dtype=torch.int32, device=dev
+        )
+        self._tree_heap_ranks_buf: torch.Tensor = torch.empty(
+            _max_bs, _heap_cap, dtype=torch.int32, device=dev
+        )
         self._ddtree_vocab_id_cache_key = None
         self._ddtree_org_token_ids: Optional[torch.Tensor] = None
         self._ddtree_added_token_ids: Optional[torch.Tensor] = None
 
         if self.tp_rank == 0:
             logger.info(
-                "Initialized DDTree worker. block_size=%s, tree_budget=%s, max_tree_nodes=%s, is_ddtree_prune=%s",
+                "Initialized DDTree worker. block_size=%s, tree_budget=%s, max_tree_nodes=%s, is_ddtree_prune=%s, force_cpu_build=%s, cuda_graph_buckets=%s",
                 self.block_size,
                 self.tree_budget,
                 self.max_tree_nodes,
                 self.is_ddtree_prune,
+                self.force_ddtree_cpu_build,
+                self.ddtree_cuda_graph_buckets,
             )
 
     def _prepare_for_speculative_decoding(
@@ -153,29 +187,66 @@ class DDTreeWorker(DFlashWorker):
             bs, self.block_size - 1, proposal_topk
         )
 
-        (
-            node_token_ids,
-            node_depths,
-            parents,
-            child_maps,
-            visibility,
-            actual_tree_sizes,
-            actual_tree_sizes_cpu,
-        ) = build_ddtree_tree(
-            draft_logits=None,
-            draft_top_log_probs=draft_top_log_probs,
-            draft_top_token_ids=draft_top_token_ids,
-            tree_budget=self.tree_budget,
-            device=batch.device,
-            _out_node_token_ids=self._tree_node_token_ids_buf,
-            _out_node_depths=self._tree_node_depths_buf,
-            _out_parents=self._tree_parents_buf,
-            _out_visibility=self._tree_visibility_buf,
-            prune_to_deepest_chains=self.is_ddtree_prune,
-            profiler=profiler,
+        can_use_gpu_build = (
+            not self.force_ddtree_cpu_build
+            and not self.is_ddtree_prune
+            and draft_top_log_probs.is_cuda
         )
+        if can_use_gpu_build:
+            with profiler.gpu("tree_gpu_build"):
+                (
+                    node_token_ids,
+                    node_depths,
+                    parents,
+                    child_maps,
+                    visibility,
+                    actual_tree_sizes,
+                    actual_tree_sizes_cpu,
+                ) = build_ddtree_tree_gpu(
+                    draft_top_log_probs=draft_top_log_probs,
+                    draft_top_token_ids=draft_top_token_ids,
+                    tree_budget=self.tree_budget,
+                    device=batch.device,
+                    _out_node_token_ids=self._tree_node_token_ids_buf,
+                    _out_node_depths=self._tree_node_depths_buf,
+                    _out_parents=self._tree_parents_buf,
+                    _out_visibility=self._tree_visibility_buf,
+                    _out_actual_tree_sizes=self._tree_actual_sizes_buf,
+                    _heap_scores=self._tree_heap_scores_buf,
+                    _heap_parents=self._tree_heap_parents_buf,
+                    _heap_depths=self._tree_heap_depths_buf,
+                    _heap_ranks=self._tree_heap_ranks_buf,
+                )
+        else:
+            (
+                node_token_ids,
+                node_depths,
+                parents,
+                child_maps,
+                visibility,
+                actual_tree_sizes,
+                actual_tree_sizes_cpu,
+            ) = build_ddtree_tree(
+                draft_logits=None,
+                draft_top_log_probs=draft_top_log_probs,
+                draft_top_token_ids=draft_top_token_ids,
+                tree_budget=self.tree_budget,
+                device=batch.device,
+                _out_node_token_ids=self._tree_node_token_ids_buf,
+                _out_node_depths=self._tree_node_depths_buf,
+                _out_parents=self._tree_parents_buf,
+                _out_visibility=self._tree_visibility_buf,
+                prune_to_deepest_chains=self.is_ddtree_prune,
+                profiler=profiler,
+            )
 
-        verify_token_num = max(1, max(int(x) for x in actual_tree_sizes_cpu))
+        raw_verify_token_num = max(1, max(int(x) for x in actual_tree_sizes_cpu))
+        if self.use_ddtree_cuda_graph_buckets:
+            verify_token_num = select_ddtree_cuda_graph_bucket(
+                raw_verify_token_num, self.ddtree_cuda_graph_buckets
+            )
+        else:
+            verify_token_num = raw_verify_token_num
         with profiler.cpu("mask_compile"):
             (
                 verify_input_ids,
@@ -198,7 +269,10 @@ class DDTreeWorker(DFlashWorker):
             )
 
         tree_is_spine = (
-            all(all(len(children) <= 1 for children in cm.values()) for cm in child_maps)
+            bool(child_maps)
+            and all(
+                all(len(children) <= 1 for children in cm.values()) for cm in child_maps
+            )
             and all(int(size) == verify_token_num for size in actual_tree_sizes_cpu)
         )
 
@@ -209,8 +283,11 @@ class DDTreeWorker(DFlashWorker):
             tree_budget=self.tree_budget,
             child_maps=child_maps,
             actual_tree_sizes=actual_tree_sizes,
+            parents=parents,
             custom_mask=tree_attention_mask,
             tree_is_spine=tree_is_spine,
+            raw_tree_size=raw_verify_token_num,
+            cuda_graph_bucket_size=verify_token_num,
         )
         with profiler.cpu("prepare_verify"):
             verify_input.prepare_for_verify(batch, self.page_size)
@@ -336,6 +413,16 @@ class DDTreeWorker(DFlashWorker):
             block_size=int(self.block_size),
             tree_budget=int(self.tree_budget),
             draft_token_num=int(verify_input.draft_token_num),
+            raw_tree_size=int(
+                getattr(verify_input, "raw_tree_size", verify_input.draft_token_num)
+            ),
+            cuda_graph_bucket_size=int(
+                getattr(
+                    verify_input,
+                    "cuda_graph_bucket_size",
+                    verify_input.draft_token_num,
+                )
+            ),
             mean_num_correct_drafts=(float(num_correct_drafts) / bs if bs > 0 else 0.0),
             mean_accept_len=(float(num_correct_drafts + bs) / bs if bs > 0 else 0.0),
             round_output_tokens=int(num_correct_drafts + bs),

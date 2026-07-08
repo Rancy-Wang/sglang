@@ -6,6 +6,46 @@ import numpy as np
 import torch
 
 
+def resolve_ddtree_cuda_graph_buckets(
+    *,
+    tree_budget: int,
+    is_ddtree_prune: bool,
+    configured_buckets: Optional[List[int]] = None,
+) -> List[int]:
+    """Return DDTree target-verify token-per-request CUDA graph buckets."""
+    max_nodes = int(tree_budget) + 1
+    if max_nodes <= 0:
+        raise ValueError(f"DDTree tree_budget must be non-negative, got {tree_budget}.")
+
+    if configured_buckets:
+        buckets = [int(x) for x in configured_buckets]
+    elif not is_ddtree_prune:
+        buckets = [max_nodes]
+    elif max_nodes <= 33:
+        buckets = [8, 12, 16, 20, 24, 28, max_nodes]
+    elif max_nodes <= 65:
+        buckets = [8, 12, 16, 24, 32, 40, 48, 56, max_nodes]
+    elif max_nodes <= 129:
+        buckets = [8, 16, 24, 32, 48, 64, 80, 96, 112, max_nodes]
+    else:
+        buckets = [8, 16, 24, 32, 48, 64, 96, 128, max_nodes]
+
+    normalized = sorted({b for b in buckets if 0 < b <= max_nodes})
+    if max_nodes not in normalized:
+        normalized.append(max_nodes)
+    if not normalized:
+        normalized = [max_nodes]
+    return normalized
+
+
+def select_ddtree_cuda_graph_bucket(actual_tree_size: int, buckets: List[int]) -> int:
+    actual = max(1, int(actual_tree_size))
+    for bucket in buckets:
+        if int(bucket) >= actual:
+            return int(bucket)
+    return int(buckets[-1])
+
+
 def build_ddtree_tree(
     draft_logits: torch.Tensor | None,  # [bs, L, vocab_size]
     tree_budget: int,  # 节点预算 B
@@ -68,7 +108,6 @@ def build_ddtree_tree(
     all_child_maps = []
     all_visibility = []
     actual_sizes = []
-
     with cpu_ctx("tree_heap_cpu"):
         for b in range(bs):
             node_ids, depths, parents, child_map, vis, actual = _build_single_tree(
@@ -162,6 +201,71 @@ def build_ddtree_tree(
     )
 
 
+def build_ddtree_tree_gpu(
+    *,
+    draft_top_log_probs: torch.Tensor,
+    draft_top_token_ids: torch.Tensor,
+    tree_budget: int,
+    device: torch.device,
+    _out_node_token_ids: torch.Tensor,
+    _out_node_depths: torch.Tensor,
+    _out_parents: torch.Tensor,
+    _out_visibility: torch.Tensor,
+    _out_actual_tree_sizes: torch.Tensor,
+    _heap_scores: torch.Tensor,
+    _heap_parents: torch.Tensor,
+    _heap_depths: torch.Tensor,
+    _heap_ranks: torch.Tensor,
+) -> Tuple[
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    List[Dict[int, Dict[int, int]]],
+    torch.Tensor,
+    torch.Tensor,
+    List[int],
+]:
+    """Build a no-prune DDTree on GPU, returning the same tensor metadata shape.
+
+    The Python child_maps are intentionally left empty here. They are only
+    needed after target verify, so the GPU path reconstructs them lazily from
+    tensor metadata in DDTreeVerifyInput.verify instead of blocking target
+    verify with a CPU copy.
+    """
+    from sglang.srt.speculative.triton_ops.ddtree import build_ddtree_tree_triton
+
+    if draft_top_log_probs is None or draft_top_token_ids is None:
+        raise ValueError("DDTree GPU builder requires top log-probs and token ids.")
+    if not draft_top_log_probs.is_cuda:
+        raise ValueError("DDTree GPU builder requires CUDA tensors.")
+
+    bs, _, _ = draft_top_log_probs.shape
+    actual_tree_sizes = build_ddtree_tree_triton(
+        top_log_probs=draft_top_log_probs,
+        top_token_ids=draft_top_token_ids,
+        tree_budget=tree_budget,
+        out_node_token_ids=_out_node_token_ids,
+        out_node_depths=_out_node_depths,
+        out_parents=_out_parents,
+        out_visibility=_out_visibility,
+        out_actual_tree_sizes=_out_actual_tree_sizes,
+        heap_scores=_heap_scores,
+        heap_parents=_heap_parents,
+        heap_depths=_heap_depths,
+        heap_ranks=_heap_ranks,
+    )
+    max_nodes = int(tree_budget) + 1
+    return (
+        _out_node_token_ids[:bs, :tree_budget],
+        _out_node_depths[:bs, :tree_budget],
+        _out_parents[:bs, :max_nodes],
+        [],
+        _out_visibility[:bs, :max_nodes, :max_nodes],
+        actual_tree_sizes,
+        [max_nodes] * int(bs),
+    )
+
+
 def _build_single_tree(
     top_log_probs: torch.Tensor,
     top_token_ids: torch.Tensor,
@@ -241,6 +345,28 @@ def _build_single_tree(
     )
 
 
+def build_child_maps_from_parent_metadata(
+    draft_tokens_cpu: List[List[int]],
+    parents_cpu: List[List[int]],
+    actual_sizes_cpu: List[int],
+) -> List[Dict[int, Dict[int, int]]]:
+    child_maps: List[Dict[int, Dict[int, int]]] = []
+    for tokens, parents, actual_size in zip(
+        draft_tokens_cpu, parents_cpu, actual_sizes_cpu, strict=True
+    ):
+        child_map: Dict[int, Dict[int, int]] = {idx: {} for idx in range(actual_size)}
+        for idx in range(1, actual_size):
+            parent = int(parents[idx])
+            if parent < 0 or parent >= actual_size:
+                raise ValueError(
+                    f"Invalid DDTree parent index {parent} for child {idx}."
+                )
+            child_map.setdefault(parent, {})[int(tokens[idx])] = idx
+            child_map.setdefault(idx, {})
+        child_maps.append(child_map)
+    return child_maps
+
+
 def _prune_tree_to_deepest_chains(
     node_token_ids: np.ndarray,
     node_depths: np.ndarray,
@@ -288,7 +414,9 @@ def _prune_tree_to_deepest_chains(
     new_node_token_ids = np.zeros(new_actual_size - 1, dtype=node_token_ids.dtype)
     new_node_depths = np.zeros(new_actual_size - 1, dtype=node_depths.dtype)
     new_parents = np.full(new_actual_size, -1, dtype=parents.dtype)
-    new_child_map: Dict[int, Dict[int, int]] = {idx: {} for idx in range(new_actual_size)}
+    new_child_map: Dict[int, Dict[int, int]] = {
+        idx: {} for idx in range(new_actual_size)
+    }
 
     for new_idx, old_idx in enumerate(kept_indices):
         if old_idx == 0:
@@ -391,6 +519,8 @@ def compile_ddtree_tree(
         )
         if actual_size < max_nodes:
             request_mask[actual_size:, :].fill_(False)
+            dummy_rows = torch.arange(actual_size, max_nodes, device=device)
+            request_mask[dummy_rows, past_len_i + dummy_rows] = True
         offset += max_nodes * kv_len_i
 
     return verify_input_ids, verify_position_ids, tree_attention_mask, actual_tree_sizes

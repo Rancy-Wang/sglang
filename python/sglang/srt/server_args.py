@@ -608,7 +608,9 @@ class ServerArgs:
     speculative_num_draft_tokens: Optional[int] = None
     speculative_dflash_block_size: Optional[int] = None
     speculative_ddtree_budget: Optional[int] = None
+    speculative_ddtree_cuda_graph_buckets: Optional[List[int]] = None
     is_ddtree_prune: bool = False
+    speculative_ddtree_cpu_build: bool = False
     speculative_ddtree_profile: bool = False
     speculative_ddtree_profile_interval: int = 50
     speculative_ddtree_profile_warmup: int = 0
@@ -5844,10 +5846,23 @@ class ServerArgs:
             default=ServerArgs.speculative_ddtree_budget,
         )
         parser.add_argument(
+            "--speculative-ddtree-cuda-graph-buckets",
+            type=int,
+            nargs="+",
+            default=ServerArgs.speculative_ddtree_cuda_graph_buckets,
+            help="DDTREE only. Token-per-request CUDA graph buckets for pruned target verify, e.g. 8 12 16 20 24 33.",
+        )
+        parser.add_argument(
             "--is-ddtree-prune",
             action="store_true",
             default=ServerArgs.is_ddtree_prune,
             help="DDTREE only. Prune draft tree nodes whose subtree cannot reach the deepest depth before target verification.",
+        )
+        parser.add_argument(
+            "--speculative-ddtree-cpu-build",
+            action="store_true",
+            default=ServerArgs.speculative_ddtree_cpu_build,
+            help="DDTREE only. Force the Python heap builder instead of the default no-prune GPU tree builder.",
         )
         parser.add_argument(
             "--speculative-ddtree-profile",
