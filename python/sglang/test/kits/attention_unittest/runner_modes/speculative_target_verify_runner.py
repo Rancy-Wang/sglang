@@ -413,6 +413,7 @@ def _target_verify_expected_output(
     case,
     inputs,
     topk: int,
+    spec_kind: SpecVerifyKind,
     device: str,
 ):
     masks_by_req, _ = _make_custom_masks(case, topk=topk, device=device, spec_kind=spec_kind)
@@ -496,6 +497,7 @@ def _run_spec_verify_cuda_graph_case(
                 case=spec_case,
                 inputs=inputs,
                 topk=topk,
+                spec_kind=spec_kind,
                 device=device,
             )
         ),
@@ -538,7 +540,9 @@ def run_dense_spec_verify_case(
     )
     _prepare_target_verify_batch(fixture.forward_batch, case, device)
     fixture.forward_batch.spec_algorithm = _spec_algorithm_for_kind(spec_kind)
-    masks_by_req, _ = _make_custom_masks(case, topk=topk, device=device)
+    masks_by_req, _ = _make_custom_masks(
+        case, topk=topk, device=device, spec_kind=spec_kind
+    )
     fixture.forward_batch.spec_info = _make_spec_verify_input(
         case,
         fixture.forward_batch,
@@ -786,7 +790,9 @@ def run_mla_eagle_verify_case(
         device=device,
     )
     _prepare_target_verify_batch(fixture.forward_batch, case, device)
-    masks_by_req, _ = _make_custom_masks(case, topk=topk, device=device)
+    masks_by_req, _ = _make_custom_masks(
+        case, topk=topk, device=device, spec_kind=spec_kind
+    )
     fixture.forward_batch.spec_info = _make_spec_verify_input(
         case,
         fixture.forward_batch,

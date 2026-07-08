@@ -1,9 +1,98 @@
 import heapq
 from contextlib import nullcontext
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
+
+
+@dataclass(frozen=True)
+class DDTreeTargetBackendCapability:
+    backend_name: str
+    build_attention_mask: bool
+    use_visibility: bool
+    supports_full_tree: bool
+    unsupported_reason: str = ""
+
+
+def resolve_ddtree_target_backend_capability(
+    attn_backend: Any,
+    speculative_attention_mode: str = "prefill",
+) -> DDTreeTargetBackendCapability:
+    """Describe how DDTree full-tree target verify should feed an attention backend."""
+
+    if attn_backend is None:
+        return DDTreeTargetBackendCapability(
+            backend_name="unknown",
+            build_attention_mask=False,
+            use_visibility=False,
+            supports_full_tree=False,
+            unsupported_reason="target model runner has no attention backend",
+        )
+
+    selected_backend = attn_backend
+    visited = set()
+    while selected_backend is not None:
+        module = selected_backend.__class__.__module__
+        cls_name = selected_backend.__class__.__name__
+        if not module.endswith("hybrid_attn_backend"):
+            break
+        obj_id = id(selected_backend)
+        if obj_id in visited:
+            break
+        visited.add(obj_id)
+        selected_backend = (
+            getattr(selected_backend, "decode_backend", None)
+            if speculative_attention_mode == "decode"
+            else getattr(selected_backend, "prefill_backend", None)
+        )
+        if selected_backend is None:
+            return DDTreeTargetBackendCapability(
+                backend_name=f"{module}.{cls_name}",
+                build_attention_mask=False,
+                use_visibility=False,
+                supports_full_tree=False,
+                unsupported_reason=(
+                    "hybrid attention backend did not expose the selected "
+                    f"{speculative_attention_mode!r} child backend"
+                ),
+            )
+
+    module = selected_backend.__class__.__module__
+    cls_name = selected_backend.__class__.__name__
+    backend_name = f"{module}.{cls_name}"
+    if module.endswith("flashattention_backend"):
+        return DDTreeTargetBackendCapability(
+            backend_name=backend_name,
+            build_attention_mask=False,
+            use_visibility=True,
+            supports_full_tree=True,
+        )
+    if module.endswith("flashinfer_backend"):
+        return DDTreeTargetBackendCapability(
+            backend_name=backend_name,
+            build_attention_mask=True,
+            use_visibility=False,
+            supports_full_tree=True,
+        )
+    if module.endswith("triton_backend"):
+        return DDTreeTargetBackendCapability(
+            backend_name=backend_name,
+            build_attention_mask=True,
+            use_visibility=False,
+            supports_full_tree=True,
+        )
+    return DDTreeTargetBackendCapability(
+        backend_name=backend_name,
+        build_attention_mask=False,
+        use_visibility=False,
+        supports_full_tree=False,
+        unsupported_reason=(
+            "DDTree full-tree target verify needs either packed-mask "
+            "support or FA visibility metadata support"
+        ),
+    )
 
 
 def resolve_ddtree_cuda_graph_buckets(
@@ -216,6 +305,11 @@ def build_ddtree_tree_gpu(
     _heap_parents: torch.Tensor,
     _heap_depths: torch.Tensor,
     _heap_ranks: torch.Tensor,
+    prune_to_deepest_chains: bool = False,
+    _out_pruned_node_token_ids: torch.Tensor | None = None,
+    _out_pruned_node_depths: torch.Tensor | None = None,
+    _out_pruned_parents: torch.Tensor | None = None,
+    _out_pruned_visibility: torch.Tensor | None = None,
 ) -> Tuple[
     torch.Tensor,
     torch.Tensor,
@@ -232,7 +326,10 @@ def build_ddtree_tree_gpu(
     tensor metadata in DDTreeVerifyInput.verify instead of blocking target
     verify with a CPU copy.
     """
-    from sglang.srt.speculative.triton_ops.ddtree import build_ddtree_tree_triton
+    from sglang.srt.speculative.triton_ops.ddtree import (
+        build_ddtree_tree_triton,
+        prune_ddtree_deepest_chains_triton,
+    )
 
     if draft_top_log_probs is None or draft_top_token_ids is None:
         raise ValueError("DDTree GPU builder requires top log-probs and token ids.")
@@ -255,6 +352,38 @@ def build_ddtree_tree_gpu(
         heap_ranks=_heap_ranks,
     )
     max_nodes = int(tree_budget) + 1
+    if prune_to_deepest_chains:
+        if (
+            _out_pruned_node_token_ids is None
+            or _out_pruned_node_depths is None
+            or _out_pruned_parents is None
+            or _out_pruned_visibility is None
+        ):
+            raise ValueError("DDTree GPU pruning requires pruned output buffers.")
+        actual_tree_sizes = prune_ddtree_deepest_chains_triton(
+            in_node_token_ids=_out_node_token_ids[:bs, :tree_budget],
+            in_node_depths=_out_node_depths[:bs, :tree_budget],
+            in_parents=_out_parents[:bs, :max_nodes],
+            in_visibility=_out_visibility[:bs, :max_nodes, :max_nodes],
+            out_node_token_ids=_out_pruned_node_token_ids[:bs, :tree_budget],
+            out_node_depths=_out_pruned_node_depths[:bs, :tree_budget],
+            out_parents=_out_pruned_parents[:bs, :max_nodes],
+            out_visibility=_out_pruned_visibility[:bs, :max_nodes, :max_nodes],
+            out_actual_tree_sizes=_out_actual_tree_sizes[:bs],
+            scratch=_heap_depths[:bs],
+            tree_budget=tree_budget,
+        )
+        actual_sizes_cpu = [int(x) for x in actual_tree_sizes.detach().cpu().tolist()]
+        return (
+            _out_pruned_node_token_ids[:bs, :tree_budget],
+            _out_pruned_node_depths[:bs, :tree_budget],
+            _out_pruned_parents[:bs, :max_nodes],
+            [],
+            _out_pruned_visibility[:bs, :max_nodes, :max_nodes],
+            actual_tree_sizes,
+            actual_sizes_cpu,
+        )
+
     return (
         _out_node_token_ids[:bs, :tree_budget],
         _out_node_depths[:bs, :tree_budget],
@@ -459,7 +588,8 @@ def compile_ddtree_tree(
     past_lens_cpu: Optional[List[int]] = None,
     actual_sizes_cpu: Optional[List[int]] = None,
     verify_token_num: Optional[int] = None,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    build_attention_mask: bool = True,
+) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], torch.Tensor]:
     bs = root_token_ids.shape[0]
     max_nodes = tree_budget + 1 if verify_token_num is None else int(verify_token_num)
     if max_nodes <= 0:
@@ -477,6 +607,24 @@ def compile_ddtree_tree(
             start_positions.unsqueeze(1) + node_depths[:, : max_nodes - 1]
         )
 
+    if actual_sizes_cpu is None:
+        actual_sizes_cpu = [int(x) for x in actual_tree_sizes.detach().cpu().tolist()]
+    max_actual_size = max(actual_sizes_cpu) if actual_sizes_cpu else 1
+    if max_actual_size > max_nodes:
+        raise ValueError(
+            "DDTree verify_token_num is smaller than a pruned tree: "
+            f"verify_token_num={max_nodes}, max_actual_size={max_actual_size}."
+        )
+
+    if not build_attention_mask:
+        if max_actual_size < max_nodes:
+            for b, actual_size in enumerate(actual_sizes_cpu):
+                if actual_size < max_nodes:
+                    visibility[b, actual_size:max_nodes, :max_nodes].fill_(False)
+                    dummy_rows = torch.arange(actual_size, max_nodes, device=device)
+                    visibility[b, dummy_rows, dummy_rows] = True
+        return verify_input_ids, verify_position_ids, None, actual_tree_sizes
+
     # Attention backends consume the speculative custom mask as a request-packed
     # boolean allow-mask:
     #   concat(mask_i.reshape(-1)), mask_i.shape == [max_nodes, prefix_i + max_nodes]
@@ -486,14 +634,6 @@ def compile_ddtree_tree(
     # directly instead of materializing a [bs, max_nodes, max_kv_len] rectangle.
     if past_lens_cpu is None:
         past_lens_cpu = [int(x) for x in past_lengths.detach().cpu().tolist()]
-    if actual_sizes_cpu is None:
-        actual_sizes_cpu = [int(x) for x in actual_tree_sizes.detach().cpu().tolist()]
-    max_actual_size = max(actual_sizes_cpu) if actual_sizes_cpu else 1
-    if max_actual_size > max_nodes:
-        raise ValueError(
-            "DDTree verify_token_num is smaller than a pruned tree: "
-            f"verify_token_num={max_nodes}, max_actual_size={max_actual_size}."
-        )
     mask_numel = sum(max_nodes * (past_len + max_nodes) for past_len in past_lens_cpu)
     tree_attention_mask = torch.empty((mask_numel,), dtype=torch.bool, device=device)
 
@@ -524,6 +664,62 @@ def compile_ddtree_tree(
         offset += max_nodes * kv_len_i
 
     return verify_input_ids, verify_position_ids, tree_attention_mask, actual_tree_sizes
+
+
+def follow_verified_tree_gpu(
+    *,
+    draft_tokens: torch.Tensor,
+    target_predict: torch.Tensor,
+    parents: torch.Tensor,
+    actual_tree_sizes: Optional[torch.Tensor] = None,
+    accepted_indices: Optional[torch.Tensor] = None,
+    accepted_token_ids: Optional[torch.Tensor] = None,
+    accepted_lens: Optional[torch.Tensor] = None,
+    next_tokens: Optional[torch.Tensor] = None,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """GPU equivalent of follow_verified_tree using parent metadata.
+
+    Returns accepted local node indices, accepted token ids in path order,
+    accepted path lengths, and final target bonus tokens.
+    """
+
+    if draft_tokens.ndim != 2 or target_predict.shape != draft_tokens.shape:
+        raise ValueError(
+            "DDTree GPU follow expects [bs, q] draft_tokens/target_predict, got "
+            f"{tuple(draft_tokens.shape)} and {tuple(target_predict.shape)}."
+        )
+    if parents is None or parents.shape != draft_tokens.shape:
+        raise ValueError("DDTree GPU follow requires parents with the same shape.")
+    if not draft_tokens.is_cuda:
+        raise ValueError("DDTree GPU follow requires CUDA tensors.")
+
+    bs, q_len = draft_tokens.shape
+    device = draft_tokens.device
+    if actual_tree_sizes is None:
+        actual_tree_sizes = torch.full((bs,), q_len, dtype=torch.long, device=device)
+    if accepted_indices is None:
+        accepted_indices = torch.empty((bs, q_len), dtype=torch.long, device=device)
+    if accepted_token_ids is None:
+        accepted_token_ids = torch.empty((bs, q_len), dtype=torch.long, device=device)
+    if accepted_lens is None:
+        accepted_lens = torch.empty((bs,), dtype=torch.long, device=device)
+    if next_tokens is None:
+        next_tokens = torch.empty((bs,), dtype=torch.long, device=device)
+
+    from sglang.srt.speculative.triton_ops.ddtree import (
+        follow_ddtree_verified_path_triton,
+    )
+
+    return follow_ddtree_verified_path_triton(
+        draft_tokens=draft_tokens.contiguous(),
+        target_predict=target_predict.contiguous(),
+        parents=parents.contiguous(),
+        actual_tree_sizes=actual_tree_sizes.contiguous(),
+        accepted_indices=accepted_indices,
+        accepted_token_ids=accepted_token_ids,
+        accepted_lens=accepted_lens,
+        next_tokens=next_tokens,
+    )
 
 
 def follow_verified_tree(

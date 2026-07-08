@@ -118,6 +118,449 @@ def _next_power_of_2(x: int) -> int:
     return 1 << (int(x) - 1).bit_length()
 
 
+@triton.jit
+def _build_fa_suffix_metadata_kernel(
+    visibility,
+    req_to_token,
+    req_pool_indices,
+    seq_lens,
+    page_table,
+    cache_seqlens,
+    Q_LEN: tl.constexpr,
+    VIS_B_STRIDE: tl.constexpr,
+    VIS_ROW_STRIDE: tl.constexpr,
+    VIS_COL_STRIDE: tl.constexpr,
+    REQ_TO_TOKEN_B_STRIDE: tl.constexpr,
+    BLOCK_Q: tl.constexpr,
+):
+    row_pid = tl.program_id(0)
+    req_idx_in_batch = row_pid // Q_LEN
+    query_idx = row_pid - req_idx_in_batch * Q_LEN
+
+    cols = tl.arange(0, BLOCK_Q)
+    col_mask = cols < Q_LEN
+
+    visible = tl.load(
+        visibility
+        + req_idx_in_batch * VIS_B_STRIDE
+        + query_idx * VIS_ROW_STRIDE
+        + cols * VIS_COL_STRIDE,
+        mask=col_mask,
+        other=0,
+    ).to(tl.int32)
+    packed_offsets = tl.cumsum(visible, 0) - 1
+    cache_len = tl.sum(visible, axis=0)
+
+    req_pool_idx = tl.load(req_pool_indices + req_idx_in_batch).to(tl.int64)
+    seq_len = tl.load(seq_lens + req_idx_in_batch).to(tl.int64)
+    token_locs = tl.load(
+        req_to_token + req_pool_idx * REQ_TO_TOKEN_B_STRIDE + seq_len + cols,
+        mask=col_mask,
+        other=0,
+    ).to(tl.int32)
+
+    page_base = row_pid * Q_LEN
+    tl.store(page_table + page_base + cols, 0, mask=col_mask)
+    tl.store(
+        page_table + page_base + packed_offsets,
+        token_locs,
+        mask=col_mask & (visible != 0),
+    )
+    tl.store(cache_seqlens + row_pid, cache_len)
+
+
+def build_ddtree_fa_suffix_metadata_triton(
+    *,
+    visibility: torch.Tensor,
+    req_to_token: torch.Tensor,
+    req_pool_indices: torch.Tensor,
+    seq_lens: torch.Tensor,
+    page_table: torch.Tensor,
+    cache_seqlens: torch.Tensor,
+    q_len: int,
+) -> None:
+    """Pack DDTree ancestor visibility into FA suffix metadata on GPU.
+
+    Each output row corresponds to one (request, tree query).  The first
+    cache_seqlens[row] columns of page_table[row] are the KV locations of root,
+    ancestors, and self in tree order.  Remaining columns are zero-filled.
+    """
+
+    q_len = int(q_len)
+    if q_len <= 0:
+        raise ValueError(f"DDTree FA suffix q_len must be positive, got {q_len}.")
+    if not visibility.is_cuda:
+        raise ValueError("DDTree FA suffix metadata Triton kernel requires CUDA visibility.")
+    if visibility.ndim != 3:
+        raise ValueError(
+            f"DDTree visibility must be [bs, q, q], got {tuple(visibility.shape)}."
+        )
+    bs = int(seq_lens.numel())
+    if page_table.shape[0] < bs * q_len or page_table.shape[1] < q_len:
+        raise ValueError(
+            "DDTree FA suffix page_table buffer is too small: "
+            f"shape={tuple(page_table.shape)}, required rows={bs * q_len}, cols={q_len}."
+        )
+    if cache_seqlens.shape[0] < bs * q_len:
+        raise ValueError(
+            "DDTree FA suffix cache_seqlens buffer is too small: "
+            f"shape={tuple(cache_seqlens.shape)}, required={bs * q_len}."
+        )
+
+    block_q = _next_power_of_2(q_len)
+    _build_fa_suffix_metadata_kernel[(bs * q_len,)](
+        visibility,
+        req_to_token,
+        req_pool_indices,
+        seq_lens,
+        page_table,
+        cache_seqlens,
+        Q_LEN=q_len,
+        VIS_B_STRIDE=int(visibility.stride(0)),
+        VIS_ROW_STRIDE=int(visibility.stride(1)),
+        VIS_COL_STRIDE=int(visibility.stride(2)),
+        REQ_TO_TOKEN_B_STRIDE=int(req_to_token.stride(0)),
+        BLOCK_Q=block_q,
+    )
+
+
+@triton.jit
+def _follow_verified_tree_kernel(
+    draft_tokens,
+    target_predict,
+    parents,
+    actual_tree_sizes,
+    accepted_indices,
+    accepted_token_ids,
+    accepted_lens,
+    next_tokens,
+    Q_LEN: tl.constexpr,
+    BLOCK_Q: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    offsets = tl.arange(0, BLOCK_Q)
+    mask = offsets < Q_LEN
+    row_base = pid * Q_LEN
+
+    tl.store(accepted_indices + row_base + offsets, -1, mask=mask)
+    tl.store(accepted_token_ids + row_base + offsets, 0, mask=mask)
+
+    actual_size = tl.load(actual_tree_sizes + pid).to(tl.int32)
+    actual_size = tl.minimum(tl.maximum(actual_size, 1), Q_LEN)
+
+    current_idx = tl.full((), 0, dtype=tl.int32)
+    accepted_len = tl.full((), 1, dtype=tl.int32)
+    active = tl.full((), True, dtype=tl.int1)
+
+    root_token = tl.load(draft_tokens + row_base)
+    next_token = tl.load(target_predict + row_base)
+    tl.store(accepted_indices + row_base, 0)
+    tl.store(accepted_token_ids + row_base, root_token)
+
+    for _ in range(0, Q_LEN - 1):
+        parent_vals = tl.load(
+            parents + row_base + offsets,
+            mask=mask & (offsets < actual_size),
+            other=-2,
+        ).to(tl.int32)
+        draft_vals = tl.load(
+            draft_tokens + row_base + offsets,
+            mask=mask & (offsets < actual_size),
+            other=-1,
+        )
+        matches = (
+            active
+            & (offsets > 0)
+            & (offsets < actual_size)
+            & (parent_vals == current_idx)
+            & (draft_vals == next_token)
+        )
+        child_idx = tl.min(tl.where(matches, offsets, Q_LEN), axis=0).to(tl.int32)
+        found = child_idx < Q_LEN
+        write_pos = accepted_len
+
+        child_token = tl.load(
+            draft_tokens + row_base + child_idx,
+            mask=found,
+            other=0,
+        )
+        tl.store(
+            accepted_indices + row_base + write_pos,
+            child_idx,
+            mask=found & (write_pos < Q_LEN),
+        )
+        tl.store(
+            accepted_token_ids + row_base + write_pos,
+            child_token,
+            mask=found & (write_pos < Q_LEN),
+        )
+
+        next_from_child = tl.load(
+            target_predict + row_base + child_idx,
+            mask=found,
+            other=next_token,
+        )
+        current_idx = tl.where(found, child_idx, current_idx)
+        next_token = tl.where(found, next_from_child, next_token)
+        accepted_len += found.to(tl.int32)
+        active = active & found
+
+    tl.store(accepted_lens + pid, accepted_len)
+    tl.store(next_tokens + pid, next_token)
+
+
+def follow_ddtree_verified_path_triton(
+    *,
+    draft_tokens: torch.Tensor,
+    target_predict: torch.Tensor,
+    parents: torch.Tensor,
+    actual_tree_sizes: torch.Tensor,
+    accepted_indices: torch.Tensor,
+    accepted_token_ids: torch.Tensor,
+    accepted_lens: torch.Tensor,
+    next_tokens: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Follow DDTree target predictions over parent metadata on GPU."""
+
+    if not draft_tokens.is_cuda:
+        raise ValueError("DDTree GPU follow requires CUDA draft_tokens.")
+    if draft_tokens.ndim != 2 or target_predict.shape != draft_tokens.shape:
+        raise ValueError(
+            "DDTree GPU follow expects draft_tokens and target_predict to be [bs, q], "
+            f"got {tuple(draft_tokens.shape)} and {tuple(target_predict.shape)}."
+        )
+    if parents.shape != draft_tokens.shape:
+        raise ValueError(
+            "DDTree GPU follow expects parents to match draft_tokens, got "
+            f"{tuple(parents.shape)} vs {tuple(draft_tokens.shape)}."
+        )
+
+    bs, q_len = draft_tokens.shape
+    if q_len <= 0:
+        raise ValueError(f"DDTree GPU follow q_len must be positive, got {q_len}.")
+    if actual_tree_sizes.shape[0] < bs:
+        raise ValueError(
+            "DDTree GPU follow actual_tree_sizes is too small: "
+            f"shape={tuple(actual_tree_sizes.shape)}, bs={bs}."
+        )
+    if accepted_indices.shape[0] < bs or accepted_indices.shape[1] < q_len:
+        raise ValueError(
+            "DDTree GPU follow accepted_indices buffer is too small: "
+            f"shape={tuple(accepted_indices.shape)}, required=({bs}, {q_len})."
+        )
+    if accepted_token_ids.shape[0] < bs or accepted_token_ids.shape[1] < q_len:
+        raise ValueError(
+            "DDTree GPU follow accepted_token_ids buffer is too small: "
+            f"shape={tuple(accepted_token_ids.shape)}, required=({bs}, {q_len})."
+        )
+    if accepted_lens.shape[0] < bs or next_tokens.shape[0] < bs:
+        raise ValueError("DDTree GPU follow scalar output buffers are too small.")
+
+    block_q = _next_power_of_2(q_len)
+    _follow_verified_tree_kernel[(bs,)](
+        draft_tokens,
+        target_predict,
+        parents,
+        actual_tree_sizes,
+        accepted_indices,
+        accepted_token_ids,
+        accepted_lens,
+        next_tokens,
+        Q_LEN=int(q_len),
+        BLOCK_Q=block_q,
+    )
+    return (
+        accepted_indices[:bs, :q_len],
+        accepted_token_ids[:bs, :q_len],
+        accepted_lens[:bs],
+        next_tokens[:bs],
+    )
+
+
+@triton.jit
+def _prune_deepest_chains_kernel(
+    in_node_token_ids,
+    in_node_depths,
+    in_parents,
+    in_visibility,
+    out_node_token_ids,
+    out_node_depths,
+    out_parents,
+    out_visibility,
+    out_actual_tree_sizes,
+    scratch,
+    BUDGET: tl.constexpr,
+    MAX_NODES: tl.constexpr,
+    NODE_BLOCK: tl.constexpr,
+    VIS_BLOCK: tl.constexpr,
+    SCRATCH_STRIDE: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    node_offsets = tl.arange(0, NODE_BLOCK)
+    node_mask = node_offsets < MAX_NODES
+    draft_mask = node_offsets < BUDGET
+
+    tl.store(out_node_token_ids + pid * BUDGET + node_offsets, 0, mask=draft_mask)
+    tl.store(out_node_depths + pid * BUDGET + node_offsets, 0, mask=draft_mask)
+    tl.store(out_parents + pid * MAX_NODES + node_offsets, -1, mask=node_mask)
+
+    vis_offsets = tl.arange(0, VIS_BLOCK)
+    vis_mask = vis_offsets < (MAX_NODES * MAX_NODES)
+    vis_rows = vis_offsets // MAX_NODES
+    vis_cols = vis_offsets - vis_rows * MAX_NODES
+    out_vis_base = pid * MAX_NODES * MAX_NODES
+    tl.store(
+        out_visibility + out_vis_base + vis_offsets,
+        vis_rows == vis_cols,
+        mask=vis_mask,
+    )
+
+    scratch_base = pid * SCRATCH_STRIDE
+    depths = tl.load(
+        in_node_depths + pid * BUDGET + node_offsets - 1,
+        mask=(node_offsets > 0) & node_mask,
+        other=0,
+    ).to(tl.int32)
+    depths = tl.where(node_offsets == 0, 0, depths)
+    tl.store(scratch + scratch_base + node_offsets, depths, mask=node_mask)
+    tl.store(scratch + scratch_base + MAX_NODES + node_offsets, -1, mask=node_mask)
+
+    max_depth = tl.max(tl.where(node_mask, depths, 0), axis=0)
+    for old_idx in range(BUDGET, 0, -1):
+        parent_idx = tl.load(in_parents + pid * MAX_NODES + old_idx).to(tl.int32)
+        child_depth = tl.load(scratch + scratch_base + old_idx)
+        parent_depth = tl.load(
+            scratch + scratch_base + parent_idx,
+            mask=parent_idx >= 0,
+            other=0,
+        )
+        tl.store(
+            scratch + scratch_base + parent_idx,
+            tl.maximum(parent_depth, child_depth),
+            mask=parent_idx >= 0,
+        )
+
+    subtree_depths = tl.load(scratch + scratch_base + node_offsets, mask=node_mask, other=-1)
+    keep = node_mask & ((node_offsets == 0) | (subtree_depths == max_depth))
+    keep_i32 = keep.to(tl.int32)
+    new_indices = tl.cumsum(keep_i32, 0) - 1
+    actual_size = tl.sum(keep_i32, axis=0)
+    tl.store(out_actual_tree_sizes + pid, actual_size)
+    tl.store(
+        scratch + scratch_base + MAX_NODES + node_offsets,
+        new_indices,
+        mask=keep,
+    )
+
+    token_ids = tl.load(
+        in_node_token_ids + pid * BUDGET + node_offsets - 1,
+        mask=(node_offsets > 0) & node_mask,
+        other=0,
+    )
+    node_depths = tl.load(
+        in_node_depths + pid * BUDGET + node_offsets - 1,
+        mask=(node_offsets > 0) & node_mask,
+        other=0,
+    )
+    tl.store(
+        out_node_token_ids + pid * BUDGET + new_indices - 1,
+        token_ids,
+        mask=keep & (node_offsets > 0),
+    )
+    tl.store(
+        out_node_depths + pid * BUDGET + new_indices - 1,
+        node_depths,
+        mask=keep & (node_offsets > 0),
+    )
+
+    old_parent_indices = tl.load(
+        in_parents + pid * MAX_NODES + node_offsets,
+        mask=keep & (node_offsets > 0),
+        other=-1,
+    ).to(tl.int32)
+    new_parent_indices = tl.load(
+        scratch + scratch_base + MAX_NODES + old_parent_indices,
+        mask=keep & (node_offsets > 0) & (old_parent_indices >= 0),
+        other=-1,
+    )
+    tl.store(
+        out_parents + pid * MAX_NODES + new_indices,
+        new_parent_indices,
+        mask=keep & (node_offsets > 0),
+    )
+
+    in_vis_base = pid * MAX_NODES * MAX_NODES
+    cols = node_offsets
+    col_new_indices = tl.load(
+        scratch + scratch_base + MAX_NODES + cols,
+        mask=node_mask,
+        other=-1,
+    )
+    col_keep = node_mask & (col_new_indices >= 0)
+    for old_row in range(0, MAX_NODES):
+        row_new_idx = tl.load(scratch + scratch_base + MAX_NODES + old_row)
+        row_keep = row_new_idx >= 0
+        row_vis = tl.load(
+            in_visibility + in_vis_base + old_row * MAX_NODES + cols,
+            mask=row_keep & node_mask,
+            other=False,
+        )
+        tl.store(
+            out_visibility + out_vis_base + row_new_idx * MAX_NODES + col_new_indices,
+            row_vis,
+            mask=row_keep & col_keep,
+        )
+
+
+def prune_ddtree_deepest_chains_triton(
+    *,
+    in_node_token_ids: torch.Tensor,
+    in_node_depths: torch.Tensor,
+    in_parents: torch.Tensor,
+    in_visibility: torch.Tensor,
+    out_node_token_ids: torch.Tensor,
+    out_node_depths: torch.Tensor,
+    out_parents: torch.Tensor,
+    out_visibility: torch.Tensor,
+    out_actual_tree_sizes: torch.Tensor,
+    scratch: torch.Tensor,
+    tree_budget: int,
+) -> torch.Tensor:
+    """Prune a full GPU-built DDTree to deepest-reaching chains and compact it."""
+
+    if not in_node_token_ids.is_cuda:
+        raise ValueError("DDTree prune Triton kernel requires CUDA tensors.")
+    bs = int(in_node_token_ids.shape[0])
+    budget = int(tree_budget)
+    max_nodes = budget + 1
+    if scratch.shape[1] < 2 * max_nodes:
+        raise ValueError(
+            "DDTree prune scratch buffer is too small: "
+            f"shape={tuple(scratch.shape)}, required width={2 * max_nodes}."
+        )
+
+    node_block = _next_power_of_2(max_nodes)
+    vis_block = _next_power_of_2(max_nodes * max_nodes)
+    _prune_deepest_chains_kernel[(bs,)](
+        in_node_token_ids,
+        in_node_depths,
+        in_parents,
+        in_visibility,
+        out_node_token_ids,
+        out_node_depths,
+        out_parents,
+        out_visibility,
+        out_actual_tree_sizes,
+        scratch,
+        BUDGET=budget,
+        MAX_NODES=max_nodes,
+        NODE_BLOCK=node_block,
+        VIS_BLOCK=vis_block,
+        SCRATCH_STRIDE=int(scratch.stride(0)),
+    )
+    return out_actual_tree_sizes[:bs]
+
+
 def build_ddtree_tree_triton(
     *,
     top_log_probs: torch.Tensor,

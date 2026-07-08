@@ -24,6 +24,7 @@ class DDTreeVerifyInput(SpecInput):
     child_maps: List[Dict[int, Dict[int, int]]] = field(default_factory=list)
     actual_tree_sizes: Optional[torch.Tensor] = None
     parents: Optional[torch.Tensor] = None
+    visibility: Optional[torch.Tensor] = None
 
     custom_mask: Optional[torch.Tensor] = None
     topk: int = 1
@@ -37,6 +38,11 @@ class DDTreeVerifyInput(SpecInput):
     tree_is_spine: bool = False
     raw_tree_size: Optional[int] = None
     cuda_graph_bucket_size: Optional[int] = None
+    force_cpu_follow: bool = False
+    follow_accepted_indices: Optional[torch.Tensor] = None
+    follow_accepted_token_ids: Optional[torch.Tensor] = None
+    follow_accepted_lens: Optional[torch.Tensor] = None
+    follow_next_tokens: Optional[torch.Tensor] = None
 
     def __post_init__(self):
         super().__init__(spec_input_type=SpecInputType.DDTREE_VERIFY)
@@ -157,6 +163,7 @@ class DDTreeVerifyInput(SpecInput):
     ):
         from sglang.srt.speculative.ddtree_utils import (
             follow_verified_tree,
+            follow_verified_tree_gpu,
         )
         from sglang.srt.speculative.dflash_utils import (
             compute_dflash_correct_drafts_and_bonus,
@@ -182,6 +189,9 @@ class DDTreeVerifyInput(SpecInput):
         with gpu_ctx("accept_argmax"):
             target_predict = torch.argmax(logits_output.next_token_logits, dim=-1)
             target_predict = target_predict.reshape(bs, self.draft_token_num)
+
+        gpu_follow_indices = None
+        gpu_follow_token_ids = None
 
         # --- 1) Acceptance ---
         if self.tree_is_spine:
@@ -219,62 +229,126 @@ class DDTreeVerifyInput(SpecInput):
         else:
             # Full tree path: greedy-only for now (tree sampling requires
             # sgl_kernel tree topology which is expensive to build per-step).
-            with cpu_ctx("follow_tree_cpu"):
-                draft_tokens_cpu = (
-                    self.draft_token.view(bs, self.draft_token_num).cpu().tolist()
-                )
-                child_maps = self.child_maps
-                if not child_maps:
-                    if self.parents is None:
-                        raise RuntimeError(
-                            "DDTree verify needs child_maps or parent metadata."
-                        )
-                    from sglang.srt.speculative.ddtree_utils import (
-                        build_child_maps_from_parent_metadata,
+            can_use_gpu_follow = (
+                not self.force_cpu_follow
+                and self.parents is not None
+                and self.draft_token.is_cuda
+                and target_predict.is_cuda
+            )
+            if can_use_gpu_follow:
+                with gpu_ctx("follow_tree_gpu"):
+                    draft_tokens_2d = self.draft_token.view(bs, self.draft_token_num)
+                    parents_2d = self.parents.view(bs, self.draft_token_num)
+                    (
+                        gpu_follow_indices,
+                        gpu_follow_token_ids,
+                        gpu_follow_lens,
+                        gpu_next_tokens,
+                    ) = follow_verified_tree_gpu(
+                        draft_tokens=draft_tokens_2d,
+                        target_predict=target_predict,
+                        parents=parents_2d,
+                        actual_tree_sizes=self.actual_tree_sizes,
+                        accepted_indices=self.follow_accepted_indices,
+                        accepted_token_ids=self.follow_accepted_token_ids,
+                        accepted_lens=self.follow_accepted_lens,
+                        next_tokens=self.follow_next_tokens,
                     )
+                    self.next_tokens = gpu_next_tokens
 
-                    parents_cpu = (
-                        self.parents.view(bs, self.draft_token_num).cpu().tolist()
+                commit_lens = []
+                num_correct_drafts_per_req = []
+                with cpu_ctx("commit_output_cpu"):
+                    accepted_lens_cpu = gpu_follow_lens.detach().cpu().tolist()
+                    accepted_indices_cpu = gpu_follow_indices.detach().cpu().tolist()
+                    accepted_token_ids_cpu = (
+                        gpu_follow_token_ids.detach().cpu().tolist()
                     )
-                    if self.actual_tree_sizes is None:
-                        actual_sizes_cpu = [self.draft_token_num] * bs
-                    else:
-                        actual_sizes_cpu = [
-                            int(x) for x in self.actual_tree_sizes.cpu().tolist()
+                    next_tokens_cpu = gpu_next_tokens.detach().cpu().tolist()
+                    self.accepted_indices = []
+                    for i, req in enumerate(batch.reqs):
+                        accepted_len = int(accepted_lens_cpu[i])
+                        accepted = [
+                            int(idx)
+                            for idx in accepted_indices_cpu[i][:accepted_len]
                         ]
-                    child_maps = build_child_maps_from_parent_metadata(
-                        draft_tokens_cpu, parents_cpu, actual_sizes_cpu
+                        self.accepted_indices.append(accepted)
+                        appended = 0
+                        for pos in range(1, accepted_len):
+                            token_id = int(accepted_token_ids_cpu[i][pos])
+                            req.output_ids.append(token_id)
+                            appended += 1
+                            req.update_finish_state()
+                            if req.finished():
+                                break
+                        if not req.finished():
+                            bonus = int(next_tokens_cpu[i])
+                            req.output_ids.append(bonus)
+                            appended += 1
+                            req.update_finish_state()
+                        num_correct_drafts = max(0, appended - 1)
+                        commit_lens.append(appended)
+                        num_correct_drafts_per_req.append(num_correct_drafts)
+                        req.spec_verify_ct += 1
+                        req.spec_num_correct_drafts += num_correct_drafts
+                        req.update_spec_correct_drafts_histogram(num_correct_drafts)
+            else:
+                with cpu_ctx("follow_tree_cpu"):
+                    draft_tokens_cpu = (
+                        self.draft_token.view(bs, self.draft_token_num).cpu().tolist()
                     )
-                    self.child_maps = child_maps
-                (
-                    self.accepted_indices,
-                    self.next_tokens,
-                    next_tokens_cpu,
-                ) = follow_verified_tree(child_maps, target_predict)
-            commit_lens = []
-            num_correct_drafts_per_req = []
-            with cpu_ctx("commit_output_cpu"):
-                for i, req in enumerate(batch.reqs):
-                    accepted = self.accepted_indices[i]
-                    appended = 0
-                    for idx in accepted[1:]:
-                        token_id = int(draft_tokens_cpu[i][idx])
-                        req.output_ids.append(token_id)
-                        appended += 1
-                        req.update_finish_state()
-                        if req.finished():
-                            break
-                    if not req.finished():
-                        bonus = int(next_tokens_cpu[i])
-                        req.output_ids.append(bonus)
-                        appended += 1
-                        req.update_finish_state()
-                    num_correct_drafts = max(0, appended - 1)
-                    commit_lens.append(appended)
-                    num_correct_drafts_per_req.append(num_correct_drafts)
-                    req.spec_verify_ct += 1
-                    req.spec_num_correct_drafts += num_correct_drafts
-                    req.update_spec_correct_drafts_histogram(num_correct_drafts)
+                    child_maps = self.child_maps
+                    if not child_maps:
+                        if self.parents is None:
+                            raise RuntimeError(
+                                "DDTree verify needs child_maps or parent metadata."
+                            )
+                        from sglang.srt.speculative.ddtree_utils import (
+                            build_child_maps_from_parent_metadata,
+                        )
+
+                        parents_cpu = (
+                            self.parents.view(bs, self.draft_token_num).cpu().tolist()
+                        )
+                        if self.actual_tree_sizes is None:
+                            actual_sizes_cpu = [self.draft_token_num] * bs
+                        else:
+                            actual_sizes_cpu = [
+                                int(x) for x in self.actual_tree_sizes.cpu().tolist()
+                            ]
+                        child_maps = build_child_maps_from_parent_metadata(
+                            draft_tokens_cpu, parents_cpu, actual_sizes_cpu
+                        )
+                        self.child_maps = child_maps
+                    (
+                        self.accepted_indices,
+                        self.next_tokens,
+                        next_tokens_cpu,
+                    ) = follow_verified_tree(child_maps, target_predict)
+                commit_lens = []
+                num_correct_drafts_per_req = []
+                with cpu_ctx("commit_output_cpu"):
+                    for i, req in enumerate(batch.reqs):
+                        accepted = self.accepted_indices[i]
+                        appended = 0
+                        for idx in accepted[1:]:
+                            token_id = int(draft_tokens_cpu[i][idx])
+                            req.output_ids.append(token_id)
+                            appended += 1
+                            req.update_finish_state()
+                            if req.finished():
+                                break
+                        if not req.finished():
+                            bonus = int(next_tokens_cpu[i])
+                            req.output_ids.append(bonus)
+                            appended += 1
+                            req.update_finish_state()
+                        num_correct_drafts = max(0, appended - 1)
+                        commit_lens.append(appended)
+                        num_correct_drafts_per_req.append(num_correct_drafts)
+                        req.spec_verify_ct += 1
+                        req.spec_num_correct_drafts += num_correct_drafts
+                        req.update_spec_correct_drafts_histogram(num_correct_drafts)
 
         # --- 2) Commit tokens to output ---
         if self.tree_is_spine:
@@ -362,7 +436,8 @@ class DDTreeVerifyInput(SpecInput):
                             if len(free_locs) == 1
                             else torch.cat(free_locs)
                         )
-                        batch.token_to_kv_pool_allocator.free(free_loc_tensor)
+                        if free_loc_tensor.numel() > 0:
+                            batch.token_to_kv_pool_allocator.free(free_loc_tensor)
                     batch.out_cache_loc = (
                         kept_locs[0]
                         if len(kept_locs) == 1

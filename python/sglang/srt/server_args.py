@@ -611,6 +611,7 @@ class ServerArgs:
     speculative_ddtree_cuda_graph_buckets: Optional[List[int]] = None
     is_ddtree_prune: bool = False
     speculative_ddtree_cpu_build: bool = False
+    speculative_ddtree_cpu_follow: bool = False
     speculative_ddtree_profile: bool = False
     speculative_ddtree_profile_interval: int = 50
     speculative_ddtree_profile_warmup: int = 0
@@ -3412,11 +3413,18 @@ class ServerArgs:
         standard-allgather wrapper buffers and the FlashInfer A2A dispatcher
         budget. Max over the prefill (max_prefill_tokens), piecewise-prefill
         capture (piecewise_cuda_graph_max_tokens), and decode/verify
-        (cuda_graph_max_bs * num_tokens_per_bs) bounds; num_tokens_per_bs is
-        speculative_num_draft_tokens under speculative decoding, else 1.
+        (cuda_graph_max_bs * num_tokens_per_bs) bounds. For DDTree,
+        num_tokens_per_bs is tree_budget + 1; for other speculative decoding
+        algorithms it is speculative_num_draft_tokens; otherwise it is 1.
         """
         if self.speculative_algorithm:
-            num_tokens_per_bs = self.speculative_num_draft_tokens or 1
+            if str(self.speculative_algorithm).upper() == "DDTREE":
+                tree_budget = self.speculative_ddtree_budget
+                if tree_budget is None:
+                    tree_budget = max(0, int(self.speculative_num_draft_tokens or 1) - 1)
+                num_tokens_per_bs = int(tree_budget) + 1
+            else:
+                num_tokens_per_bs = self.speculative_num_draft_tokens or 1
         else:
             num_tokens_per_bs = 1
         prefill_tokens = self.max_prefill_tokens
@@ -5863,6 +5871,12 @@ class ServerArgs:
             action="store_true",
             default=ServerArgs.speculative_ddtree_cpu_build,
             help="DDTREE only. Force the Python heap builder instead of the default no-prune GPU tree builder.",
+        )
+        parser.add_argument(
+            "--speculative-ddtree-cpu-follow",
+            action="store_true",
+            default=ServerArgs.speculative_ddtree_cpu_follow,
+            help="DDTREE only. Force the Python child-map follow path instead of the default GPU verified-path follow.",
         )
         parser.add_argument(
             "--speculative-ddtree-profile",

@@ -318,6 +318,17 @@ class FlashAttentionBackend(AttentionBackend):
         seq_lens: torch.Tensor,
         num_draft_tokens: int,
     ) -> None:
+        visibility = getattr(spec_info, "visibility", None)
+        if visibility is not None:
+            self._init_target_verify_expand_metadata_from_visibility(
+                metadata_expand,
+                visibility,
+                req_pool_indices,
+                seq_lens,
+                num_draft_tokens,
+            )
+            return
+
         custom_mask = getattr(spec_info, "custom_mask", None)
         if custom_mask is None:
             raise ValueError("Target verify cascade requires spec_info.custom_mask.")
@@ -395,6 +406,87 @@ class FlashAttentionBackend(AttentionBackend):
             metadata_expand.page_table[:, :q_len].copy_(page_table)
             if metadata_expand.page_table.shape[1] > q_len:
                 metadata_expand.page_table[:, q_len:].zero_()
+
+    def _init_target_verify_expand_metadata_from_visibility(
+        self,
+        metadata_expand: FlashAttentionMetadata,
+        visibility: torch.Tensor,
+        req_pool_indices: torch.Tensor,
+        seq_lens: torch.Tensor,
+        num_draft_tokens: int,
+    ) -> None:
+        q_len = int(num_draft_tokens)
+        if q_len <= 0:
+            raise ValueError(
+                f"Target verify draft_token_num must be positive, got {q_len}."
+            )
+
+        device = seq_lens.device
+        bs = int(seq_lens.numel())
+        metadata_expand.max_seq_len_q = 1
+        if metadata_expand.cache_seqlens_int32 is None:
+            metadata_expand.cache_seqlens_int32 = torch.empty(
+                bs * q_len, dtype=torch.int32, device=device
+            )
+        if metadata_expand.cu_seqlens_q is None:
+            metadata_expand.cu_seqlens_q = torch.arange(
+                0, bs * q_len + 1, dtype=torch.int32, device=device
+            )
+        if metadata_expand.cu_seqlens_k is None:
+            metadata_expand.cu_seqlens_k = torch.empty(
+                bs * q_len + 1, dtype=torch.int32, device=device
+            )
+        if metadata_expand.page_table is None:
+            metadata_expand.page_table = torch.empty(
+                bs * q_len, q_len, dtype=torch.int32, device=device
+            )
+
+        if visibility.is_cuda:
+            from sglang.srt.speculative.triton_ops.ddtree import (
+                build_ddtree_fa_suffix_metadata_triton,
+            )
+
+            build_ddtree_fa_suffix_metadata_triton(
+                visibility=visibility,
+                req_to_token=self.req_to_token,
+                req_pool_indices=req_pool_indices.to(torch.long),
+                seq_lens=seq_lens.to(torch.int64),
+                page_table=metadata_expand.page_table,
+                cache_seqlens=metadata_expand.cache_seqlens_int32,
+                q_len=q_len,
+            )
+            if metadata_expand.page_table.shape[1] > q_len:
+                metadata_expand.page_table[:, q_len:].zero_()
+        else:
+            visibility = visibility[:bs, :q_len, :q_len].to(
+                device=device, dtype=torch.bool
+            )
+            offsets = torch.arange(q_len, device=device, dtype=torch.int64)
+            cols = seq_lens.to(torch.int64)[:, None] + offsets[None, :]
+            draft_token_locs = self.req_to_token[
+                req_pool_indices.to(torch.long)[:, None], cols
+            ]
+            draft_token_locs = draft_token_locs.repeat_interleave(q_len, dim=0)
+
+            suffix_mask = visibility.reshape(bs * q_len, q_len)
+            col_indices = offsets.expand(bs * q_len, q_len)
+            keys = torch.where(suffix_mask, col_indices, col_indices + q_len)
+            _, sort_order = torch.sort(keys, dim=1)
+            page_table = draft_token_locs.gather(1, sort_order).to(torch.int32)
+            cache_seqlens = suffix_mask.sum(dim=1).to(torch.int32)
+            metadata_expand.page_table[:, :q_len].copy_(page_table)
+            metadata_expand.cache_seqlens_int32.copy_(cache_seqlens)
+            if metadata_expand.page_table.shape[1] > q_len:
+                metadata_expand.page_table[:, q_len:].zero_()
+
+        metadata_expand.cu_seqlens_k[0].zero_()
+        metadata_expand.cu_seqlens_k[1:].copy_(
+            torch.cumsum(
+                metadata_expand.cache_seqlens_int32,
+                dim=0,
+                dtype=torch.int32,
+            )
+        )
 
     def init_forward_metadata_out_graph(
         self,

@@ -16,6 +16,7 @@ from sglang.srt.speculative.ddtree_utils import (
     build_ddtree_tree_gpu,
     compile_ddtree_tree,
     resolve_ddtree_cuda_graph_buckets,
+    resolve_ddtree_target_backend_capability,
     select_ddtree_cuda_graph_bucket,
 )
 from sglang.srt.speculative.dflash_info import DFlashDraftInput
@@ -57,6 +58,9 @@ class DDTreeWorker(DFlashWorker):
         self.force_ddtree_cpu_build = bool(
             getattr(server_args, "speculative_ddtree_cpu_build", False)
         )
+        self.force_ddtree_cpu_follow = bool(
+            getattr(server_args, "speculative_ddtree_cpu_follow", False)
+        )
         self.max_tree_nodes = self.tree_budget + 1
         self.ddtree_cuda_graph_buckets = resolve_ddtree_cuda_graph_buckets(
             tree_budget=self.tree_budget,
@@ -89,6 +93,23 @@ class DDTreeWorker(DFlashWorker):
         self._tree_actual_sizes_buf: torch.Tensor = torch.zeros(
             _max_bs, dtype=torch.long, device=dev
         )
+        self._tree_pruned_node_token_ids_buf: Optional[torch.Tensor] = None
+        self._tree_pruned_node_depths_buf: Optional[torch.Tensor] = None
+        self._tree_pruned_parents_buf: Optional[torch.Tensor] = None
+        self._tree_pruned_visibility_buf: Optional[torch.Tensor] = None
+        if self.is_ddtree_prune and not self.force_ddtree_cpu_build:
+            self._tree_pruned_node_token_ids_buf = torch.zeros(
+                _max_bs, _budget, dtype=torch.long, device=dev
+            )
+            self._tree_pruned_node_depths_buf = torch.zeros(
+                _max_bs, _budget, dtype=torch.long, device=dev
+            )
+            self._tree_pruned_parents_buf = torch.full(
+                (_max_bs, _mn), -1, dtype=torch.long, device=dev
+            )
+            self._tree_pruned_visibility_buf = torch.zeros(
+                _max_bs, _mn, _mn, dtype=torch.bool, device=dev
+            )
         _heap_cap = 1 << (max(1, 2 * _budget + 3) - 1).bit_length()
         self._tree_heap_scores_buf: torch.Tensor = torch.empty(
             _max_bs, _heap_cap, dtype=torch.float64, device=dev
@@ -102,18 +123,31 @@ class DDTreeWorker(DFlashWorker):
         self._tree_heap_ranks_buf: torch.Tensor = torch.empty(
             _max_bs, _heap_cap, dtype=torch.int32, device=dev
         )
+        self._follow_accepted_indices_buf: torch.Tensor = torch.empty(
+            _max_bs, _mn, dtype=torch.long, device=dev
+        )
+        self._follow_accepted_token_ids_buf: torch.Tensor = torch.empty(
+            _max_bs, _mn, dtype=torch.long, device=dev
+        )
+        self._follow_accepted_lens_buf: torch.Tensor = torch.empty(
+            _max_bs, dtype=torch.long, device=dev
+        )
+        self._follow_next_tokens_buf: torch.Tensor = torch.empty(
+            _max_bs, dtype=torch.long, device=dev
+        )
         self._ddtree_vocab_id_cache_key = None
         self._ddtree_org_token_ids: Optional[torch.Tensor] = None
         self._ddtree_added_token_ids: Optional[torch.Tensor] = None
 
         if self.tp_rank == 0:
             logger.info(
-                "Initialized DDTree worker. block_size=%s, tree_budget=%s, max_tree_nodes=%s, is_ddtree_prune=%s, force_cpu_build=%s, cuda_graph_buckets=%s",
+                "Initialized DDTree worker. block_size=%s, tree_budget=%s, max_tree_nodes=%s, is_ddtree_prune=%s, force_cpu_build=%s, force_cpu_follow=%s, cuda_graph_buckets=%s",
                 self.block_size,
                 self.tree_budget,
                 self.max_tree_nodes,
                 self.is_ddtree_prune,
                 self.force_ddtree_cpu_build,
+                self.force_ddtree_cpu_follow,
                 self.ddtree_cuda_graph_buckets,
             )
 
@@ -188,9 +222,7 @@ class DDTreeWorker(DFlashWorker):
         )
 
         can_use_gpu_build = (
-            not self.force_ddtree_cpu_build
-            and not self.is_ddtree_prune
-            and draft_top_log_probs.is_cuda
+            not self.force_ddtree_cpu_build and draft_top_log_probs.is_cuda
         )
         if can_use_gpu_build:
             with profiler.gpu("tree_gpu_build"):
@@ -216,6 +248,11 @@ class DDTreeWorker(DFlashWorker):
                     _heap_parents=self._tree_heap_parents_buf,
                     _heap_depths=self._tree_heap_depths_buf,
                     _heap_ranks=self._tree_heap_ranks_buf,
+                    prune_to_deepest_chains=self.is_ddtree_prune,
+                    _out_pruned_node_token_ids=self._tree_pruned_node_token_ids_buf,
+                    _out_pruned_node_depths=self._tree_pruned_node_depths_buf,
+                    _out_pruned_parents=self._tree_pruned_parents_buf,
+                    _out_pruned_visibility=self._tree_pruned_visibility_buf,
                 )
         else:
             (
@@ -247,6 +284,25 @@ class DDTreeWorker(DFlashWorker):
             )
         else:
             verify_token_num = raw_verify_token_num
+
+        target_attn_backend = getattr(
+            self.target_worker.model_runner, "attn_backend", None
+        )
+        target_backend_capability = resolve_ddtree_target_backend_capability(
+            target_attn_backend,
+            speculative_attention_mode=getattr(
+                self.server_args, "speculative_attention_mode", "prefill"
+            ),
+        )
+        if not target_backend_capability.supports_full_tree:
+            reason = target_backend_capability.unsupported_reason or "unknown reason"
+            raise RuntimeError(
+                "DDTREE full-tree target verify supports target attention backends "
+                "flashinfer, fa3/fa4, triton, or hybrid backends whose "
+                "target-verify child backend resolves to one of those. Got "
+                f"{target_backend_capability.backend_name}: {reason}."
+            )
+
         with profiler.cpu("mask_compile"):
             (
                 verify_input_ids,
@@ -266,6 +322,7 @@ class DDTreeWorker(DFlashWorker):
                 past_lens_cpu=batch.seq_lens_cpu.tolist(),
                 actual_sizes_cpu=actual_tree_sizes_cpu,
                 verify_token_num=verify_token_num,
+                build_attention_mask=target_backend_capability.build_attention_mask,
             )
 
         tree_is_spine = (
@@ -283,11 +340,21 @@ class DDTreeWorker(DFlashWorker):
             tree_budget=self.tree_budget,
             child_maps=child_maps,
             actual_tree_sizes=actual_tree_sizes,
-            parents=parents,
+            parents=parents[:, :verify_token_num],
+            visibility=visibility if target_backend_capability.use_visibility else None,
             custom_mask=tree_attention_mask,
             tree_is_spine=tree_is_spine,
             raw_tree_size=raw_verify_token_num,
             cuda_graph_bucket_size=verify_token_num,
+            force_cpu_follow=self.force_ddtree_cpu_follow,
+            follow_accepted_indices=self._follow_accepted_indices_buf[
+                :bs, :verify_token_num
+            ],
+            follow_accepted_token_ids=self._follow_accepted_token_ids_buf[
+                :bs, :verify_token_num
+            ],
+            follow_accepted_lens=self._follow_accepted_lens_buf[:bs],
+            follow_next_tokens=self._follow_next_tokens_buf[:bs],
         )
         with profiler.cpu("prepare_verify"):
             verify_input.prepare_for_verify(batch, self.page_size)
