@@ -1,9 +1,19 @@
-from dataclasses import dataclass, field
 from contextlib import nullcontext
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 import torch
+import torch.nn.functional as F
 
+from sglang.srt.distributed import get_tp_group
+from sglang.srt.layers.dp_attention import (
+    get_attention_tp_group,
+    is_dp_attention_enabled,
+)
+from sglang.srt.layers.sampler import (
+    apply_custom_logit_processor,
+    top_k_top_p_min_p_sampling_from_probs_torch,
+)
 from sglang.srt.mem_cache.common import (
     alloc_token_slots,
     get_last_loc,
@@ -11,6 +21,79 @@ from sglang.srt.mem_cache.common import (
 from sglang.srt.model_executor.forward_batch_info import CaptureHiddenMode
 from sglang.srt.speculative.spec_info import SpecInput, SpecInputType
 from sglang.srt.speculative.spec_utils import assign_req_to_token_pool_func
+
+
+def _maybe_apply_sampling_logits_processors(
+    *,
+    logits: torch.Tensor,
+    sampling_info,
+    bs: int,
+    q_len: int,
+):
+    if sampling_info is None:
+        return
+    if len(sampling_info) != bs:
+        raise RuntimeError(
+            "DDTREE verify sampling_info size mismatch: "
+            f"len(sampling_info)={len(sampling_info)}, bs={bs}."
+        )
+
+    # Keep target-verify token selection consistent with the normal sampling path.
+    if sampling_info.has_custom_logit_processor:
+        apply_custom_logit_processor(
+            logits,
+            sampling_info,
+            num_tokens_in_batch=q_len,
+        )
+
+    if (
+        sampling_info.penalizer_orchestrator.is_required
+        or sampling_info.logit_bias is not None
+    ):
+        linear_penalty = torch.zeros(
+            (bs, logits.shape[1]),
+            dtype=torch.float32,
+            device=logits.device,
+        )
+        sampling_info.apply_logits_bias(linear_penalty)
+        logits.add_(torch.repeat_interleave(linear_penalty, q_len, dim=0))
+
+
+def _sample_ddtree_target_tokens(
+    *,
+    logits: torch.Tensor,
+    sampling_info,
+    positions: torch.Tensor,
+    bs: int,
+    q_len: int,
+) -> torch.Tensor:
+    expanded_temperature = torch.repeat_interleave(
+        sampling_info.temperatures, q_len, dim=0
+    )
+    probs = F.softmax(logits / expanded_temperature, dim=-1)
+
+    repeated_seed = None
+    if sampling_info.sampling_seed is not None:
+        repeated_seed = torch.repeat_interleave(sampling_info.sampling_seed, q_len, dim=0)
+
+    sampled = top_k_top_p_min_p_sampling_from_probs_torch(
+        probs,
+        torch.repeat_interleave(sampling_info.top_ks, q_len, dim=0),
+        torch.repeat_interleave(sampling_info.top_ps, q_len, dim=0),
+        torch.repeat_interleave(sampling_info.min_ps, q_len, dim=0),
+        sampling_info.need_min_p_sampling,
+        repeated_seed,
+        positions,
+    )
+    target_predict = sampled.to(dtype=torch.long).view(bs, q_len)
+
+    # Different TP ranks can see tiny floating-point differences in logits/probs.
+    # The sampled verifier walk must be identical on every rank because it mutates
+    # request state and KV ownership.
+    tp_group = get_attention_tp_group() if is_dp_attention_enabled() else get_tp_group()
+    if tp_group.world_size > 1:
+        tp_group.broadcast(target_predict, src=0)
+    return target_predict
 
 
 @dataclass
@@ -180,29 +263,52 @@ class DDTreeVerifyInput(SpecInput):
         )
 
         sampling_info = batch.sampling_info
-        use_sampling = (
-            sampling_info is not None
-            and not sampling_info.is_all_greedy
+        sampling_requested = (
+            sampling_info is not None and not sampling_info.is_all_greedy
+        )
+        use_dflash_chain_sampling = (
+            sampling_requested
+            and self.tree_is_spine
             and is_dflash_sampling_verify_available()
         )
 
-        with gpu_ctx("accept_argmax"):
-            target_predict = torch.argmax(logits_output.next_token_logits, dim=-1)
-            target_predict = target_predict.reshape(bs, self.draft_token_num)
+        with gpu_ctx("sampling_logits_processors"):
+            _maybe_apply_sampling_logits_processors(
+                logits=logits_output.next_token_logits,
+                sampling_info=sampling_info,
+                bs=bs,
+                q_len=self.draft_token_num,
+            )
+
+        target_predict = None
+        if not use_dflash_chain_sampling:
+            if sampling_requested:
+                with gpu_ctx("target_sample"):
+                    target_predict = _sample_ddtree_target_tokens(
+                        logits=logits_output.next_token_logits,
+                        sampling_info=sampling_info,
+                        positions=self.positions,
+                        bs=bs,
+                        q_len=self.draft_token_num,
+                    )
+            else:
+                with gpu_ctx("accept_argmax"):
+                    target_predict = torch.argmax(logits_output.next_token_logits, dim=-1)
+                    target_predict = target_predict.reshape(bs, self.draft_token_num)
 
         gpu_follow_indices = None
         gpu_follow_token_ids = None
 
         # --- 1) Acceptance ---
         if self.tree_is_spine:
-            if use_sampling:
+            candidates = self.draft_token.view(bs, self.draft_token_num)
+            if use_dflash_chain_sampling:
                 # Chain-based sampling verification via sgl_kernel.
                 # candidates must include ALL N tokens (bonus + drafts).
                 from sglang.srt.speculative.dflash_utils import (
                     compute_dflash_sampling_correct_drafts_and_bonus,
                 )
 
-                candidates = self.draft_token.view(bs, self.draft_token_num)
                 correct_len, bonus = compute_dflash_sampling_correct_drafts_and_bonus(
                     candidates=candidates,
                     next_token_logits=logits_output.next_token_logits,
@@ -217,7 +323,6 @@ class DDTreeVerifyInput(SpecInput):
                 ]
                 self.next_tokens = bonus
             else:
-                candidates = self.draft_token.view(bs, self.draft_token_num)
                 correct, bonus = compute_dflash_correct_drafts_and_bonus(
                     candidates=candidates,
                     target_predict=target_predict,
@@ -227,8 +332,9 @@ class DDTreeVerifyInput(SpecInput):
                 self.accepted_indices = [list(range(cl)) for cl in commit_lens]
                 self.next_tokens = bonus
         else:
-            # Full tree path: greedy-only for now (tree sampling requires
-            # sgl_kernel tree topology which is expensive to build per-step).
+            # Full-tree verification follows the target model's decoding rule:
+            # greedy uses argmax, while non-greedy uses a sampled target token per
+            # tree node and then walks the draft tree by child-token matches.
             can_use_gpu_follow = (
                 not self.force_cpu_follow
                 and self.parents is not None
