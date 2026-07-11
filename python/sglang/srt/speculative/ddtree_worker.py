@@ -94,6 +94,13 @@ class DDTreeWorker(DFlashWorker):
             _max_bs, dtype=torch.long, device=dev
         )
         self._tree_pruned_node_token_ids_buf: Optional[torch.Tensor] = None
+        self._verify_input_ids_buf: torch.Tensor = torch.empty(
+            _max_bs * _mn, dtype=torch.long, device=dev
+        )
+        self._verify_position_ids_buf: torch.Tensor = torch.empty(
+            _max_bs * _mn, dtype=torch.long, device=dev
+        )
+        self._tree_attention_mask_buf: Optional[torch.Tensor] = None
         self._tree_pruned_node_depths_buf: Optional[torch.Tensor] = None
         self._tree_pruned_parents_buf: Optional[torch.Tensor] = None
         self._tree_pruned_visibility_buf: Optional[torch.Tensor] = None
@@ -318,7 +325,26 @@ class DDTreeWorker(DFlashWorker):
                 f"{target_backend_capability.backend_name}: {reason}."
             )
 
-        with profiler.cpu("mask_compile"):
+        with (
+            profiler.cpu("mask_compile"),
+            profiler.gpu("mask_compile_gpu"),
+        ):
+            past_lens_cpu = batch.seq_lens_cpu.tolist()
+            if target_backend_capability.build_attention_mask:
+                mask_numel = sum(
+                    verify_token_num * (past_len + verify_token_num)
+                    for past_len in past_lens_cpu
+                )
+                current_capacity = (
+                    0
+                    if self._tree_attention_mask_buf is None
+                    else self._tree_attention_mask_buf.numel()
+                )
+                if current_capacity < mask_numel:
+                    new_capacity = max(mask_numel, max(1, current_capacity * 2))
+                    self._tree_attention_mask_buf = torch.empty(
+                        new_capacity, dtype=torch.bool, device=batch.device
+                    )
             (
                 verify_input_ids,
                 verify_position_ids,
@@ -334,10 +360,13 @@ class DDTreeWorker(DFlashWorker):
                 tree_budget=self.tree_budget,
                 actual_tree_sizes=actual_tree_sizes,
                 device=batch.device,
-                past_lens_cpu=batch.seq_lens_cpu.tolist(),
+                past_lens_cpu=past_lens_cpu,
                 actual_sizes_cpu=actual_tree_sizes_cpu,
                 verify_token_num=verify_token_num,
                 build_attention_mask=target_backend_capability.build_attention_mask,
+                _out_verify_input_ids=self._verify_input_ids_buf,
+                _out_verify_position_ids=self._verify_position_ids_buf,
+                _out_attention_mask=self._tree_attention_mask_buf,
             )
 
         tree_is_spine = (

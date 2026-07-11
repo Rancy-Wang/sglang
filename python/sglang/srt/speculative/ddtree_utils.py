@@ -575,7 +575,7 @@ def _prune_tree_to_deepest_chains(
     )
 
 
-def compile_ddtree_tree(
+def _compile_ddtree_tree_torch(
     root_token_ids: torch.Tensor,
     node_token_ids: torch.Tensor,
     node_depths: torch.Tensor,
@@ -589,18 +589,35 @@ def compile_ddtree_tree(
     actual_sizes_cpu: Optional[List[int]] = None,
     verify_token_num: Optional[int] = None,
     build_attention_mask: bool = True,
+    _out_verify_input_ids: Optional[torch.Tensor] = None,
+    _out_verify_position_ids: Optional[torch.Tensor] = None,
+    _out_attention_mask: Optional[torch.Tensor] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], torch.Tensor]:
     bs = root_token_ids.shape[0]
     max_nodes = tree_budget + 1 if verify_token_num is None else int(verify_token_num)
     if max_nodes <= 0:
         raise ValueError(f"DDTree verify_token_num must be positive, got {max_nodes}.")
 
-    verify_input_ids = torch.zeros(bs, max_nodes, dtype=torch.long, device=device)
+    if _out_verify_input_ids is None:
+        verify_input_ids = torch.empty(
+            bs, max_nodes, dtype=torch.long, device=device
+        )
+    else:
+        verify_input_ids = _out_verify_input_ids.reshape(-1)[: bs * max_nodes].view(
+            bs, max_nodes
+        )
     verify_input_ids[:, 0] = root_token_ids
     if max_nodes > 1:
         verify_input_ids[:, 1:] = node_token_ids[:, : max_nodes - 1]
 
-    verify_position_ids = torch.zeros(bs, max_nodes, dtype=torch.long, device=device)
+    if _out_verify_position_ids is None:
+        verify_position_ids = torch.empty(
+            bs, max_nodes, dtype=torch.long, device=device
+        )
+    else:
+        verify_position_ids = _out_verify_position_ids.reshape(-1)[
+            : bs * max_nodes
+        ].view(bs, max_nodes)
     verify_position_ids[:, 0] = start_positions
     if max_nodes > 1:
         verify_position_ids[:, 1:] = (
@@ -617,12 +634,11 @@ def compile_ddtree_tree(
         )
 
     if not build_attention_mask:
-        if max_actual_size < max_nodes:
-            for b, actual_size in enumerate(actual_sizes_cpu):
-                if actual_size < max_nodes:
-                    visibility[b, actual_size:max_nodes, :max_nodes].fill_(False)
-                    dummy_rows = torch.arange(actual_size, max_nodes, device=device)
-                    visibility[b, dummy_rows, dummy_rows] = True
+        for b, actual_size in enumerate(actual_sizes_cpu):
+            if actual_size < max_nodes:
+                visibility[b, actual_size:max_nodes, :max_nodes].fill_(False)
+                dummy_rows = torch.arange(actual_size, max_nodes, device=device)
+                visibility[b, dummy_rows, dummy_rows] = True
         return verify_input_ids, verify_position_ids, None, actual_tree_sizes
 
     # Attention backends consume the speculative custom mask as a request-packed
@@ -635,7 +651,17 @@ def compile_ddtree_tree(
     if past_lens_cpu is None:
         past_lens_cpu = [int(x) for x in past_lengths.detach().cpu().tolist()]
     mask_numel = sum(max_nodes * (past_len + max_nodes) for past_len in past_lens_cpu)
-    tree_attention_mask = torch.empty((mask_numel,), dtype=torch.bool, device=device)
+    if _out_attention_mask is None:
+        tree_attention_mask = torch.empty(
+            (mask_numel,), dtype=torch.bool, device=device
+        )
+    else:
+        if _out_attention_mask.numel() < mask_numel:
+            raise ValueError(
+                "DDTree attention-mask output buffer is too small: "
+                f"capacity={_out_attention_mask.numel()}, required={mask_numel}."
+            )
+        tree_attention_mask = _out_attention_mask[:mask_numel]
 
     offset = 0
     for b, (past_len_i, actual_size) in enumerate(
@@ -664,6 +690,131 @@ def compile_ddtree_tree(
         offset += max_nodes * kv_len_i
 
     return verify_input_ids, verify_position_ids, tree_attention_mask, actual_tree_sizes
+
+
+def compile_ddtree_tree(
+    root_token_ids: torch.Tensor,
+    node_token_ids: torch.Tensor,
+    node_depths: torch.Tensor,
+    visibility: torch.Tensor,
+    start_positions: torch.Tensor,
+    past_lengths: torch.Tensor,
+    tree_budget: int,
+    actual_tree_sizes: torch.Tensor,
+    device: torch.device,
+    past_lens_cpu: Optional[List[int]] = None,
+    actual_sizes_cpu: Optional[List[int]] = None,
+    verify_token_num: Optional[int] = None,
+    build_attention_mask: bool = True,
+    _out_verify_input_ids: Optional[torch.Tensor] = None,
+    _out_verify_position_ids: Optional[torch.Tensor] = None,
+    _out_attention_mask: Optional[torch.Tensor] = None,
+) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], torch.Tensor]:
+    """Compile DDTree verify tensors, using Triton for the CUDA hot path."""
+
+    bs = int(root_token_ids.shape[0])
+    max_nodes = tree_budget + 1 if verify_token_num is None else int(verify_token_num)
+    if max_nodes <= 0:
+        raise ValueError(f"DDTree verify_token_num must be positive, got {max_nodes}.")
+
+    if actual_sizes_cpu is None:
+        actual_sizes_cpu = [int(x) for x in actual_tree_sizes.detach().cpu().tolist()]
+    max_actual_size = max(actual_sizes_cpu) if actual_sizes_cpu else 1
+    if max_actual_size > max_nodes:
+        raise ValueError(
+            "DDTree verify_token_num is smaller than a pruned tree: "
+            f"verify_token_num={max_nodes}, max_actual_size={max_actual_size}."
+        )
+
+    if not root_token_ids.is_cuda:
+        return _compile_ddtree_tree_torch(
+            root_token_ids=root_token_ids,
+            node_token_ids=node_token_ids,
+            node_depths=node_depths,
+            visibility=visibility,
+            start_positions=start_positions,
+            past_lengths=past_lengths,
+            tree_budget=tree_budget,
+            actual_tree_sizes=actual_tree_sizes,
+            device=device,
+            past_lens_cpu=past_lens_cpu,
+            actual_sizes_cpu=actual_sizes_cpu,
+            verify_token_num=verify_token_num,
+            build_attention_mask=build_attention_mask,
+            _out_verify_input_ids=_out_verify_input_ids,
+            _out_verify_position_ids=_out_verify_position_ids,
+            _out_attention_mask=_out_attention_mask,
+        )
+
+    if _out_verify_input_ids is None:
+        verify_input_ids = torch.empty(
+            bs, max_nodes, dtype=torch.long, device=device
+        )
+    else:
+        if _out_verify_input_ids.numel() < bs * max_nodes:
+            raise ValueError("DDTree verify-input output buffer is too small.")
+        verify_input_ids = _out_verify_input_ids.reshape(-1)[
+            : bs * max_nodes
+        ].view(bs, max_nodes)
+
+    if _out_verify_position_ids is None:
+        verify_position_ids = torch.empty(
+            bs, max_nodes, dtype=torch.long, device=device
+        )
+    else:
+        if _out_verify_position_ids.numel() < bs * max_nodes:
+            raise ValueError("DDTree position-id output buffer is too small.")
+        verify_position_ids = _out_verify_position_ids.reshape(-1)[
+            : bs * max_nodes
+        ].view(bs, max_nodes)
+
+    tree_attention_mask = None
+    if build_attention_mask:
+        if past_lens_cpu is None:
+            past_lens_cpu = [int(x) for x in past_lengths.detach().cpu().tolist()]
+        mask_numel = sum(
+            max_nodes * (past_len + max_nodes) for past_len in past_lens_cpu
+        )
+        if _out_attention_mask is None:
+            tree_attention_mask = torch.empty(
+                mask_numel, dtype=torch.bool, device=device
+            )
+        else:
+            if _out_attention_mask.numel() < mask_numel:
+                raise ValueError(
+                    "DDTree attention-mask output buffer is too small: "
+                    f"capacity={_out_attention_mask.numel()}, required={mask_numel}."
+                )
+            tree_attention_mask = _out_attention_mask[:mask_numel]
+
+    from sglang.srt.speculative.triton_ops.ddtree import (
+        compile_ddtree_tree_triton,
+    )
+
+    compile_ddtree_tree_triton(
+        root_token_ids=root_token_ids,
+        node_token_ids=node_token_ids,
+        node_depths=node_depths,
+        visibility=visibility,
+        start_positions=start_positions,
+        past_lengths=past_lengths,
+        actual_tree_sizes=actual_tree_sizes,
+        verify_input_ids=verify_input_ids,
+        verify_position_ids=verify_position_ids,
+        tree_attention_mask=tree_attention_mask,
+        q_len=max_nodes,
+        max_kv_len=(max(past_lens_cpu) + max_nodes) if past_lens_cpu else None,
+        pad_visibility=(
+            not build_attention_mask
+            and any(actual_size < max_nodes for actual_size in actual_sizes_cpu)
+        ),
+    )
+    return (
+        verify_input_ids,
+        verify_position_ids,
+        tree_attention_mask,
+        actual_tree_sizes,
+    )
 
 
 def sample_ddtree_target_probs_gpu(

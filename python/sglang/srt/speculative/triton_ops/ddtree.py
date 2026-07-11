@@ -119,6 +119,202 @@ def _next_power_of_2(x: int) -> int:
 
 
 @triton.jit
+def _compile_ddtree_verify_inputs_kernel(
+    root_token_ids,
+    node_token_ids,
+    node_depths,
+    start_positions,
+    verify_input_ids,
+    verify_position_ids,
+    Q_LEN: tl.constexpr,
+    NODE_STRIDE: tl.constexpr,
+    BLOCK_Q: tl.constexpr,
+):
+    req_idx = tl.program_id(0)
+    cols = tl.arange(0, BLOCK_Q)
+    mask = cols < Q_LEN
+    is_root = cols == 0
+    node_cols = cols - 1
+
+    root_token = tl.load(root_token_ids + req_idx)
+    node_token = tl.load(
+        node_token_ids + req_idx * NODE_STRIDE + node_cols,
+        mask=mask & ~is_root,
+        other=0,
+    )
+    start_position = tl.load(start_positions + req_idx)
+    node_depth = tl.load(
+        node_depths + req_idx * NODE_STRIDE + node_cols,
+        mask=mask & ~is_root,
+        other=0,
+    )
+
+    out_offset = req_idx * Q_LEN + cols
+    tl.store(
+        verify_input_ids + out_offset,
+        tl.where(is_root, root_token, node_token),
+        mask=mask,
+    )
+    tl.store(
+        verify_position_ids + out_offset,
+        tl.where(is_root, start_position, start_position + node_depth),
+        mask=mask,
+    )
+
+
+@triton.jit
+def _pad_ddtree_visibility_kernel(
+    visibility,
+    actual_tree_sizes,
+    Q_LEN: tl.constexpr,
+    VIS_B_STRIDE: tl.constexpr,
+    VIS_ROW_STRIDE: tl.constexpr,
+    VIS_COL_STRIDE: tl.constexpr,
+    BLOCK_Q: tl.constexpr,
+):
+    req_idx = tl.program_id(0)
+    row = tl.program_id(1)
+    actual_size = tl.load(actual_tree_sizes + req_idx)
+    cols = tl.arange(0, BLOCK_Q)
+    mask = (row >= actual_size) & (cols < Q_LEN)
+    tl.store(
+        visibility
+        + req_idx * VIS_B_STRIDE
+        + row * VIS_ROW_STRIDE
+        + cols * VIS_COL_STRIDE,
+        cols == row,
+        mask=mask,
+    )
+
+
+@triton.jit
+def _compile_ddtree_packed_mask_kernel(
+    visibility,
+    actual_tree_sizes,
+    past_lengths,
+    tree_attention_mask,
+    Q_LEN: tl.constexpr,
+    BS: tl.constexpr,
+    VIS_B_STRIDE: tl.constexpr,
+    VIS_ROW_STRIDE: tl.constexpr,
+    VIS_COL_STRIDE: tl.constexpr,
+    BLOCK_K: tl.constexpr,
+):
+    row_pid = tl.program_id(0)
+    kv_block = tl.program_id(1)
+    req_idx = row_pid // Q_LEN
+    query_idx = row_pid - req_idx * Q_LEN
+
+    request_offset = tl.zeros((1,), tl.int64)
+    for prior_req in range(0, BS):
+        prior_len = tl.load(past_lengths + prior_req)
+        request_offset += tl.where(
+            prior_req < req_idx, Q_LEN * (prior_len + Q_LEN), 0
+        )
+
+    past_len = tl.load(past_lengths + req_idx)
+    actual_size = tl.load(actual_tree_sizes + req_idx)
+    kv_len = past_len + Q_LEN
+    cols = kv_block * BLOCK_K + tl.arange(0, BLOCK_K)
+    col_mask = cols < kv_len
+    real_query = query_idx < actual_size
+    in_prefix = cols < past_len
+    tree_col = cols - past_len
+    in_tree = (tree_col >= 0) & (tree_col < actual_size)
+    visible = tl.load(
+        visibility
+        + req_idx * VIS_B_STRIDE
+        + query_idx * VIS_ROW_STRIDE
+        + tree_col * VIS_COL_STRIDE,
+        mask=col_mask & real_query & in_tree,
+        other=False,
+    )
+    dummy_self = (~real_query) & (tree_col == query_idx)
+    allow = (real_query & (in_prefix | (in_tree & visible))) | dummy_self
+    tl.store(
+        tree_attention_mask + request_offset + query_idx * kv_len + cols,
+        allow,
+        mask=col_mask,
+    )
+
+
+def compile_ddtree_tree_triton(
+    *,
+    root_token_ids: torch.Tensor,
+    node_token_ids: torch.Tensor,
+    node_depths: torch.Tensor,
+    visibility: torch.Tensor,
+    start_positions: torch.Tensor,
+    past_lengths: torch.Tensor,
+    actual_tree_sizes: torch.Tensor,
+    verify_input_ids: torch.Tensor,
+    verify_position_ids: torch.Tensor,
+    tree_attention_mask: torch.Tensor | None,
+    q_len: int,
+    max_kv_len: int | None = None,
+    pad_visibility: bool = False,
+) -> None:
+    """Compile DDTree verify inputs and optional packed allow-mask on GPU."""
+
+    q_len = int(q_len)
+    if q_len <= 0:
+        raise ValueError(f"DDTree q_len must be positive, got {q_len}.")
+    if not root_token_ids.is_cuda:
+        raise ValueError("DDTree compile Triton kernels require CUDA tensors.")
+    bs = int(root_token_ids.numel())
+    if verify_input_ids.numel() < bs * q_len:
+        raise ValueError("DDTree verify_input_ids buffer is too small.")
+    if verify_position_ids.numel() < bs * q_len:
+        raise ValueError("DDTree verify_position_ids buffer is too small.")
+
+    block_q = _next_power_of_2(q_len)
+    _compile_ddtree_verify_inputs_kernel[(bs,)](
+        root_token_ids,
+        node_token_ids,
+        node_depths,
+        start_positions,
+        verify_input_ids,
+        verify_position_ids,
+        Q_LEN=q_len,
+        NODE_STRIDE=int(node_token_ids.stride(0)),
+        BLOCK_Q=block_q,
+    )
+    if pad_visibility:
+        _pad_ddtree_visibility_kernel[(bs, q_len)](
+            visibility,
+            actual_tree_sizes,
+            Q_LEN=q_len,
+            VIS_B_STRIDE=int(visibility.stride(0)),
+            VIS_ROW_STRIDE=int(visibility.stride(1)),
+            VIS_COL_STRIDE=int(visibility.stride(2)),
+            BLOCK_Q=block_q,
+        )
+
+    if tree_attention_mask is not None:
+        if max_kv_len is None:
+            raise ValueError(
+                "DDTree packed-mask compilation requires max_kv_len from "
+                "CPU-resident sequence-length metadata."
+            )
+        max_kv_len = int(max_kv_len)
+        block_k = 256
+        _compile_ddtree_packed_mask_kernel[
+            (bs * q_len, triton.cdiv(max_kv_len, block_k))
+        ](
+            visibility,
+            actual_tree_sizes,
+            past_lengths,
+            tree_attention_mask,
+            Q_LEN=q_len,
+            BS=bs,
+            VIS_B_STRIDE=int(visibility.stride(0)),
+            VIS_ROW_STRIDE=int(visibility.stride(1)),
+            VIS_COL_STRIDE=int(visibility.stride(2)),
+            BLOCK_K=block_k,
+        )
+
+
+@triton.jit
 def _build_fa_suffix_metadata_kernel(
     visibility,
     req_to_token,
