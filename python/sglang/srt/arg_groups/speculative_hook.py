@@ -300,16 +300,72 @@ def _handle_ddtree(server_args: "ServerArgs") -> None:
         )
         server_args.speculative_eagle_topk = 1
 
-    # --- Infer speculative_num_draft_tokens (block_size) ---
-    # DDTREE requires this to match the draft model's verify-window.
+    # --- Resolve speculative_num_draft_tokens (DDTree draft block_size/depth) ---
+    # Priority:
+    #   1. --speculative-ddtree-block-size
+    #   2. --speculative-dflash-block-size (kept as a compatibility fallback)
+    #   3. --speculative-num-draft-tokens if explicitly provided
+    #   4. draft model config / default
     # It is NOT the same as max_tree_nodes (ddtree_budget + 1).
-    if server_args.speculative_dflash_block_size is not None:
+    ddtree_block_size = getattr(server_args, "speculative_ddtree_block_size", None)
+    dflash_block_size = server_args.speculative_dflash_block_size
+    block_size_source = None
+
+    if ddtree_block_size is not None:
+        if int(ddtree_block_size) <= 0:
+            raise ValueError(
+                "DDTREE requires --speculative-ddtree-block-size to be positive, "
+                f"got {ddtree_block_size}."
+            )
+        if server_args.speculative_num_draft_tokens is not None and int(
+            server_args.speculative_num_draft_tokens
+        ) != int(ddtree_block_size):
+            logger.warning(
+                "Both --speculative-num-draft-tokens and --speculative-ddtree-block-size are set "
+                "but they differ. Using --speculative-ddtree-block-size=%s for DDTREE.",
+                ddtree_block_size,
+            )
+        server_args.speculative_num_draft_tokens = int(ddtree_block_size)
+        block_size_source = "--speculative-ddtree-block-size"
+    elif dflash_block_size is not None:
+        if int(dflash_block_size) <= 0:
+            raise ValueError(
+                "DDTREE fallback requires --speculative-dflash-block-size to be positive, "
+                f"got {dflash_block_size}."
+            )
         logger.warning(
-            "--speculative-dflash-block-size has no effect with "
-            "speculative_algorithm=DDTREE (use --speculative-ddtree-budget instead)."
+            "--speculative-ddtree-block-size is not set; using "
+            "--speculative-dflash-block-size=%s as DDTREE block_size.",
+            dflash_block_size,
         )
+        if server_args.speculative_num_draft_tokens is not None and int(
+            server_args.speculative_num_draft_tokens
+        ) != int(dflash_block_size):
+            logger.warning(
+                "Both --speculative-num-draft-tokens and --speculative-dflash-block-size are set "
+                "but they differ. Using --speculative-dflash-block-size=%s for DDTREE fallback.",
+                dflash_block_size,
+            )
+        server_args.speculative_num_draft_tokens = int(dflash_block_size)
+        block_size_source = "--speculative-dflash-block-size"
+    elif server_args.speculative_num_draft_tokens is not None:
+        logger.warning(
+            "--speculative-ddtree-block-size is not set and --speculative-dflash-block-size "
+            "is not set; using --speculative-num-draft-tokens=%s as DDTREE block_size.",
+            server_args.speculative_num_draft_tokens,
+        )
+        if int(server_args.speculative_num_draft_tokens) <= 0:
+            raise ValueError(
+                "DDTREE requires speculative_num_draft_tokens to be positive, "
+                f"got {server_args.speculative_num_draft_tokens}."
+            )
+        block_size_source = "--speculative-num-draft-tokens"
 
     if server_args.speculative_num_draft_tokens is None:
+        logger.warning(
+            "--speculative-ddtree-block-size is not set and --speculative-dflash-block-size "
+            "is not set; inferring DDTREE block_size from draft model config or default."
+        )
         from sglang.srt.speculative.dflash_utils import (
             parse_dflash_draft_config,
         )
@@ -341,12 +397,14 @@ def _handle_ddtree(server_args: "ServerArgs") -> None:
                 "speculative_num_draft_tokens is not set; defaulting to %d for DDTREE.",
                 inferred_block_size,
             )
-        server_args.speculative_num_draft_tokens = inferred_block_size
-        logger.info(
-            "Inferred speculative_num_draft_tokens=%d (block_size) "
-            "from draft model config for DDTREE.",
-            server_args.speculative_num_draft_tokens,
-        )
+        server_args.speculative_num_draft_tokens = int(inferred_block_size)
+        block_size_source = "draft model config/default"
+
+    logger.info(
+        "Resolved DDTREE block_size=%d from %s.",
+        server_args.speculative_num_draft_tokens,
+        block_size_source,
+    )
 
     # --- DDTREE-specific: handle tree budget ---
     if server_args.speculative_ddtree_budget is None:

@@ -135,6 +135,21 @@ class DDTreeWorker(DFlashWorker):
         self._follow_next_tokens_buf: torch.Tensor = torch.empty(
             _max_bs, dtype=torch.long, device=dev
         )
+        self._native_sampling_uniform_buf: torch.Tensor = torch.empty(
+            _max_bs, _mn, dtype=torch.float32, device=dev
+        )
+        self._native_sampling_uniform_final_buf: torch.Tensor = torch.empty(
+            _max_bs, dtype=torch.float32, device=dev
+        )
+        self._native_reject_indices_buf: torch.Tensor = torch.empty(
+            _max_bs, dtype=torch.long, device=dev
+        )
+        self._native_reject_child_tokens_buf: torch.Tensor = torch.empty(
+            _max_bs, _mn, dtype=torch.long, device=dev
+        )
+        self._native_reject_child_counts_buf: torch.Tensor = torch.empty(
+            _max_bs, dtype=torch.long, device=dev
+        )
         self._ddtree_vocab_id_cache_key = None
         self._ddtree_org_token_ids: Optional[torch.Tensor] = None
         self._ddtree_added_token_ids: Optional[torch.Tensor] = None
@@ -355,6 +370,15 @@ class DDTreeWorker(DFlashWorker):
             ],
             follow_accepted_lens=self._follow_accepted_lens_buf[:bs],
             follow_next_tokens=self._follow_next_tokens_buf[:bs],
+            native_sampling_uniform=self._native_sampling_uniform_buf[
+                :bs, :verify_token_num
+            ],
+            native_sampling_uniform_final=self._native_sampling_uniform_final_buf[:bs],
+            native_reject_indices=self._native_reject_indices_buf[:bs],
+            native_reject_child_tokens=self._native_reject_child_tokens_buf[
+                :bs, :verify_token_num
+            ],
+            native_reject_child_counts=self._native_reject_child_counts_buf[:bs],
         )
         with profiler.cpu("prepare_verify"):
             verify_input.prepare_for_verify(batch, self.page_size)
@@ -672,22 +696,21 @@ class DDTreeWorker(DFlashWorker):
                 (num_tokens, topk), dtype=torch.long, device=device
             )
 
-        if tp_size > 1:
-            gathered_top_vals = torch.empty(
-                (tp_size, num_tokens, topk), dtype=torch.float32, device=device
-            )
-            gathered_top_ids = torch.empty(
-                (tp_size, num_tokens, topk), dtype=torch.long, device=device
-            )
-            tp_group.all_gather_into_tensor(
-                gathered_top_vals, local_top_vals.contiguous()
-            )
-            tp_group.all_gather_into_tensor(
-                gathered_top_ids, local_top_ids.contiguous()
-            )
-        else:
-            gathered_top_vals = local_top_vals.unsqueeze(0)
-            gathered_top_ids = local_top_ids.unsqueeze(0)
+        if tp_size == 1:
+            return local_top_vals - log_z[:, None], local_top_ids
+
+        gathered_top_vals = torch.empty(
+            (tp_size, num_tokens, topk), dtype=torch.float32, device=device
+        )
+        gathered_top_ids = torch.empty(
+            (tp_size, num_tokens, topk), dtype=torch.long, device=device
+        )
+        tp_group.all_gather_into_tensor(
+            gathered_top_vals, local_top_vals.contiguous()
+        )
+        tp_group.all_gather_into_tensor(
+            gathered_top_ids, local_top_ids.contiguous()
+        )
 
         flat_top_vals = gathered_top_vals.permute(1, 0, 2).reshape(num_tokens, -1)
         flat_top_ids = gathered_top_ids.permute(1, 0, 2).reshape(num_tokens, -1)

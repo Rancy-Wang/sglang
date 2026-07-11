@@ -378,6 +378,208 @@ def follow_ddtree_verified_path_triton(
 
 
 @triton.jit
+def _sample_ddtree_accept_path_kernel(
+    target_probs,
+    draft_tokens,
+    parents,
+    actual_tree_sizes,
+    uniform_samples,
+    accepted_indices,
+    accepted_token_ids,
+    accepted_lens,
+    next_tokens,
+    reject_indices,
+    reject_child_tokens,
+    reject_child_counts,
+    Q_LEN: tl.constexpr,
+    VOCAB_SIZE: tl.constexpr,
+    BLOCK_Q: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    offsets = tl.arange(0, BLOCK_Q)
+    mask = offsets < Q_LEN
+    row_base = pid * Q_LEN
+
+    tl.store(accepted_indices + row_base + offsets, -1, mask=mask)
+    tl.store(accepted_token_ids + row_base + offsets, 0, mask=mask)
+    tl.store(reject_child_tokens + row_base + offsets, 0, mask=mask)
+    tl.store(reject_indices + pid, 0)
+    tl.store(reject_child_counts + pid, 0)
+
+    actual_size = tl.load(actual_tree_sizes + pid).to(tl.int32)
+    actual_size = tl.minimum(tl.maximum(actual_size, 1), Q_LEN)
+
+    current_idx = tl.full((), 0, dtype=tl.int32)
+    accepted_len = tl.full((), 1, dtype=tl.int32)
+    active = tl.full((), True, dtype=tl.int1)
+
+    root_token = tl.load(draft_tokens + row_base)
+    tl.store(accepted_indices + row_base, 0)
+    tl.store(accepted_token_ids + row_base, root_token)
+
+    for _ in range(0, Q_LEN - 1):
+        parent_vals = tl.load(
+            parents + row_base + offsets,
+            mask=mask & (offsets < actual_size),
+            other=-2,
+        ).to(tl.int32)
+        draft_vals = tl.load(
+            draft_tokens + row_base + offsets,
+            mask=mask & (offsets < actual_size),
+            other=0,
+        )
+        child_mask = (
+            active
+            & (offsets > 0)
+            & (offsets < actual_size)
+            & (parent_vals == current_idx)
+        )
+        child_i32 = child_mask.to(tl.int32)
+        child_count = tl.sum(child_i32, axis=0)
+        child_pos = tl.cumsum(child_i32, 0) - 1
+        tl.store(
+            reject_child_tokens + row_base + child_pos,
+            draft_vals,
+            mask=child_mask & (child_pos >= 0) & (child_pos < Q_LEN),
+        )
+
+        probs = tl.load(
+            target_probs + (row_base + current_idx) * VOCAB_SIZE + draft_vals,
+            mask=child_mask,
+            other=0.0,
+        )
+        prefix = tl.cumsum(tl.where(child_mask, probs, 0.0), 0)
+        sample_u = tl.load(uniform_samples + row_base + current_idx)
+        select_mask = child_mask & (sample_u < prefix)
+        child_idx = tl.min(tl.where(select_mask, offsets, Q_LEN), axis=0).to(tl.int32)
+        found = active & (child_idx < Q_LEN)
+        reject_now = active & (~found)
+
+        tl.store(reject_indices + pid, current_idx, mask=reject_now)
+        tl.store(reject_child_counts + pid, child_count, mask=reject_now)
+
+        write_pos = accepted_len
+        child_token = tl.load(
+            draft_tokens + row_base + child_idx,
+            mask=found,
+            other=0,
+        )
+        tl.store(
+            accepted_indices + row_base + write_pos,
+            child_idx,
+            mask=found & (write_pos < Q_LEN),
+        )
+        tl.store(
+            accepted_token_ids + row_base + write_pos,
+            child_token,
+            mask=found & (write_pos < Q_LEN),
+        )
+
+        current_idx = tl.where(found, child_idx, current_idx)
+        accepted_len += found.to(tl.int32)
+        active = active & found
+
+    tl.store(reject_indices + pid, current_idx, mask=active)
+    tl.store(reject_child_counts + pid, 0, mask=active)
+    tl.store(accepted_lens + pid, accepted_len)
+    tl.store(next_tokens + pid, 0)
+
+
+def sample_ddtree_target_probs_triton(
+    *,
+    target_probs: torch.Tensor,
+    draft_tokens: torch.Tensor,
+    parents: torch.Tensor,
+    actual_tree_sizes: torch.Tensor,
+    uniform_samples: torch.Tensor,
+    uniform_final: torch.Tensor,
+    accepted_indices: torch.Tensor,
+    accepted_token_ids: torch.Tensor,
+    accepted_lens: torch.Tensor,
+    next_tokens: torch.Tensor,
+    reject_indices: torch.Tensor,
+    reject_child_tokens: torch.Tensor,
+    reject_child_counts: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Sample DDTree target verification on GPU for unfiltered non-greedy sampling.
+
+    The Triton kernel samples only along the visited tree path.  Once a node
+    rejects, Python/Torch samples the final bonus from that node's target
+    distribution with child token probabilities masked out.
+    """
+
+    if not target_probs.is_cuda:
+        raise ValueError("DDTree native target sampler requires CUDA target_probs.")
+    if target_probs.ndim != 3:
+        raise ValueError(
+            "DDTree native target sampler expects target_probs [bs, q, vocab], got "
+            f"{tuple(target_probs.shape)}."
+        )
+    bs, q_len, vocab_size = target_probs.shape
+    if draft_tokens.shape != (bs, q_len) or parents.shape != (bs, q_len):
+        raise ValueError(
+            "DDTree native target sampler expects draft_tokens/parents [bs, q], got "
+            f"{tuple(draft_tokens.shape)} and {tuple(parents.shape)} for {(bs, q_len)}."
+        )
+    if q_len <= 0:
+        raise ValueError(f"DDTree native target sampler q_len must be positive, got {q_len}.")
+
+    target_probs = target_probs.contiguous()
+    draft_tokens = draft_tokens.contiguous()
+    parents = parents.contiguous()
+    actual_tree_sizes = actual_tree_sizes[:bs].contiguous()
+    uniform_samples = uniform_samples[:bs, :q_len]
+    uniform_final = uniform_final[:bs]
+    accepted_indices = accepted_indices[:bs, :q_len]
+    accepted_token_ids = accepted_token_ids[:bs, :q_len]
+    accepted_lens = accepted_lens[:bs]
+    next_tokens = next_tokens[:bs]
+    reject_indices = reject_indices[:bs]
+    reject_child_tokens = reject_child_tokens[:bs, :q_len]
+    reject_child_counts = reject_child_counts[:bs]
+
+    uniform_samples.uniform_()
+    uniform_final.uniform_()
+
+    block_q = _next_power_of_2(q_len)
+    _sample_ddtree_accept_path_kernel[(bs,)](
+        target_probs,
+        draft_tokens,
+        parents,
+        actual_tree_sizes,
+        uniform_samples,
+        accepted_indices,
+        accepted_token_ids,
+        accepted_lens,
+        next_tokens,
+        reject_indices,
+        reject_child_tokens,
+        reject_child_counts,
+        Q_LEN=int(q_len),
+        VOCAB_SIZE=int(vocab_size),
+        BLOCK_Q=block_q,
+    )
+
+    batch_idx = torch.arange(bs, device=target_probs.device)
+    reject_rows = target_probs[batch_idx, reject_indices.to(torch.long)].clone()
+    child_offsets = torch.arange(q_len, device=target_probs.device)
+    child_counts = reject_child_counts.to(torch.long)
+    child_mask = child_offsets.unsqueeze(0) < child_counts.unsqueeze(1)
+    row_idx = batch_idx.repeat_interleave(child_counts)
+    child_ids = reject_child_tokens[child_mask].to(torch.long)
+    reject_rows[row_idx, child_ids] = 0.0
+
+    reject_cdf = torch.cumsum(reject_rows, dim=-1)
+    reject_totals = reject_cdf[:, -1]
+    thresholds = uniform_final * reject_totals.clamp_min(0.0)
+    sampled = torch.searchsorted(reject_cdf, thresholds[:, None], right=False).squeeze(1)
+    sampled = sampled.clamp_(max=vocab_size - 1).to(next_tokens.dtype)
+    next_tokens.copy_(sampled)
+
+    return accepted_indices, accepted_token_ids, accepted_lens, next_tokens
+
+
+@triton.jit
 def _prune_deepest_chains_kernel(
     in_node_token_ids,
     in_node_depths,

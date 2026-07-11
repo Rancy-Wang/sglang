@@ -1,6 +1,6 @@
 from contextlib import nullcontext
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -57,6 +57,68 @@ def _maybe_apply_sampling_logits_processors(
         )
         sampling_info.apply_logits_bias(linear_penalty)
         logits.add_(torch.repeat_interleave(linear_penalty, q_len, dim=0))
+
+
+def _can_use_ddtree_native_sampling(sampling_info) -> bool:
+    if sampling_info is None or sampling_info.is_all_greedy:
+        return False
+    if getattr(sampling_info, "sampling_seed", None) is not None:
+        return False
+    if bool(getattr(sampling_info, "need_min_p_sampling", False)):
+        return False
+    if bool(getattr(sampling_info, "need_top_p_sampling", False)):
+        return False
+    if bool(getattr(sampling_info, "need_top_k_sampling", False)):
+        return False
+    return True
+
+
+def _sample_ddtree_native_target_tokens(
+    *,
+    logits: torch.Tensor,
+    sampling_info,
+    bs: int,
+    q_len: int,
+    draft_tokens: torch.Tensor,
+    parents: torch.Tensor,
+    actual_tree_sizes: torch.Tensor,
+    uniform_samples: torch.Tensor,
+    uniform_final: torch.Tensor,
+    accepted_indices: torch.Tensor,
+    accepted_token_ids: torch.Tensor,
+    accepted_lens: torch.Tensor,
+    next_tokens: torch.Tensor,
+    reject_indices: torch.Tensor,
+    reject_child_tokens: torch.Tensor,
+    reject_child_counts: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    from sglang.srt.speculative.ddtree_utils import sample_ddtree_target_probs_gpu
+
+    target_probs = F.softmax(
+        logits.view(bs, q_len, -1) / sampling_info.temperatures.view(bs, 1, 1),
+        dim=-1,
+    )
+    result = sample_ddtree_target_probs_gpu(
+        target_probs=target_probs,
+        draft_tokens=draft_tokens,
+        parents=parents,
+        actual_tree_sizes=actual_tree_sizes,
+        uniform_samples=uniform_samples,
+        uniform_final=uniform_final,
+        accepted_indices=accepted_indices,
+        accepted_token_ids=accepted_token_ids,
+        accepted_lens=accepted_lens,
+        next_tokens=next_tokens,
+        reject_indices=reject_indices,
+        reject_child_tokens=reject_child_tokens,
+        reject_child_counts=reject_child_counts,
+    )
+
+    tp_group = get_attention_tp_group() if is_dp_attention_enabled() else get_tp_group()
+    if tp_group.world_size > 1:
+        for tensor in result:
+            tp_group.broadcast(tensor, src=0)
+    return result
 
 
 def _sample_ddtree_target_tokens(
@@ -126,6 +188,11 @@ class DDTreeVerifyInput(SpecInput):
     follow_accepted_token_ids: Optional[torch.Tensor] = None
     follow_accepted_lens: Optional[torch.Tensor] = None
     follow_next_tokens: Optional[torch.Tensor] = None
+    native_sampling_uniform: Optional[torch.Tensor] = None
+    native_sampling_uniform_final: Optional[torch.Tensor] = None
+    native_reject_indices: Optional[torch.Tensor] = None
+    native_reject_child_tokens: Optional[torch.Tensor] = None
+    native_reject_child_counts: Optional[torch.Tensor] = None
 
     def __post_init__(self):
         super().__init__(spec_input_type=SpecInputType.DDTREE_VERIFY)
@@ -281,16 +348,56 @@ class DDTreeVerifyInput(SpecInput):
             )
 
         target_predict = None
+        target_native_sample_result = None
+        can_use_native_sampling = (
+            sampling_requested
+            and not self.tree_is_spine
+            and not self.force_cpu_follow
+            and self.parents is not None
+            and self.actual_tree_sizes is not None
+            and self.draft_token.is_cuda
+            and self.follow_accepted_indices is not None
+            and self.follow_accepted_token_ids is not None
+            and self.follow_accepted_lens is not None
+            and self.follow_next_tokens is not None
+            and self.native_sampling_uniform is not None
+            and self.native_sampling_uniform_final is not None
+            and self.native_reject_indices is not None
+            and self.native_reject_child_tokens is not None
+            and self.native_reject_child_counts is not None
+            and _can_use_ddtree_native_sampling(sampling_info)
+        )
         if not use_dflash_chain_sampling:
             if sampling_requested:
-                with gpu_ctx("target_sample"):
-                    target_predict = _sample_ddtree_target_tokens(
-                        logits=logits_output.next_token_logits,
-                        sampling_info=sampling_info,
-                        positions=self.positions,
-                        bs=bs,
-                        q_len=self.draft_token_num,
-                    )
+                if can_use_native_sampling:
+                    with gpu_ctx("target_native_sample"):
+                        target_native_sample_result = _sample_ddtree_native_target_tokens(
+                            logits=logits_output.next_token_logits,
+                            sampling_info=sampling_info,
+                            bs=bs,
+                            q_len=self.draft_token_num,
+                            draft_tokens=self.draft_token.view(bs, self.draft_token_num),
+                            parents=self.parents.view(bs, self.draft_token_num),
+                            actual_tree_sizes=self.actual_tree_sizes,
+                            uniform_samples=self.native_sampling_uniform,
+                            uniform_final=self.native_sampling_uniform_final,
+                            accepted_indices=self.follow_accepted_indices,
+                            accepted_token_ids=self.follow_accepted_token_ids,
+                            accepted_lens=self.follow_accepted_lens,
+                            next_tokens=self.follow_next_tokens,
+                            reject_indices=self.native_reject_indices,
+                            reject_child_tokens=self.native_reject_child_tokens,
+                            reject_child_counts=self.native_reject_child_counts,
+                        )
+                else:
+                    with gpu_ctx("target_sample"):
+                        target_predict = _sample_ddtree_target_tokens(
+                            logits=logits_output.next_token_logits,
+                            sampling_info=sampling_info,
+                            positions=self.positions,
+                            bs=bs,
+                            q_len=self.draft_token_num,
+                        )
             else:
                 with gpu_ctx("accept_argmax"):
                     target_predict = torch.argmax(logits_output.next_token_logits, dim=-1)
@@ -336,31 +443,44 @@ class DDTreeVerifyInput(SpecInput):
             # greedy uses argmax, while non-greedy uses a sampled target token per
             # tree node and then walks the draft tree by child-token matches.
             can_use_gpu_follow = (
-                not self.force_cpu_follow
-                and self.parents is not None
-                and self.draft_token.is_cuda
-                and target_predict.is_cuda
+                target_native_sample_result is not None
+                or (
+                    not self.force_cpu_follow
+                    and self.parents is not None
+                    and self.draft_token.is_cuda
+                    and target_predict is not None
+                    and target_predict.is_cuda
+                )
             )
             if can_use_gpu_follow:
-                with gpu_ctx("follow_tree_gpu"):
-                    draft_tokens_2d = self.draft_token.view(bs, self.draft_token_num)
-                    parents_2d = self.parents.view(bs, self.draft_token_num)
+                if target_native_sample_result is not None:
                     (
                         gpu_follow_indices,
                         gpu_follow_token_ids,
                         gpu_follow_lens,
                         gpu_next_tokens,
-                    ) = follow_verified_tree_gpu(
-                        draft_tokens=draft_tokens_2d,
-                        target_predict=target_predict,
-                        parents=parents_2d,
-                        actual_tree_sizes=self.actual_tree_sizes,
-                        accepted_indices=self.follow_accepted_indices,
-                        accepted_token_ids=self.follow_accepted_token_ids,
-                        accepted_lens=self.follow_accepted_lens,
-                        next_tokens=self.follow_next_tokens,
-                    )
+                    ) = target_native_sample_result
                     self.next_tokens = gpu_next_tokens
+                else:
+                    with gpu_ctx("follow_tree_gpu"):
+                        draft_tokens_2d = self.draft_token.view(bs, self.draft_token_num)
+                        parents_2d = self.parents.view(bs, self.draft_token_num)
+                        (
+                            gpu_follow_indices,
+                            gpu_follow_token_ids,
+                            gpu_follow_lens,
+                            gpu_next_tokens,
+                        ) = follow_verified_tree_gpu(
+                            draft_tokens=draft_tokens_2d,
+                            target_predict=target_predict,
+                            parents=parents_2d,
+                            actual_tree_sizes=self.actual_tree_sizes,
+                            accepted_indices=self.follow_accepted_indices,
+                            accepted_token_ids=self.follow_accepted_token_ids,
+                            accepted_lens=self.follow_accepted_lens,
+                            next_tokens=self.follow_next_tokens,
+                        )
+                        self.next_tokens = gpu_next_tokens
 
                 commit_lens = []
                 num_correct_drafts_per_req = []

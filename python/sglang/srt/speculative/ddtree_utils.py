@@ -666,6 +666,55 @@ def compile_ddtree_tree(
     return verify_input_ids, verify_position_ids, tree_attention_mask, actual_tree_sizes
 
 
+def sample_ddtree_target_probs_gpu(
+    *,
+    target_probs: torch.Tensor,
+    draft_tokens: torch.Tensor,
+    parents: torch.Tensor,
+    actual_tree_sizes: Optional[torch.Tensor] = None,
+    uniform_samples: torch.Tensor,
+    uniform_final: torch.Tensor,
+    accepted_indices: torch.Tensor,
+    accepted_token_ids: torch.Tensor,
+    accepted_lens: torch.Tensor,
+    next_tokens: torch.Tensor,
+    reject_indices: torch.Tensor,
+    reject_child_tokens: torch.Tensor,
+    reject_child_counts: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """DDTree target-only sampling fast path for unfiltered sampling."""
+
+    if target_probs.ndim != 3:
+        raise ValueError(
+            "DDTree native sampler expects target_probs [bs, q, vocab], got "
+            f"{tuple(target_probs.shape)}."
+        )
+    bs, q_len, _ = target_probs.shape
+    device = target_probs.device
+    if actual_tree_sizes is None:
+        actual_tree_sizes = torch.full((bs,), q_len, dtype=torch.long, device=device)
+
+    from sglang.srt.speculative.triton_ops.ddtree import (
+        sample_ddtree_target_probs_triton,
+    )
+
+    return sample_ddtree_target_probs_triton(
+        target_probs=target_probs,
+        draft_tokens=draft_tokens,
+        parents=parents,
+        actual_tree_sizes=actual_tree_sizes,
+        uniform_samples=uniform_samples,
+        uniform_final=uniform_final,
+        accepted_indices=accepted_indices,
+        accepted_token_ids=accepted_token_ids,
+        accepted_lens=accepted_lens,
+        next_tokens=next_tokens,
+        reject_indices=reject_indices,
+        reject_child_tokens=reject_child_tokens,
+        reject_child_counts=reject_child_counts,
+    )
+
+
 def follow_verified_tree_gpu(
     *,
     draft_tokens: torch.Tensor,

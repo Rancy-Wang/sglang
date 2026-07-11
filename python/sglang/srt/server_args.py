@@ -607,6 +607,7 @@ class ServerArgs:
     speculative_eagle_topk: Optional[int] = None
     speculative_num_draft_tokens: Optional[int] = None
     speculative_dflash_block_size: Optional[int] = None
+    speculative_ddtree_block_size: Optional[int] = None
     speculative_ddtree_budget: Optional[int] = None
     speculative_ddtree_cuda_graph_buckets: Optional[List[int]] = None
     is_ddtree_prune: bool = False
@@ -5850,8 +5851,14 @@ class ServerArgs:
         parser.add_argument(
             "--speculative-ddtree-budget",
             type=int,
-            help="DDTREE only. Tree node budget B. Controls how many tree nodes are verified per round (excluding root). Defaults to speculative_num_draft_tokens - 1.",
+            help="DDTREE only. Tree node budget B. Controls how many tree nodes are verified per round (excluding root). Defaults to DDTree block_size - 1.",
             default=ServerArgs.speculative_ddtree_budget,
+        )
+        parser.add_argument(
+            "--speculative-ddtree-block-size",
+            type=int,
+            help="DDTREE only. DFlash draft block size/depth used to build DDTree proposals. If unset, DDTree falls back to --speculative-dflash-block-size when provided.",
+            default=ServerArgs.speculative_ddtree_block_size,
         )
         parser.add_argument(
             "--speculative-ddtree-cuda-graph-buckets",
