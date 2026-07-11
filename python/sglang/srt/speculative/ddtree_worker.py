@@ -55,6 +55,9 @@ class DDTreeWorker(DFlashWorker):
             self.tree_budget = self.block_size - 1
 
         self.is_ddtree_prune = bool(getattr(server_args, "is_ddtree_prune", False))
+        self.use_tree_attention = bool(
+            getattr(server_args, "use_tree_attention", False)
+        )
         self.force_ddtree_cpu_build = bool(
             getattr(server_args, "speculative_ddtree_cpu_build", False)
         )
@@ -163,11 +166,12 @@ class DDTreeWorker(DFlashWorker):
 
         if self.tp_rank == 0:
             logger.info(
-                "Initialized DDTree worker. block_size=%s, tree_budget=%s, max_tree_nodes=%s, is_ddtree_prune=%s, force_cpu_build=%s, force_cpu_follow=%s, cuda_graph_buckets=%s",
+                "Initialized DDTree worker. block_size=%s, tree_budget=%s, max_tree_nodes=%s, is_ddtree_prune=%s, use_tree_attention=%s, force_cpu_build=%s, force_cpu_follow=%s, cuda_graph_buckets=%s",
                 self.block_size,
                 self.tree_budget,
                 self.max_tree_nodes,
                 self.is_ddtree_prune,
+                self.use_tree_attention,
                 self.force_ddtree_cpu_build,
                 self.force_ddtree_cpu_follow,
                 self.ddtree_cuda_graph_buckets,
@@ -316,6 +320,13 @@ class DDTreeWorker(DFlashWorker):
                 self.server_args, "speculative_attention_mode", "prefill"
             ),
         )
+        if self.use_tree_attention and not target_backend_capability.use_visibility:
+            raise RuntimeError(
+                "--use-tree-attention currently requires an FA3/FA4 target "
+                "attention backend (including a hybrid backend whose selected "
+                "target-verify child is FA3/FA4). Got "
+                f"{target_backend_capability.backend_name}."
+            )
         if not target_backend_capability.supports_full_tree:
             reason = target_backend_capability.unsupported_reason or "unknown reason"
             raise RuntimeError(
@@ -388,6 +399,7 @@ class DDTreeWorker(DFlashWorker):
             visibility=visibility if target_backend_capability.use_visibility else None,
             custom_mask=tree_attention_mask,
             tree_is_spine=tree_is_spine,
+            use_tree_attention=self.use_tree_attention,
             raw_tree_size=raw_verify_token_num,
             cuda_graph_bucket_size=verify_token_num,
             force_cpu_follow=self.force_ddtree_cpu_follow,
@@ -547,6 +559,7 @@ class DDTreeWorker(DFlashWorker):
             mean_accept_len=(float(num_correct_drafts + bs) / bs if bs > 0 else 0.0),
             round_output_tokens=int(num_correct_drafts + bs),
             can_run_cuda_graph=bool(can_run_cuda_graph),
+            use_tree_attention=self.use_tree_attention,
         )
         if not self._logged_first_verify and self.tp_rank == 0:
             logger.info(

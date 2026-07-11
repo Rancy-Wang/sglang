@@ -291,6 +291,29 @@ class FlashAttentionBackend(AttentionBackend):
             return force_ddtree_cascade or not getattr(spec_info, "tree_is_spine", False)
         return self.topk > 1
 
+    def _init_ddtree_hybrid_tree_attention_metadata(
+        self,
+        metadata_expand: FlashAttentionMetadata,
+        spec_info: SpecInput,
+        req_pool_indices: torch.Tensor,
+        seq_lens: torch.Tensor,
+        num_draft_tokens: int,
+    ) -> None:
+        """Build metadata for the experimental DDTree Hybrid Tree Attention path."""
+
+        visibility = getattr(spec_info, "visibility", None)
+        if visibility is None:
+            raise ValueError(
+                "DDTree Hybrid Tree Attention requires spec_info.visibility."
+            )
+        self._init_target_verify_expand_metadata_from_visibility(
+            metadata_expand,
+            visibility,
+            req_pool_indices,
+            seq_lens,
+            num_draft_tokens,
+        )
+
     @staticmethod
     def _fill_target_verify_cu_seqlens_q(
         cu_seqlens_q: torch.Tensor, bs: int, num_draft_tokens: int
@@ -318,6 +341,18 @@ class FlashAttentionBackend(AttentionBackend):
         seq_lens: torch.Tensor,
         num_draft_tokens: int,
     ) -> None:
+        if self._is_ddtree_verify_spec(spec_info) and getattr(
+            spec_info, "use_tree_attention", False
+        ):
+            self._init_ddtree_hybrid_tree_attention_metadata(
+                metadata_expand,
+                spec_info,
+                req_pool_indices,
+                seq_lens,
+                num_draft_tokens,
+            )
+            return
+
         visibility = getattr(spec_info, "visibility", None)
         if visibility is not None:
             self._init_target_verify_expand_metadata_from_visibility(

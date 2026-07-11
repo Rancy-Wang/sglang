@@ -311,6 +311,7 @@ def _make_spec_verify_input(
     topk: int,
     device: str,
     spec_kind: SpecVerifyKind,
+    use_tree_attention: bool = False,
 ):
     draft_token_num = _check_target_verify_case(case)
     _, custom_mask = _make_custom_masks(
@@ -330,6 +331,16 @@ def _make_spec_verify_input(
         )
 
     if spec_kind == "ddtree":
+        visibility = None
+        if use_tree_attention:
+            visibility = (
+                _draft_tree_mask(
+                    draft_token_num=draft_token_num,
+                    topk=topk,
+                    device=device,
+                    spec_kind=spec_kind,
+                ).unsqueeze(0).expand(case.batch_size, -1, -1).contiguous()
+            )
         return DDTreeVerifyInput(
             draft_token=batch.input_ids,
             positions=batch.positions,
@@ -338,6 +349,8 @@ def _make_spec_verify_input(
             custom_mask=custom_mask,
             capture_hidden_mode=CaptureHiddenMode.FULL,
             tree_is_spine=(topk == 1),
+            use_tree_attention=use_tree_attention,
+            visibility=visibility,
         )
 
     retrieve_index, retrieve_next_token, retrieve_next_sibling = _make_retrieve_tensors(
@@ -433,6 +446,7 @@ def _prepare_spec_verify_batch(
     topk: int,
     spec_kind: SpecVerifyKind,
     device: str,
+    use_tree_attention: bool = False,
 ) -> None:
     _prepare_target_verify_batch(batch, case, device)
     batch.spec_algorithm = _spec_algorithm_for_kind(spec_kind)
@@ -441,6 +455,7 @@ def _prepare_spec_verify_batch(
         batch,
         topk=topk,
         device=device,
+        use_tree_attention=use_tree_attention,
         spec_kind=spec_kind,
     )
 
@@ -467,6 +482,7 @@ def _run_spec_verify_cuda_graph_case(
     capture_batch_size: int,
     atol: float,
     rtol: float,
+    use_tree_attention: bool = False,
 ):
     draft_token_num = _check_target_verify_case(case)
     adapter = SpeculativeCudaGraphAdapter(
@@ -486,6 +502,7 @@ def _run_spec_verify_cuda_graph_case(
             batch,
             topk=topk,
             spec_kind=spec_kind,
+            use_tree_attention=use_tree_attention,
             device=device,
         ),
         prepare_inputs=prepare_inputs,
@@ -522,6 +539,7 @@ def run_dense_spec_verify_case(
     case: DenseAttentionCase,
     *,
     topk: int,
+    use_tree_attention: bool = False,
     spec_kind: SpecVerifyKind = "eagle",
     head_dim: int = DEFAULT_HEAD_DIM,
     hidden_size: int = DEFAULT_HIDDEN_SIZE,
@@ -548,6 +566,7 @@ def run_dense_spec_verify_case(
         fixture.forward_batch,
         topk=topk,
         device=device,
+        use_tree_attention=use_tree_attention,
         spec_kind=spec_kind,
     )
     inputs = dense_fixture_inputs(fixture)
@@ -595,6 +614,7 @@ def run_dense_spec_verify_cuda_graph_case(
     case: DenseAttentionCase,
     *,
     topk: int,
+    use_tree_attention: bool = False,
     spec_kind: SpecVerifyKind = "eagle",
     head_dim: int = DEFAULT_HEAD_DIM,
     hidden_size: int = DEFAULT_HIDDEN_SIZE,
@@ -607,6 +627,7 @@ def run_dense_spec_verify_cuda_graph_case(
         testcase,
         case,
         topk=topk,
+        use_tree_attention=use_tree_attention,
         spec_kind=spec_kind,
         build_fixture=build_dense_attention_fixture,
         make_case_with_prefix_lens=make_dense_case_with_prefix_lens,

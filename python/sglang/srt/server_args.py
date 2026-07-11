@@ -611,6 +611,7 @@ class ServerArgs:
     speculative_ddtree_budget: Optional[int] = None
     speculative_ddtree_cuda_graph_buckets: Optional[List[int]] = None
     is_ddtree_prune: bool = False
+    use_tree_attention: bool = False
     speculative_ddtree_cpu_build: bool = False
     speculative_ddtree_cpu_follow: bool = False
     speculative_ddtree_profile: bool = False
@@ -5872,6 +5873,12 @@ class ServerArgs:
             action="store_true",
             default=ServerArgs.is_ddtree_prune,
             help="DDTREE only. Prune draft tree nodes whose subtree cannot reach the deepest depth before target verification.",
+        )
+        parser.add_argument(
+            "--use-tree-attention",
+            action="store_true",
+            default=ServerArgs.use_tree_attention,
+            help="DDTREE only. Enable the experimental DDTree Hybrid Tree Attention path for FA3/FA4 target verification.",
         )
         parser.add_argument(
             "--speculative-ddtree-cpu-build",

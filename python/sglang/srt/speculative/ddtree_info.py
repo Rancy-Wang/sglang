@@ -181,6 +181,7 @@ class DDTreeVerifyInput(SpecInput):
     # In this mode, cascade attention is unnecessary and a standard causal
     # mask suffices, matching DFLASH's verify pattern exactly.
     tree_is_spine: bool = False
+    use_tree_attention: bool = False
     raw_tree_size: Optional[int] = None
     cuda_graph_bucket_size: Optional[int] = None
     force_cpu_follow: bool = False
