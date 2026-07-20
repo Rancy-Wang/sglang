@@ -2094,7 +2094,10 @@ class FlashInferIndicesUpdaterPrefill:
             custom_mask = cross_attention_custom_mask
         else:
             assert isinstance(spec_info, SpecInput)
-            if spec_info.spec_input_type == SpecInputType.DFLASH_VERIFY:
+            if spec_info.spec_input_type in (
+                SpecInputType.DFLASH_VERIFY,
+                SpecInputType.DDTREE_VERIFY,
+            ):
                 kv_indices, kv_indptr, qo_indptr, custom_mask = (
                     spec_info.generate_attn_arg_prefill(
                         req_pool_indices,

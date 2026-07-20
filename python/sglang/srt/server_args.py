@@ -1684,7 +1684,7 @@ class ServerArgs:
     # -------------------------------------------------------------------------
     speculative_algorithm: A[
         Optional[str],
-        "Speculative algorithm. Builtins: EAGLE, EAGLE3, NEXTN, STANDALONE, NGRAM, DFLASH, DSPARK. Or any name registered via `SpeculativeAlgorithm.register`.",
+        "Speculative algorithm. Builtins: EAGLE, EAGLE3, NEXTN, STANDALONE, NGRAM, DFLASH, DDTREE, DSPARK. Or any name registered via `SpeculativeAlgorithm.register`.",
     ] = None
     speculative_draft_model_path: A[
         Optional[str],
@@ -1719,6 +1719,50 @@ class ServerArgs:
     speculative_dflash_block_size: A[
         Optional[int],
         "DFLASH only. Block size (verify window length). Alias of --speculative-num-draft-tokens for DFLASH.",
+    ] = None
+    speculative_ddtree_block_size: A[
+        Optional[int],
+        "DDTREE only. DFlash draft block size/depth. If omitted, infer it from --speculative-num-draft-tokens or the draft checkpoint.",
+    ] = None
+    speculative_ddtree_budget: A[
+        Optional[int],
+        "DDTREE only. Number of non-root tree nodes B; target verify uses B + 1 tokens per request.",
+    ] = None
+    speculative_ddtree_cuda_graph_buckets: A[
+        Optional[List[int]],
+        "DDTREE only. Optional per-request target-verify widths captured for a pruned tree.",
+    ] = None
+    is_ddtree_prune: A[
+        bool,
+        "DDTREE only. Keep only branches whose subtree reaches the maximum draft depth.",
+    ] = False
+    use_tree_attention: A[
+        bool,
+        "DDTREE only. Enable the experimental FA3/FA4 hybrid tree-attention verify path.",
+    ] = False
+    speculative_ddtree_cpu_build: A[
+        bool,
+        "DDTREE only. Force the Python heap tree builder instead of the GPU builder.",
+    ] = False
+    speculative_ddtree_cpu_follow: A[
+        bool,
+        "DDTREE only. Force CPU tree follow instead of the GPU verified-path kernel.",
+    ] = False
+    speculative_ddtree_profile: A[
+        bool,
+        "Enable optional DDTree stage profiling.",
+    ] = False
+    speculative_ddtree_profile_interval: A[
+        int,
+        "Number of DDTree verify rounds aggregated per profiling record.",
+    ] = 50
+    speculative_ddtree_profile_warmup: A[
+        int,
+        "Number of initial DDTree verify rounds excluded from profiling.",
+    ] = 0
+    speculative_ddtree_profile_output: A[
+        Optional[str],
+        "Optional JSONL output path for aggregated DDTree profiling records.",
     ] = None
     speculative_dspark_block_size: A[
         Optional[int],
@@ -7303,6 +7347,14 @@ class ServerArgs:
         """Return the maximum draft-token count speculative decoding may use."""
         if self.speculative_num_draft_tokens is None:
             return None
+        if str(self.speculative_algorithm or "").upper() == "DDTREE":
+            tree_budget = self.speculative_ddtree_budget
+            if tree_budget is None:
+                tree_budget = max(0, int(self.speculative_num_draft_tokens) - 1)
+            return max(
+                int(self.speculative_num_draft_tokens),
+                int(tree_budget) + 1,
+            )
         if not self.speculative_adaptive:
             return self.speculative_num_draft_tokens
 

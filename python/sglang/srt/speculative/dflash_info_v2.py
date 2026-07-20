@@ -133,12 +133,15 @@ class DFlashDraftInputV2(SpecInput):
         batch_seq_lens_cpu_t = self._prepare_batch_seq_lens_cpu_buf[:bs]
         cur_kv_lens_cpu_t = self._prepare_cur_kv_lens_cpu_buf[:bs]
 
-        # For DFLASH, each decode step needs a fixed-size verify block.
-        block_size = int(get_server_args().speculative_num_draft_tokens)
+        # DFLASH reserves one fixed block. DDTREE shares this state carrier but
+        # verifies budget + 1 tree nodes, which can be wider than its draft block.
+        server_args = get_server_args()
+        block_size = int(server_args.speculative_num_draft_tokens)
         if block_size <= 0:
             raise ValueError(
                 f"DFLASH invalid speculative_num_draft_tokens={block_size}."
             )
+        reserve_width = int(server_args.max_speculative_num_draft_tokens)
         page_size = batch.token_to_kv_pool_allocator.page_size
         nxt_kv_lens_cpu_t = self._prepare_nxt_kv_lens_cpu_buf[:bs]
         committed_seq_lens_sum = 0
@@ -151,7 +154,7 @@ class DFlashDraftInputV2(SpecInput):
             committed_len = int(req.kv_committed_len)
             # Read the allocation watermark from the req object like EAGLE.
             cur_alloc_len = int(req.kv.kv_allocated_len)
-            reserved_len = max(cur_alloc_len, committed_len + 2 * block_size)
+            reserved_len = max(cur_alloc_len, committed_len + 2 * reserve_width)
             top_k = int(req.sampling_params.top_k)
 
             batch_seq_lens_cpu_t[i] = committed_len

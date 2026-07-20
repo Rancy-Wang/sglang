@@ -111,7 +111,7 @@ def handle_speculative_decoding(server_args: ServerArgs) -> None:
                 f"--speculative-draft-window-size must be positive, got {window_size}."
             )
         server_args.speculative_draft_window_size = window_size
-        if server_args.speculative_algorithm not in ("EAGLE3", "DFLASH"):
+        if server_args.speculative_algorithm not in ("EAGLE3", "DFLASH", "DDTREE"):
             logger.warning(
                 "--speculative-draft-window-size has no effect with "
                 "speculative_algorithm=%s (honored by Llama EAGLE-3 and DFLASH only).",
@@ -263,6 +263,73 @@ def _handle_dflash(server_args: ServerArgs) -> None:
         logger.warning(
             "Mixed chunked prefill is disabled because of using dflash speculative decoding."
         )
+
+
+def _handle_ddtree(server_args: ServerArgs) -> None:
+    """Normalize DDTree arguments while reusing the DFlash draft backbone."""
+
+    ddtree_block_size = server_args.speculative_ddtree_block_size
+    if ddtree_block_size is not None:
+        ddtree_block_size = int(ddtree_block_size)
+        if ddtree_block_size <= 0:
+            raise ValueError(
+                "--speculative-ddtree-block-size must be positive, got "
+                f"{ddtree_block_size}."
+            )
+        if (
+            server_args.speculative_num_draft_tokens is not None
+            and int(server_args.speculative_num_draft_tokens) != ddtree_block_size
+        ):
+            logger.warning(
+                "DDTREE uses --speculative-ddtree-block-size=%d instead of "
+                "--speculative-num-draft-tokens=%s.",
+                ddtree_block_size,
+                server_args.speculative_num_draft_tokens,
+            )
+        if (
+            server_args.speculative_dflash_block_size is not None
+            and int(server_args.speculative_dflash_block_size) != ddtree_block_size
+        ):
+            logger.warning(
+                "DDTREE ignores conflicting --speculative-dflash-block-size=%s; "
+                "using --speculative-ddtree-block-size=%d.",
+                server_args.speculative_dflash_block_size,
+                ddtree_block_size,
+            )
+        server_args.speculative_num_draft_tokens = ddtree_block_size
+        # _handle_dflash treats this as a strict alias. DDTree has its own
+        # authoritative block-size argument, so do not re-validate the fallback.
+        server_args.speculative_dflash_block_size = None
+
+    _handle_dflash(server_args)
+
+    block_size = int(server_args.speculative_num_draft_tokens)
+    if server_args.speculative_ddtree_budget is None:
+        server_args.speculative_ddtree_budget = block_size - 1
+    budget = int(server_args.speculative_ddtree_budget)
+    if budget < 1:
+        raise ValueError(
+            "--speculative-ddtree-budget must be >= 1, got "
+            f"{server_args.speculative_ddtree_budget}."
+        )
+    server_args.speculative_ddtree_budget = budget
+
+    buckets = server_args.speculative_ddtree_cuda_graph_buckets
+    if buckets is not None:
+        normalized = sorted({int(x) for x in buckets})
+        if not normalized or normalized[0] <= 0:
+            raise ValueError(
+                "--speculative-ddtree-cuda-graph-buckets must contain positive widths."
+            )
+        max_width = budget + 1
+        if normalized[-1] > max_width:
+            raise ValueError(
+                "DDTREE CUDA graph bucket exceeds budget + 1: "
+                f"buckets={normalized}, max_width={max_width}."
+            )
+        if max_width not in normalized:
+            normalized.append(max_width)
+        server_args.speculative_ddtree_cuda_graph_buckets = normalized
 
 
 def _target_checkpoint_bundles_dspark_draft(server_args: ServerArgs) -> bool:

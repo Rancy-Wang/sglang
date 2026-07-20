@@ -35,6 +35,7 @@ class SpeculativeAlgorithm(Enum):
     """
 
     DFLASH = auto()
+    DDTREE = auto()
     DSPARK = auto()
     EAGLE = auto()
     EAGLE3 = auto()
@@ -112,11 +113,14 @@ class SpeculativeAlgorithm(Enum):
     def is_dflash(self) -> bool:
         return self == SpeculativeAlgorithm.DFLASH
 
+    def is_ddtree(self) -> bool:
+        return self == SpeculativeAlgorithm.DDTREE
+
     def is_dspark(self) -> bool:
         return self == SpeculativeAlgorithm.DSPARK
 
     def is_dflash_family(self) -> bool:
-        return self.is_dflash() or self.is_dspark()
+        return self.is_dflash() or self.is_ddtree() or self.is_dspark()
 
     def is_standalone(self) -> bool:
         return self == SpeculativeAlgorithm.STANDALONE
@@ -187,6 +191,7 @@ class SpeculativeAlgorithm(Enum):
         In-place updated.
         """
         from sglang.srt.arg_groups.speculative_hook import (
+            _handle_ddtree,
             _handle_dflash,
             _handle_dspark,
             _handle_eagle_family,
@@ -202,6 +207,8 @@ class SpeculativeAlgorithm(Enum):
 
         if self.is_dflash():
             _handle_dflash(server_args)
+        elif self.is_ddtree():
+            _handle_ddtree(server_args)
         elif self.is_dspark():
             _handle_dspark(server_args)
         elif self.is_frozen_kv_mtp():
@@ -221,6 +228,13 @@ class SpeculativeAlgorithm(Enum):
         # Here, we expose this interface to allow the other use cases.
         if self.is_dspark() and is_draft_worker:
             return num_draft_tokens - 1
+        if self.is_ddtree() and not is_draft_worker:
+            from sglang.srt.runtime_context import get_server_args
+
+            tree_budget = get_server_args().speculative_ddtree_budget
+            if tree_budget is None:
+                tree_budget = int(num_draft_tokens) - 1
+            return int(tree_budget) + 1
         return num_draft_tokens
 
     def get_num_tokens_per_bs_for_target_verify(
@@ -250,6 +264,11 @@ class SpeculativeAlgorithm(Enum):
             from sglang.srt.speculative.dflash_worker_v2 import DFlashWorkerV2
 
             return DFlashWorkerV2
+
+        if self.is_ddtree():
+            from sglang.srt.speculative.ddtree_worker import DDTreeWorker
+
+            return DDTreeWorker
 
         if self.is_dspark():
             from sglang.srt.speculative.dspark_components.dspark_worker_v2 import (
@@ -302,6 +321,7 @@ class SpecInputType(IntEnum):
     FROZEN_KV_MTP_VERIFY = auto()
     DFLASH_DRAFT = auto()
     DFLASH_VERIFY = auto()
+    DDTREE_VERIFY = auto()
     NGRAM_VERIFY = auto()
 
 
@@ -347,6 +367,7 @@ class SpecInput(ABC):
             SpecInputType.EAGLE_VERIFY,
             SpecInputType.FROZEN_KV_MTP_VERIFY,
             SpecInputType.DFLASH_VERIFY,
+            SpecInputType.DDTREE_VERIFY,
             SpecInputType.NGRAM_VERIFY,
         }
 
@@ -400,6 +421,20 @@ def create_dummy_verify_input(
                 seq_lens_sum=None,
                 seq_lens_cpu=None,
             )
+    elif spec_algorithm.is_ddtree() and not is_draft_worker:
+        from sglang.srt.speculative.ddtree_info import DDTreeVerifyInput
+
+        tree_budget = server_args.speculative_ddtree_budget
+        if tree_budget is None:
+            tree_budget = int(server_args.speculative_num_draft_tokens) - 1
+        spec_info = DDTreeVerifyInput(
+            draft_token=None,
+            positions=None,
+            draft_token_num=int(tree_budget) + 1,
+            tree_budget=int(tree_budget),
+            custom_mask=custom_mask,
+            capture_hidden_mode=CaptureHiddenMode.FULL,
+        )
     elif spec_algorithm.is_dflash_family():
         from sglang.srt.speculative.dflash_info import DFlashVerifyInput
 

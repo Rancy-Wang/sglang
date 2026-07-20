@@ -1326,6 +1326,36 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
                     dtype=self.model_runner.dtype,
                     device=self.model_runner.device,
                 )
+        elif (
+            self.model_runner.spec_algorithm.is_ddtree()
+            and not self.model_runner.is_draft_worker
+        ):
+            from sglang.srt.speculative.ddtree_info import DDTreeVerifyInput
+
+            q_len = int(self.captured_req_width)
+            bs = num_tokens // q_len
+            visibility = torch.tril(
+                torch.ones(
+                    (bs, q_len, q_len),
+                    dtype=torch.bool,
+                    device=self.device,
+                )
+            )
+            spec_info = DDTreeVerifyInput(
+                draft_token=None,
+                positions=None,
+                draft_token_num=q_len,
+                tree_budget=q_len - 1,
+                actual_tree_sizes=torch.full(
+                    (bs,), q_len, dtype=torch.long, device=self.device
+                ),
+                parents=torch.full(
+                    (bs, q_len), -1, dtype=torch.long, device=self.device
+                ),
+                visibility=visibility,
+                custom_mask=self.buffers.custom_mask,
+                capture_hidden_mode=CaptureHiddenMode.FULL,
+            )
         elif self.model_runner.spec_algorithm.is_dflash_family():
             from sglang.srt.speculative.dflash_info import DFlashVerifyInput
             from sglang.srt.speculative.dflash_utils import (
