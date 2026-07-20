@@ -3,6 +3,7 @@ import unittest
 import torch
 
 from sglang.kernels.ops.speculative.ddtree import (
+    build_ddtree_fa_full_metadata_triton,
     build_ddtree_fa_suffix_metadata_triton,
 )
 from sglang.srt.speculative.ddtree_utils import (
@@ -117,6 +118,60 @@ class TestDDTreeGpuBuild(unittest.TestCase):
         for row in range(5):
             expected = suffix_locs[visibility[0, row]]
             torch.testing.assert_close(page_table[row, : expected.numel()], expected)
+
+    def test_fa_full_metadata_prepends_prefix_and_matches_visibility(self):
+        visibility = torch.tensor(
+            [
+                [
+                    [1, 0, 0, 0],
+                    [1, 1, 0, 0],
+                    [1, 0, 1, 0],
+                    [1, 0, 1, 1],
+                ],
+                [
+                    [1, 0, 0, 0],
+                    [1, 1, 0, 0],
+                    [1, 0, 1, 0],
+                    [1, 1, 0, 1],
+                ],
+            ],
+            dtype=torch.bool,
+            device="cuda",
+        )
+        req_to_token = torch.stack(
+            (
+                torch.arange(100, 132, dtype=torch.int32, device="cuda"),
+                torch.arange(200, 232, dtype=torch.int32, device="cuda"),
+            )
+        )
+        q_len = 4
+        seq_lens = torch.tensor([3, 5], dtype=torch.long, device="cuda")
+        page_table = torch.full((8, 12), -1, dtype=torch.int32, device="cuda")
+        cache_seqlens = torch.empty((8,), dtype=torch.int32, device="cuda")
+
+        build_ddtree_fa_full_metadata_triton(
+            visibility=visibility,
+            req_to_token=req_to_token,
+            req_pool_indices=torch.tensor(
+                [0, 1], dtype=torch.long, device="cuda"
+            ),
+            seq_lens=seq_lens,
+            page_table=page_table,
+            cache_seqlens=cache_seqlens,
+            q_len=q_len,
+        )
+
+        for req_idx, prefix_len in enumerate((3, 5)):
+            prefix = req_to_token[req_idx, :prefix_len]
+            suffix = req_to_token[req_idx, prefix_len : prefix_len + q_len]
+            for query_idx in range(q_len):
+                row = req_idx * q_len + query_idx
+                visible_suffix = suffix[visibility[req_idx, query_idx]]
+                expected = torch.cat((prefix, visible_suffix))
+                self.assertEqual(int(cache_seqlens[row]), expected.numel())
+                torch.testing.assert_close(
+                    page_table[row, : expected.numel()], expected
+                )
 
     def test_gpu_follow_uses_parent_edges(self):
         draft_tokens = torch.tensor(

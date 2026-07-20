@@ -1354,6 +1354,9 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
                 ),
                 visibility=visibility,
                 custom_mask=self.buffers.custom_mask,
+                use_tree_attention=bool(
+                    self.model_runner.server_args.use_tree_attention
+                ),
                 capture_hidden_mode=CaptureHiddenMode.FULL,
             )
         elif self.model_runner.spec_algorithm.is_dflash_family():

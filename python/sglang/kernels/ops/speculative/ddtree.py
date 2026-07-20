@@ -421,6 +421,162 @@ def build_ddtree_fa_suffix_metadata_triton(
 
 
 @triton.jit
+def _copy_fa_full_prefix_metadata_kernel(
+    req_to_token,
+    req_pool_indices,
+    seq_lens,
+    page_table,
+    Q_LEN: tl.constexpr,
+    PAGE_TABLE_ROW_STRIDE: tl.constexpr,
+    REQ_TO_TOKEN_B_STRIDE: tl.constexpr,
+    PREFIX_CAPACITY: tl.constexpr,
+    BLOCK_N: tl.constexpr,
+):
+    row_pid = tl.program_id(0)
+    block_pid = tl.program_id(1)
+    req_idx_in_batch = row_pid // Q_LEN
+    cols = block_pid * BLOCK_N + tl.arange(0, BLOCK_N)
+
+    req_pool_idx = tl.load(req_pool_indices + req_idx_in_batch).to(tl.int64)
+    seq_len = tl.load(seq_lens + req_idx_in_batch).to(tl.int64)
+    mask = (cols < seq_len) & (cols < PREFIX_CAPACITY)
+    token_locs = tl.load(
+        req_to_token + req_pool_idx * REQ_TO_TOKEN_B_STRIDE + cols,
+        mask=mask,
+        other=0,
+    ).to(tl.int32)
+    tl.store(
+        page_table + row_pid * PAGE_TABLE_ROW_STRIDE + cols,
+        token_locs,
+        mask=mask,
+    )
+
+
+@triton.jit
+def _append_fa_visible_suffix_metadata_kernel(
+    visibility,
+    req_to_token,
+    req_pool_indices,
+    seq_lens,
+    page_table,
+    cache_seqlens,
+    Q_LEN: tl.constexpr,
+    VIS_B_STRIDE: tl.constexpr,
+    VIS_ROW_STRIDE: tl.constexpr,
+    VIS_COL_STRIDE: tl.constexpr,
+    REQ_TO_TOKEN_B_STRIDE: tl.constexpr,
+    PAGE_TABLE_ROW_STRIDE: tl.constexpr,
+    BLOCK_Q: tl.constexpr,
+):
+    row_pid = tl.program_id(0)
+    req_idx_in_batch = row_pid // Q_LEN
+    query_idx = row_pid % Q_LEN
+    cols = tl.arange(0, BLOCK_Q)
+    col_mask = cols < Q_LEN
+
+    visible = tl.load(
+        visibility
+        + req_idx_in_batch * VIS_B_STRIDE
+        + query_idx * VIS_ROW_STRIDE
+        + cols * VIS_COL_STRIDE,
+        mask=col_mask,
+        other=0,
+    ).to(tl.int32)
+    packed_offsets = tl.cumsum(visible, 0) - 1
+    visible_count = tl.sum(visible, axis=0)
+
+    req_pool_idx = tl.load(req_pool_indices + req_idx_in_batch).to(tl.int64)
+    seq_len = tl.load(seq_lens + req_idx_in_batch).to(tl.int64)
+    token_locs = tl.load(
+        req_to_token + req_pool_idx * REQ_TO_TOKEN_B_STRIDE + seq_len + cols,
+        mask=col_mask,
+        other=0,
+    ).to(tl.int32)
+
+    row_base = row_pid * PAGE_TABLE_ROW_STRIDE
+    tl.store(
+        page_table + row_base + seq_len + packed_offsets,
+        token_locs,
+        mask=col_mask & (visible != 0),
+    )
+    tl.store(cache_seqlens + row_pid, seq_len + visible_count)
+
+
+def build_ddtree_fa_full_metadata_triton(
+    *,
+    visibility: torch.Tensor,
+    req_to_token: torch.Tensor,
+    req_pool_indices: torch.Tensor,
+    seq_lens: torch.Tensor,
+    page_table: torch.Tensor,
+    cache_seqlens: torch.Tensor,
+    q_len: int,
+) -> None:
+    """Build one-pass FA metadata for every DDTree query.
+
+    Each row contains the complete committed prefix followed by only the tree
+    nodes visible to that query. This represents arbitrary tree ancestry with
+    one non-causal FlashAttention call per layer.
+    """
+
+    q_len = int(q_len)
+    if q_len <= 0:
+        raise ValueError(f"DDTree FA full q_len must be positive, got {q_len}.")
+    if not visibility.is_cuda:
+        raise ValueError(
+            "DDTree FA full metadata Triton kernels require CUDA visibility."
+        )
+    if visibility.ndim != 3:
+        raise ValueError(
+            f"DDTree visibility must be [bs, q, q], got {tuple(visibility.shape)}."
+        )
+    bs = int(seq_lens.numel())
+    rows = bs * q_len
+    prefix_capacity = int(page_table.shape[1]) - q_len
+    if page_table.shape[0] < rows or prefix_capacity <= 0:
+        raise ValueError(
+            "DDTree FA full page_table buffer is too small: "
+            f"shape={tuple(page_table.shape)}, required rows={rows}, "
+            f"suffix_cols={q_len}."
+        )
+    if cache_seqlens.shape[0] < rows:
+        raise ValueError(
+            "DDTree FA full cache_seqlens buffer is too small: "
+            f"shape={tuple(cache_seqlens.shape)}, required={rows}."
+        )
+
+    block_n = 256
+    _copy_fa_full_prefix_metadata_kernel[
+        (rows, triton.cdiv(prefix_capacity, block_n))
+    ](
+        req_to_token,
+        req_pool_indices,
+        seq_lens,
+        page_table,
+        Q_LEN=q_len,
+        PAGE_TABLE_ROW_STRIDE=int(page_table.stride(0)),
+        REQ_TO_TOKEN_B_STRIDE=int(req_to_token.stride(0)),
+        PREFIX_CAPACITY=prefix_capacity,
+        BLOCK_N=block_n,
+    )
+    _append_fa_visible_suffix_metadata_kernel[(rows,)](
+        visibility,
+        req_to_token,
+        req_pool_indices,
+        seq_lens,
+        page_table,
+        cache_seqlens,
+        Q_LEN=q_len,
+        VIS_B_STRIDE=int(visibility.stride(0)),
+        VIS_ROW_STRIDE=int(visibility.stride(1)),
+        VIS_COL_STRIDE=int(visibility.stride(2)),
+        REQ_TO_TOKEN_B_STRIDE=int(req_to_token.stride(0)),
+        PAGE_TABLE_ROW_STRIDE=int(page_table.stride(0)),
+        BLOCK_Q=_next_power_of_2(q_len),
+    )
+
+
+@triton.jit
 def _follow_verified_tree_kernel(
     draft_tokens,
     target_predict,

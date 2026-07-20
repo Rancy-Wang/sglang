@@ -158,6 +158,7 @@ class FlashAttentionBackend(AttentionBackend):
         self.device = model_runner.device
         self.decode_cuda_graph_metadata = {}
         self.target_verify_metadata = {}
+        self.target_verify_metadata_ddtree_full = {}
         # Pool refs — captured at construction so they survive deletion of the
         # corresponding ForwardBatch fields.
         self.req_to_token_pool = model_runner.req_to_token_pool
@@ -209,6 +210,9 @@ class FlashAttentionBackend(AttentionBackend):
             )
         self.is_ddtree_target = (
             self.spec_algorithm.is_ddtree() and not model_runner.is_draft_worker
+        )
+        self.ddtree_use_tree_attention = bool(
+            getattr(model_runner.server_args, "use_tree_attention", False)
         )
         self.speculative_step_id = speculative_step_id
 
@@ -332,8 +336,15 @@ class FlashAttentionBackend(AttentionBackend):
     ) -> bool:
         return self.topk > 1 or (
             self._is_ddtree_verify_spec(spec_info)
-            and not bool(getattr(spec_info, "tree_is_spine", False))
+            and self.ddtree_use_tree_attention
         )
+
+    def _target_verify_uses_ddtree_full_expand(
+        self, spec_info: Optional[SpecInput]
+    ) -> bool:
+        return self._is_ddtree_verify_spec(
+            spec_info
+        ) and not self.ddtree_use_tree_attention
 
     def _init_ddtree_verify_expand_metadata(
         self,
@@ -403,6 +414,87 @@ class FlashAttentionBackend(AttentionBackend):
         metadata_expand.cu_seqlens_k[1:].copy_(
             torch.cumsum(
                 metadata_expand.cache_seqlens_int32,
+                dim=0,
+                dtype=torch.int32,
+            )
+        )
+
+    def _init_ddtree_verify_full_metadata(
+        self,
+        metadata: FlashAttentionMetadata,
+        spec_info: SpecInput,
+        req_pool_indices: torch.Tensor,
+        seq_lens: torch.Tensor,
+        q_len: int,
+        *,
+        max_prefix_len: Optional[int] = None,
+    ) -> None:
+        visibility = getattr(spec_info, "visibility", None)
+        if visibility is None:
+            raise ValueError(
+                "DDTREE one-pass FlashAttention verify requires visibility metadata."
+            )
+        if self.page_size != 1:
+            raise ValueError(
+                "DDTREE one-pass FlashAttention verify currently requires page_size=1."
+            )
+
+        bs = int(seq_lens.numel())
+        rows = bs * q_len
+        device = seq_lens.device
+        metadata.max_seq_len_q = 1
+        metadata.max_seq_len_k = (
+            self.max_context_len + q_len
+            if max_prefix_len is None
+            else int(max_prefix_len) + q_len
+        )
+        if metadata.cache_seqlens_int32 is None:
+            metadata.cache_seqlens_int32 = torch.empty(
+                rows, dtype=torch.int32, device=device
+            )
+        if metadata.cu_seqlens_q is None:
+            metadata.cu_seqlens_q = torch.arange(
+                0, rows + 1, dtype=torch.int32, device=device
+            )
+        if metadata.cu_seqlens_k is None:
+            metadata.cu_seqlens_k = torch.empty(
+                rows + 1, dtype=torch.int32, device=device
+            )
+        if metadata.page_table is None:
+            metadata.page_table = torch.empty(
+                rows,
+                metadata.max_seq_len_k,
+                dtype=torch.int32,
+                device=device,
+            )
+
+        visibility = visibility[:, :q_len, :q_len].to(
+            device=device, dtype=torch.bool
+        )
+        if visibility.shape[0] < bs:
+            padded_visibility = torch.eye(
+                q_len, dtype=torch.bool, device=device
+            ).expand(bs, -1, -1).clone()
+            padded_visibility[: visibility.shape[0]].copy_(visibility)
+            visibility = padded_visibility
+
+        from sglang.kernels.ops.speculative.ddtree import (
+            build_ddtree_fa_full_metadata_triton,
+        )
+
+        build_ddtree_fa_full_metadata_triton(
+            visibility=visibility[:bs],
+            req_to_token=self.req_to_token,
+            req_pool_indices=req_pool_indices.to(torch.long),
+            seq_lens=seq_lens.to(torch.int64),
+            page_table=metadata.page_table,
+            cache_seqlens=metadata.cache_seqlens_int32,
+            q_len=q_len,
+        )
+        metadata.cu_seqlens_k[0].zero_()
+        metadata.cu_seqlens_k[1:].copy_(
+            torch.cumsum(
+                metadata.cache_seqlens_int32,
                 dim=0,
                 dtype=torch.int32,
             )
@@ -756,7 +848,19 @@ class FlashAttentionBackend(AttentionBackend):
             spec_info = forward_batch.spec_info
             num_draft_tokens = self._get_target_verify_token_num(spec_info)
             use_cascade = self._target_verify_uses_cascade(spec_info)
-            if not use_cascade:
+            use_ddtree_full_expand = (
+                self._target_verify_uses_ddtree_full_expand(spec_info)
+            )
+            if use_ddtree_full_expand:
+                self._init_ddtree_verify_full_metadata(
+                    metadata,
+                    spec_info,
+                    forward_batch.req_pool_indices,
+                    forward_batch.seq_lens,
+                    num_draft_tokens,
+                    max_prefix_len=eager_max_k,
+                )
+            elif not use_cascade:
                 ragged_layout = getattr(
                     forward_batch.spec_info, "ragged_verify_layout", None
                 )
@@ -1195,6 +1299,13 @@ class FlashAttentionBackend(AttentionBackend):
             and self._target_verify_uses_cascade(forward_batch.spec_info)
             and not is_swa_layer
         )
+        if (
+            forward_batch.forward_mode.is_target_verify()
+            and self._target_verify_uses_ddtree_full_expand(forward_batch.spec_info)
+        ):
+            # Each query owns a page-table row containing exactly its prefix
+            # and visible tree nodes, so no positional causal mask is needed.
+            causal = False
 
         kwargs = {}
         if sinks is not None:
@@ -1688,6 +1799,11 @@ class FlashAttentionBackend(AttentionBackend):
         causal = True
         if layer.is_cross_attention or layer.attn_type == AttentionType.ENCODER_ONLY:
             causal = False
+        elif (
+            forward_batch.forward_mode.is_target_verify()
+            and self._target_verify_uses_ddtree_full_expand(forward_batch.spec_info)
+        ):
+            causal = False
 
         kwargs = {}
         if sinks is not None:
@@ -2153,6 +2269,31 @@ class FlashAttentionBackend(AttentionBackend):
                     device=self.device,
                 )
 
+            if self.is_ddtree_target and not self.ddtree_use_tree_attention:
+                ddtree_rows = max_bs * self.speculative_num_draft_tokens
+                self.target_verify_metadata_ddtree_full = {
+                    "cache_seqlens": torch.zeros(
+                        ddtree_rows, dtype=torch.int32, device=self.device
+                    ),
+                    "cu_seqlens_q": torch.arange(
+                        0,
+                        ddtree_rows + 1,
+                        dtype=torch.int32,
+                        device=self.device,
+                    ),
+                    "cu_seqlens_k": torch.zeros(
+                        ddtree_rows + 1,
+                        dtype=torch.int32,
+                        device=self.device,
+                    ),
+                    "page_table": torch.zeros(
+                        ddtree_rows,
+                        self.max_context_len + self.speculative_num_draft_tokens,
+                        dtype=torch.int32,
+                        device=self.device,
+                    ),
+                }
+
         if self.topk > 1 or self.is_ddtree_target:
             self.target_verify_metadata_topk_normal = {
                 "cache_seqlens": torch.zeros(
@@ -2353,7 +2494,19 @@ class FlashAttentionBackend(AttentionBackend):
                 self.decode_cuda_graph_metadata[bs] = metadata
 
         elif forward_mode.is_target_verify():
-            if not self._target_verify_uses_cascade(spec_info):
+            if self._target_verify_uses_ddtree_full_expand(spec_info):
+                rows = bs * self.speculative_num_draft_tokens
+                full_buffers = self.target_verify_metadata_ddtree_full
+                metadata.cache_seqlens_int32 = full_buffers["cache_seqlens"][:rows]
+                metadata.max_seq_len_q = 1
+                metadata.max_seq_len_k = (
+                    self.max_context_len + self.speculative_num_draft_tokens
+                )
+                metadata.cu_seqlens_q = full_buffers["cu_seqlens_q"][: rows + 1]
+                metadata.cu_seqlens_k = full_buffers["cu_seqlens_k"][: rows + 1]
+                metadata.page_table = full_buffers["page_table"][:rows]
+                self.target_verify_metadata_ddtree_full[bs] = metadata
+            elif not self._target_verify_uses_cascade(spec_info):
                 metadata.cache_seqlens_int32 = self.target_verify_metadata[
                     "cache_seqlens"
                 ][:bs]
@@ -2682,7 +2835,16 @@ class FlashAttentionBackend(AttentionBackend):
                         self._sched_meta_buf[n:] = 0
 
         elif forward_mode.is_target_verify():
-            if not self._target_verify_uses_cascade(spec_info):
+            if self._target_verify_uses_ddtree_full_expand(spec_info):
+                metadata = self.target_verify_metadata_ddtree_full[bs]
+                self._init_ddtree_verify_full_metadata(
+                    metadata,
+                    spec_info,
+                    req_pool_indices,
+                    seq_lens,
+                    self.speculative_num_draft_tokens,
+                )
+            elif not self._target_verify_uses_cascade(spec_info):
                 metadata = self.target_verify_metadata[bs]
                 ragged_layout = getattr(spec_info, "ragged_verify_layout", None)
                 if ragged_layout is not None:

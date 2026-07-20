@@ -433,6 +433,7 @@ def create_dummy_verify_input(
             draft_token_num=int(tree_budget) + 1,
             tree_budget=int(tree_budget),
             custom_mask=custom_mask,
+            use_tree_attention=bool(server_args.use_tree_attention),
             capture_hidden_mode=CaptureHiddenMode.FULL,
         )
     elif spec_algorithm.is_dflash_family():
