@@ -124,8 +124,20 @@ R2 修复限定 `MooncakeKVManager._transfer_data`：每次最多提交1024个�
 保留既有源页租约、最终元数据发布时机、失败处理，不添加部分写入后的盲目重试。
 本次边界按上述默认 TCP 队列配置验证；人为缩小底层队列或未支持的 custom pool 并行
 不是本次验证范围。测试 `test_mooncake_fragmented_transfer.py` 覆盖地址/长度与顺序、
-边界批次、失败后停止，以及可选的独立GPU进程 TCP 字节级校验。GPU验证和修复后的
+边界批次、失败后停止，以及独立GPU进程 TCP 字节级校验。BUS 在 `862c7af37`
+执行 `pytest -q test/registered/context_system/test_mooncake_fragmented_transfer.py -k "not real_tcp" test/registered/unit/disaggregation/test_mooncake_transfer_batching.py`
+为13 passed、1 deselected、3 subtests；设置 `CUDA_VISIBLE_DEVICES=0,1` 与
+`CONTEXT_TEST_MOONCAKE_TCP_GPU=1` 后执行同文件 `-k real_tcp` 为1 passed、8 deselected。
+两个独立进程传输49,545,216字节，三批1024/1024/976，payload与未写入保护区逐字节正确。
 完整 C1/C2 Drop 性能仍待完成，R2尚未通过。
+
+原生 `d7a3df66a` 的 `minimal-native-pd120-c2-none-parser-v1` 同样失败：44成功、4失败，
+整组无效。首次错误为case786 turn21、case787 turn23，P传输返回非零后封禁session；
+D当时仍运行。该日志没有queue-full、CUDA异常或显式传输timeout证据，不能断言与上述
+Drop失败同因。原生对照后续仅应用相同的1024-descriptor传输修复，模型、scheduler与
+Radix保持原生；后续C2基线须标为“原生+传输兼容修复”，不冒充未修改的上游。
+同一benchmark launcher为两边增加失败时的descriptor数、字节数与返回码日志，不记录
+地址、不增加逐token hook；成功调用只多一层Python转发。
 
 ## PD 容量异常路径补修（2026-09-18）
 
