@@ -80,8 +80,18 @@ async def main():
         "runs": {},
     }
     logits = {}
-    for feature in ("none", "drop", "drop_repos"):
-        runner.clear()
+    reference_path = os.environ.get("CONTEXT_ORACLE_RETRY_REFERENCE")
+    reference = json.loads(Path(reference_path).read_text()) if reference_path else None
+    if reference is not None:
+        assert reference["fixture"] == fixture and reference["model"] == model
+        result["reference_path"] = reference_path
+        result["comparison_kind"] = "matched_cache_retry_fixed_tokens"
+    features = ("none", "drop_repos") if reference else ("none", "drop", "drop_repos")
+    for feature in features:
+        if feature == "none" or reference is None:
+            runner.clear()
+        if reference:
+            runner.forced_tokens = reference["runs"][feature]["records"][0]["tokens"]
         run = await runner.generate(
             "mask",
             [request_for(fixture, feature)],
@@ -89,6 +99,8 @@ async def main():
         )
         (record,) = [r for r in run["records"] if not r["warmup"]]
         logits[feature] = runner.full_logits[record["uid"]]
+        if reference:
+            assert record["tokens"] == runner.forced_tokens
         result["runs"][feature] = run
         print("MINI_BCP", feature, run["responses"], flush=True)
     runner.clear()
