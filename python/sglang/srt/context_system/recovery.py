@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import heapq
 from dataclasses import dataclass
+from itertools import pairwise
 
 import numpy as np
 import torch
@@ -125,12 +126,93 @@ class RecoveryPlan:
         raise ValueError("Recovery cursor is past the query stream.")
 
 
+def sliding_window_starts(
+    layout, visible_until: torch.Tensor, window: int
+) -> torch.Tensor:
+    """First possible raw key for each query's inclusive true-position window.
+
+    Reposition stages use sorted surviving positions. Drop-only boundaries do
+    not change positions; expiry is checked by the dependency walk itself.
+    Work is vectorized per stage and proportional to the compiler's live-token
+    transitions, rather than building a query-by-key mask.
+    """
+    if window <= 0:
+        raise ValueError("Context SWA window must be positive")
+    birth = layout.birth_positions.numpy()
+    stages = layout.birth_stages.numpy()
+    expiry = visible_until.numpy()
+    n = len(birth)
+    if len(expiry) != n:
+        raise ValueError("Context SWA expiry must cover every query")
+    positions = birth.copy()
+    starts = np.empty(n, dtype=np.int32)
+    offsets = layout.transition_offsets.numpy()
+    transition_raw = layout.transition_raw_tokens.numpy()
+    transition_positions = layout.transition_new_positions.numpy()
+    boundaries = np.r_[0, np.flatnonzero(np.diff(stages)) + 1, n]
+    active = np.empty(0, dtype=np.int64)
+    applied = 0
+    for a, b in pairwise(boundaries):
+        stage = int(stages[a])
+        if stage > applied:
+            # A token can transition several times across stages without a
+            # birth query. Apply in stage order so duplicate raw IDs are exact.
+            for k in range(applied, stage):
+                left, right = offsets[k : k + 2]
+                positions[transition_raw[left:right]] = transition_positions[left:right]
+            applied = stage
+        active = np.r_[active[expiry[active] > a], np.arange(a, b)]
+        ranks = np.searchsorted(positions[active], birth[a:b] - (window - 1))
+        starts[a:b] = active[ranks]
+    return torch.from_numpy(starts)
+
+
+class _SWAQueryDemand:
+    """Prefix-min Fenwick index of already planned later queries.
+
+    Reverse recovery inserts only queries after the current token, so the
+    prefix ending at that token's Drop event is exactly its live query range.
+    Initialization is vectorized; each newly repaired query costs O(log N).
+    """
+
+    def __init__(self, starts: np.ndarray, matched: int):
+        self.starts = starts
+        n = len(starts)
+        self.tree = np.full(n + 1, n, dtype=np.int32)
+        self.tree[matched + 1 :] = starts[matched:]
+        width = 1
+        while width <= n:
+            parents = np.arange(width * 2, n + 1, width * 2)
+            self.tree[parents] = np.minimum(
+                self.tree[parents], self.tree[parents - width]
+            )
+            width *= 2
+
+    def reads(self, raw: int, expiry: int) -> bool:
+        cursor = min(expiry, len(self.starts))
+        while cursor:
+            if self.tree[cursor] <= raw:
+                return True
+            cursor -= cursor & -cursor
+        return False
+
+    def add(self, query: int):
+        cursor = query + 1
+        start = self.starts[query]
+        while cursor < len(self.tree):
+            self.tree[cursor] = min(self.tree[cursor], start)
+            cursor += cursor & -cursor
+
+
 def plan_recovery(
     resident: torch.Tensor,
     visible_until: torch.Tensor,
     input_length: int,
     rewind_sources: torch.Tensor | None = None,
     incompatible_sources: torch.Tensor | None = None,
+    *,
+    swa_resident: torch.Tensor | None = None,
+    swa_query_starts: torch.Tensor | None = None,
 ) -> RecoveryPlan:
     """Close missing KV dependencies backwards without scanning the Radix tree.
 
@@ -150,7 +232,7 @@ def plan_recovery(
         or visible_until.ndim != 1
     ):
         raise ValueError("Recovery visibility must be a CPU int32 vector.")
-    for source_mask in (rewind_sources, incompatible_sources):
+    for source_mask in (rewind_sources, incompatible_sources, swa_resident):
         if source_mask is not None and (
             source_mask.device.type != "cpu"
             or source_mask.dtype != torch.bool
@@ -176,8 +258,36 @@ def plan_recovery(
         if incompatible_sources is None
         else incompatible_sources.numpy()
     )
+    if (swa_resident is None) != (swa_query_starts is None):
+        raise ValueError("SWA recovery requires both residency and query windows")
+    swa_demand = None
+    swa_starts = None
+    swa_suffix_missing = False
+    swa_present = np.ones(matched, dtype=np.bool_)
+    if swa_resident is not None:
+        if (
+            swa_query_starts.device.type != "cpu"
+            or swa_query_starts.dtype != torch.int32
+            or swa_query_starts.shape != (input_length,)
+            or torch.any(swa_query_starts < 0)
+            or torch.any(swa_query_starts > torch.arange(input_length))
+        ):
+            raise ValueError("Invalid Context SWA query window metadata")
+        swa_present = swa_resident.numpy()
+        if np.any(~swa_present):
+            swa_starts = swa_query_starts.numpy()
+            # Query suffix is continuous. Prefix minima answer all live suffix
+            # window demands in one vectorized pass; cold old SWA tombstones
+            # outside those windows must not trigger a per-token Python scan.
+            minima = np.minimum.accumulate(swa_starts[matched:])
+            ends = np.minimum(expiry[:matched], input_length) - matched - 1
+            swa_suffix_missing = np.any(
+                ~swa_present
+                & (ends >= 0)
+                & (minima[np.maximum(ends, 0)] <= np.arange(matched))
+            )
     suffix_demand = expiry[:matched] > matched
-    if not np.any((~present | incompatible) & suffix_demand):
+    if not swa_suffix_missing and not np.any((~present | incompatible) & suffix_demand):
         # No suffix query needs an absent/version-incompatible KV. Rewind-only
         # sources are irrelevant until a historical query actually needs repair.
         return RecoveryPlan(
@@ -186,18 +296,29 @@ def plan_recovery(
             matched,
             torch.from_numpy(present.copy()),
         )
-    missing = np.flatnonzero(~present | rewind | incompatible)
+    if swa_starts is not None:
+        swa_demand = _SWAQueryDemand(swa_starts, matched)
+    missing = np.flatnonzero(~present | rewind | incompatible | ~swa_present)
     needed = np.zeros(input_length, dtype=np.bool_)
     needed[matched:] = True
     earliest = matched
     for raw in missing[::-1]:
-        # Rebuilding an earlier query must not use a lossy inverse rotation of
-        # a later-position source. Ordinary suffix queries still reuse it.
-        if present[raw] and not incompatible[raw] and earliest == matched:
-            continue
-        if expiry[raw] > earliest:
+        full_missing = (
+            not present[raw]
+            or incompatible[raw]
+            or (earliest < matched and rewind[raw])
+        )
+        full_needed = full_missing and expiry[raw] > earliest
+        swa_needed = (
+            not swa_present[raw]
+            and swa_demand is not None
+            and swa_demand.reads(int(raw), int(expiry[raw]))
+        )
+        if full_needed or swa_needed:
             needed[raw] = True
             earliest = int(raw)
+            if swa_demand is not None:
+                swa_demand.add(int(raw))
     # A resident token is held only when some planned query can read it.
     next_query = np.minimum.accumulate(
         np.where(needed, np.arange(input_length), input_length)[::-1]

@@ -133,3 +133,54 @@ def test_drop_skip_requires_matched_ancestor_event(recovery):
     records[2, 2] = -4  # References future raw 2: must never authorize eviction.
     with pytest.raises(ValueError, match="non-ancestor"):
         recovery.proven_skip_ranges(records, torch.tensor([False, True, True]))
+
+
+def test_swa_recovery_matches_staged_dependencies(compiler, recovery):
+    rng = random.Random(271828)
+    count = 0
+    for tokens, drops, reposition in cases():
+        layout = compiler(*args(tokens, drops, reposition))
+        visibility, expiry = query_visibility(tokens, drops, reposition)
+        n = len(tokens)
+        for window in (1, 4, 128):
+            starts = recovery.sliding_window_starts(layout, expiry, window)
+            expected_keys = [
+                [raw for raw, pos in keys if keys[-1][1] - pos < window]
+                for keys in visibility
+            ]
+            for q, keys in enumerate(expected_keys):
+                assert [t for t, _ in visibility[q] if t >= starts[q]] == keys
+            matched = rng.randrange(n)
+            present = [rng.choice([False, True]) for _ in range(matched)]
+            swa_present = [p and rng.choice([False, True]) for p in present]
+            rewind = [rng.choice([False, True]) for _ in range(matched)]
+            incompatible = [rng.choice([False, True]) for _ in range(matched)]
+            needed = set(range(matched, n))
+            for q in reversed(range(n)):
+                if q not in needed:
+                    continue
+                for raw, _ in visibility[q]:
+                    if raw >= min(q, matched):
+                        continue
+                    if (
+                        not present[raw]
+                        or incompatible[raw]
+                        or (q < matched and rewind[raw])
+                        or (not swa_present[raw] and raw in expected_keys[q])
+                    ):
+                        needed.add(raw)
+            plan = recovery.plan_recovery(
+                torch.tensor(present, dtype=torch.bool),
+                expiry,
+                n,
+                torch.tensor(rewind, dtype=torch.bool),
+                torch.tensor(incompatible, dtype=torch.bool),
+                swa_resident=torch.tensor(swa_present, dtype=torch.bool),
+                swa_query_starts=starts,
+            )
+            assert {q for a, b in plan.intervals for q in range(a, b)} == needed
+            assert plan.reusable_prefix.tolist() == [
+                present[t] and t not in needed for t in range(matched)
+            ]
+            count += 1
+    assert count > 100
