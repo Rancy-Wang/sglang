@@ -158,7 +158,7 @@ def test_bcp_pd_terminal_handoff(pd_servers):
     room = int(time.time_ns() % (1 << 53))
     lock = threading.Lock()
 
-    def call(feature, name):
+    def call(feature, name, fixed=True):
         nonlocal room
         with lock:
             room += 1
@@ -176,13 +176,14 @@ def test_bcp_pd_terminal_handoff(pd_servers):
             "bootstrap_host": "127.0.0.1",
             "bootstrap_port": bootstrap,
             "bootstrap_room": request_room,
-            "custom_logit_processor": processor,
         }
+        if fixed:
+            payload["custom_logit_processor"] = processor
 
         def send(mode, base, count, offset):
-            body = dict(
-                payload,
-                custom_params={
+            body = dict(payload)
+            if fixed:
+                body["custom_params"] = {
                     "context_trace_path": str(directory / f"{name}-{mode}.pt"),
                     "context_trace_count": count,
                     "context_forced_tokens": tokens,
@@ -190,8 +191,7 @@ def test_bcp_pd_terminal_handoff(pd_servers):
                     "context_retraction_group": (
                         "bcp-retract-pair" if name.startswith("retract-") else None
                     ),
-                },
-            )
+                }
             response = requests.post(
                 base + "/v1/chat/completions", json=body, timeout=300
             )
@@ -204,6 +204,25 @@ def test_bcp_pd_terminal_handoff(pd_servers):
             d = executor.submit(send, "decode", d_base, len(tokens) - 1, 1)
             p.result()
             response = d.result()
+        if not fixed:
+            output = response["sglext"]["output_ids"][0]
+            choice = response["choices"][0]
+            assert output and choice["finish_reason"] in ("length", "stop", "tool_calls"), response
+            item = {
+                "comparison_kind": "native_generation_observation",
+                "exact_token_match": output == tokens,
+                "matching_tokens": sum(a == b for a, b in zip(output, tokens)),
+                "generated_tokens": len(output),
+                "reference_tokens": len(tokens),
+                "same_input_tokens": response["sglext"]["input_ids"] == reference["runs"]["none"]["records"][0]["input"]["ids"],
+                "message": choice["message"],
+                "reference_message": reference["runs"][feature]["responses"][0]["choices"][0]["message"],
+                "finish_reason": choice["finish_reason"],
+            }
+            comparisons[name] = item
+            (directory / "comparison.json").write_text(json.dumps(comparisons, indent=2))
+            print("BCP_PD_ACTUAL", name, json.dumps(item), flush=True)
+            return
         logits = torch.cat(
             [
                 torch.load(directory / f"{name}-{mode}.pt", weights_only=True)
@@ -270,6 +289,8 @@ def test_bcp_pd_terminal_handoff(pd_servers):
         return
 
     for feature in ("none", "drop", "drop_repos"):
+        assert requests.post(p_base + "/flush_cache", timeout=5).status_code == 200
+        call(feature, feature + "-actual", fixed=False)
         assert requests.post(p_base + "/flush_cache", timeout=5).status_code == 200
         call(feature, feature)
     call("drop_repos", "drop_repos-hot")

@@ -533,6 +533,10 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
         return seq_len - window_start
 
     def _swa_retractable_len(self, req: Req) -> int:
+        # Overlap keeps a completed request in running_batch until filtering.
+        # Its cache ownership (and Context layout) has already been released.
+        if not req.kv.holds_kv:
+            return 0
         if req.context_program is not None:
             from sglang.srt.disaggregation.context_transfer import request_active_lengths
 
@@ -1188,6 +1192,7 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
              if r.context_program is not None and r.context_decode_layout is not None
              else len(r.origin_input_ids) + len(r.output_ids))
             for r in self.scheduler.running_batch.reqs
+            if r.kv.holds_kv
         )
 
         uses_swa_tail_prealloc = self._uses_separate_swa_budgets()
