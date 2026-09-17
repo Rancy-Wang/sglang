@@ -107,10 +107,33 @@ def prepare_batch(
 
 
 def forward(runner, batch):
+    from unittest.mock import patch
+
+    from sglang.srt.layers.attention.context_backend import ContextAttentionMetadata
     from sglang.srt.model_executor.forward_batch_info import ForwardBatch
 
     fb = ForwardBatch.init_new(batch, runner, return_hidden_states_before_norm=False)
-    result = runner.forward(fb)
+    context_calls = 0
+    original = ContextAttentionMetadata.forward
+
+    def observe(metadata, *args, **kwargs):
+        nonlocal context_calls
+        context_calls += 1
+        return original(metadata, *args, **kwargs)
+
+    with patch.object(ContextAttentionMetadata, "forward", observe):
+        result = runner.forward(fb)
+    if batch.context_prefill_input is not None:
+        assert context_calls == len(runner.context_model_binding.layers)
+    else:
+        assert context_calls == 0
+    print(
+        "FORWARD_PATH",
+        len(batch.input_ids),
+        result.can_run_graph,
+        context_calls,
+        flush=True,
+    )
     return result.logits_output.next_token_logits.clone()
 
 

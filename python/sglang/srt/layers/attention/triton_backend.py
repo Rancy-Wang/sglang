@@ -66,6 +66,7 @@ if _is_cuda:
     from sgl_kernel.utils import is_arch_support_pdl
 
 if TYPE_CHECKING:
+    from sglang.srt.layers.attention.context_backend import ContextForwardMetadata
     from sglang.srt.layers.radix_attention import RadixAttention
     from sglang.srt.model_executor.model_runner import ModelRunner
     from sglang.srt.speculative.spec_info import SpecInput
@@ -127,6 +128,9 @@ class ForwardMetadata:
     window_kv_offsets: torch.Tensor
     # Separate attn_logits for SWA layers when v_head_dim differs
     swa_attn_logits: Optional[torch.Tensor] = None
+    # Replay rebuilds ForwardBatch without extension fields. Keep the immutable
+    # Context snapshot with the live backend metadata initialized before replay.
+    context_attention: Optional[ContextForwardMetadata] = None
     # full->SWA translated out_cache_loc (SWA KV-store write target)
     swa_out_cache_loc: Optional[torch.Tensor] = None
     # PHYSICAL full-attn write target for the unified pool (eager: translated tensor;
@@ -1035,6 +1039,7 @@ class TritonAttnBackend(AttentionBackend):
             lean_Lp=lean_Lp,
             lean_Op=lean_Op,
             lean_locks=lean_locks,
+            context_attention=forward_batch.context_attention,
         )
 
     def init_cuda_graph_state(
@@ -1541,7 +1546,7 @@ class TritonAttnBackend(AttentionBackend):
         score_mod=None,
         aux_tensors=None,
     ):
-        context = forward_batch.context_attention
+        context = self.forward_metadata.context_attention
         if context is not None:
             if self.page_size != 1:
                 raise ValueError("Context attention requires page_size=1")
@@ -1573,7 +1578,7 @@ class TritonAttnBackend(AttentionBackend):
                 or context_v_buffer.ndim != 3
                 or context_k_buffer.dtype not in (torch.float16, torch.bfloat16)
                 or context_v_buffer.dtype != context_k_buffer.dtype
-                or context_metadata.query_count != q.shape[0]
+                or context_metadata.query_count > q.shape[0]
             ):
                 raise ValueError("Context Triton requires NHD FP16/BF16 KV and aligned Q")
         if (
@@ -1648,12 +1653,16 @@ class TritonAttnBackend(AttentionBackend):
             copies = context.layer_copies.get(layer.layer_id)
             if copies is not None:
                 copies.apply()
+            # Native piecewise graphs pad Q/K/V to a capture bucket. Only real
+            # queries belong to the Context program; padded rows are not reads
+            # or computed tokens and the native output trimming discards them.
+            count = context_metadata.query_count
             context_metadata.forward(
                 self.extend_attention_fwd,
-                q.view(-1, layer.tp_q_head_num, layer.qk_head_dim),
-                k.contiguous(),
-                v.contiguous(),
-                o.view(-1, layer.tp_q_head_num, layer.v_head_dim),
+                q[:count].view(-1, layer.tp_q_head_num, layer.qk_head_dim),
+                k[:count].contiguous(),
+                v[:count].contiguous(),
+                o[:count].view(-1, layer.tp_q_head_num, layer.v_head_dim),
                 context_k_buffer,
                 context_v_buffer,
                 sm_scale=layer.scaling,
