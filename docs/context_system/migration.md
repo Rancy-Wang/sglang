@@ -268,17 +268,56 @@ mini `2966eb4`。单位 tokens/s，实际吞吐排除 cache hit。
 | C1 no_drop | 2/2 | 84 / 0 | 850.903 | 252.298 / 32.091 / 284.389 |
 | C1 Drop+R | 2/2 | 84 / 0 | 824.251 | 260.506 / 33.128 / 293.634 |
 | C2 no_drop | 4/4 | 150 / 0 | 1321.638 | 324.724 / 35.734 / 360.457 |
+| C2 Drop+R | 4/4 | 150 / 0 | 1416.758 | 358.832 / 33.335 / 392.167 |
 
 相对上述 BUS 实验根目录，证据分别为：
 
 - `minimal-mini120-c1-none-v1/workload/20260917_223811_238167_no_drop_C1.json`
 - `minimal-mini120-c1-drop-v1/workload/20260917_225617_541427_drop_C1.json`
 - `minimal-mini120-c2-none-v1/workload/20260917_231258_426732_no_drop_C2.json`
+- `minimal-mini120-c2-drop-v1/workload/20260917_233903_368300_drop_C2.json`
 
 C2 成功 turn 含 143 次 first-pass 和 7 次 filler；截止取消单列，不计失败或成功分子。
-所有返回长度均符合源任务要求。当前 mini C2 Drop、修改版/原生 SGLang 及 PD 矩阵
+所有返回长度均符合源任务要求。mini 四组已完成，修改版/原生 SGLang 及 PD 矩阵
 仍未全部完成，不能依据此表宣称 SGLang 达到约 3% 的效率目标。并行实验分别占用
 0/1 和 2/3，但共享主机 CPU；小样本、首遇形状 JIT 和执行时段差异均须列为比较限制。
+
+2026-09-18 补充：`minimal-sg120-c1-none-v5` 完成 84/84、零失败，但测量跨越午夜，
+GPT-OSS 模板日期改变使已缓存长前缀重新 prefill。其 1228.124 秒不纳入性能对照。
+`7dab80625` 将实验模板日期固定在启动时；生产模板保持原生行为。
+`minimal-sg120-c1-drop-native-ar-v1` 在接收任何请求前因 Unix socket 路径超过
+107 字节启动失败。`1929c115c` 让每个 server 使用 `/tmp/sg-bcp-*` 独立短目录，
+缓存和实验输出仍隔离存放；实际目录记录在 `launch.json`。v2 使用此修复重启。
+
+### 中间 prefill 容量边界（2026-09-18）
+
+`7390089b8` 补充匹配后的最低 KV 需求检查：最终 active 长度可装入池，并不保证
+Drop 生效前的待算 query 可以装入。对 raw 历史超过整个池容量的请求，根据
+`RecoveryPlan.intervals` 计算实际待算 query 的最大可见 KV 数；跳过热命中区间，
+不按冷历史峰值误拒绝热请求。相同 program 和区间复用 CPU 检查结果；raw 长度不超过
+池容量时直接返回。拒绝发生在请求取得 KV 前，返回 503，不缩短输入或执行 dummy
+forward；P 通知 sender 并释放 metadata，D 不执行历史 prefill 容量检查。
+
+实现：`python/sglang/srt/context_system/request_storage.py:11`
+`prefill_capacity_error`；`python/sglang/srt/managers/scheduler.py:3319`
+`_reject_context_prefill_capacity`。这是不可能读集的下界检查，额外 COW 分配仍由原有
+admission 预算计算；不能声称覆盖了所有资源不足场景。
+
+本地 `pytest test/registered/context_system/test_context_raw_storage.py -q`：
+3 passed、1 CUDA skipped；py_compile、Ruff format、diff 检查通过。
+BUS 独立 worktree `sglang-r2-capacity-check@7390089b8`，不暴露 GPU：
+
+```bash
+CUDA_VISIBLE_DEVICES= PYTHONPATH=python python -m pytest \
+  test/registered/context_system/test_context_raw_storage.py \
+  test/registered/context_system/test_context_admission.py \
+  -k 'prefill_capacity or capacity_rejection' -q
+```
+
+结果 4 passed、9 deselected，17.25 秒；日志 `capacity-focused-7390089b8.log`。
+先前较宽的 `-k capacity` 同样通过这四项，但另选中一项既有 fixture，该 fixture 对
+空 `CUDA_VISIBLE_DEVICES` 取首字符而报 IndexError；保留该失败日志，不将其计作通过。
+计时实验工作树保持 `1929c115c`，没有在运行中更新源码。
 
 ### Native allreduce 与长 raw P/D 补充
 
