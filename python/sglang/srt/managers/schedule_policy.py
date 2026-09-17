@@ -545,6 +545,7 @@ class _PrefillAdmission:
     extend_len: int
     max_new_tokens: int
     is_chunked: bool
+    context_extra_pages: int = 0
 
 
 class PrefillAdder:
@@ -917,6 +918,57 @@ class PrefillAdder:
             return self._mamba_slot_cost
         return 0
 
+    def _fit_context_admission(self, req: Req, admission: _PrefillAdmission):
+        """Charge occurrence pages before allocation, keeping query budgets raw.
+
+        The usual native shape is tried once. Only memory pressure triggers
+        smaller chunks; source pages remain leased throughout selection. Plans
+        contain CPU ownership rows and never allocate or copy physical KV.
+        """
+        if getattr(req, "context_program", None) is None:
+            return admission
+        from sglang.srt.mem_cache.prefill_budget import (
+            SharedSWAPrefillBudget,
+            SWAPrefillBudget,
+        )
+
+        budget = self.memory_budget
+        if self.page_size != 1 or self.dllm_config is not None:
+            raise ValueError("Context admission requires page_size=1 autoregression")
+        if req.host_hit_length or req.swa_host_hit_length:
+            raise ValueError("Context admission cannot borrow offloaded KV")
+        if isinstance(budget, SWAPrefillBudget) and budget.req_ring:
+            raise ValueError("Context occurrence ownership does not use SWA rings")
+        length = admission.extend_len
+        while length > 0:
+            truncated = admission.is_chunked or length < admission.extend_len
+            max_new = 0 if truncated else admission.max_new_tokens
+            extra = req.plan_context_prefill(admission.prefix_len + length)
+            full = length + extra + max_new + self.page_size
+            fits = full < budget.remaining_total and (
+                length + extra + self.page_size <= budget.remaining_current
+            )
+            if isinstance(budget, SWAPrefillBudget):
+                swa = budget.swa_tokens(length, max_new, chunk_limit=length) + extra
+                if isinstance(budget, SharedSWAPrefillBudget):
+                    fits = budget.allocator.can_reserve(
+                        full + budget.total_offset,
+                        swa + budget.swa_offset,
+                        full_evictable_tokens=budget.tree_cache.full_evictable_size(),
+                        swa_evictable_tokens=budget.tree_cache.swa_evictable_size(),
+                    )
+                else:
+                    fits = fits and swa <= budget.remaining_swa
+            if fits:
+                return _PrefillAdmission(
+                    admission.prefix_len, length, max_new, truncated, extra
+                )
+            if self.rem_chunk_tokens is None or length == 1:
+                break
+            length //= 2
+        req.context_window_plan = None
+        return AddReqResult.NO_TOKEN
+
     def ceil_paged_tokens(self, tokens: int) -> int:
         return -(-tokens // self.page_size) * self.page_size
 
@@ -952,6 +1004,7 @@ class PrefillAdder:
         mamba_gap_reserve: int = 0,
         is_chunked_continuation: bool = False,
         compute_charge: Optional[int] = None,
+        context_extra_pages: int = 0,
     ):
         """Charge one admitted request against the prefill budgets.
 
@@ -977,11 +1030,16 @@ class PrefillAdder:
         # immediately (counts against `cur_rem`) and held for the request lifetime
         # (counts against `rem_total`). See `_mamba_gap_budget_for_req`.
         self.rem_total_token_offset += (
-            extend_input_len + max_new_tokens + page_overhead + mamba_gap_reserve
+            extend_input_len + max_new_tokens + page_overhead + mamba_gap_reserve + context_extra_pages
         )
         self.cur_rem_token_offset += (
-            extend_input_len + page_overhead + mamba_gap_reserve
+            extend_input_len + page_overhead + mamba_gap_reserve + context_extra_pages
         )
+        if context_extra_pages:
+            from sglang.srt.mem_cache.prefill_budget import SWAPrefillBudget
+
+            if isinstance(self.memory_budget, SWAPrefillBudget):
+                self.memory_budget.swa_offset += context_extra_pages
         # The new mamba slot also consumes one mamba-recoverable slot (gated
         # separately so full_evictable can't cover it — see __init__).
         if mamba_gap_reserve and self.rem_mamba_slots is not None:
@@ -1157,6 +1215,18 @@ class PrefillAdder:
         )
         truncated = cand_extend_input_len > _rem_tokens
         new_len = min(cand_extend_input_len, _rem_tokens)
+        admission = self._fit_context_admission(
+            req,
+            _PrefillAdmission(
+                len(req.prefix_indices), new_len,
+                min(req.sampling_params.max_new_tokens, CLIP_MAX_NEW_TOKENS)
+                if not truncated else 0,
+                truncated,
+            ),
+        )
+        if isinstance(admission, AddReqResult):
+            return req
+        new_len, truncated = admission.extend_len, admission.is_chunked
         req.set_extend_range(len(req.prefix_indices), len(req.prefix_indices) + new_len)
         self.can_run_list.append(req)
         self._update_prefill_budget(
@@ -1170,6 +1240,7 @@ class PrefillAdder:
             req.retracted_stain,
             mamba_gap_reserve=self._mamba_gap_budget_for_req(req),
             is_chunked_continuation=True,
+            context_extra_pages=admission.context_extra_pages,
             compute_charge=req.extend_range.length if self.exact_chunk_fill else None,
         )
 
@@ -1270,6 +1341,35 @@ class PrefillAdder:
             )
         ):
             return AddReqResult.OTHER
+
+        if getattr(req, "context_program", None) is not None:
+            length = cand_extend_input_len
+            if self.rem_chunk_tokens is not None:
+                length = min(length, self.rem_chunk_tokens)
+            admission = self._fit_context_admission(
+                req,
+                _PrefillAdmission(
+                    len(req.prefix_indices), length, self._swa_new_tokens(req),
+                    length < cand_extend_input_len,
+                ),
+            )
+            if isinstance(admission, AddReqResult):
+                return admission
+            if (verdict := self._check_prefill_tile_budget(admission.extend_len)) is not None:
+                return verdict
+            req.set_extend_range(
+                admission.prefix_len, admission.prefix_len + admission.extend_len
+            )
+            self.can_run_list.append(req)
+            if admission.is_chunked:
+                self.new_chunked_req = req
+            self._update_prefill_budget(
+                0, admission.extend_len, admission.max_new_tokens,
+                req.retracted_stain,
+                context_extra_pages=admission.context_extra_pages,
+                compute_charge=admission.extend_len,
+            )
+            return self.budget_state()
 
         if self.dllm_config is not None:
             if self.rem_dllm_tokens <= 0:
@@ -1526,7 +1626,9 @@ class PrefillAdder:
         if (verdict := self._check_prefill_tile_budget(tile_tokens)) is not None:
             return verdict
 
-        return _PrefillAdmission(prefix_len, extend_len, max_new_tokens, is_chunked)
+        return self._fit_context_admission(
+            req, _PrefillAdmission(prefix_len, extend_len, max_new_tokens, is_chunked)
+        )
 
     def _commit_prefill_admission(
         self, req: Req, admission: _PrefillAdmission, mamba_gap_reserve: int
@@ -1545,6 +1647,7 @@ class PrefillAdder:
             admission.max_new_tokens,
             req.retracted_stain,
             mamba_gap_reserve=mamba_gap_reserve,
+            context_extra_pages=admission.context_extra_pages,
             # Compute budgets are billed forward-pass tokens under exact-chunk-fill.
             compute_charge=admission.extend_len if self.exact_chunk_fill else None,
         )

@@ -978,6 +978,8 @@ class UnifiedRadixCache(BasePrefixCache):
             self._release_context_source_lease(req)
             req.context_state = None
             req.context_window_plan = None
+            req.context_prefill_started = False
+            req.context_cache_published = False
 
     def _cache_finished_req_native(
         self, req: Req, is_insert: bool = True, *, kv_len_to_handle: int, **kwargs
