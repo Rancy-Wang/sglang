@@ -330,7 +330,8 @@ def test_context_decode_native_graph_and_position_window(runtime):
         # Inspect the graph's actual read indices once, beyond GPT-OSS's SWA window.
         if step == 3:
             backend = runner.decode_attn_backend or runner.attn_backend
-            metadata = backend.forward_metadata
+            # Prefill replaces forward_metadata; decode graph replay refills
+            # the stable capture buffers without rebuilding that Python view.
             active_raw = torch.cat(
                 (
                     layout.keep_mask.nonzero().flatten(),
@@ -341,9 +342,9 @@ def test_context_decode_native_graph_and_position_window(runtime):
                 req.kv.req_pool_idx, active_raw
             ]
             expected = runner.kv_index_translator.translate_full_attn_ids(raw_slots)
-            count = int(metadata.kv_indptr[1])
+            count = int(backend.kv_indptr[1])
             torch.testing.assert_close(
-                metadata.kv_indices[:count], expected.to(torch.int64)
+                backend.cuda_graph_kv_indices[:count], expected.to(torch.int64)
             )
             if runner.sliding_window_size is not None:
                 positions = torch.cat(
@@ -358,9 +359,9 @@ def test_context_decode_native_graph_and_position_window(runtime):
                 swa = runner.kv_index_translator.sliding_window_write_loc_for(
                     expected[visible]
                 )
-                count = int(metadata.window_kv_indptr[1])
+                count = int(backend.window_kv_indptr[1])
                 torch.testing.assert_close(
-                    metadata.window_kv_indices[:count], swa.to(torch.int64)
+                    backend.cuda_graph_window_kv_indices[:count], swa.to(torch.int64)
                 )
                 print(
                     "DECODE_SWA_COUNT",
