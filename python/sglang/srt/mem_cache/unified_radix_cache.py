@@ -559,7 +559,7 @@ class UnifiedRadixCache(BasePrefixCache):
         if result is not None:
             return result
         if self.disable:
-            return self.tree_core.empty_match_result
+            return self._context_match_metadata(params, self.tree_core.empty_match_result)
         result = self.tree_core.match_prefix(params)
         # Apply the walk's actions (e.g. a pending write-through relocation on
         # a split) before the finalizers, which can evict or raise.
@@ -570,6 +570,18 @@ class UnifiedRadixCache(BasePrefixCache):
         assert not result.cache_actions
         if self.linker is not None and params.req is not None:
             result = self.linker.match(params.key, params.req, result)
+        return self._context_match_metadata(params, result)
+
+    def _context_match_metadata(self, params, result):
+        if params.context_retry and ComponentType.SWA in self.components:
+            if result.context_swa_window is None:
+                swa = self.components[ComponentType.SWA]
+                result = result._replace(
+                    context_swa_resident=torch.ones(
+                        len(result.device_indices), dtype=torch.bool
+                    ),
+                    context_swa_window=swa.sliding_window_size + 1,
+                )
         return result
 
     def supports_fast_match_prefix(self) -> bool:
@@ -1067,6 +1079,7 @@ class UnifiedRadixCache(BasePrefixCache):
             insert_params.context_resident = self._context_cache_residency(
                 req, page_aligned_len
             )
+            insert_params.context_swa_resident = self._context_cache_swa_residency(req, page_aligned_len)
             result = self.insert(insert_params)
 
             # Keep the prompt as an independent radix node. Finished requests
@@ -1159,7 +1172,8 @@ class UnifiedRadixCache(BasePrefixCache):
         self._cache_unfinished_req_native(req, chunked=chunked, **kwargs)
         if state is not None and not self.disable:
             req.context_state = state.publish(
-                req.prefix_indices, cache_len=req.kv.cache_protected_len
+                req.prefix_indices, cache_len=req.kv.cache_protected_len,
+                swa_resident=req.context_swa_resident,
             )
             req.context_cache_published = True
             if not chunked and len(state.terminal_rows) >= len(req.origin_input_ids):
@@ -1183,6 +1197,10 @@ class UnifiedRadixCache(BasePrefixCache):
                 # The native request lease moves to the target branch below.
                 # Keep the Retry source branch alive for remaining birth reads.
                 receipt = self.inc_lock_ref(req.last_node).to_dec_params()
+                if req.context_swa_source_required is not None:
+                    self.configure_context_swa_lock(
+                        req.last_node, receipt, req.context_swa_source_required
+                    )
                 req.context_source_lease = (req.last_node, receipt)
             req.kv.cache_protected_len = min(
                 req.kv.cache_protected_len, req.context_exact_prefix_len
@@ -1203,6 +1221,18 @@ class UnifiedRadixCache(BasePrefixCache):
         resident = torch.ones(length, dtype=torch.bool)
         resident[: len(rows)] = rows >= 0
         return resident
+
+    @staticmethod
+    def _context_cache_swa_residency(req, length):
+        state = getattr(req, "context_state", None)
+        swa = state.terminal_swa_residency() if state is not None else None
+        if swa is None:
+            return None
+        result = torch.ones(length, dtype=torch.bool)
+        count = min(length, len(swa))
+        result[:count] = swa[:count]
+        result[: min(length, req.kv.swa_evicted_seqlen)] = False
+        return result
 
     def _free_context_kv_row(self, req, ranges):
         """Exclude Full holes and absent SWA peers using CPU ownership data."""
@@ -1327,6 +1357,7 @@ class UnifiedRadixCache(BasePrefixCache):
         insert_params.key = radix_key
         insert_params.value = values
         insert_params.context_resident = self._context_cache_residency(req, page_aligned_len)
+        insert_params.context_swa_resident = self._context_cache_swa_residency(req, page_aligned_len)
         result = self.insert(insert_params)
 
         if result.rotation_tail_declined:
@@ -1352,7 +1383,7 @@ class UnifiedRadixCache(BasePrefixCache):
             MatchPrefixParams(
                 key=radix_key,
                 req=req,
-                context_retry=insert_params.context_resident is not None,
+                context_retry=req.context_program is not None,
             )
         )
         new_indices = match_result.device_indices
@@ -1384,6 +1415,17 @@ class UnifiedRadixCache(BasePrefixCache):
                 else ()
             ),
         )
+
+        if getattr(req, "context_swa_query_starts", None) is not None:
+            demand = req.context_swa_read_demand(
+                len(new_indices), len(req.context_state.canonical_rows)
+            )
+            demand &= match_result.context_swa_resident
+            self.configure_context_swa_lock(new_last_node, lock_result, demand)
+            req.context_swa_resident = torch.cat((
+                demand,
+                insert_params.context_swa_resident[len(new_indices):len(kv_indices_orig)],
+            ))
 
         # Update req fields
         if len(new_indices) < len(kv_indices_orig):

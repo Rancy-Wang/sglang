@@ -184,3 +184,54 @@ def test_swa_recovery_matches_staged_dependencies(compiler, recovery):
             ]
             count += 1
     assert count > 100
+
+
+def test_sparse_swa_read_union_and_terminal_decode_repair(compiler, recovery):
+    rng = random.Random(4817)
+    for tokens, drops, repos in cases():
+        layout = compiler(*args(tokens, drops, repos))
+        visible, expiry = query_visibility(tokens, drops, repos)
+        n, matched = len(tokens), len(tokens) // 2
+        for window in (1, 4, 128):
+            starts = recovery.sliding_window_starts(layout, expiry, window)
+            selected = [q for q in range(n) if rng.random() < 0.4]
+            intervals = tuple((q, q + 1) for q in selected)
+            actual = recovery.sliding_window_read_mask(
+                starts, expiry, intervals, matched
+            )
+            expected = torch.zeros(matched, dtype=torch.bool)
+            for q in selected:
+                for raw, pos in visible[q]:
+                    if raw < min(q, matched) and visible[q][-1][1] - pos < window:
+                        expected[raw] = True
+            assert torch.equal(actual, expected)
+            # The final Reposition can widen the first decode window without a
+            # following prefill query. Those cache peers must also be repaired.
+            swa = torch.tensor([rng.random() > 0.3 for _ in range(matched)])
+            terminal = layout.keep_mask[:matched] & (
+                layout.positions[:matched] >= layout.next_position - (window - 1)
+            )
+            expected_queries = set(range(matched, n)) | set(
+                torch.nonzero(terminal & ~swa).flatten().tolist()
+            )
+            for q in reversed(range(n)):
+                if q not in expected_queries:
+                    continue
+                for raw, pos in visible[q]:
+                    if (
+                        raw < min(q, matched)
+                        and not swa[raw]
+                        and visible[q][-1][1] - pos < window
+                    ):
+                        expected_queries.add(raw)
+            plan = recovery.plan_recovery(
+                torch.ones(matched, dtype=torch.bool),
+                expiry,
+                n,
+                swa_resident=swa,
+                swa_query_starts=starts,
+                swa_terminal_required=terminal,
+            )
+            assert {
+                q for a, b in plan.intervals for q in range(a, b)
+            } == expected_queries

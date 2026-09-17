@@ -167,6 +167,50 @@ def sliding_window_starts(
     return torch.from_numpy(starts)
 
 
+def sliding_window_read_mask(
+    query_starts: torch.Tensor,
+    visible_until: torch.Tensor,
+    intervals: tuple[tuple[int, int], ...],
+    prefix_length: int,
+) -> torch.Tensor:
+    """Union of cached SWA reads, with no query-by-key matrix.
+
+    Between decreases in the window's first raw key, the earliest selected
+    query after a token has the widest possible window for that token. Later
+    queries cannot undo its Drop. Evaluate only the potential read range of
+    each monotonic run, including disjoint historical repair intervals.
+    """
+    starts, expiry = query_starts.numpy(), visible_until.numpy()
+    n = len(starts)
+    if (
+        query_starts.device.type != "cpu"
+        or query_starts.dtype != torch.int32
+        or visible_until.device.type != "cpu"
+        or visible_until.dtype != torch.int32
+        or len(expiry) != n
+        or not 0 <= prefix_length <= n
+    ):
+        raise ValueError("Context SWA read metadata must cover CPU query positions")
+    selected = np.zeros(n, dtype=np.bool_)
+    for a, b in intervals:
+        if not 0 <= a <= b <= n:
+            raise ValueError("Context SWA query interval is out of range")
+        selected[a:b] = True
+    required = np.zeros(prefix_length, dtype=np.bool_)
+    boundaries = np.r_[0, np.flatnonzero(np.diff(starts) < 0) + 1, n]
+    for a, b in pairwise(boundaries):
+        queries = np.flatnonzero(selected[a:b]) + a
+        if len(queries) == 0:
+            continue
+        lo, hi = int(starts[queries[0]]), min(int(queries[-1]), prefix_length)
+        if lo >= hi:
+            continue
+        raw = np.arange(lo, hi)
+        query = queries[np.searchsorted(queries, raw, side="right")]
+        required[lo:hi] |= (starts[query] <= raw) & (query < expiry[raw])
+    return torch.from_numpy(required)
+
+
 class _SWAQueryDemand:
     """Prefix-min Fenwick index of already planned later queries.
 
@@ -213,6 +257,7 @@ def plan_recovery(
     *,
     swa_resident: torch.Tensor | None = None,
     swa_query_starts: torch.Tensor | None = None,
+    swa_terminal_required: torch.Tensor | None = None,
 ) -> RecoveryPlan:
     """Close missing KV dependencies backwards without scanning the Radix tree.
 
@@ -232,7 +277,12 @@ def plan_recovery(
         or visible_until.ndim != 1
     ):
         raise ValueError("Recovery visibility must be a CPU int32 vector.")
-    for source_mask in (rewind_sources, incompatible_sources, swa_resident):
+    for source_mask in (
+        rewind_sources,
+        incompatible_sources,
+        swa_resident,
+        swa_terminal_required,
+    ):
         if source_mask is not None and (
             source_mask.device.type != "cpu"
             or source_mask.dtype != torch.bool
@@ -286,6 +336,12 @@ def plan_recovery(
                 & (ends >= 0)
                 & (minima[np.maximum(ends, 0)] <= np.arange(matched))
             )
+    terminal_missing = np.zeros(matched, dtype=np.bool_)
+    if swa_terminal_required is not None:
+        if swa_resident is None:
+            raise ValueError("Terminal SWA recovery requires residency metadata")
+        terminal_missing = swa_terminal_required.numpy() & ~swa_present
+        swa_suffix_missing |= bool(terminal_missing.any())
     suffix_demand = expiry[:matched] > matched
     if not swa_suffix_missing and not np.any((~present | incompatible) & suffix_demand):
         # No suffix query needs an absent/version-incompatible KV. Rewind-only
@@ -309,7 +365,7 @@ def plan_recovery(
             or (earliest < matched and rewind[raw])
         )
         full_needed = full_missing and expiry[raw] > earliest
-        swa_needed = (
+        swa_needed = terminal_missing[raw] or (
             not swa_present[raw]
             and swa_demand is not None
             and swa_demand.reads(int(raw), int(expiry[raw]))
