@@ -642,10 +642,29 @@ class MooncakeKVManager(StagingManagerMixin, CommonKVManager):
         if not transfer_blocks:
             return 0
 
-        src_addrs, dst_addrs, lengths = zip(*transfer_blocks)
-        return self.engine.batch_transfer_sync(
-            mooncake_session_id, list(src_addrs), list(dst_addrs), list(lengths)
-        )
+        # Drop/reposition can leave many discontiguous page-1 ranges. Bound
+        # descriptors, not token indices: each range expands across all layers.
+        # Mooncake 0.3.13 TCP has 1024 queued + 1024 pending slots per peer.
+        # Same-peer chunks use one transfer worker; completing each bounded
+        # batch keeps that queue below capacity without retrying partial writes.
+        # Contiguous transfers retain one all-layer call, regardless of bytes.
+        max_blocks = 1024
+        if len(transfer_blocks) <= max_blocks:
+            src_addrs, dst_addrs, lengths = zip(*transfer_blocks)
+            return self.engine.batch_transfer_sync(
+                mooncake_session_id, list(src_addrs), list(dst_addrs), list(lengths)
+            )
+
+        for start in range(0, len(transfer_blocks), max_blocks):
+            src_addrs, dst_addrs, lengths = zip(
+                *transfer_blocks[start : start + max_blocks]
+            )
+            ret = self.engine.batch_transfer_sync(
+                mooncake_session_id, list(src_addrs), list(dst_addrs), list(lengths)
+            )
+            if ret != 0:
+                return ret
+        return 0
 
     def _send_kvcache_generic(
         self,
