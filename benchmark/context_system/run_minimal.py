@@ -190,7 +190,12 @@ def main():
             env["CUDA_VISIBLE_DEVICES"] = args.gpus if i == 0 else args.decode_gpus
             env["PYTHONPATH"] = str(repo / "python")
             env["SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN"] = "1"
-            for key in ("SGLANG_CACHE_DIR", "TRITON_CACHE_DIR", "TMPDIR"):
+            for key in (
+                "SGLANG_CACHE_DIR",
+                "SGLANG_JIT_CACHE_DIR",
+                "TRITON_CACHE_DIR",
+                "TMPDIR",
+            ):
                 directory = root / mode / key.lower()
                 directory.mkdir(parents=True)
                 env[key] = str(directory)
