@@ -369,3 +369,39 @@ def test_retract_rebuilds_generated_occurrences_and_retains_usage(chat):
     assert int(window.segment_query_ends[-1]) == end
     usage.record_prefill(plan.read_cached, plan.repositioned_cached, end)
     assert usage.snapshot().actual_prefill_tokens == end + 5
+
+
+def test_context_admission_limits_preserve_native_tp_and_overlap(chat):
+    from types import SimpleNamespace
+
+    import torch
+    from sglang.srt.context_system.capabilities import validate_context_request
+    from sglang.srt.managers.io_struct import GenerateReqInput
+    from sglang.srt.server_args import ServerArgs
+
+    processed = chat._process_messages(request(drop_message={"1": [0]}), False)
+    obj = GenerateReqInput(
+        input_ids=processed.prompt_ids, context_program=processed.context_program
+    )
+    obj.normalize_batch_and_arguments()
+    config = SimpleNamespace(
+        hf_config=SimpleNamespace(architectures=["Qwen3ForCausalLM"]),
+        is_multimodal=False,
+        dtype=torch.bfloat16,
+    )
+    args = ServerArgs(
+        model_path="dummy", page_size=1, attention_backend="triton", tp_size=2
+    )
+    validate_context_request(args, config, obj)
+    for field, value, error in (
+        ("page_size", 16, "page_size=1"),
+        ("attention_backend", "flashinfer", "Triton"),
+        ("disaggregation_mode", "decode", "PD"),
+        ("enable_hierarchical_cache", True, "hierarchical"),
+        ("speculative_algorithm", "EAGLE", "non-speculative"),
+    ):
+        previous = getattr(args, field)
+        setattr(args, field, value)
+        with pytest.raises(ValueError, match=error):
+            validate_context_request(args, config, obj)
+        setattr(args, field, previous)
