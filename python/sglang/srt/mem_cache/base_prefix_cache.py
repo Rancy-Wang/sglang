@@ -87,6 +87,8 @@ class InsertParams:
     context_resident: torch.Tensor | None = None
     # Independent SWA validity. False entries must already have no SWA mapping.
     context_swa_resident: torch.Tensor | None = None
+    # Context repair can interleave private copies with borrowed prefix pages.
+    context_owned: torch.Tensor | None = None
 
     # Mamba specific
     mamba_value: Optional[torch.Tensor] = None

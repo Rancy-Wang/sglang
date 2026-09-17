@@ -219,10 +219,12 @@ def test_large_page_context_rejected_without_changing_native_cache(compiler):
         "tail_drop",
         "duplicate",
         "retry",
+        "retry_abort",
         "disabled",
         "holes",
         "holes_abort",
         "recovery",
+        "recovery_deferred_abort",
         "recovery_gap_abort",
     ],
 )
@@ -286,7 +288,7 @@ def test_context_occurrence_native_publication_and_release(compiler, mode):
                     key=RadixKey.from_context(layout), value=allocator.alloc(128)
                 )
             )
-        if mode == "retry":
+        if mode.startswith("retry"):
             source_tokens = tokens.copy()
             source_tokens[64] = 999
             source_drops = {**drops, 96: [(36, 48)]}
@@ -334,7 +336,7 @@ def test_context_occurrence_native_publication_and_release(compiler, mode):
             req.last_node = matched.last_device_node
             req.lock_receipt = cache.inc_lock_ref(req.last_node).to_dec_params()
         ends = (
-            [80, 128] if mode == "retry" or mode.startswith("holes") else [17, 57, 128]
+            [80, 128] if mode.startswith(("retry", "holes")) else [17, 57, 128]
         )
         if mode.startswith("recovery"):
             source_tokens = tokens.copy()
@@ -404,6 +406,13 @@ def test_context_occurrence_native_publication_and_release(compiler, mode):
                 == allocator.available_size()
             )
             cache.sanity_check()
+            if mode in {"retry_abort", "recovery_deferred_abort"}:
+                from sglang.srt.context_system.request_storage import context_publish_length
+
+                if context_publish_length(req, end) < req.kv.cache_protected_len:
+                    break
+        if mode in {"retry_abort", "recovery_deferred_abort"}:
+            assert end < 128
         if mode == "recovery":
             assert queried == [
                 q for a, b in req.context_recovery_plan.intervals for q in range(a, b)
@@ -412,7 +421,7 @@ def test_context_occurrence_native_publication_and_release(compiler, mode):
         cache.cache_finished_req(
             req,
             kv_len_to_handle=req.kv.kv_committed_len,
-            is_insert=mode not in {"holes_abort", "recovery_gap_abort"},
+            is_insert=not mode.endswith("abort"),
         )
         assert req.context_state is None
         assert req.context_source_lease is None

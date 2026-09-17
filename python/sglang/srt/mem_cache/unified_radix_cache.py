@@ -1108,7 +1108,10 @@ class UnifiedRadixCache(BasePrefixCache):
             kv_indices_full = kv_indices
             tail_free_start = None
             if effective_cache_len < len(token_ids):
-                tail_free_start = max(effective_cache_len, req.kv.cache_protected_len)
+                tail_free_start = (
+                    effective_cache_len if getattr(req, "context_state", None) is not None
+                    else max(effective_cache_len, req.kv.cache_protected_len)
+                )
                 token_ids = token_ids[:effective_cache_len]
                 kv_indices = kv_indices[:effective_cache_len]
 
@@ -1124,6 +1127,7 @@ class UnifiedRadixCache(BasePrefixCache):
                 req, page_aligned_len
             )
             insert_params.context_swa_resident = self._context_cache_swa_residency(req, page_aligned_len)
+            insert_params.context_owned = self._context_cache_ownership(req, page_aligned_len)
             result = self.insert(insert_params)
 
             # Keep the prompt as an independent radix node. Finished requests
@@ -1152,6 +1156,7 @@ class UnifiedRadixCache(BasePrefixCache):
                         key=prompt_key,
                         value=values[: len(prompt_key)],
                         prev_prefix_len=len(prompt_key),
+                        context_owned=None,
                         priority=insert_params.priority + 1,
                         # Topology-only re-insert: the request itself created
                         # these nodes moments ago, so counting it as a hit is
@@ -1183,7 +1188,8 @@ class UnifiedRadixCache(BasePrefixCache):
                     ranges.append((tail_free_start, len(kv_indices_full)))
             self._free_context_kv_row(req, ranges)
         else:
-            self._free_context_kv_row(req, [(req.kv.cache_protected_len, kv_len_to_handle)])
+            start = 0 if getattr(req, "context_state", None) is not None else req.kv.cache_protected_len
+            self._free_context_kv_row(req, [(start, kv_len_to_handle)])
 
         # Synthetic profiling requests may own KV without locking a tree node.
         if req.last_node is not None:
@@ -1339,6 +1345,18 @@ class UnifiedRadixCache(BasePrefixCache):
         return resident
 
     @staticmethod
+    def _context_cache_ownership(req, length):
+        state = getattr(req, "context_state", None)
+        if state is None:
+            return None
+        result = torch.arange(length) >= req.kv.cache_protected_len
+        rows = state.terminal_rows[:length]
+        present = rows >= 0
+        result[:len(rows)] = False
+        result[:len(rows)][present] = state.owned[rows[present]]
+        return result
+
+    @staticmethod
     def _context_cache_swa_residency(req, length):
         state = getattr(req, "context_state", None)
         swa = state.terminal_swa_residency() if state is not None else None
@@ -1358,7 +1376,8 @@ class UnifiedRadixCache(BasePrefixCache):
         resident = self._context_cache_residency(req, length)
         state = getattr(req, "context_state", None)
         swa = state.terminal_swa_residency() if state is not None else None
-        if resident is None and swa is None:
+        owned = self._context_cache_ownership(req, length)
+        if resident is None and swa is None and owned is None:
             self.free_kv_row(req.kv, ranges)
             return
         from sglang.srt.context_system.recovery import mask_ranges
@@ -1367,6 +1386,8 @@ class UnifiedRadixCache(BasePrefixCache):
         present = (
             resident if resident is not None else torch.ones(length, dtype=torch.bool)
         )
+        if owned is not None:
+            present &= owned
         if swa is None:
             ranges = [
                 (start + a, start + b)
@@ -1472,6 +1493,7 @@ class UnifiedRadixCache(BasePrefixCache):
         insert_params.value = values
         insert_params.context_resident = self._context_cache_residency(req, page_aligned_len)
         insert_params.context_swa_resident = self._context_cache_swa_residency(req, page_aligned_len)
+        insert_params.context_owned = self._context_cache_ownership(req, page_aligned_len)
         result = self.insert(insert_params)
 
         if result.rotation_tail_declined:
