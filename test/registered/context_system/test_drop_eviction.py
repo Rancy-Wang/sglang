@@ -421,3 +421,111 @@ def test_sparse_swa_request_release_and_completion(native_cache):
     assert_allocator(cache, allocator, 0)
     assert allocator.swa_attn_allocator.available_size() == 128
     assert allocator.full_to_swa_index_mapping[slots].count_nonzero() == 0
+
+
+@pytest.mark.parametrize("source_cache", [False, True])
+def test_swa_req_recovery_publication_and_pressure(
+    compiler, native_cache, source_cache
+):
+    from array import array
+
+    from sglang.srt.context_system.occurrence import free_context_slots
+    from sglang.srt.context_system.planner import ContextProgram
+    from sglang.srt.managers.schedule_batch import Req
+    from sglang.srt.managers.schedule_policy import PrefillAdder
+    from sglang.srt.mem_cache.base_prefix_cache import EvictParams, InsertParams
+    from sglang.srt.mem_cache.memory_pool import ReqToTokenPool
+    from sglang.srt.mem_cache.radix_cache import RadixKey
+    from sglang.srt.runtime_context import publish, reset_context
+    from sglang.srt.sampling.sampling_params import SamplingParams
+    from sglang.srt.server_args import ServerArgs
+    from test_occurrence_ownership import expiry_for
+
+    cache, allocator = native_cache
+    if not hasattr(allocator, "swa_attn_allocator"):
+        pytest.skip("SWA-specific ownership")
+    reset_context()
+    publish(ServerArgs(model_path="dummy", page_size=1), role="scheduler")
+    try:
+        tokens = list(range(48))
+        drops, repos = {32: [(8, 16)]}, [31, 47]
+        layout = compiler(*args(tokens, drops, repos))
+        program = ContextProgram(layout, expiry_for(48, drops))
+        if source_cache:
+            source_tokens = tokens.copy()
+            source_tokens[24] = 999
+            source = compiler(*args(source_tokens, drops, repos))
+            full = program.visible_until > 48
+            swa = torch.zeros(48, dtype=torch.bool)
+            swa[20:24] = True
+            swa[44:] = True
+            slots = torch.full((48,), -1, dtype=torch.int64)
+            slots[full] = allocator.alloc(int(full.sum()))
+            allocator.free_swa(slots[full & ~swa])
+            cache.insert(
+                InsertParams(
+                    key=RadixKey.from_context(source),
+                    value=slots,
+                    context_resident=full,
+                    context_swa_resident=swa,
+                )
+            )
+        req = Req(
+            "swa",
+            "",
+            array("q", tokens),
+            SamplingParams(max_new_tokens=1),
+            context_program=program.to_wire(),
+        )
+        pool = ReqToTokenPool(2, 64, "cpu", False)
+        cache.req_to_token_pool = pool
+        pool.alloc([req])
+        req.init_next_round_input(cache)
+        assert req.context_swa_window == 5
+        assert req.context_swa_resident is not None
+        if source_cache:
+            assert req.context_recovery_plan.matched_length == 24
+            assert req.context_recovery_plan.start < 8
+        PrefillAdder._req_inc_lock_ref(SimpleNamespace(tree_cache=cache), req)
+        for start, end in req.context_recovery_plan.intervals:
+            for cursor in range(start, end, 7):
+                req.advance_context_recovery_gap()
+                req.commit_context_recovery_gap()
+                stop = min(cursor + 7, end)
+                extra = req.plan_context_prefill(stop)
+                window, plan = req.context_window_plan
+                advance = req.context_state.advance(
+                    window,
+                    plan,
+                    allocator.alloc(stop - cursor),
+                    allocator.alloc(extra),
+                    program.visible_until,
+                )
+                allocator.free_swa(advance.unused_swa_slots)
+                req.context_state = advance.state
+                req.set_extend_range(cursor, stop)
+                req.kv.kv_committed_len = stop
+                free_context_slots(
+                    allocator, advance.retired_slots, advance.retired_swa_resident
+                )
+                cache.cache_unfinished_req(req, chunked=stop < 48)
+                # Every future SWA copy/read remains pinned while cold SWA is
+                # reclaimed between native chunks. Full ownership stays intact.
+                cache.evict(EvictParams(swa_num_tokens=128))
+                state = req.context_state
+                valid = state.swa_resident
+                mapping = allocator.full_to_swa_index_mapping[state.slots]
+                assert torch.all(mapping[valid] > 0)
+                assert (
+                    len(torch.unique(allocator.swa_attn_allocator.get_all_free_pages()))
+                    == allocator.swa_attn_allocator.available_size()
+                )
+                cache.sanity_check()
+        cache.cache_finished_req(req, kv_len_to_handle=48)
+        assert req.context_source_lease is None
+        pool.free(req)
+        cache.evict(EvictParams(num_tokens=128, swa_num_tokens=128))
+        assert_allocator(cache, allocator, 0)
+        assert allocator.swa_attn_allocator.available_size() == 128
+    finally:
+        reset_context()
