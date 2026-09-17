@@ -45,6 +45,18 @@ def test_bcp_default_reference(server):  # noqa: F811
             "custom_logit_processor": serialized_probe(),
             "custom_params": params,
         }
+        grammar_model = os.environ.get("CONTEXT_BCP_GRAMMAR_MODEL")
+        if grammar_model:
+            import xgrammar
+
+            # Exercise SGLang's public native grammar interface with the same
+            # descriptor as mini's default tool grammar. No sampler replacement.
+            payload["response_format"] = xgrammar.get_model_structural_tag(
+                grammar_model,
+                tools=reference["fixture"]["tools"],
+                tool_choice="auto",
+                reasoning=False,
+            ).model_dump()
         response_path = directory / (name + ".json")
         if (
             not fixed
@@ -89,6 +101,7 @@ def test_bcp_default_reference(server):  # noqa: F811
                 "context_usage"
             ),
             "input_tokens": len(ids),
+            "grammar_model": grammar_model,
             "raw_argmax_matching_tokens": int(
                 (logits.argmax(-1) == expected.argmax(-1)).sum()
             ),
