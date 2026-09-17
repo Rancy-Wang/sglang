@@ -12,6 +12,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from sglang.srt.context_system.request_storage import request_row
+
 import numpy as np
 import torch
 
@@ -391,9 +393,7 @@ class ContextPrefillInput:
             zip(batch.reqs, batch.seq_lens_cpu.tolist())
         ):
             query_len = 1 if decode else batch.extend_lens[i]
-            raw_row = batch.req_to_token_pool.req_to_token[
-                req.kv.req_pool_idx, :raw_len
-            ]
+            raw_row = request_row(batch.req_to_token_pool, req.kv.req_pool_idx)[:raw_len]
             if req.context_program is None:
                 sequences.append(
                     ContextSequence.ordinary(raw_len - query_len, query_len)
@@ -517,13 +517,14 @@ class ContextDecodeRegistry:
     no historical KV is copied and no per-layer Context work is added to decode.
     """
 
-    def __init__(self, translator, pool):
+    def __init__(self, translator, pool, request_pool=None):
         if translator.page_size != 1 or translator.defer_read_translate:
             raise ValueError("Context decode requires page_size=1 without DCP")
         self.translator = translator
         self.pool = pool
+        self.request_pool = request_pool
         self.rows = torch.zeros(
-            (translator.req_to_token.shape[0], 5),
+            (translator.req_to_token.shape[0], 6),
             dtype=torch.int64,
             device=translator.req_to_token.device,
         )
@@ -535,7 +536,7 @@ class ContextDecodeRegistry:
         for req, raw_length in zip(reqs, raw_lengths):
             raw_length = int(raw_length)
             if req.context_program is None:
-                entries.append((0, 0, 0, 0, 0))
+                entries.append((0, 0, 0, 0, 0, 0))
                 lengths.append(raw_length)
                 positions.append(raw_length - 1)
                 continue
@@ -549,6 +550,13 @@ class ContextDecodeRegistry:
             if generated < 1:
                 raise ValueError("Context decode requires a computed output query")
             count = len(layout.raw_indices)
+            row_pointer = 0
+            if self.request_pool is not None:
+                raw_row = request_row(self.request_pool, req.kv.req_pool_idx)
+                row_pointer = raw_row.data_ptr()
+                if raw_row.is_cuda:
+                    raw_row.record_stream(torch.cuda.current_stream(raw_row.device))
+                refs.append(raw_row)
             entries.append(
                 (
                     layout.device_indices.data_ptr(),
@@ -556,6 +564,7 @@ class ContextDecodeRegistry:
                     layout.prompt_length,
                     count,
                     layout.next_position,
+                    row_pointer,
                 )
             )
             lengths.append(count + generated)
@@ -565,11 +574,11 @@ class ContextDecodeRegistry:
             [(*entry, n, p) for entry, n, p in zip(entries, lengths, positions)],
             dtype=torch.int64,
         ).to(row_ids.device, non_blocking=True)
-        self.rows[row_ids] = packed[:, :5]
+        self.rows[row_ids] = packed[:, :6]
         return (
             torch.tensor(lengths, dtype=torch.int64),
-            packed[:, 5].to(torch.int32),
-            packed[:, 6],
+            packed[:, 6].to(torch.int32),
+            packed[:, 7],
             tuple(refs),
         )
 

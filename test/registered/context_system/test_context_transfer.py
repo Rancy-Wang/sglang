@@ -22,6 +22,8 @@ def test_pd_final_versions_holes_identity_and_usage(compiler, monkeypatch):
         "pd_recovery", ROOT / "python/sglang/srt/context_system/recovery.py"
     )
     monkeypatch.setitem(sys.modules, "sglang.srt.context_system.recovery", recovery)
+    storage = load_file("pd_storage", ROOT / "python/sglang/srt/context_system/request_storage.py")
+    monkeypatch.setitem(sys.modules, "sglang.srt.context_system.request_storage", storage)
     transfer = load_file(
         "pd_transfer", ROOT / "python/sglang/srt/disaggregation/context_transfer.py"
     )

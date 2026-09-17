@@ -37,6 +37,8 @@ def test_empty_active_prompt_still_marks_context():
 
 
 def test_mixed_extend_composes_queries_positions_and_slots():
+    load_file("sglang.srt.context_system.request_storage",
+              ROOT / "python/sglang/srt/context_system/request_storage.py")
     module = load_file(
         "context_mixed_backend",
         ROOT / "python/sglang/srt/layers/attention/context_backend.py",

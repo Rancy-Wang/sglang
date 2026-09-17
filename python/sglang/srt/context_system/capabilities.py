@@ -72,4 +72,4 @@ def validate_context_request(args, model_config, request):
     # Validate tensor IPC or native PD rebootstrap JSON before scheduler IPC.
     from sglang.srt.context_system.planner import ContextProgram
 
-    ContextProgram.from_wire(request.context_program, request.input_ids)
+    return ContextProgram.from_wire(request.context_program, request.input_ids)

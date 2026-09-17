@@ -796,6 +796,35 @@ class TritonAttnBackend(AttentionBackend):
         """Init auxiliary variables for triton attention backend."""
 
         self._dense_one_shot_kv_indptr = None
+        if forward_batch.context_attention is not None:
+            swa_loc = None
+            if self.use_sliding_window_kv_pool:
+                swa_loc = self.kv_index_translator.sliding_window_write_loc_for(
+                    forward_batch.out_cache_loc
+                )
+            self.forward_metadata = ForwardMetadata(
+                attn_logits=None,
+                attn_lse=None,
+                max_extend_len=None,
+                num_kv_splits=None,
+                kv_indptr=None,
+                kv_indices=None,
+                qo_indptr=None,
+                custom_mask=None,
+                mask_indptr=None,
+                window_kv_indptr=None,
+                window_kv_indices=None,
+                window_num_kv_splits=None,
+                window_kv_offsets=None,
+                context_attention=forward_batch.context_attention,
+                swa_out_cache_loc=swa_loc,
+                out_cache_loc_full_physical=(
+                    forward_batch.out_cache_loc
+                    if self.kv_index_translator.is_translating
+                    else None
+                ),
+            )
+            return
         bs = forward_batch.batch_size
         window_kv_indptr = self.window_kv_indptr
         window_kv_indices = None

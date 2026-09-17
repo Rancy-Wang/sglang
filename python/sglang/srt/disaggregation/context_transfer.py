@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
+from sglang.srt.context_system.request_storage import request_row
 from sglang.srt.context_system.occurrence import ContextDecodeLayout, OccurrenceState
 from sglang.srt.context_system.usage import ContextUsage, ContextUsageSnapshot
 
@@ -46,8 +47,8 @@ class ContextTransferPlan:
 
     def slots(self, req, pool, *, window=None):
         start = self.swa_start(window) if window is not None else 0
-        return pool.req_to_token[
-            req.kv.req_pool_idx, self.decode.device_indices[start : self.active_count]
+        return request_row(pool, req.kv.req_pool_idx)[
+            self.decode.device_indices[start : self.active_count]
         ]
 
     def full_chunk(self, raw_start, raw_end, *, last_chunk):
@@ -103,11 +104,11 @@ def request_active_slots(req, pool, raw_end, *, window=None):
         lower = view.next_position + raw_end - view.prompt_length - window
         start = int(np.searchsorted(view.positions, lower))
         generated_start += max(0, lower - view.next_position)
-    prefix = pool.req_to_token[
-        req.kv.req_pool_idx, view.device_indices[start : len(view.raw_indices)]
+    prefix = request_row(pool, req.kv.req_pool_idx)[
+        view.device_indices[start : len(view.raw_indices)]
     ]
     return torch.cat(
-        (prefix, pool.req_to_token[req.kv.req_pool_idx, generated_start:raw_end])
+        (prefix, request_row(pool, req.kv.req_pool_idx)[generated_start:raw_end])
     )
 
 
