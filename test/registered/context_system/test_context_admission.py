@@ -398,3 +398,62 @@ def test_parked_chunk_returns_control_to_decode(factory, capacity_error):
     assert scheduler.chunked_req is req and req.inflight_middle_chunks == 0
     assert scheduler._pending_chunked_abort_req is (req if capacity_error else None)
     adder.add_one_req.assert_not_called()
+
+
+@pytest.mark.parametrize("path", ["cold_retry", "capacity_error", "native"])
+def test_idle_rejected_context_can_retry_or_fail(factory, compiler, path):
+    from types import SimpleNamespace
+    from unittest.mock import Mock, patch
+
+    from sglang.srt.disaggregation.utils import DisaggregationMode
+    from sglang.srt.managers.schedule_policy import AddReqResult
+    from sglang.srt.managers.scheduler import Scheduler
+
+    req = make_req(compiler)
+    req.init_next_round_input = Mock()
+    if path == "native":
+        req.context_program = None
+
+    def reject(*_args, **_kwargs):
+        if path == "cold_retry":
+            req.context_force_miss = True
+        elif path == "capacity_error":
+            req.context_admission_error = "cold prefill exceeds capacity"
+        return AddReqResult.NO_TOKEN
+
+    adder = Mock(can_run_list=[], add_one_req=Mock(side_effect=reject))
+    running = factory.create_running_batch()
+    running.batch_is_full = False
+    scheduler = SimpleNamespace(
+        grammar_manager=Mock(has_waiting_grammars=Mock(return_value=False)),
+        enable_priority_preemption=False, is_hybrid_swa=False,
+        waiting_queue=[req], chunked_req=None, min_free_slots_delayer=None,
+        get_num_allocatable_reqs=Mock(return_value=4), policy=Mock(),
+        processed_tokens_counter=0, chunked_prefill_size=32, dynamic_chunk_sizer=None,
+        tp_worker=Mock(), page_size=1, tree_cache=factory.mock_tree_cache,
+        token_to_kv_pool_allocator=factory.mock_token_allocator,
+        new_token_ratio_tracker=SimpleNamespace(current=1.0), max_prefill_tokens=32,
+        is_mixed_chunk=False, priority_scheduling_preemption_threshold=0,
+        max_prefill_bs=4, max_running_requests=4, dllm_config=None,
+        req_to_token_pool=SimpleNamespace(mamba_allocator=None),
+        enable_lora=False, enable_hicache_storage=False,
+        enable_hierarchical_cache=False, enable_unified_cache_external_linker=False,
+        disaggregation_mode=DisaggregationMode.NULL, truncation_align_size=None,
+        _reject_context_prefill_capacity=Mock(),
+    )
+    with patch("sglang.srt.managers.scheduler.PrefillAdder", return_value=adder):
+        batch, remaining = Scheduler._get_new_batch_prefill_raw(scheduler, None, running)
+        assert batch is None and remaining is running
+        assert running.batch_is_full == (path == "native")
+        if path == "capacity_error":
+            scheduler._reject_context_prefill_capacity.assert_called_once_with(
+                req, "cold prefill exceeds capacity"
+            )
+            assert not scheduler.waiting_queue
+        else:
+            scheduler._reject_context_prefill_capacity.assert_not_called()
+            assert scheduler.waiting_queue == [req]
+            Scheduler._get_new_batch_prefill_raw(scheduler, None, running)
+            # Native retains its existing full-batch behavior. Context retries
+            # its match instead of waiting for a nonexistent decode to finish.
+            assert adder.add_one_req.call_count == (1 if path == "native" else 2)
