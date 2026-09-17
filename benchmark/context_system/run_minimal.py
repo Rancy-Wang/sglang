@@ -154,7 +154,9 @@ def main():
                     )
                 try:
                     with urllib.request.urlopen(
-                        f"http://127.0.0.1:{port}/health", timeout=5
+                        f"http://127.0.0.1:{port}/"
+                        + ("v1/models" if args.engine == "mini" else "health"),
+                        timeout=5,
                     ) as response:
                         if response.status == 200:
                             break
