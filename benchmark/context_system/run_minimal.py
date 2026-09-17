@@ -32,7 +32,40 @@ def replay_template(template):
             raise ValueError("Unrecognized GPT-OSS tool-result template")
         template = template.replace(
             guard, "{%- if not message.name and last_tool_call.name is none %}"
-        ).replace(speaker, '"<|start|>functions." + (message.name or last_tool_call.name)')
+        ).replace(
+            speaker, '"<|start|>functions." + (message.name or last_tool_call.name)'
+        )
+        # Fixed-length native output may contain commentary, reasoning and
+        # multiple tool calls. Keep every generated field, as mini's replay
+        # does; the model template otherwise rejects/drops parts of this input.
+        start = "            {#- We need very careful handling here"
+        end = "        {%- elif loop.last and not add_generation_prompt %}"
+        if template.count(start) != 1 or template.count(end) != 1:
+            raise ValueError("Unrecognized GPT-OSS assistant tool-call template")
+        before, rest = template.split(start, 1)
+        _, after = rest.split(end, 1)
+        template = (
+            before
+            + """
+            {%- if message.content %}
+                {{- "<|start|>assistant<|channel|>commentary<|message|>" + message.content + "<|end|>" }}
+            {%- endif %}
+            {%- if message.reasoning_content or message.thinking %}
+                {{- "<|start|>assistant<|channel|>analysis<|message|>" + (message.reasoning_content or message.thinking) + "<|end|>" }}
+            {%- endif %}
+            {%- for item in message.tool_calls %}
+                {%- set tool_call = item.function if item.function else item %}
+                {{- "<|start|>assistant to=" }}
+                {{- "functions." + tool_call.name + "<|channel|>commentary " }}
+                {{- (tool_call.content_type if tool_call.content_type is defined else "json") + "<|message|>" }}
+                {{- tool_call.arguments|tojson }}
+                {{- "<|call|>" }}
+                {%- set last_tool_call.name = tool_call.name %}
+            {%- endfor %}
+"""
+            + end
+            + after
+        )
     return template
 
 

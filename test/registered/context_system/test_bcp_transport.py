@@ -50,6 +50,47 @@ def test_gpt_replay_named_tool_after_generated_final(tmp_path):
     with pytest.raises(ValueError, match="no previous assistant"):
         adapter.render(history, [])
 
+    # Real fixed-length output can carry all three fields. No generated text
+    # or additional call may disappear from the next turn's prompt.
+    history[1] = {
+        "role": "assistant",
+        "content": "Generated commentary.",
+        "reasoning_content": "Generated reasoning.",
+        "tool_calls": [
+            {
+                "id": name,
+                "type": "function",
+                "function": {"name": name, "arguments": '{"query":"test"}'},
+            }
+            for name in ("search", "lookup")
+        ],
+    }
+    history[-1]["name"] = "search"
+    original = copy.deepcopy(history)
+    size, owners = adapter.render(history, [])
+    assert history == original
+    text = adapter.renderer.trace.rendered_text
+    for channel, value in (
+        ("commentary", "Generated commentary."),
+        ("analysis", "Generated reasoning."),
+    ):
+        assert f"<|channel|>{channel}<|message|>{value}<|end|>" in text
+        assert text.count(value) == 1
+    for name in ("search", "lookup"):
+        assert f"assistant to=functions.{name}" in text
+    assert size == len(owners)
+    history += [
+        {"role": "assistant", "content": "Later final."},
+        {"role": "user", "content": "Continue."},
+    ]
+    adapter.render(history, [])
+    from collections import Counter
+
+    old_counts = Counter(owners)
+    new_counts = Counter(adapter.renderer.trace.owners)
+    assert all(new_counts[i] == old_counts[i] for i in range(3))
+    assert "Generated reasoning." in adapter.renderer.trace.rendered_text
+
 
 @pytest.mark.parametrize("blocked_at", ["headers", "stream"])
 def test_prefill_failure_wakes_blocked_decode(blocked_at):
