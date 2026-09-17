@@ -165,8 +165,29 @@ chunk 和 prompt/output 分节点都遵守同一边界。如果旧稀疏匹配�
 **1 passed in 0.58s**，涵盖空洞、延迟副本、未发布私有页与最终发送不重不漏。
 首次 `bcp778-sg-pd-gpt20-capacity-lifetime-v1` 在启动时遇到 ZMQ socket 路径超过107字节，
 未进入模型请求；保留失败日志，以独立短临时目录重新启动。
-真实 `bcp778-sg-pd-gpt20-capacity-lifetime-v2` 已在 GPU0/1、独立 P/D、
-默认 GPT-OSS backend 启动，结果待确认；不能用此 CPU 检查代替 PD 数值验收。
+真实 `bcp778-sg-pd-gpt20-capacity-lifetime-v2` 在 `d2ef1d0f1`、P GPU0、D GPU1、
+独立 TP1 进程完成：`python -m pytest -s -q test/registered/context_system/test_bcp_pd_numeric.py`
+为 **1 passed in 452.08s**（含启动，不是吞吐）。配置为 BF16、page1、默认 Triton、
+共享 Full/SWA 物理池、P24576/D16384 KV、context16384、chunk512；D Radix 关闭。
+复用 `bcp778-mini-gpt20-native-input.json` 的相同 token 路径与保存的 mini logits。
+
+| PD 路径 | max / mean / p99 绝对误差（相对 mini） | 实际 Prefill / Decode tokens |
+| --- | --- | --- |
+| 无功能 | 2.710938 / 0.069612 / 0.437500 | 原生计数未提供 |
+| Drop 冷算 | 4.875000 / 0.101741 / 0.875000 | 8927 / 63 |
+| Drop+R 冷算 | 2.279297 / 0.064363 / 0.412109 | 8927 / 63 |
+| Drop+R 热命中 | 2.279297 / 0.064380 / 0.410156 | 1 / 63 |
+| Drop+R Retry | 1.265625 / 0.057951 / 0.343750 | 1746 / 63 |
+
+三条自由生成路径均为 64/64 tokens 与 mini 相同。热命中 cached3384、repos0、
+drop-skipped0；Retry cached432、repos3929、drop-skipped2820。Drop-skipped0 的
+物理驻留口径同前述普通调度说明；不能用逻辑空洞增加该计数。
+
+读取已保存的普通/PD logits 做离线直接对照，无额外模型 forward：无功能、Drop 冷算、
+Drop+R 冷算及 Retry 的张量逐元素完全一致；热命中 max/mean/p99 为
+0.9375/0.030352/0.21875，64/64 argmax 一致。原始结果为该 PD 目录下
+`comparison.json`、`normal-pd-comparison.json` 及逐路径 `.pt`。
+本次覆盖稳定终态传输、冷算、热命中和 Retry，不替代 120B PD 与完整轨迹吞吐门槛。
 
 ## 当前实测状态（2026-09-17）
 
