@@ -787,6 +787,49 @@ class OccurrenceState:
             swa,
         )
 
+    def drop_borrowed_raw(self, dropped):
+        """Forget proven-unused cache owners before their Full pages can evict.
+
+        Private versions remain owned until the normal completion receipt frees
+        them. The surviving raw coordinates never shift when a page disappears.
+        """
+        if (
+            dropped.device.type != "cpu"
+            or dropped.dtype != torch.bool
+            or dropped.shape != self.terminal_rows.shape
+        ):
+            raise ValueError("Context Drop ownership mask must cover the raw state")
+        canonical = self.canonical_rows.numpy().copy()
+        terminal = self.terminal_rows.numpy().copy()
+        changed = False
+        for rows in (canonical, terminal):
+            candidates = np.flatnonzero(dropped.numpy() & (rows >= 0))
+            candidates = candidates[~self.owned.numpy()[rows[candidates]]]
+            if len(candidates):
+                rows[candidates] = -1
+                changed = True
+        if not changed:
+            return self
+        live = self.owned.numpy().copy()
+        live[canonical[canonical >= 0]] = True
+        live[terminal[terminal >= 0]] = True
+        retained = np.flatnonzero(live)
+        remap = np.full(len(live), -1, dtype=np.int64)
+        remap[retained] = np.arange(len(retained))
+        for rows in (canonical, terminal):
+            present = rows >= 0
+            rows[present] = remap[rows[present]]
+        indices = torch.from_numpy(retained).to(self.slots.device, non_blocking=True)
+        return OccurrenceState(
+            self.slots[indices],
+            self.owned[retained],
+            torch.from_numpy(canonical),
+            torch.from_numpy(terminal),
+            self.canonical_positions,
+            self.exact_prefix_len,
+            self.swa_resident[retained] if self.swa_resident is not None else None,
+        )
+
     def terminal_swa_residency(self):
         if self.swa_resident is None:
             return None
