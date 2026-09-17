@@ -8,6 +8,38 @@ admission and contains page IDs, not extra model KV.
 import torch
 
 
+def prefill_capacity_error(req, capacity):
+    """Reject impossible query read sets after matching, before acquiring KV.
+
+    Final active length alone misses cold queries preceding a large Drop. Hot
+    requests may skip those queries, so only recovery intervals count. This is
+    a lower bound, not an allocation estimate (COW copies are charged separately).
+    """
+    program = req.context_recompute_program or req.context_program
+    if program is None or len(program.visible_until) <= capacity:
+        return None
+    intervals = req.context_recovery_plan.intervals
+    cached = getattr(req, "_context_prefill_capacity", None)
+    if cached is None or cached[0] is not program or cached[1] != intervals:
+        import numpy as np
+
+        n = len(program.visible_until)
+        # Visibility metadata guarantees expiry > birth raw index. Therefore
+        # every expired key was already born by the query being counted.
+        expired = np.bincount(
+            np.minimum(program.visible_until.numpy(), n), minlength=n + 1
+        ).cumsum()
+        live = np.arange(1, n + 1) - expired[:n]
+        peak = max(int(live[start:end].max()) for start, end in intervals)
+        cached = req._context_prefill_capacity = (program, intervals, peak)
+    if cached[2] > capacity:
+        return (
+            f"Context prefill needs at least {cached[2]} simultaneous KV tokens "
+            f"for its uncached queries, but the KV pool holds {capacity}"
+        )
+    return None
+
+
 def request_row(pool, index):
     rows = getattr(pool, "_context_rows", None)
     if rows and index in rows:

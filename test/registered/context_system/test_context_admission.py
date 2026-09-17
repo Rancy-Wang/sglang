@@ -10,6 +10,56 @@ pytest_plugins = ("test_ir",)
 pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="native SRT runtime")
 
 
+@pytest.mark.parametrize(
+    "prefill,transport_error", [(False, False), (True, False), (True, True)]
+)
+def test_capacity_rejection_preserves_program_and_releases_pd_metadata(
+    prefill, transport_error
+):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from sglang.srt.disaggregation.utils import DisaggregationMode
+    from sglang.srt.managers.scheduler import Scheduler
+
+    original = [11, 12, 13]
+    program = object()
+    sender = Mock()
+    if transport_error:
+        sender.abort.side_effect = RuntimeError("peer unavailable")
+    req = SimpleNamespace(
+        rid="capacity",
+        origin_input_ids=original,
+        context_program=program,
+        disagg_kv_sender=sender,
+        metadata_buffer_index=4,
+        pending_bootstrap=True,
+        time_stats=SimpleNamespace(trace_ctx=Mock()),
+        return_logprob=False,
+    )
+    scheduler = SimpleNamespace(
+        _release_aborted_request=Mock(),
+        beam_coordinator=Mock(),
+        disaggregation_mode=(
+            DisaggregationMode.PREFILL if prefill else DisaggregationMode.NULL
+        ),
+        req_to_metadata_buffer_idx_allocator=Mock(),
+        output_streamer=Mock(),
+    )
+    Scheduler._reject_context_prefill_capacity(scheduler, req, "capacity exhausted")
+    assert req.origin_input_ids is original and req.context_program is program
+    assert req.finished_reason.to_json()["status_code"] == 503
+    scheduler._release_aborted_request.assert_called_once_with(req)
+    scheduler.output_streamer.stream_output.assert_called_once_with([req], False)
+    if prefill:
+        sender.abort.assert_called_once()
+        scheduler.req_to_metadata_buffer_idx_allocator.free.assert_called_once_with(4)
+        assert req.metadata_buffer_index == -1 and not req.pending_bootstrap
+    else:
+        sender.abort.assert_not_called()
+        scheduler.req_to_metadata_buffer_idx_allocator.free.assert_not_called()
+
+
 @pytest.fixture
 def factory():
     module = load_file(
