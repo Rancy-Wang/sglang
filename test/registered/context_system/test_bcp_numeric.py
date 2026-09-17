@@ -85,7 +85,9 @@ def test_bcp_default_reference(server):  # noqa: F811
             "first_token_difference": next(
                 (i for i, equal in enumerate(same) if not equal), None
             ),
-            "context_usage": response.get("metadata"),
+            "context_usage": response["choices"][0].get("meta_info", {}).get(
+                "context_usage"
+            ),
             "input_tokens": len(ids),
             "raw_argmax_matching_tokens": int(
                 (logits.argmax(-1) == expected.argmax(-1)).sum()
