@@ -53,13 +53,22 @@ from sglang.srt.mem_cache.utils import (
 )
 
 if TYPE_CHECKING:
+    from sglang.srt.context_system.ir import ContextKeyData, ContextLayout
     from sglang.srt.managers.schedule_batch import Req
 
 
 class RadixKey:
     """is_bigram=True: token_ids holds raw tokens (N+1 for N bigrams); slices share one boundary token."""
 
-    __slots__ = ("token_ids", "extra_key", "cache_salt", "is_bigram", "limit")
+    __slots__ = (
+        "token_ids",
+        "extra_key",
+        "cache_salt",
+        "is_bigram",
+        "limit",
+        "context",
+        "context_start",
+    )
 
     def __init__(
         self,
@@ -68,6 +77,8 @@ class RadixKey:
         is_bigram: bool = False,
         limit: Optional[int] = None,
         cache_salt: Optional[str] = None,
+        context: ContextKeyData | None = None,
+        context_start: int = 0,
     ):
         # token ids sequence (raw ints in both modes)
         self.token_ids = token_ids
@@ -80,6 +91,38 @@ class RadixKey:
         # Optional cap on raw tokens: behave as if token_ids were sliced to
         # token_ids[:limit], without the O(n) copy. None = use all tokens.
         self.limit = limit
+        self.context = context
+        self.context_start = context_start
+        if context is not None:
+            if is_bigram:
+                raise ValueError("Context Radix keys do not support speculative bigrams")
+            if context_start < 0 or context_start + self._raw_len() > len(
+                context.token_to_record
+            ):
+                raise ValueError("Context Radix key lies outside its record storage")
+
+    @classmethod
+    def from_context(
+        cls,
+        layout: ContextLayout,
+        *,
+        extra_key: str | None = None,
+        cache_salt: str | None = None,
+        limit: int | None = None,
+    ) -> RadixKey:
+        from sglang.srt.context_system.ir import ContextKeyData
+
+        tokens = array("q")
+        tokens.frombytes(
+            layout.records[layout.token_to_key, 1].to(torch.int64).numpy().tobytes()
+        )
+        return cls(
+            tokens,
+            extra_key=extra_key,
+            cache_salt=cache_salt,
+            limit=limit,
+            context=ContextKeyData.from_layout(layout),
+        )
 
     def _raw_len(self) -> int:
         n = len(self.token_ids)
@@ -138,6 +181,8 @@ class RadixKey:
             self.token_ids[start:stop],
             self.extra_key,
             cache_salt=self.cache_salt,
+            context=self.context,
+            context_start=self.context_start + start,
         )
 
     def __repr__(self) -> str:
@@ -157,6 +202,8 @@ class RadixKey:
     ) -> Tuple[RadixKey, Optional[torch.Tensor]]:
         # O(1): flip the bigram flag instead of materializing a tuple list.
         # value is paired with raw tokens and gets truncated to the bigram count.
+        if is_eagle and self.context is not None:
+            raise ValueError("Context Radix keys do not support speculative bigrams")
         if is_eagle and not self.is_bigram:
             self.is_bigram = True
             if value is not None:
@@ -189,6 +236,18 @@ class RadixKey:
         t0, t1 = self.token_ids, other.token_ids
         assert type(t0) is type(t1), (type(t0), type(t1))
         n = min(self._raw_len(), other._raw_len() - offset)
+
+        if self.context is not None and other.context is not None:
+            matched = self.context.match(
+                other.context, self.context_start, other.context_start + offset, n
+            )
+            return matched // page_size * page_size
+        # A feature-free prefix shares the original namespace and native KV.
+        # Once a structured event/final position differs, ordinary matching ends.
+        if self.context is not None:
+            n = self.context.plain_prefix(self.context_start, n)
+        elif other.context is not None:
+            n = other.context.plain_prefix(other.context_start + offset, n)
 
         # Exponential search for the first diverging token: gallop in doubling
         # windows (one C-level slice compare each), then binary-search the window
@@ -242,12 +301,35 @@ class RadixKey:
             plain = (
                 t[offset] if page_size == 1 else tuple(t[offset : offset + page_size])
             )
+        if self.context is not None and self.context.plain_prefix(
+            self.context_start + offset, page_size
+        ) < page_size:
+            plain = (
+                "context-v1",
+                self.context.child_records(self.context_start + offset, page_size),
+            )
         if self.cache_salt is not None:
             return ((self.extra_key, self.cache_salt), plain)
         return plain if self.extra_key is None else (self.extra_key, plain)
 
     def hash_page(self, start: int, end: int, prior_hash: Optional[str] = None) -> str:
         """SHA256 for logical units [start, end); bigram mode feeds overlapping (t_i, t_{i+1}) byte pairs."""
+        if self.context is not None and self.context.plain_prefix(
+            self.context_start + start, end - start
+        ) < end - start:
+            # Context storage/export is gated separately. Keep this public hash
+            # helper collision-safe for diagnostics and in-memory page records.
+            import hashlib
+            import struct
+
+            records = self.context.child_records(
+                self.context_start + start, end - start
+            )
+            digest = hashlib.sha256(b"sglang-context-key-v1")
+            if prior_hash is not None:
+                digest.update(bytes.fromhex(prior_hash))
+            digest.update(struct.pack(f"<{len(records)}i", *records))
+            return digest.hexdigest()
         hash_value = get_hash_str(self[start:end], prior_hash)
         assert isinstance(hash_value, str)
         return hash_value
