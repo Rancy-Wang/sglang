@@ -14,7 +14,7 @@ import pytest
 
 requests = pytest.importorskip("requests")
 torch = pytest.importorskip("torch")
-from bcp_numeric_fixture import request_for
+from bcp_numeric_fixture import oracle_chat_template, request_for
 from serving_logits_probe import serialized_probe
 
 pytestmark = pytest.mark.skipif(
@@ -31,6 +31,11 @@ def pd_servers():
     bootstrap = port + 10
     processes, logs = [], []
     bases = []
+    template = oracle_chat_template(
+        os.environ["CONTEXT_PD_BCP_ORACLE"],
+        os.environ["CONTEXT_SERVER_MODEL"],
+        directory,
+    )
     try:
         for i, mode in enumerate(("prefill", "decode")):
             base = f"http://127.0.0.1:{port + i}"
@@ -94,6 +99,8 @@ def pd_servers():
                 "--enable-custom-logit-processor",
             ]
             cmd += ["--tp-size", os.environ.get("CONTEXT_TEST_TP", "1")]
+            if template:
+                cmd += ["--chat-template", template]
             if "gpt-oss" in os.environ["CONTEXT_SERVER_MODEL"].lower():
                 cmd += [
                     "--tool-call-parser",
@@ -211,6 +218,10 @@ def test_bcp_pd_terminal_handoff(pd_servers):
             d = executor.submit(send, "decode", d_base, len(tokens) - 1, 1)
             p.result()
             response = d.result()
+        assert (
+            response["sglext"]["input_ids"]
+            == reference["runs"]["none"]["records"][0]["input"]["ids"]
+        ), name
         if not fixed:
             output = response["sglext"]["output_ids"][0]
             choice = response["choices"][0]
@@ -252,10 +263,6 @@ def test_bcp_pd_terminal_handoff(pd_servers):
         )
         expected = reference_logits[reference_key]
         assert logits.shape == expected.shape and torch.isfinite(logits).all(), name
-        assert (
-            response["sglext"]["input_ids"]
-            == reference["runs"]["none"]["records"][0]["input"]["ids"]
-        )
         assert response["sglext"]["output_ids"] == [tokens], response
         delta = (logits - expected).abs()
         item = {

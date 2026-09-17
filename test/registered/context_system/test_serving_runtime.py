@@ -61,6 +61,16 @@ def server(tmp_path_factory):
         "--enable-mixed-chunk",
     ]
     cmd += ["--tp-size", os.environ.get("CONTEXT_TEST_TP", "1")]
+    if os.environ.get("CONTEXT_BCP_ORACLE"):
+        from bcp_numeric_fixture import oracle_chat_template
+
+        template = oracle_chat_template(
+            os.environ["CONTEXT_BCP_ORACLE"],
+            os.environ["CONTEXT_SERVER_MODEL"],
+            log_path.parent,
+        )
+        if template:
+            cmd += ["--chat-template", template]
     if "gpt-oss" in os.environ["CONTEXT_SERVER_MODEL"].lower():
         cmd += [
             "--tool-call-parser",
