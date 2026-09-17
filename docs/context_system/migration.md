@@ -90,6 +90,54 @@
   原生和修改版均存在重复内容；简单重复检测不等于模型质量验收，也不能将每次重复
   直接归因为 Drop/Reposition。必须结合原始输出、首次分歧、数值对照及 finish reason。
 
+追加检查点 `9746a7881`：
+
+- 对 Retry 独立 source lease 补充容量计数。真实 CPU UnifiedRadix/allocator 反例：
+  source70、target50、共享24、私有30、pool128，实际保留126页、空闲2页、最小 forward
+  还需3页；旧计数只看到当前状态的30页，未拒绝。现在
+  `request_storage.py:11` 的 `handle_prefill_capacity_pressure` 在已有 source lease 时调用
+  `unified_radix_cache.py:965` 的 `context_leased_page_count`，仅沿 target/source 两条
+  CPU 树路径去重，尊重 Drop path-only receipt 与已淘汰的 hole，再加私有页；不做
+  GPU→CPU 页号读取，不扫描整棵树，也不进入正常成功调度的热路径。
+- BUS capacity-check 已通过 Git fast-forward 到该提交。执行
+  `CUDA_VISIBLE_DEVICES=9 PYTHONPATH=python python -m pytest -q test/registered/context_system/test_drop_eviction.py -k retry_source_capacity`：
+  **1 passed, 29 deselected in 14.53s**。用例还验证共享祖先不重复计数、外部读者占用不误拒绝、
+  Drop path-only 不占本请求页额度、hole 不计数以及最后128页全部归还。这个测试使用真实
+  CPU 树与分配器，但 occurrence state 为构造数据，不是实际模型的 GPU 停滞复现。
+- 同提交执行
+  `CUDA_VISIBLE_DEVICES=9 PYTHONPATH=python python -m pytest -q test/registered/context_system/test_context_admission.py test/registered/context_system/test_context_raw_storage.py -k 'capacity or self_pin'`：
+  **10 passed, 8 deselected in 16.39s**。本机 Anaconda 环境同类运行为1 passed/2 setup errors，
+  原因是缺少 `tvm_ffi`；BUS 完整环境的结果如上。未为这个只改失败分支的计数再跑完整 GPU 矩阵。
+- 普通调度修改版 `652810595` 的 C2 无功能配对运行
+  `minimal-sg120-c2-none-parser-v1` 已完成：4/4首次 task、150成功/0失败，47377输出 tokens，
+  1516.924459s，**31.232274 token/s**；逻辑输入8137716 tokens。
+  精确物理 prefill/decode 计数缺失，保持 null。该项是修改版无功能对照；对应原生与
+  Drop+R 配对运行仍在执行，暂不据此判断5%门槛。
+
+追加检查点 `75a1eb49c`：
+
+- C2 Drop 的 `minimal-sg120-c2-drop-parser-v1` 在 warmup 混合 prefill/decode 时失败，
+  没有进入正式 BCP 工作负载。堆栈定位到 `ContextPrefillInput.concatenate` 仍读取旧的
+  `field_offsets`；16字节对齐后的实际数据结构已经改为不含 padding 的 `field_ranges`。
+  现使用真实字段区间拼接，保留对齐与原生混合调度；不关闭 mixed chunk 或 CUDA Graph。
+- BUS capacity-check 修复前执行已有
+  `test_context_decode.py -k mixed_extend`：**1 failed, 5 deselected in 2.94s**，
+  与真实启动相同的 AttributeError。Git fast-forward 后执行
+  `CUDA_VISIBLE_DEVICES=9 PYTHONPATH=python python -m pytest -q test/registered/context_system/test_context_decode.py -k 'not gather'`：
+  **4 passed, 2 deselected in 2.07s**。这组检查验证 mixed query positions、prefix positions、
+  物理 KV 索引、query/KV indptr 和 decode 工作量计数；GPU graph gather 未在本轮重复运行。
+  本地默认 Anaconda 无 torch，收集失败；本地 py_compile 与 diff-check 通过。
+- 恢复 C2 Drop 为 `minimal-sg120-c2-drop-parser-v2`，后续 C1 无功能及 PD 队列继续。
+  已完成 C2 无功能不重复跑；失败的 warmup 不进入任何吞吐平均值。
+
+完整读取的 mini System/main diff 已逐项标在 `source_inventory.json`，与“端到端迁移验收”
+分开计数。attention adapter 的额外差异：mini FA/FI 在带位置空洞的 SWA decode 上避开
+普通 CUDA Graph，并禁止混合 masked/普通请求；迁移保留可见集与 shared all-layer KV
+语义，不能把这两个调度限制搬入 SGLang。mini FA3/FI FA2 的 sinks 通过 LSE 补偿实现，
+SGLang 使用原生默认 attention 的 sinks；不能叠加第二次补偿。mini 的 pinned staging
+与按消费 stream event 管理复用，是防止 H2D CPU 停顿和异步覆写的重要参考；SGLang
+需按其实际 tensor 生命周期验证，不能只凭 `non_blocking=True` 宣称无阻塞。
+
 以上日志均位于前述 BUS 实验根目录；双并发候选与 PD 小量吞吐仍需补齐。对比时必须
 注明 parser 等兼容修复是否同时应用于原生对照，不把修复原生卡顿带来的收益宣称为
 Drop/Reposition 本身的性能收益。
