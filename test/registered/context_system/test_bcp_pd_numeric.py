@@ -41,7 +41,8 @@ def pd_servers():
                 ("TRITON_CACHE_DIR", "triton-cache"),
                 ("TMPDIR", "tmp"),
             ):
-                target = directory / mode / subdir
+                cache_root = Path(os.environ.get("CONTEXT_PD_CACHE_ROOT", directory))
+                target = cache_root / mode / subdir
                 target.mkdir(parents=True, exist_ok=True)
                 env[name] = str(target)
             env["CUDA_VISIBLE_DEVICES"] = os.environ.get(
@@ -183,6 +184,9 @@ def test_bcp_pd_terminal_handoff(pd_servers):
                     "context_trace_count": count,
                     "context_forced_tokens": tokens,
                     "context_forced_offset": offset,
+                    "context_retraction_group": (
+                        "bcp-retract-pair" if name.startswith("retract-") else None
+                    ),
                 },
             )
             response = requests.post(
@@ -232,7 +236,8 @@ def test_bcp_pd_terminal_handoff(pd_servers):
 
     if os.environ.get("CONTEXT_PD_RETRACT") == "1":
         # Reuse the existing no-feature calibration; this launch only tests the
-        # new recovery path. Warm P first so both real BCP transfers overlap on D.
+        # new recovery path. Prime installs the diagnostic transfer barrier on D;
+        # the pair then enters native decode together despite transport jitter.
         call("drop_repos", "prime")
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             runs = [
