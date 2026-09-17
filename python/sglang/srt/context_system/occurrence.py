@@ -726,3 +726,14 @@ class ContextPrefillCompletion:
         )
         allocator.free(self.retired_slots)
         self.completed = True
+
+
+@dataclass
+class ContextDecodeCompletion:
+    usage: object
+    completed: bool = False
+
+    def complete(self, allocator):
+        if not self.completed:
+            self.usage.record_decode()
+            self.completed = True

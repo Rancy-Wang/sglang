@@ -36,6 +36,62 @@ def test_empty_active_prompt_still_marks_context():
     assert view.swa_raw_floor(12, 2) == 9
 
 
+def test_mixed_extend_composes_queries_positions_and_slots():
+    module = load_file(
+        "context_mixed_backend",
+        ROOT / "python/sglang/srt/layers/attention/context_backend.py",
+    )
+    view, program = layout([0, 7, 8, 19], [0, 1, 2, 3], 20, 4)
+    req = SimpleNamespace(
+        context_program=SimpleNamespace(layout=program),
+        context_decode_layout=view,
+        kv=SimpleNamespace(req_pool_idx=1),
+    )
+    table = torch.arange(96, dtype=torch.int32).reshape(3, 32)
+    batch = SimpleNamespace(
+        reqs=[req],
+        seq_lens_cpu=torch.tensor([22]),
+        req_to_token_pool=SimpleNamespace(req_to_token=table),
+        out_cache_loc=table[1, 21:22],
+    )
+    decode = module.ContextPrefillInput.from_prepared_batch(batch, decode=True)
+    plain_seq = module.ContextSequence.ordinary(2, 3)
+    empty = torch.empty(0, dtype=torch.int32)
+    plain = module.ContextPrefillInput(
+        module.ContextAttentionPlan.merge([plain_seq]),
+        torch.arange(5, dtype=torch.int32),
+        empty,
+        empty,
+        empty.reshape(0, 2),
+        None,
+    )
+    mixed = module.ContextPrefillInput.concatenate((plain, decode))
+    metadata = mixed.attention_plan.bind(mixed.occurrence_slots)
+    assert metadata.query_positions.tolist() == [2, 3, 4, 5]
+    assert metadata.kv_positions.tolist() == [0, 1, 0, 1, 2, 3, 4]
+    assert metadata.kv_indices.tolist() == [0, 1, 32, 39, 40, 51, 52]
+    assert metadata.qo_indptr.tolist() == [0, 3, 4]
+    assert metadata.kv_indptr.tolist() == [0, 2, 7]
+
+
+def test_decode_receipt_counts_completed_work_once():
+    occurrence = load_file(
+        "context_decode_receipt",
+        ROOT / "python/sglang/srt/context_system/occurrence.py",
+    )
+    usage_module = load_file(
+        "context_decode_usage", ROOT / "python/sglang/srt/context_system/usage.py"
+    )
+    usage = usage_module.ContextUsage(
+        torch.empty(0, dtype=torch.bool), torch.empty(0, dtype=torch.bool)
+    )
+    receipt = occurrence.ContextDecodeCompletion(usage)
+    assert usage.snapshot().actual_decode_tokens == 0
+    receipt.complete(None)
+    receipt.complete(None)
+    assert usage.snapshot().actual_decode_tokens == 1
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
 @pytest.mark.parametrize("translated", [False, True])
 def test_decode_gather_keeps_native_raw_row_and_replays_mutable_registry(translated):
