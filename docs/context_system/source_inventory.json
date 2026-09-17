@@ -1650,7 +1650,7 @@
           "end_line": 1989
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/scheduler/radix_delta.py",
@@ -1805,7 +1805,7 @@
           "end_line": 1075
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/scheduler/table.py",
@@ -2015,7 +2015,7 @@
           "end_line": 1268
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/server/args.py",
@@ -2035,7 +2035,7 @@
           "end_line": 372
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/server/launch.py",
@@ -2095,7 +2095,7 @@
           "end_line": 312
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/server/response_parser.py",
@@ -2220,7 +2220,7 @@
           "end_line": 942
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/tokenizer/detokenize.py",
@@ -2345,7 +2345,7 @@
           "end_line": 805
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/tokenizer/reposition_occurrence.py",
@@ -2425,7 +2425,7 @@
           "end_line": 458
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/tokenizer/template_provenance.py",
@@ -2465,7 +2465,7 @@
           "end_line": 300
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/tokenizer/thinking_template.py",
@@ -2505,7 +2505,7 @@
           "end_line": 160
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/tokenizer/tokenize.py",
@@ -2545,7 +2545,7 @@
           "end_line": 1855
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/utils/mp.py",
@@ -2665,7 +2665,7 @@
           "end_line": 322
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "tests/attention/test_gap_aware_sliding_window_gpu.py",
@@ -2705,7 +2705,7 @@
           "end_line": 215
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     }
   ],
   "system_test_additions": [
