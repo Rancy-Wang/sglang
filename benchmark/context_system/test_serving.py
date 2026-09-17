@@ -45,7 +45,7 @@ def load_method(root):
 class NativeTemplateAdapter:
     """Use the server's preprocessing method, retaining its canonical trace."""
 
-    def __init__(self, path, template_kwargs):
+    def __init__(self, path, template_kwargs, chat_template=None):
         from sglang.srt.entrypoints.openai.serving_chat import OpenAIServingChat
         from sglang.srt.parser.jinja_template_utils import (
             detect_jinja_template_content_format,
@@ -70,6 +70,8 @@ class NativeTemplateAdapter:
                 return self.trace.rendered_text, self.trace.input_ids, None
 
         tokenizer = AutoTokenizer.from_pretrained(path, local_files_only=True)
+        if chat_template is not None:
+            tokenizer.chat_template = Path(chat_template).read_text()
         template = TemplateManager()
         template._jinja_template_content_format = detect_jinja_template_content_format(
             tokenizer.chat_template
@@ -206,7 +208,9 @@ async def run(args):
     cases, manifest = method.load_cases(
         args.requests_path, args.num_tasks, args.seed, args.case_id
     )
-    renderer = NativeTemplateAdapter(args.tokenizer, json.loads(args.template_kwargs))
+    renderer = NativeTemplateAdapter(
+        args.tokenizer, json.loads(args.template_kwargs), args.chat_template
+    )
     root = Path(args.output_dir)
     root.mkdir(parents=True, exist_ok=False)
     rows = []
@@ -334,6 +338,7 @@ def parser():
     p.add_argument("--prefill-url", help="Native P URL; --url is the native D URL")
     p.add_argument("--bootstrap-port", type=int, default=28971)
     p.add_argument("--template-kwargs", default="{}")
+    p.add_argument("--chat-template")
     p.add_argument("--concurrency", type=int, choices=[1, 2], default=1)
     p.add_argument("--num-tasks", type=int, choices=[2, 4], default=2)
     p.add_argument("--seed", type=int, default=42)

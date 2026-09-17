@@ -346,6 +346,21 @@ def test_real_thinking_retention_and_exact_drop(chat, model_path):
     plain = chat._process_messages(request(), False)
     kept = chat._process_messages(request(chat_template_kwargs=kwargs), False)
     assert plain.prompt_ids == kept.prompt_ids
+    # Frozen upstream can consume the same native-template adapter through
+    # --chat-template, without any modified Python preprocessing code.
+    from sglang.srt.context_system.thinking_template import retained_template
+
+    template, family = retained_template(original_template)
+    assert retained_template(template) == (template, family)
+    tokenizer.chat_template = template
+    with patch(
+        "sglang.srt.context_system.thinking_template.prepare_thinking_history",
+        side_effect=lambda tokenizer, messages, tools, kwargs: (messages, kwargs),
+    ):
+        upstream_render = chat._process_messages(
+            request(messages=history, chat_template_kwargs=kwargs), False
+        )
+    assert upstream_render.prompt_ids == retained.prompt_ids
 
 
 @pytest.mark.parametrize("repos", [None, [1]])

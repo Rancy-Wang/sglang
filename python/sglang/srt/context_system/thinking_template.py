@@ -12,6 +12,11 @@ from jinja2 import Environment
 
 @lru_cache(maxsize=16)
 def retained_template(template):
+    marker = "{# SGLANG_CONTEXT_THINKING_HISTORY_V1:"
+    if template.startswith(marker):
+        family = template[len(marker) :].split(" #}", 1)[0]
+        if family in ("gpt-oss", "qwen", "native"):
+            return template, family
     Environment().parse(template)
     if "future_final_message.found" in template and "<|start|>assistant" in template:
         guard = "and not future_final_message.found"
@@ -31,6 +36,11 @@ def retained_template(template):
                 "{%- endif %}" + final
             ),
         )
+        # Also support this template through upstream's --chat-template option,
+        # which receives OpenAI reasoning_content without our Python adapter.
+        patched = patched.replace(
+            "message.thinking", "(message.reasoning_content or message.thinking)"
+        )
         family = "gpt-oss"
     elif "ns.last_query_index" in template and "reasoning_content" in template:
         patched, count = re.subn(
@@ -46,7 +56,7 @@ def retained_template(template):
         # ThinkingDrop's exact provenance check rejects silently omitted text.
         patched, family = template, "native"
     Environment().parse(patched)
-    return patched, family
+    return marker + family + " #}" + patched, family
 
 
 def prepare_thinking_history(tokenizer, messages, tools, template_kwargs):
