@@ -839,6 +839,25 @@ class OccurrenceState:
         result[present] = self.swa_resident[rows[present]]
         return result
 
+    def live_swa_ranges(self, start: int, end: int):
+        """Read only the newly retiring CPU interval, never the full history.
+
+        Generated slots beyond this prefill state own native SWA peers. The
+        caller's monotonic eviction floor excludes already retired peers.
+        """
+        from sglang.srt.context_system.recovery import mask_ranges
+
+        if end <= start:
+            return []
+        live = np.ones(end - start, dtype=np.bool_)
+        rows = self.terminal_rows[start:end].numpy()
+        present = rows >= 0
+        live[: len(rows)] = present
+        if self.swa_resident is not None:
+            indices = np.flatnonzero(present)
+            live[indices] = self.swa_resident.numpy()[rows[indices]]
+        return [(start + a, start + b) for a, b in mask_ranges(live)]
+
     def private_slots(self):
         """Request pages only; borrowed Radix pages are released through leases."""
         rows = torch.from_numpy(np.flatnonzero(self.owned.numpy())).to(

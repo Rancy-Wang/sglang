@@ -4220,12 +4220,24 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
     def _evict_swa(self, req: Req, pre_len: int):
         assert self.tree_cache.supports_swa(), "prefix cache must support swa"
         if req.context_program is not None:
-            if req.context_decode_layout is None:
+            if req.context_decode_layout is None or not req.kv.holds_kv:
                 # Prefill owns stage-specific occurrences until completion.
                 return
-            pre_len = req.context_decode_layout.swa_raw_floor(
+            start = max(req.kv.swa_evicted_seqlen, req.kv.swa_dead_lo(1))
+            end = req.context_decode_layout.swa_raw_floor(
                 pre_len, self.tree_cache.sliding_window_size
-            ) + self.tree_cache.sliding_window_size
+            )
+            retain_floor = self.tree_cache.swa_retain_floor(req)
+            if retain_floor is not None:
+                end = min(end, retain_floor)
+            end = max(start, end)
+            row = self.req_to_token_pool.req_to_token[req.kv.req_pool_idx]
+            for left, right in req.context_state.live_swa_ranges(start, end):
+                self.token_to_kv_pool_allocator.free_swa_segment(
+                    row[left:right], start_pos=left
+                )
+            req.kv.swa_evicted_seqlen = end
+            return
         free_swa_out_of_window_slots(
             req,
             pre_len,

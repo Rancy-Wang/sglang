@@ -456,6 +456,14 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
             and hasattr(self.token_to_kv_pool_allocator, "alloc_extend_swa_tail")
         )
 
+    def _uses_separate_swa_budgets(self) -> bool:
+        # Native page-size-one requests still allocate the full SWA prompt.
+        # Once a Context request enters, admission must track both physical
+        # pools independently; _prealloc_kv_lens keeps native charges intact.
+        return self._uses_swa_tail_prealloc() or getattr(
+            self, "_context_swa_admission", False
+        )
+
     def _release_matched_prefix_lock(self, req: Req) -> None:
         if req.swa_prefix_lock_released:
             self.tree_cache.dec_lock_ref(req.last_node, req.lock_receipt, skip_swa=True)
@@ -519,6 +527,12 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
         return seq_len - window_start
 
     def _swa_retractable_len(self, req: Req) -> int:
+        if req.context_program is not None:
+            from sglang.srt.disaggregation.context_transfer import request_active_lengths
+
+            return request_active_lengths(
+                req, req.seqlen - 1, self.scheduler.sliding_window_size
+            )[1]
         if not self._uses_swa_tail_prealloc():
             return len(req.origin_input_ids) + len(req.output_ids)
         return self._swa_tail_len(len(req.origin_input_ids)) + len(req.output_ids)
@@ -688,6 +702,8 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
         if not is_retracted and not is_rebootstrap and is_unadmitted_reject(req):
             self.scheduler.retire_unadmitted_request(req)
             return
+        if req.context_program is not None and self.scheduler.tp_worker.is_hybrid_swa:
+            self._context_swa_admission = True
         if self._check_if_req_exceed_kv_capacity(req):
             return
 
@@ -825,13 +841,15 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
         input_len = self._rebootstrap_prefill_len(req)
         if req.context_program is not None:
             input_len = self._prealloc_kv_lens(req)[0]
+            if self.scheduler.tp_worker.is_hybrid_swa:
+                capacity = self.token_to_kv_pool_allocator.size_full
         if input_len > capacity:
             message = f"Request {req.rid} exceeds the maximum number of tokens: {input_len} > {capacity}"
             logger.error(message)
             prepare_abort(req, message, status_code=HTTPStatus.BAD_REQUEST)
             self.scheduler.output_streamer.stream_output([req], req.return_logprob)
             return True
-        if self._uses_swa_tail_prealloc():
+        if self._uses_separate_swa_budgets():
             _, swa_required = self._prealloc_required_tokens(req)
             swa_capacity = self.token_to_kv_pool_allocator.size_swa
             if swa_required > swa_capacity:
@@ -875,7 +893,7 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
         # allocate memory
         resumed_reqs = []
         indices_to_remove = set()
-        uses_swa_tail_prealloc = self._uses_swa_tail_prealloc()
+        uses_swa_tail_prealloc = self._uses_separate_swa_budgets()
         if uses_swa_tail_prealloc:
             full_allocatable_tokens, swa_allocatable_tokens = (
                 self._swa_aware_allocatable_token_budgets(count_retracted=False)
@@ -1159,11 +1177,14 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
         # We need to make sure that the sum of inflight tokens and allocatable tokens is greater than maximum input+output length of each inflight request
         # Otherwise it is possible for one request running decode out of memory, while all other requests are in the transfer queue that cannot be retracted.
         retractable_tokens = sum(
-            len(r.origin_input_ids) + len(r.output_ids)
+            (len(r.context_decode_layout.raw_indices)
+             + max(0, r.seqlen - r.context_decode_layout.prompt_length)
+             if r.context_program is not None and r.context_decode_layout is not None
+             else len(r.origin_input_ids) + len(r.output_ids))
             for r in self.scheduler.running_batch.reqs
         )
 
-        uses_swa_tail_prealloc = self._uses_swa_tail_prealloc()
+        uses_swa_tail_prealloc = self._uses_separate_swa_budgets()
         swa_allocatable_tokens = 0
         if uses_swa_tail_prealloc:
             retractable_swa_tokens = sum(
@@ -1682,7 +1703,9 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
             max(
                 [
                     min(x.sampling_params.max_new_tokens, CLIP_MAX_NEW_TOKEN)
-                    + len(x.origin_input_ids)
+                    + (len(x.context_decode_layout.raw_indices)
+                       if x.context_program is not None and x.context_decode_layout is not None
+                       else len(x.origin_input_ids))
                     - retractable_tokens
                     for x in self.scheduler.running_batch.reqs
                 ]
@@ -1755,7 +1778,7 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
                 # HiSparse pre-alloc only allocates logical indices, so the
                 # logical pool is the binding constraint for admission control.
                 available_size = logical_allocator.available_size()
-        elif self._uses_swa_tail_prealloc():
+        elif self._uses_separate_swa_budgets():
             available_size = self.token_to_kv_pool_allocator.full_available_size()
             if get_disagg().disaggregation_decode_enable_radix_cache:
                 available_size += self._radix_full_evictable()
@@ -1804,7 +1827,8 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
             and len(self.scheduler.running_batch.reqs) > 0
         ):
             need_swa_space_for_single_req = max(
-                self._swa_tail_len(len(x.origin_input_ids))
+                (self._swa_retractable_len(x) if x.context_program is not None
+                 else self._swa_tail_len(len(x.origin_input_ids)))
                 + min(x.sampling_params.max_new_tokens, CLIP_MAX_NEW_TOKEN)
                 - retractable_swa_tokens
                 for x in self.scheduler.running_batch.reqs

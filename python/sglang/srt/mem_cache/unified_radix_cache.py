@@ -1641,6 +1641,12 @@ class UnifiedRadixCache(BasePrefixCache):
         full_indices = self.req_to_token_pool.req_to_token[
             req.kv.req_pool_idx, :num_tokens
         ].to(torch.int64)
+        if req.context_program is not None:
+            from sglang.srt.disaggregation.context_transfer import request_active_slots
+
+            full_indices = request_active_slots(
+                req, self.req_to_token_pool, num_tokens
+            ).to(torch.int64)
         full_indices = self._pad_retraction_indices(full_indices, self.page_size)
 
         component_transfers: dict[ComponentType, list[PoolTransfer]] = {}
@@ -1652,6 +1658,11 @@ class UnifiedRadixCache(BasePrefixCache):
             window_indices = self.req_to_token_pool.req_to_token[
                 req.kv.req_pool_idx, window_start:num_tokens
             ].to(torch.int64)
+            if req.context_program is not None:
+                window_indices = request_active_slots(
+                    req, self.req_to_token_pool, num_tokens,
+                    window=self.sliding_window_size,
+                ).to(torch.int64)
             swa_indices = kv_cache.translate_loc_from_full_to_swa(window_indices)
             assert bool((swa_indices > 0).all()), (
                 f"unmapped SWA window positions for request {req.rid}"

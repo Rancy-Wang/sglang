@@ -6,6 +6,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -35,6 +36,14 @@ def pd_servers():
             base = f"http://127.0.0.1:{port + i}"
             bases.append(base)
             env = os.environ.copy()
+            for name, subdir in (
+                ("SGLANG_CACHE_DIR", "sglang-cache"),
+                ("TRITON_CACHE_DIR", "triton-cache"),
+                ("TMPDIR", "tmp"),
+            ):
+                target = directory / mode / subdir
+                target.mkdir(parents=True, exist_ok=True)
+                env[name] = str(target)
             env["CUDA_VISIBLE_DEVICES"] = os.environ.get(
                 "CONTEXT_P_GPU" if i == 0 else "CONTEXT_D_GPU", str(i)
             )
@@ -85,6 +94,11 @@ def pd_servers():
             backend = os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND")
             if backend:
                 cmd += ["--attention-backend", backend]
+            if mode == "decode" and os.environ.get("CONTEXT_PD_RETRACT") == "1":
+                # Native fault injection exercises the real host backup/resume.
+                env["SGLANG_TEST_RETRACT"] = "1"
+                env["SGLANG_TEST_RETRACT_INTERVAL"] = "16"
+                cmd += ["--hicache-ratio", "0.5"]
             log_path = directory / f"{mode}-server.log"
             log = log_path.open("w")
             logs.append(log)
@@ -108,7 +122,7 @@ def pd_servers():
                 if proc.poll() is not None:
                     pytest.fail(log_path.read_text()[-16000:])
                 try:
-                    if requests.get(base + "/health", timeout=1).status_code == 200:
+                    if requests.get(base + "/health", timeout=5).status_code == 200:
                         break
                 except requests.RequestException:
                     pass
@@ -138,10 +152,13 @@ def test_bcp_pd_terminal_handoff(pd_servers):
     processor = serialized_probe()
     comparisons = {}
     room = int(time.time_ns() % (1 << 53))
+    lock = threading.Lock()
 
     def call(feature, name):
         nonlocal room
-        room += 1
+        with lock:
+            room += 1
+            request_room = room
         tokens = reference["runs"][feature]["records"][0]["tokens"]
         payload = {
             **request_for(reference["fixture"], feature),
@@ -154,7 +171,7 @@ def test_bcp_pd_terminal_handoff(pd_servers):
             "return_output_ids_in_sglext": True,
             "bootstrap_host": "127.0.0.1",
             "bootstrap_port": bootstrap,
-            "bootstrap_room": room,
+            "bootstrap_room": request_room,
             "custom_logit_processor": processor,
         }
 
@@ -202,10 +219,41 @@ def test_bcp_pd_terminal_handoff(pd_servers):
             "context_usage": response["choices"][0]
             .get("meta_info", {})
             .get("context_usage"),
+            "num_retractions": response["choices"][0]
+            .get("meta_info", {})
+            .get("num_retractions", 0),
         }
-        comparisons[name] = item
-        (directory / "comparison.json").write_text(json.dumps(comparisons, indent=2))
+        with lock:
+            comparisons[name] = item
+            (directory / "comparison.json").write_text(
+                json.dumps(comparisons, indent=2)
+            )
         print("BCP_PD_COMPARE", name, json.dumps(item), flush=True)
+
+    if os.environ.get("CONTEXT_PD_RETRACT") == "1":
+        # Reuse the existing no-feature calibration; this launch only tests the
+        # new recovery path. Warm P first so both real BCP transfers overlap on D.
+        call("drop_repos", "prime")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            runs = [
+                executor.submit(call, "drop_repos", f"retract-{i}") for i in range(2)
+            ]
+            for run in runs:
+                run.result()
+        baseline = json.loads(Path(os.environ["CONTEXT_PD_CALIBRATION"]).read_text())[
+            "none"
+        ]
+        assert sum(comparisons[f"retract-{i}"]["num_retractions"] for i in range(2)) > 0
+        for i in range(2):
+            for metric, floor in (
+                ("max_abs", 0.125),
+                ("mean_abs", 0.02),
+                ("p99_abs", 0.0625),
+            ):
+                assert comparisons[f"retract-{i}"][metric] <= max(
+                    floor, 2 * baseline[metric]
+                )
+        return
 
     for feature in ("none", "drop", "drop_repos"):
         assert requests.post(p_base + "/flush_cache", timeout=5).status_code == 200

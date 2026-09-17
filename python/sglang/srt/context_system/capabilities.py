@@ -40,13 +40,6 @@ def validate_context_request(args, model_config, request):
         ):
             if getattr(args, name, False):
                 raise ValueError(f"Context PD is not yet supported with {name}")
-        if (
-            getattr(args, "disaggregation_decode_retraction_backup", None)
-            == "host_pool"
-        ):
-            raise ValueError(
-                "Context PD currently requires CPU tensor retraction backup"
-            )
         if envs.SGLANG_DISAGG_STAGING_BUFFER.get():
             raise ValueError("Context PD staging transfer is not yet supported")
     if args.pp_size != 1 or args.attn_cp_size != 1 or args.dcp_size != 1:

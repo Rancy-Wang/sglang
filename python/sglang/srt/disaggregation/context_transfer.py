@@ -75,19 +75,35 @@ def prepare_decode_transfer_plan(req, device, raw_length):
     return transfer_plan(req, device)
 
 
-def request_active_slots(req, pool, raw_end):
+def request_active_slots(req, pool, raw_end, *, window=None):
     """Rare offload/load paths must never send Full holes to a pool copy."""
     view = req.context_decode_layout
     if view is None:
         view = ContextDecodeLayout.from_layout(
             req.context_program.layout, pool.req_to_token.device
         )
+    start = 0
+    generated_start = view.prompt_length
+    if window is not None:
+        lower = view.next_position + raw_end - view.prompt_length - window
+        start = int(np.searchsorted(view.positions, lower))
+        generated_start += max(0, lower - view.next_position)
     prefix = pool.req_to_token[
-        req.kv.req_pool_idx, view.device_indices[: len(view.raw_indices)]
+        req.kv.req_pool_idx, view.device_indices[start : len(view.raw_indices)]
     ]
     return torch.cat(
-        (prefix, pool.req_to_token[req.kv.req_pool_idx, view.prompt_length : raw_end])
+        (prefix, pool.req_to_token[req.kv.req_pool_idx, generated_start:raw_end])
     )
+
+
+def request_active_lengths(req, raw_end, window):
+    """Admission reads immutable CPU metadata, without rebuilding generated IR."""
+    view = req.context_decode_layout
+    generated = max(0, raw_end - view.prompt_length)
+    full = len(view.raw_indices) + generated
+    lower = view.next_position + generated - window
+    start = int(np.searchsorted(view.positions, lower))
+    return full, len(view.raw_indices) - start + min(generated, window)
 
 
 def allocate_context_destination(req, allocator, pool, *, window=None):

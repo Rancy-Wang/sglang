@@ -396,7 +396,6 @@ def test_context_admission_limits_preserve_native_tp_and_overlap(chat):
     for field, value, error in (
         ("page_size", 16, "page_size=1"),
         ("attention_backend", "flashinfer", "Triton"),
-        ("disaggregation_mode", "decode", "PD"),
         ("enable_hierarchical_cache", True, "hierarchical"),
         ("speculative_algorithm", "EAGLE", "non-speculative"),
     ):
@@ -405,6 +404,15 @@ def test_context_admission_limits_preserve_native_tp_and_overlap(chat):
         with pytest.raises(ValueError, match=error):
             validate_context_request(args, config, obj)
         setattr(args, field, previous)
+    for mode in ("prefill", "decode"):
+        args.disaggregation_mode = mode
+        for backup in (None, "cpu_tensor", "host_pool"):
+            args.disaggregation_decode_retraction_backup = backup
+            validate_context_request(args, config, obj)
+        args.disaggregation_decode_enable_radix_cache = True
+        with pytest.raises(ValueError, match="radix_cache"):
+            validate_context_request(args, config, obj)
+        args.disaggregation_decode_enable_radix_cache = False
 
 
 def test_context_usage_streams_scalar_snapshot_in_mixed_batch():
