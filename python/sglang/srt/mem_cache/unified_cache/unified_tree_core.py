@@ -1067,11 +1067,21 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             path.append(node)
             node = node.parent
         path.reverse()
-        values, positions, residency = [], [], []
+        values, positions, residency, swa_residency = [], [], [], []
         cursor = exact_source_length = 0
         for node in path:
             values.append(node.component_data[BASE_COMPONENT_TYPE].value)
-            residency.append(torch.full((len(node.key),), not node.context_hole, dtype=torch.bool))
+            residency.append(
+                torch.full((len(node.key),), not node.context_hole, dtype=torch.bool)
+            )
+            if swa is not None:
+                swa_residency.append(
+                    torch.full(
+                        (len(node.key),),
+                        node.component_data[ComponentType.SWA].value is not None,
+                        dtype=torch.bool,
+                    )
+                )
             source = node.key
             if exact_source_length == cursor:
                 exact_source_length += source.match_at(key, cursor, self.page_size)
@@ -1102,6 +1112,10 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             context_exact_prefix_len=exact_source_length,
             context_retry=exact_source_length < selected.matched_length,
             context_resident=torch.cat(residency),
+            context_swa_resident=torch.cat(swa_residency) if swa is not None else None,
+            # Native attention stores the maximum position distance; the
+            # Context dependency planner accepts the inclusive token count.
+            context_swa_window=swa.sliding_window_size + 1 if swa is not None else None,
         )
 
     def _match_prefix_helper(
@@ -1353,6 +1367,8 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             self._validate_context_key(key)
         if params.context_resident is not None:
             self._validate_context_insert_residency(params)
+        if params.context_swa_resident is not None:
+            self._validate_context_swa_insert_residency(params)
         key, value = key.maybe_to_bigram_view(self.is_eagle, value)
         key = key.page_aligned(self.page_size)
         if value is not None:
@@ -1431,6 +1447,26 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         real = records.numpy()[:, 0] == 0
         if not np.all(resident[: len(key)].numpy() | proven[real]):
             raise ValueError("Context insert hole has no Drop proof on the inserted path")
+
+    def _validate_context_swa_insert_residency(self, params):
+        key, resident = params.key, params.context_swa_resident
+        if (
+            key.context is None
+            or key.context_start != 0
+            or ComponentType.SWA not in self.components_by_type
+            or resident.device.type != "cpu"
+            or resident.dtype != torch.bool
+            or resident.ndim != 1
+            or len(resident) < len(key)
+        ):
+            raise ValueError(
+                "Context SWA insertion requires aligned CPU residency and structured Full/SWA keys"
+            )
+        full = params.context_resident
+        if full is not None and bool(
+            torch.any(resident[: len(key)] & ~full[: len(key)])
+        ):
+            raise ValueError("Context SWA pages cannot exist inside a Full hole")
 
     def _rotation_conflict(
         self, key: RadixKey, rotation_base: int
@@ -1539,15 +1575,19 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         prefix_len = node.key.match(key, page_size=self.page_size)
         incoming_present = True
         resident = state.params.context_resident
-        if resident is not None:
-            import numpy as np
+        if resident is not None or state.params.context_swa_resident is not None:
+            for component_resident in (resident, state.params.context_swa_resident):
+                if component_resident is None:
+                    continue
+                import numpy as np
 
-            offset = state.total_prefix_length
-            span = resident.numpy()[offset : offset + prefix_len]
-            incoming_present = bool(span[0])
-            changes = np.flatnonzero(span[1:] != span[:-1])
-            if len(changes):
-                prefix_len = int(changes[0]) + 1
+                offset = state.total_prefix_length
+                span = component_resident.numpy()[offset : offset + prefix_len]
+                if component_resident is resident:
+                    incoming_present = bool(span[0])
+                changes = np.flatnonzero(span[1:] != span[:-1])
+                if len(changes):
+                    prefix_len = int(changes[0]) + 1
         if prefix_len < len(node.key):
             node, action = self._split_node(node.key, node, prefix_len)
             if action is not None:
@@ -1622,7 +1662,10 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
 
     def _insert_commit_step(self, state: _InsertWalkState) -> None:
         """Create the tail leaf and run the component commit hooks."""
-        if state.params.context_resident is not None and len(state.key):
+        if (
+            state.params.context_resident is not None
+            or state.params.context_swa_resident is not None
+        ) and len(state.key):
             self._insert_context_tail(state)
             return
         # Create new leaf for remaining suffix. A leaf survives on its Full
@@ -1668,14 +1711,24 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         import numpy as np
 
         base = state.total_prefix_length
-        resident = state.params.context_resident.numpy()[base : base + len(state.key)]
+        full = state.params.context_resident
+        resident = (
+            full.numpy()[base : base + len(state.key)]
+            if full is not None
+            else np.ones(len(state.key), dtype=np.bool_)
+        )
         if self.context_eviction_candidates is None and not np.all(resident):
             from sglang.srt.context_system.recovery import DropEvictionCandidates
 
             self.context_eviction_candidates = DropEvictionCandidates()
             for leaf in self.evictable_device_leaves:
                 self._update_context_candidate(leaf)
-        bounds = [0, *(np.flatnonzero(resident[1:] != resident[:-1]) + 1), len(resident)]
+        changes = resident[1:] != resident[:-1]
+        swa = state.params.context_swa_resident
+        if swa is not None:
+            swa = swa.numpy()[base : base + len(state.key)]
+            changes |= swa[1:] != swa[:-1]
+        bounds = [0, *(np.flatnonzero(changes) + 1), len(resident)]
         node = state.node
         for start, end in zip(bounds[:-1], bounds[1:]):
             start, end = int(start), int(end)
@@ -1692,7 +1745,9 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                 self.component_evictable_size_[BASE_COMPONENT_TYPE] -= end - start
                 self._update_evictable_leaf_sets(node)
                 continue
-            state.result.record_adopted_range(BASE_COMPONENT_TYPE, base + start, base + end)
+            state.result.record_adopted_range(
+                BASE_COMPONENT_TYPE, base + start, base + end
+            )
             # Native SWA hooks address this new edge using result.prefix_len.
             # Restore the insertion's original matched prefix after the loop.
             state.result.prefix_len = base + start

@@ -507,3 +507,69 @@ def test_sparse_recovery_reuses_gaps_with_independent_position_versions(
         final = state.terminal_slots()
         for raw in torch.nonzero(layout.keep_mask).flatten().tolist():
             assert page_positions[int(final[raw])] == int(layout.positions[raw])
+
+
+def test_swa_validity_follows_cow_sources_without_invalid_cache_publication(
+    compiler, occurrence
+):
+    from test_planner import query_visibility
+
+    n, matched, window = 24, 16, 4
+    drops, repos = {16: [(4, 8)]}, [15]
+    layout = compiler(*args(list(range(n)), drops, repos))
+    expiry = expiry_for(n, drops)
+    swa = torch.zeros(matched, dtype=torch.bool)
+    swa[-(window - 1) :] = True
+    sources = torch.arange(1, matched + 1, dtype=torch.int64)
+    state = occurrence.OccurrenceState.from_match(
+        sources,
+        layout.birth_positions[:matched],
+        exact_prefix_len=0,
+        swa_resident=swa,
+    )
+    compiled = occurrence.compile_occurrence_window(
+        layout, expiry, layout.positions, query_start=matched, query_end=n
+    )
+    plan = state.plan(compiled, torch.ones(n, dtype=torch.bool))
+    queries = torch.arange(101, 101 + n - matched)
+    extra = torch.arange(201, 201 + plan.extra_page_count)
+    step = state.advance(compiled, plan, queries, extra, expiry)
+    validity = dict(zip(sources.tolist(), swa.tolist()))
+    validity.update(dict.fromkeys(queries.tolist(), True))
+    for src, dst in zip(
+        step.copy_source_slots.tolist(), step.copy_destination_slots.tolist()
+    ):
+        validity[dst] = validity[src]
+    assert set(step.unused_swa_slots.tolist()) == {
+        dst for dst in extra.tolist() if not validity[dst]
+    }
+    assert len(step.unused_swa_slots) > 0
+    assert not set(step.unused_swa_slots.tolist()) & set(sources.tolist())
+    assert step.state.swa_resident.tolist() == [
+        validity[slot] for slot in step.state.slots.tolist()
+    ]
+    visibility, _ = query_visibility(list(range(n)), drops, repos)
+    for q in range(matched, n):
+        qpos = visibility[q][-1][1]
+        for raw, pos in visibility[q]:
+            if qpos - pos < window:
+                matches = (compiled.occurrence_raw_tokens == raw) & (
+                    compiled.occurrence_positions == pos
+                )
+                ids = torch.nonzero(matches).flatten()
+                assert len(ids)
+                assert all(validity[int(step.occurrence_slots[i])] for i in ids)
+    terminal = step.state.terminal_slots()
+    expected = [validity[int(slot)] for slot in terminal]
+    assert step.state.terminal_swa_residency().tolist() == expected
+    published = step.state.publish(terminal)
+    assert published.terminal_swa_residency().tolist() == expected
+    gap = state.reuse_match_gap(
+        torch.arange(1, 21),
+        layout.birth_positions[:20],
+        torch.ones(20, dtype=torch.bool),
+        20,
+        exact_prefix_len=0,
+        swa_resident=torch.cat((swa, torch.ones(4, dtype=torch.bool))),
+    )
+    assert gap.swa_resident.tolist() == swa.tolist() + [True] * 4

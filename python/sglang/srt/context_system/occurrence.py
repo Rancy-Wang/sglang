@@ -483,9 +483,14 @@ class OccurrenceState:
     terminal_rows: torch.Tensor
     canonical_positions: torch.Tensor
     exact_prefix_len: int
+    # Independent SWA validity for each physical owner row. Full-only models
+    # leave this absent; a Full hit never implies an SWA hit.
+    swa_resident: torch.Tensor | None = None
 
     @classmethod
-    def from_match(cls, slots, positions, *, exact_prefix_len, resident=None):
+    def from_match(
+        cls, slots, positions, *, exact_prefix_len, resident=None, swa_resident=None
+    ):
         if (
             slots.ndim != 1
             or slots.dtype not in (torch.int32, torch.int64)
@@ -501,6 +506,12 @@ class OccurrenceState:
             or resident.shape != slots.shape
         ):
             raise ValueError("Context residency must be an aligned CPU bool vector")
+        if swa_resident is not None and (
+            swa_resident.device.type != "cpu"
+            or swa_resident.dtype != torch.bool
+            or swa_resident.shape != slots.shape
+        ):
+            raise ValueError("Context SWA residency must be an aligned CPU bool vector")
         rows = torch.arange(len(slots), dtype=torch.int64)
         if resident is not None:
             rows[~resident] = -1
@@ -511,10 +522,18 @@ class OccurrenceState:
             torch.full((len(slots),), -1, dtype=torch.int64),
             positions.clone(),
             exact_prefix_len,
+            swa_resident.clone() if swa_resident is not None else None,
         )
 
     def reuse_match_gap(
-        self, matched_slots, matched_positions, resident, end, *, exact_prefix_len
+        self,
+        matched_slots,
+        matched_positions,
+        resident,
+        end,
+        *,
+        exact_prefix_len,
+        swa_resident=None,
     ):
         """Advance over a resident gap between recovery query intervals.
 
@@ -538,6 +557,15 @@ class OccurrenceState:
             or not self.exact_prefix_len <= exact_prefix_len <= len(matched_slots)
         ):
             raise ValueError("Invalid matched gap ownership metadata")
+        if (self.swa_resident is None) != (swa_resident is None) or (
+            swa_resident is not None
+            and (
+                swa_resident.device.type != "cpu"
+                or swa_resident.dtype != torch.bool
+                or swa_resident.shape != matched_slots.shape
+            )
+        ):
+            raise ValueError("Context matched gap must preserve SWA residency metadata")
         if end == start:
             return self
         count = end - start
@@ -552,6 +580,9 @@ class OccurrenceState:
             ),
             torch.cat((self.canonical_positions, matched_positions[start:end])),
             min(end, exact_prefix_len),
+            torch.cat((self.swa_resident, swa_resident[start:end]))
+            if swa_resident is not None
+            else None,
         )
 
     def plan(self, window, terminal_keep):
@@ -619,6 +650,18 @@ class OccurrenceState:
         copy_rows = source_rows[plan.copy_source_rows.numpy()]
         if np.any(copy_rows < 0):
             raise ValueError("Context copy references a missing canonical source")
+        all_swa = None
+        unused_swa = np.empty(0, dtype=np.int64)
+        if self.swa_resident is not None:
+            all_swa = np.r_[
+                self.swa_resident.numpy(),
+                np.ones(len(query_slots) + len(extra_slots), dtype=np.bool_),
+            ]
+            copy_destinations = occurrences[plan.copy_occurrences.numpy()]
+            all_swa[copy_destinations] = all_swa[copy_rows]
+            # Only new private destinations can be released here. An absent
+            # borrowed source's SWA mapping is already owned by the cache.
+            unused_swa = copy_destinations[~all_swa[copy_destinations]]
         selected_terminal = plan.terminal_occurrences.numpy()
         terminal = np.full(end, -1, dtype=np.int64)
         kept = selected_terminal >= 0
@@ -650,11 +693,12 @@ class OccurrenceState:
             retained,
             retired,
             plan.copy_position_pairs.numpy().reshape(-1),
+            unused_swa,
         )
         offsets = np.r_[0, np.cumsum([len(field) for field in fields])]
         packed = torch.from_numpy(np.concatenate(fields).astype(np.int64, copy=False))
         packed = packed.to(query_slots.device, non_blocking=True)
-        occ, src, dst, keep, release, pairs = (
+        occ, src, dst, keep, release, pairs, unused = (
             packed[a:b] for a, b in pairwise(offsets)
         )
         successor = OccurrenceState(
@@ -664,6 +708,7 @@ class OccurrenceState:
             torch.from_numpy(next_terminal),
             positions,
             self.exact_prefix_len,
+            torch.from_numpy(all_swa[retained]) if all_swa is not None else None,
         )
         return OccurrenceAdvance(
             successor,
@@ -672,6 +717,7 @@ class OccurrenceState:
             all_slots[dst].to(torch.int32),
             pairs.reshape(-1, 2).to(torch.int32),
             all_slots[release],
+            all_slots[unused] if all_swa is not None else None,
         )
 
     def terminal_slots(self):
@@ -686,7 +732,7 @@ class OccurrenceState:
         result[ids] = self.slots[source]
         return result
 
-    def publish(self, matched_terminal_slots, *, cache_len=None):
+    def publish(self, matched_terminal_slots, *, cache_len=None, swa_resident=None):
         """Transfer terminal ownership after native Radix insert and rematch.
 
         Native insert may free duplicate input slots. Canonical aliases must be
@@ -717,6 +763,19 @@ class OccurrenceState:
         slots[dst] = matched_terminal_slots[src]
         owned = self.owned.clone()
         owned[target] = False
+        swa = self.swa_resident
+        if swa_resident is not None:
+            if (
+                swa is None
+                or swa_resident.device.type != "cpu"
+                or swa_resident.dtype != torch.bool
+                or swa_resident.shape != rows.shape
+            ):
+                raise ValueError(
+                    "Context publication SWA metadata must cover the raw table"
+                )
+            swa = swa.clone()
+            swa[target] = swa_resident[present]
         return OccurrenceState(
             slots,
             owned,
@@ -724,7 +783,17 @@ class OccurrenceState:
             self.terminal_rows,
             self.canonical_positions,
             self.exact_prefix_len,
+            swa,
         )
+
+    def terminal_swa_residency(self):
+        if self.swa_resident is None:
+            return None
+        rows = self.terminal_rows
+        present = rows >= 0
+        result = torch.zeros(len(rows), dtype=torch.bool)
+        result[present] = self.swa_resident[rows[present]]
+        return result
 
     def private_slots(self):
         """Request pages only; borrowed Radix pages are released through leases."""
@@ -753,6 +822,9 @@ class OccurrenceAdvance:
     copy_position_pairs: torch.Tensor
     # Caller releases exactly once, after the forward's native completion event.
     retired_slots: torch.Tensor
+    # These fresh SWA peers have no valid source and no reader. Release only
+    # their SWA mapping before binding the forward, keeping Full ownership.
+    unused_swa_slots: torch.Tensor | None = None
 
 
 @dataclass
