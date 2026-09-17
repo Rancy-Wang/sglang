@@ -1047,6 +1047,7 @@ class Req(ReqDllmMixin):
         self.context_window_plan = None
         self.context_usage = None
         self.context_cache_published = False
+        self.context_prefill_started = False
         self.context_source_lease = None
         if context_program is not None:
             from sglang.srt.context_system.ir import ContextKeyData
@@ -1651,6 +1652,12 @@ class Req(ReqDllmMixin):
         tree_cache: Optional[BasePrefixCache] = None,
         cow_mamba: Optional[bool] = None,
     ):
+        if tree_cache is not None and not self.context_prefill_started:
+            # A deferred admission owns no physical pages. Its previous match
+            # may have been evicted; rebuild ownership from this round's match.
+            self.context_state = None
+            self.context_window_plan = None
+            self.context_usage = None
         if self.is_dllm():
             self._init_fill_ids_for_dllm()
             self.determine_dllm_phase()
@@ -3078,6 +3085,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
                 window, plan, birth, allocated, req.context_program.visible_until
             )
             req.context_state = step.state
+            req.context_prefill_started = True
             req.context_window_plan = None
             sequences.append(ContextSequence.from_window(window))
             slots.append(step.occurrence_slots)
