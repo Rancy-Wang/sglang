@@ -265,6 +265,7 @@ class MatchResult(NamedTuple):
     # Actions the Controller applies: CacheActions itself, ComponentActions routed to the owning component.
     cache_actions: Sequence[CacheAction | ComponentAction] = ()
     context_source_positions: torch.Tensor | None = None
+    context_exact_prefix_len: int = 0
     context_retry: bool = False
 
 

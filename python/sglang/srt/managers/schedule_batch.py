@@ -1042,6 +1042,7 @@ class Req(ReqDllmMixin):
         self.context_program = None
         self.context_key_data = None
         self.context_source_positions = None
+        self.context_exact_prefix_len = 0
         if context_program is not None:
             from sglang.srt.context_system.ir import ContextKeyData
             from sglang.srt.context_system.planner import ContextProgram
@@ -1694,6 +1695,7 @@ class Req(ReqDllmMixin):
             )
             if self.context_program is not None:
                 self.context_source_positions = match_result.context_source_positions
+                self.context_exact_prefix_len = match_result.context_exact_prefix_len
             if match_result.cache_protected_len is not None:
                 self.kv.cache_protected_len = match_result.cache_protected_len
             else:
@@ -1976,6 +1978,7 @@ class Req(ReqDllmMixin):
         # since we are tracking the total number of retractions for each request.
         self.retraction_count += 1
         self.context_source_positions = None
+        self.context_exact_prefix_len = 0
 
         self.prefix_indices = torch.empty((0,), dtype=torch.int64)
         self.routed_experts = None
