@@ -27,7 +27,13 @@ async def main():
 
     def bounded_config(**kwargs):
         kwargs.update(
-            max_seq_len_override=2048, num_page_override=4096, max_extend_tokens=2048
+            max_seq_len_override=2048,
+            num_page_override=4096,
+            max_extend_tokens=2048,
+            # The staged oracle needs native shared-owner tracking. Keeping
+            # that accounting enabled for occurrence comparisons is harmless;
+            # this process is never a throughput measurement.
+            reposition_execution_mode="staged",
         )
         return original_config(**kwargs)
 
@@ -39,17 +45,67 @@ async def main():
         return original_body(*args, **kwargs)
 
     module.request_body = draining_body
+    from minisgl.message import BaseBackendMsg, RepositionOpenAckMsg, WarmupAckMsg
+    from minisgl.tokenizer.reposition_sequence import RepositionSequenceState
     from minisgl.tokenizer.server import _build_occurrence_user_msg
 
     original_build = module._build_user_msg
+    sequences, continuations = {}, []
 
     def native_dispatch(msg, tokenized):
         if tokenized.reposition_input_ids is not None:
+            if runner.scheduler.reposition_execution_mode == "staged":
+                state = RepositionSequenceState.pending(msg, tokenized)
+                sequences[msg.uid] = state
+                return state.open_msg()
             return _build_occurrence_user_msg(msg, tokenized)
         return original_build(msg, tokenized)
 
     module._build_user_msg = native_dispatch
     runner = module.Runner(model, reference_alignment=True)
+    original_reply = runner.scheduler.send_result
+
+    def native_ack_dispatch(replies):
+        ordinary = []
+        for reply in replies:
+            state = sequences.get(reply.uid)
+            if state is None:
+                ordinary.append(reply)
+                continue
+            if isinstance(reply, RepositionOpenAckMsg):
+                state.activate(step_token_budget=reply.step_token_budget)
+            elif isinstance(reply, WarmupAckMsg):
+                state.accept_ack(reply)
+            else:
+                raise TypeError(type(reply))
+            continuations.append(state.build_next_msg())
+            if state.in_flight_final:
+                del sequences[reply.uid]
+        if ordinary:
+            original_reply(ordinary)
+
+    runner.scheduler.send_result = native_ack_dispatch
+    original_schedule = runner.scheduler._schedule_next_batch
+
+    def drain_continuations():
+        pending = continuations[:]
+        continuations.clear()
+        for msg in pending:
+            runner.scheduler._process_one_msg(
+                BaseBackendMsg.decoder(BaseBackendMsg.encoder(msg))
+            )
+        return original_schedule()
+
+    runner.scheduler._schedule_next_batch = drain_continuations
+    sampler = runner.scheduler.engine.sampler
+    observed_sample = sampler.sample
+
+    def generation_only_sample(logits, args):
+        if all(req.is_warmup for req in runner.batch.reqs):
+            return type(sampler).sample(sampler, logits, args)
+        return observed_sample(logits, args)
+
+    sampler.sample = generation_only_sample
     messages = [
         {"role": "user", "content": "Remember this text: " + "red blue green " * 32},
         {"role": "assistant", "content": "I have read the text."},
@@ -70,11 +126,18 @@ async def main():
         ("staged", "drop"),
         ("mask", "drop"),
         ("mask", "drop_repos"),
+        ("staged", "drop_repos"),
     ]
     for mode, feature, fixed in (
         (mode, feature, fixed) for fixed in (False, True) for mode, feature in cases
     ):
         runner.clear()
+        assert not sequences and not continuations
+        runner.scheduler.reposition_execution_mode = (
+            "staged"
+            if mode == "staged" and feature == "drop_repos"
+            else "paged-occurrence"
+        )
         runner.forced_tokens = forced if fixed else None
         request = {"messages": messages, "enable_thinking": False}
         if feature != "none":
