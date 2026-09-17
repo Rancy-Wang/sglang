@@ -112,6 +112,7 @@ def main():
                         "gpt-oss",
                         "--reasoning-parser",
                         "gpt-oss",
+                        "--disable-hybrid-swa-memory",
                     ]
                 if args.engine == "pd":
                     cmd += [
