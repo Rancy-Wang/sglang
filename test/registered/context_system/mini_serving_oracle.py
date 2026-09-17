@@ -80,6 +80,8 @@ async def main():
 
         def normalized_harmony(messages, **kwargs):
             assert messages == expected_messages
+            runner.tokenizer._tokenize_invocations += 1
+            runner.tokenizer._chat_template_invocations += 1
             runner.tokenizer._harmony_thinking_ranges = {}
             return (
                 list(trace["input_ids"]),

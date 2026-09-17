@@ -1,0 +1,227 @@
+"""Own isolated servers and run the approved complete-trajectory BCP method."""
+
+import argparse
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--engine", choices=["mini", "sglang", "pd"], required=True)
+    p.add_argument("--server-python", required=True)
+    p.add_argument("--server-repo", required=True)
+    p.add_argument("--mini-root", required=True)
+    p.add_argument("--model", required=True)
+    p.add_argument("--requests-path", required=True)
+    p.add_argument("--output-dir", required=True)
+    p.add_argument("--gpus", default="0")
+    p.add_argument("--decode-gpus", default="1")
+    p.add_argument("--tp", type=int, default=1)
+    p.add_argument("--port", type=int, default=29161)
+    p.add_argument("--concurrency", type=int, choices=[1, 2], default=1)
+    p.add_argument("--drop", action="store_true")
+    p.add_argument("--native-baseline", action="store_true")
+    p.add_argument("--context-length", type=int, default=196608)
+    p.add_argument("--capacity", type=int, default=262144)
+    p.add_argument("--chunk", type=int, default=8192)
+    args = p.parse_args()
+    if args.native_baseline and (args.drop or args.engine != "sglang"):
+        p.error("Native baseline is a no-Drop SGLang launch")
+    root = Path(args.output_dir).resolve()
+    root.mkdir(parents=True, exist_ok=False)
+    processes, logs, commands = [], [], []
+    repo = Path(args.server_repo).resolve()
+    head = subprocess.check_output(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
+    ).strip()
+    if subprocess.check_output(["git", "-C", str(repo), "status", "--porcelain"]):
+        raise ValueError("Server checkout must be clean")
+    try:
+        modes = ["prefill", "decode"] if args.engine == "pd" else ["normal"]
+        for i, mode in enumerate(modes):
+            env = os.environ.copy()
+            env["CUDA_VISIBLE_DEVICES"] = args.gpus if i == 0 else args.decode_gpus
+            env["PYTHONPATH"] = str(repo / "python")
+            env["SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN"] = "1"
+            for key in ("SGLANG_CACHE_DIR", "TRITON_CACHE_DIR", "TMPDIR"):
+                directory = root / mode / key.lower()
+                directory.mkdir(parents=True)
+                env[key] = str(directory)
+            port = args.port + i
+            cmd = [
+                args.server_python,
+                "-m",
+                "minisgl" if args.engine == "mini" else "sglang.launch_server",
+                "--model-path",
+                args.model,
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(port),
+                "--tp-size",
+                str(args.tp),
+                "--dtype",
+                "bfloat16",
+                "--page-size",
+                "1",
+                "--max-running-requests",
+                "4",
+            ]
+            if args.engine == "mini":
+                cmd += [
+                    "--max-seq-len-override",
+                    str(args.context_length),
+                    "--num-pages",
+                    str(args.capacity),
+                    "--max-prefill-length",
+                    str(args.chunk),
+                    "--cuda-graph-max-bs",
+                    "4",
+                ]
+                # Existing mini serving benchmark deliberately retains historical
+                # Harmony reasoning so its event boundaries remain stable.
+                env["MINISGL_PRESERVE_HARMONY_HISTORY"] = "1"
+            else:
+                cmd += [
+                    "--context-length",
+                    str(args.context_length),
+                    "--max-total-tokens",
+                    str(args.capacity),
+                    "--chunked-prefill-size",
+                    str(args.chunk),
+                    "--cuda-graph-config",
+                    json.dumps(
+                        {
+                            "decode": {"bs": [1, 2, 4], "max_bs": 4},
+                            "prefill": {"bs": [16, 32, 64], "max_bs": 64},
+                        }
+                    ),
+                ]
+                if not args.native_baseline:
+                    cmd += ["--context-drop-aware-eviction"]
+                if "gpt-oss" in args.model.lower():
+                    cmd += [
+                        "--tool-call-parser",
+                        "gpt-oss",
+                        "--reasoning-parser",
+                        "gpt-oss",
+                    ]
+                if args.engine == "pd":
+                    cmd += [
+                        "--disaggregation-mode",
+                        mode,
+                        "--disaggregation-bootstrap-port",
+                        str(args.port + 10),
+                        "--nccl-port",
+                        str(args.port + 20 + i),
+                    ]
+                else:
+                    cmd += ["--enable-mixed-chunk"]
+            commands.append(
+                {
+                    "argv": cmd,
+                    "gpu": env["CUDA_VISIBLE_DEVICES"],
+                    "head": head,
+                    "mode": mode,
+                }
+            )
+            (root / "launch.json").write_text(
+                json.dumps({"args": vars(args), "servers": commands}, indent=2)
+            )
+            log = (root / f"{mode}.log").open("w")
+            logs.append(log)
+            proc = subprocess.Popen(
+                cmd,
+                cwd=repo,
+                env=env,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+            processes.append(proc)
+            deadline = time.monotonic() + 600
+            while True:
+                if proc.poll() is not None or time.monotonic() > deadline:
+                    raise RuntimeError(
+                        f"Server startup failed; inspect {root / (mode + '.log')}"
+                    )
+                try:
+                    with urllib.request.urlopen(
+                        f"http://127.0.0.1:{port}/health", timeout=5
+                    ) as response:
+                        if response.status == 200:
+                            break
+                except (urllib.error.URLError, TimeoutError):
+                    pass
+                time.sleep(1)
+        common = [
+            "--model",
+            args.model,
+            "--tokenizer",
+            args.model,
+            "--requests-path",
+            args.requests_path,
+            "--output-dir",
+            str(root / "workload"),
+            "--concurrency",
+            str(args.concurrency),
+            "--num-tasks",
+            str(2 * args.concurrency),
+            "--seed",
+            "42",
+        ]
+        if args.drop:
+            common += ["--drop"]
+        if args.engine == "mini":
+            client = [
+                args.server_python,
+                str(Path(args.mini_root) / "tests/benchmark/test_serving.py"),
+                "run",
+                "--protocol",
+                "minisgl-harmony",
+                "--port",
+                str(args.port),
+                *common,
+            ]
+        else:
+            client = [
+                sys.executable,
+                str(Path(__file__).with_name("test_serving.py")),
+                "--mini-root",
+                args.mini_root,
+                "--url",
+                f"http://127.0.0.1:{args.port + len(modes) - 1}/v1/chat/completions",
+                *common,
+            ]
+            if args.engine == "pd":
+                client += [
+                    "--prefill-url",
+                    f"http://127.0.0.1:{args.port}/v1/chat/completions",
+                    "--bootstrap-port",
+                    str(args.port + 10),
+                ]
+        (root / "client.json").write_text(json.dumps(client, indent=2))
+        with (root / "client.log").open("w") as log:
+            subprocess.run(client, check=True, stdout=log, stderr=subprocess.STDOUT)
+    finally:
+        for proc in processes:
+            if proc.poll() is None:
+                os.killpg(proc.pid, signal.SIGTERM)
+                try:
+                    proc.wait(timeout=20)
+                except subprocess.TimeoutExpired:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    proc.wait(timeout=10)
+        for log in logs:
+            log.close()
+
+
+if __name__ == "__main__":
+    main()
