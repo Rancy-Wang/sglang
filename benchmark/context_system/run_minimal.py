@@ -210,8 +210,13 @@ def main():
                     str(args.port + 10),
                 ]
         (root / "client.json").write_text(json.dumps(client, indent=2))
+        client_env = os.environ.copy()
+        if args.engine == "mini":
+            client_env["PYTHONPATH"] = str(Path(args.mini_root) / "python")
         with (root / "client.log").open("w") as log:
-            subprocess.run(client, check=True, stdout=log, stderr=subprocess.STDOUT)
+            subprocess.run(
+                client, check=True, env=client_env, stdout=log, stderr=subprocess.STDOUT
+            )
     finally:
         for proc in processes:
             if proc.poll() is None:
