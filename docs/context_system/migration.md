@@ -192,3 +192,18 @@ key 仍是一项真实 token 对应一项 KV，保留 Drop/R 事件和最终位�
 多页 GPU 回归已按此范围修订主动中断（31 passed 后 KeyboardInterrupt），不作为
 最终验收。后续只运行 page_size=1 的正向功能测试；大页仅保留拒绝测试及原生能力
 未被改变的回归测试。模型和 PD 验证仍待完成。
+
+## Native chat / IPC 接线（实施中）
+
+OpenAI chat 请求现在显式解析 DropRule、legacy Drop 和严格整数 Reposition。
+Context 请求在 native Jinja 规范化之后用一次完整渲染取得 token provenance；
+`continue_final_message` 保留原生独立编码 assistant prefix、去除开头 BOS 的行为，
+不把拼接后的文本重新 tokenize。KeepText 使用完整历史进行同一原生模板处理。
+未带功能的请求继续使用原有 render/encode 路径。
+
+编译结果使用现有 tensor-buffer MessagePack IPC，避免转换为逐 token Python 列表；
+接收方检查 schema、dtype、原始 token IDs、最终 key positions 和 visibility。
+此检查点仍保留 tokenizer admission guard：scheduler 的 Context KV 生命周期尚未
+接通时明确拒绝正式生成，防止把 Drop/Reposition 请求静默算成普通 attention。
+这不是生产功能通过的声明。native chat、实际模型 tokenizer 与 IPC 的 Linux 测试
+在 Zhangyudong-BUS 执行；完整模型、PD 与吞吐仍待后续验证。

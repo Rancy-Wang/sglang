@@ -209,3 +209,66 @@ def test_original_mini_provenance_differential(context_modules):
         CharacterTokenizer(), messages, **kwargs
     )
     assert vars(actual) == vars(expected)
+
+
+@pytest.mark.parametrize("repos", [None, [1]])
+def test_context_program_wire_preserves_canonical_tokens(context_modules, repos):
+    import copy
+
+    import torch
+
+    rules, provenance, planner = context_modules
+    messages = [
+        {"role": "user", "content": "old"},
+        {"role": "assistant", "content": "answer"},
+        {"role": "user", "content": "new"},
+    ]
+    trace = provenance.build_template_token_provenance(
+        CharacterTokenizer(),
+        messages,
+        tools=None,
+        add_generation_prompt=True,
+        enable_thinking=None,
+    )
+    program = planner.compile_chat_program(
+        messages,
+        trace,
+        rules.parse_drop_rule(None, messages, legacy_drop_message={1: [0]}),
+        repos,
+    )
+    wire = program.to_wire()
+    restored = planner.ContextProgram.from_wire(wire, trace.input_ids)
+    assert restored.layout.records is program.layout.records
+    assert restored.visible_until is program.visible_until
+    with pytest.raises(ValueError, match="canonical input IDs"):
+        planner.ContextProgram.from_wire(wire, [1] * len(trace.input_ids))
+    corrupt = copy.deepcopy(wire)
+    corrupt["layout"]["token_to_key"][0] = -1
+    with pytest.raises(ValueError, match="canonical input IDs"):
+        planner.ContextProgram.from_wire(corrupt, trace.input_ids)
+    corrupt = copy.deepcopy(wire)
+    corrupt["visible_until"] = corrupt["visible_until"].to(torch.float32)
+    with pytest.raises(ValueError, match="visibility"):
+        planner.ContextProgram.from_wire(corrupt, trace.input_ids)
+
+
+def test_assistant_prefix_keeps_native_separate_tokenization(context_modules):
+    _, provenance, _ = context_modules
+
+    class PrefixTokenizer:
+        bos_token_id = 100
+
+        def __call__(self, text, *, return_offsets_mapping):
+            assert text == "xy" and return_offsets_mapping
+            return {
+                "input_ids": [100, 11, 12],
+                "offset_mapping": [(0, 0), (0, 1), (1, 2)],
+            }
+
+    trace = provenance.TemplateTokenProvenance([10], [1], [(0, 3)], "[A]", [1, 1, 1], 0)
+    result = provenance.append_assistant_prefix(trace, PrefixTokenizer(), "xy", owner=1)
+    assert result.input_ids == [10, 11, 12]
+    assert result.owners == [1, 1, 1]
+    assert result.offsets == [(0, 3), (3, 4), (4, 5)]
+    assert result.rendered_text == "[A]xy"
+    assert trace.input_ids == [10]
