@@ -57,8 +57,8 @@ def test_bcp_default_reference(server):  # noqa: F811
         assert logits.shape == expected.shape, (name, logits.shape, expected.shape)
         assert torch.isfinite(logits).all(), name
         ids = response["sglext"]["input_ids"]
-        expected_ids = record["input"]["ids"]
-        # Occurrence requests preserve raw input in native tokenization.
+        expected_ids = reference["runs"]["none"]["records"][0]["input"]["ids"]
+        # SGLang returns raw input; mini's legacy Drop record is compact active.
         assert ids == expected_ids, (name, len(ids), len(expected_ids))
         output_ids = response["sglext"]["output_ids"]
         same = [a == b for a, b in zip(output_ids, tokens, strict=True)]
@@ -77,6 +77,10 @@ def test_bcp_default_reference(server):  # noqa: F811
                 (i for i, equal in enumerate(same) if not equal), None
             ),
             "context_usage": response.get("metadata"),
+            "input_tokens": len(ids),
+            "raw_argmax_matching_tokens": int(
+                (logits.argmax(-1) == expected.argmax(-1)).sum()
+            ),
         }
         comparisons[name] = item
         (directory / "comparison.json").write_text(json.dumps(comparisons, indent=2))

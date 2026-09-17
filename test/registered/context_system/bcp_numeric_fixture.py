@@ -8,6 +8,8 @@ from pathlib import Path
 
 
 def load_fixture():
+    if path := os.environ.get("CONTEXT_BCP_FIXTURE"):
+        return json.loads(Path(path).read_text())
     root = Path(os.environ["CONTEXT_BCP_ROOT"])
     case_id = os.environ.get("CONTEXT_BCP_CASE", "778")
     entries = [
@@ -52,3 +54,20 @@ def request_for(fixture, feature):
     if feature == "drop_repos":
         request["reposition"] = fixture["reposition"]
     return request
+
+
+if __name__ == "__main__":
+    # Run with the SGLang environment before either model is loaded. Feeding
+    # these same native tool dictionaries to mini aligns template tokens while
+    # leaving both engines' renderers and tool implementations intact.
+    import argparse
+
+    from sglang.srt.entrypoints.openai.protocol import Tool
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output", required=True)
+    args = parser.parse_args()
+    fixture = load_fixture()
+    fixture["tools"] = [Tool.model_validate(t).model_dump() for t in fixture["tools"]]
+    fixture["tool_serialization"] = "SGLang native Tool.model_dump"
+    Path(args.output).write_text(json.dumps(fixture))
