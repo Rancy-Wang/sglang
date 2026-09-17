@@ -4056,6 +4056,11 @@ class Scheduler(
                 truncation_align_size=self.truncation_align_size,
             )
 
+            if req.context_program is not None and req.context_admission_error:
+                self._reject_context_prefill_capacity(req, req.context_admission_error)
+                capacity_rejected.add(req)
+                continue
+
             if self.enable_lora:
                 running_loras.add(req.lora_id)
 
@@ -4064,8 +4069,11 @@ class Scheduler(
                     if (
                         self.enable_hierarchical_cache
                         or self.enable_unified_cache_external_linker
+                        or req.context_program is not None
                     ):
-                        # Set batch_is_full after making sure there are requests that can be served
+                        # Context may reject a self-pinned match and request a
+                        # cold retry. An idle batch has no decode completion to
+                        # clear this flag, so it must retry admission next pass.
                         running_batch.batch_is_full = len(adder.can_run_list) > 0 or (
                             not running_batch.is_empty()
                         )
