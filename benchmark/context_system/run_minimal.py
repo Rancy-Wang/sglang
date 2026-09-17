@@ -160,6 +160,8 @@ def main():
                 # Existing mini serving benchmark deliberately retains historical
                 # Harmony reasoning so its event boundaries remain stable.
                 env["MINISGL_PRESERVE_HARMONY_HISTORY"] = "1"
+                if args.drop:
+                    cmd += ["--drop-aware-eviction"]
             else:
                 cmd += [
                     "--context-length",
@@ -176,7 +178,7 @@ def main():
                         }
                     ),
                 ]
-                if not args.native_baseline:
+                if args.drop and mode != "decode":
                     cmd += ["--context-drop-aware-eviction"]
                 if "gpt-oss" in args.model.lower():
                     cmd += [
