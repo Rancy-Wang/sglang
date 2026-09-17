@@ -281,6 +281,10 @@ def main():
                     ]
                 if args.engine == "pd":
                     cmd += [
+                        # One native summary per completed request, on both
+                        # baseline and modified servers. D transfer_duration
+                        # includes waiting for P; it is not pure network time.
+                        "--enable-request-time-stats-logging",
                         "--disaggregation-mode",
                         mode,
                         "--disaggregation-bootstrap-port",
