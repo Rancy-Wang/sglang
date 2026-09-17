@@ -29,6 +29,37 @@
 
 ## 当前实测状态（2026-09-17）
 
+2026-09-18 追加检查点（整体 R2 仍未完成）：
+
+- `4c3993038` 将 Context attention 的打包元数据字段按 16 字节对齐，避免相同语义
+  因指针余数变化产生多组 Triton 编译。BUS GPU0 执行
+  `RUN_CONTEXT_GPU=1 python -m pytest -q test/registered/context_system/test_segmented_attention.py`：
+  **4 passed in 23.86s**，覆盖 FP16/BF16、full/SWA+sinks 和混合请求独立对照。
+- `44ed3e215` 修复初始 Retry 匹配锁住自己的来源页、导致最小 chunk 永久无法进入的问题。
+  临时锁释放后下一次匹配退回 root；外部请求造成的暂时压力继续等待；冷匹配仍无法容纳
+  时通过现有 503 清理路径拒绝。本地 raw-storage 的容量子集 **2 passed**；BUS CPU 执行
+  `CUDA_VISIBLE_DEVICES=9 PYTHONPATH=python python -m pytest -q test/registered/context_system/test_context_admission.py`：
+  **10 passed in 17.18s**。编号 9 为不可见设备，未使用 GPU4+。首次设置空的可见设备字符串
+  触发原生 test_utils 端口读取错误（3 passed / 7 setup errors），原始日志保留。
+  后续 chunk 的完整峰值容量保证仍待审计，不能据此宣称所有容量边界通过。
+- GPT-OSS-120B、TP2、完整 BCP：原生 C1 无功能 84/0 成功/失败，1068.732s，
+  输出 27390 tokens，25.6285 token/s；修改版 `1929c115c` C1 Drop+R 84/0，1030.028s，
+  同样输出 27390，26.5915 token/s。该单样本满足 95% 门槛，尚不是最终性能结论。
+  原生 C2 无功能 4/4 task，147/0 请求，其中首次轨迹 143、filler 4，1497.176s，
+  输出 46597 tokens，31.1233 token/s；原生没有精确物理计算计数，未估造。
+- 修改版 C2 无功能 `minimal-sg120-c2-none-native-ar-v1` 在原生 Harmony parser 卡住。
+  CPU 栈显示 scheduler、detokenizer 已空闲，HTTP 主线程停在 `HarmonyParser.parse` 的
+  无锚点空白正则；1596 输出 tokens 时的 delta 为连续换行。现场记录
+  `sg-c2-none-parser-stall-20260918.txt`，该运行主动停止并排除吞吐验收。
+  修复仅将 header 搜索改为等价的非空白边界，并消除 fallback 的重叠空白量词；保留原生
+  解析事件与采样行为。新测试覆盖 120000 字符空白、跨 chunk header、1500 个原生匹配
+  对照；另有 10000 个分块输入与修改前解析事件和剩余 buffer 完全一致。新测试
+  **2 passed**。完整 parser Ruff 的 20 项既有诊断无新增，新测试 Ruff 通过。
+
+以上日志均位于前述 BUS 实验根目录；双并发候选与 PD 小量吞吐仍需补齐。对比时必须
+注明 parser 等兼容修复是否同时应用于原生对照，不把修复原生卡顿带来的收益宣称为
+Drop/Reposition 本身的性能收益。
+
 普通调度的终态发布修复为 `feff22efd`，首轮真实 PD 接线为 `feb289a24`。
 `760592534` 进一步修复了 Context 的原生 host-pool 备份读集、SWA 回收和 PD 双池容量
 估算。`ec321ae8f` 的真实并发 retract 验证已通过；`83cfdf638` 恢复 P 分块传输后，
