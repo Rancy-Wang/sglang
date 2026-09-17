@@ -199,7 +199,7 @@ def test_drop_reposition_real_model_chunk_lifetime(runtime):
                 receipt.complete(allocator)
             req = batch.reqs[0]
             state, usage = req.context_state, req.context_usage
-            runner.req_to_token_pool.free(req.kv.req_pool_idx)
+            runner.req_to_token_pool.free(req)
         assert usage.snapshot().actual_prefill_tokens == len(tokens)
         allocator.free(state.private_slots())
         assert allocator.available_size() == available_before
