@@ -14,6 +14,28 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
+def replay_template(template):
+    """Allow recorded, explicitly named tool returns after fixed-length output.
+
+    Like mini's BCP method, the next tool response comes from the dataset even
+    when this run generated no tool call. Keep native formatting, but resolve
+    the speaker from that response's name instead of a generated call. This is
+    a benchmark-only template shared by modified and frozen SGLang servers.
+    """
+    from sglang.srt.context_system.thinking_template import retained_template
+
+    template, family = retained_template(template)
+    if family == "gpt-oss":
+        guard = "{%- if last_tool_call.name is none %}"
+        speaker = '"<|start|>functions." + last_tool_call.name'
+        if template.count(guard) != 1 or template.count(speaker) != 1:
+            raise ValueError("Unrecognized GPT-OSS tool-result template")
+        template = template.replace(
+            guard, "{%- if not message.name and last_tool_call.name is none %}"
+        ).replace(speaker, '"<|start|>functions." + (message.name or last_tool_call.name)')
+    return template
+
+
 def warmup(args, root):
     """Compile representative kernels before the measured complete trajectories.
 
@@ -121,11 +143,10 @@ def main():
     template_path = None
     template_sha256 = None
     if args.engine != "mini":
-        from sglang.srt.context_system.thinking_template import retained_template
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained(args.model, local_files_only=True)
-        template, _ = retained_template(tokenizer.get_chat_template())
+        template = replay_template(tokenizer.get_chat_template())
         template_path = root / "retained_history.jinja"
         template_path.write_text(template)
         template_sha256 = hashlib.sha256(template.encode()).hexdigest()
