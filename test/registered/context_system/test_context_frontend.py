@@ -92,7 +92,7 @@ def test_no_feature_uses_original_render(chat):
         result = chat._process_messages(request(), False)
     assert result.context_program is None
     assert result.prompt_ids == chat.tokenizer_manager.tokenizer.apply_chat_template(
-        messages(), tokenize=True, add_generation_prompt=True
+        messages(), tokenize=True, add_generation_prompt=True, return_dict=False
     )
 
 
@@ -110,7 +110,7 @@ def test_chat_program_and_native_ipc(chat, repos):
         request(drop_message={"1": [0]}, reposition=repos), False
     )
     assert result.prompt_ids == chat.tokenizer_manager.tokenizer.apply_chat_template(
-        messages(), tokenize=True, add_generation_prompt=True
+        messages(), tokenize=True, add_generation_prompt=True, return_dict=False
     )
     obj = TokenizedGenerateReqInput(
         input_text=None,
