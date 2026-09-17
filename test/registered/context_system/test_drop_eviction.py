@@ -529,3 +529,53 @@ def test_swa_req_recovery_publication_and_pressure(
         assert allocator.swa_attn_allocator.available_size() == 128
     finally:
         reset_context()
+
+
+def test_context_decode_window_releases_sparse_prompt_then_generated_peers(
+    compiler, native_cache
+):
+    from sglang.srt.context_system.occurrence import (
+        ContextDecodeLayout,
+        OccurrenceState,
+    )
+    from sglang.srt.mem_cache.unified_cache.component_type import ComponentType
+
+    cache, allocator = native_cache
+    if not hasattr(allocator, "swa_attn_allocator"):
+        pytest.skip("SWA-specific ownership")
+    layout = compiler(*args(list(range(24)), {16: [(8, 9)]}, [15]))
+    slots = allocator.alloc(40)
+    valid = torch.ones(40, dtype=torch.bool)
+    valid[[1, 3, 8, 12, 18]] = False
+    allocator.free_swa(slots[~valid])
+    allocator.free_full(slots[8:9])
+    rows = torch.arange(24)
+    rows[8] = -1
+    state = OccurrenceState(
+        slots[:24],
+        torch.ones(24, dtype=torch.bool),
+        rows.clone(),
+        rows.clone(),
+        layout.positions,
+        0,
+        valid[:24].clone(),
+    )
+    decode = ContextDecodeLayout.from_layout(layout, "cpu")
+    cache.req_to_token_pool = SimpleNamespace(req_to_token=slots[None])
+    req = SimpleNamespace(
+        context_program=True,
+        context_state=state,
+        context_decode_layout=decode,
+        kv=SimpleNamespace(
+            req_pool_idx=0, swa_evicted_seqlen=0, holds_kv=True, swa_dead_lo=lambda _: 0
+        ),
+    )
+    for computed in (24, 25, 30, 40):
+        cache.components[ComponentType.SWA]._free_out_of_window_slots(req, computed)
+        floor = decode.swa_raw_floor(computed, 4)
+        assert req.kv.swa_evicted_seqlen == floor
+        valid[:floor] = False
+        assert torch.equal(allocator.full_to_swa_index_mapping[slots] > 0, valid)
+    cache._free_context_kv_row(req, [(0, 40)])
+    assert_allocator(cache, allocator, 0)
+    assert allocator.swa_attn_allocator.available_size() == 128

@@ -1061,9 +1061,8 @@ class SWAComponent(TreeComponent):
         if getattr(req, "context_program", None) is not None:
             if req.context_decode_layout is None:
                 return
-            pre_len = req.context_decode_layout.swa_raw_floor(
-                pre_len, self.sliding_window_size
-            ) + self.sliding_window_size
+            self._free_context_decode_window(req, pre_len)
+            return
         free_swa_out_of_window_slots(
             req,
             pre_len,
@@ -1073,6 +1072,42 @@ class SWAComponent(TreeComponent):
             token_to_kv_pool_allocator=self.cache.token_to_kv_pool_allocator,
             retain_floor=self.cache.swa_retain_floor(req),
         )
+
+    def _free_context_decode_window(self, req, pre_len):
+        """Apply the native raw eviction floor without releasing absent peers."""
+        if not req.kv.holds_kv:
+            return
+        if self.cache.page_size != 1:
+            raise ValueError("Context SWA eviction requires page_size=1")
+        start = max(req.kv.swa_evicted_seqlen, req.kv.swa_dead_lo(1))
+        end = req.context_decode_layout.swa_raw_floor(pre_len, self.sliding_window_size)
+        retain = self.cache.swa_retain_floor(req)
+        if retain is not None:
+            end = min(end, retain)
+        req.kv.swa_evicted_seqlen = start
+        if end <= start:
+            return
+        row = self.cache.req_to_token_pool.req_to_token[req.kv.req_pool_idx]
+        allocator = self.cache.token_to_kv_pool_allocator
+        state = req.context_state
+        if state is None or start >= len(state.terminal_rows):
+            # Steady decode frees one fresh generated peer, with no scan or
+            # materialization of the prompt's CPU validity metadata.
+            allocator.free_swa_segment(row[start:end], start_pos=start)
+        else:
+            from sglang.srt.context_system.recovery import mask_ranges
+
+            valid = torch.ones(end - start, dtype=torch.bool)
+            rows = state.terminal_rows[start : min(end, len(state.terminal_rows))]
+            valid[: len(rows)] = False
+            present = rows >= 0
+            if state.swa_resident is None:
+                valid[: len(rows)] = present
+            else:
+                valid[: len(rows)][present] = state.swa_resident[rows[present]]
+            for a, b in mask_ranges(valid.numpy()):
+                allocator.free_swa_segment(row[start + a : start + b], start_pos=start + a)
+        req.kv.swa_evicted_seqlen = end
 
     def free_out_of_window_slots(
         self, req: Req, pre_len: int, insert_params: InsertParams
