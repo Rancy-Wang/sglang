@@ -94,7 +94,8 @@ def test_large_page_rejected_before_kernel(attention_plan):
         )
 
 
-def test_native_model_pool_and_rope_bind_once(attention_plan):
+@pytest.mark.parametrize("shared_swa_pool", [False, True])
+def test_native_model_pool_and_rope_bind_once(attention_plan, shared_swa_pool):
     from types import SimpleNamespace
 
     class Pool:
@@ -117,7 +118,7 @@ def test_native_model_pool_and_rope_bind_once(attention_plan):
             return ids + 10
 
         def sliding_window_write_loc_for(self, ids):
-            return ids + 50
+            return None if shared_swa_pool else ids + 50
 
     ropes = [torch.randn(512, 64) for _ in range(2)]
     modules = [
@@ -144,11 +145,18 @@ def test_native_model_pool_and_rope_bind_once(attention_plan):
     for _ in range(2):
         metadata = inputs.bind()
         assert metadata.full.kv_indices.tolist() == [11, 12, 13]
-        assert metadata.sliding_window.kv_indices.tolist() == [61, 62, 63]
+        offset = 0 if shared_swa_pool else 50
+        assert metadata.sliding_window.kv_indices.tolist() == [
+            11 + offset,
+            12 + offset,
+            13 + offset,
+        ]
+        assert (metadata.sliding_window is metadata.full) == shared_swa_pool
         assert metadata.layer_copies[7].source_slots.tolist() == [11]
-        assert metadata.layer_copies[13].source_slots.tolist() == [61]
+        assert metadata.layer_copies[13].source_slots.tolist() == [11 + offset]
         assert metadata.layer_copies[7].destination_slots.tolist() == [19]
-        assert metadata.layer_copies[13].destination_slots.tolist() == [69]
+        assert metadata.layer_copies[13].destination_slots.tolist() == [19 + offset]
+        assert metadata.layer_copies[13].skip_unmapped == (not shared_swa_pool)
         assert metadata.layer_copies[13].cos_sin_cache is ropes[1]
         assert not metadata.layer_copies[13].is_neox_style
     assert pool.calls == [7, 13]
