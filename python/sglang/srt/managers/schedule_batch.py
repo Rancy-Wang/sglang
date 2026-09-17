@@ -1636,7 +1636,6 @@ class Req(ReqDllmMixin):
         if resident is None:
             resident = torch.ones(matched, dtype=torch.bool)
         rewind = resident & (positions != program.layout.birth_positions[:matched])
-        incompatible = rewind & (positions != program.layout.positions[:matched])
         swa = self.context_swa_resident
         terminal = None
         if self.context_swa_window is not None:
@@ -1654,11 +1653,26 @@ class Req(ReqDllmMixin):
             program.visible_until,
             len(program.layout.positions),
             rewind,
-            incompatible,
             swa_resident=swa,
             swa_query_starts=self.context_swa_query_starts,
             swa_terminal_required=terminal,
         )
+        if recovery.start < matched:
+            # Like mini, restore source versions only for historical repair.
+            # A later Reposition alone can rotate a fully reusable prefix;
+            # treating its old final positions as missing would recompute it.
+            # Once holes require earlier queries, avoid inverse-rotating their
+            # low-precision K sources and propagating error into repaired KV.
+            recovery = plan_recovery(
+                resident,
+                program.visible_until,
+                len(program.layout.positions),
+                rewind,
+                positions != program.layout.positions[:matched],
+                swa_resident=swa,
+                swa_query_starts=self.context_swa_query_starts,
+                swa_terminal_required=terminal,
+            )
         self.context_recovery_plan = recovery
         self.context_recovery_source = None
         self.context_gap_prefix = None

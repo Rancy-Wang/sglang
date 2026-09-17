@@ -196,6 +196,41 @@ def make_req(compiler, *, ignore_eos=False):
     return req
 
 
+@pytest.mark.parametrize("hole", [None, 8, 40])
+def test_repeated_reposition_reuses_prefix_until_historical_repair(compiler, hole):
+    import torch
+
+    req = make_req(compiler)
+    # Source ends before the second R/Drop boundary. Its earlier tokens were
+    # already rotated by the first R, so their source positions differ from
+    # both birth and the target's final positions. This is a valid Retry.
+    matched = 55
+    source = compiler(*args(list(range(matched)), {24: [(4, 12)]}, [23]))
+    req.prefix_indices = torch.arange(matched, dtype=torch.int64)
+    req.context_source_positions = source.positions
+    req.context_resident = torch.ones(matched, dtype=torch.bool)
+    if hole is not None:
+        req.context_resident[hole] = False
+    req.context_exact_prefix_len = 4
+    req.prepare_context_recovery()
+    recovery = req.context_recovery_plan
+    if hole in (None, 8):
+        # A previously dropped hole is not needed by any remaining query.
+        assert recovery.intervals == ((matched, 128),)
+        assert recovery.reusable_prefix.tolist() == req.context_resident.tolist()
+        req.plan_context_prefill(128)
+        window, plan = req.context_window_plan
+        assert window.segment_query_starts[0] == matched
+        assert plan.extra_page_count > 0  # rotate/copy, without old query forwards
+    else:
+        assert recovery.start < hole
+        assert any(a <= hole < b for a, b in recovery.intervals)
+        assert not recovery.reusable_prefix[hole]
+        # Historical repair must not borrow an already-rotated source whose
+        # birth computation it needs to reconstruct.
+        assert not recovery.reusable_prefix[12:24].any()
+
+
 @pytest.mark.parametrize("ignore_eos", [False, True])
 def test_native_admission_charges_copies_once(factory, compiler, ignore_eos):
     from sglang.srt.managers.schedule_policy import AddReqResult
