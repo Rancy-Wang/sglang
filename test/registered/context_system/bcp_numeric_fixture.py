@@ -4,7 +4,28 @@ import copy
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
+
+
+def oracle_chat_template(reference_path, model, directory):
+    """Keep the native Harmony template on the stored oracle's calendar date."""
+    if not reference_path or "gpt-oss" not in model.lower():
+        return None
+    from transformers import AutoTokenizer
+
+    reference = json.loads(Path(reference_path).read_text())
+    ids = reference["runs"]["none"]["records"][0]["input"]["ids"]
+    tokenizer = AutoTokenizer.from_pretrained(model)
+    header = tokenizer.decode(ids[:256])
+    dates = re.findall(r"(?m)^Current date: (\d{4}-\d{2}-\d{2})$", header)
+    assert len(dates) == 1, "Oracle must contain one native Harmony system date"
+    template = tokenizer.get_chat_template()
+    clock = 'strftime_now("%Y-%m-%d")'
+    assert template.count(clock) == 1, "Unrecognized native Harmony date template"
+    path = Path(directory) / "oracle_date.jinja"
+    path.write_text(template.replace(clock, json.dumps(dates[0])))
+    return str(path)
 
 
 def load_fixture():

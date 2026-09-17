@@ -77,8 +77,7 @@ def test_bcp_default_reference(server):  # noqa: F811
         ids = response["sglext"]["input_ids"]
         expected_ids = reference["runs"]["none"]["records"][0]["input"]["ids"]
         # SGLang returns raw input; mini's legacy Drop record is compact active.
-        if fixed:
-            assert ids == expected_ids, (name, len(ids), len(expected_ids))
+        assert ids == expected_ids, (name, len(ids), len(expected_ids))
         (output_ids,) = response["sglext"]["output_ids"]
         same = [a == b for a, b in zip(output_ids, tokens)]
         if not fixed:
