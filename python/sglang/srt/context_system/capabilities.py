@@ -33,6 +33,8 @@ def validate_context_request(args, model_config, request):
     if args.disaggregation_mode != "null":
         from sglang.srt.environ import envs
 
+        if args.disaggregation_transfer_backend != "mooncake":
+            raise ValueError("Context PD currently requires Mooncake transfer")
         for name in (
             "disaggregation_decode_enable_radix_cache",
             "disaggregation_decode_enable_offload_kvcache",

@@ -61,6 +61,21 @@ C2 Drop+Repos。用户随后明确修订：**如果指标劣势主要来自大�
   小量验证不测 SLO 的范围。
 - 本任务保持唯一修改和实验启动者；不影响 InfiniAI-BUS GPU0/1 的参考实验。
 
+## PD 容量异常路径补修（2026-09-18）
+
+`capacity-pd-qwen-v2` 在 P=GPU0/110 KV、D=GPU1/640 KV、Qwen3-0.6B、chunk32、
+原生 D 512-token reserve 下失败：P 正确拒绝自锁住 108 KV、再需 3 的请求，D 却在
+60 秒 HTTP 超时。`test_serving_capacity_pd.py` **1 failed in 279.95s**，不能算通过。
+根因是原生 sender `abort()` 只标记 P 本地 Failed，没有向 D 发失败消息。
+
+此次补修限定 Context 容量错误：P 先标记 transport Failed 阻止新写入，保存 D endpoint，
+等待每个 TP rank 的已开始传输计数归零，再发 Failed、清理 transport 状态并释放 KV/metadata。
+等待时保留 chunk 和资源，停止新 chunk admission；普通成功路径不新增 collective。
+Mooncake 跳过已取消 chunk 时只减去该 chunk 的计数，不能清掉其他 worker 的在途计数。
+Context PD 此阶段明确限制为 Mooncake、无 staging；其他 transport 不冒充已验证支持。
+数值对照无需因仅异常清理路径的改动重复跑全模型，但必须复测上述 GPU 失败/恢复用例。
+本段记录修复意图，实际结果待后续记录。
+
 ## 当前实测状态（2026-09-17）
 
 2026-09-18 追加检查点（整体 R2 仍未完成）：
