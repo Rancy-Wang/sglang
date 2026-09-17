@@ -45,12 +45,21 @@ def test_bcp_default_reference(server):  # noqa: F811
             "custom_logit_processor": serialized_probe(),
             "custom_params": params,
         }
-        response = requests.post(
-            server + "/v1/chat/completions", json=payload, timeout=300
-        )
-        (directory / (name + ".json")).write_text(response.text)
-        assert response.status_code == 200, response.text
-        response = response.json()
+        response_path = directory / (name + ".json")
+        if (
+            not fixed
+            and os.environ.get("CONTEXT_REUSE_BCP_ACTUAL") == "1"
+            and path.exists()
+            and response_path.exists()
+        ):
+            response = json.loads(response_path.read_text())
+        else:
+            response = requests.post(
+                server + "/v1/chat/completions", json=payload, timeout=300
+            )
+            response_path.write_text(response.text)
+            assert response.status_code == 200, response.text
+            response = response.json()
         assert path.exists(), name
         logits = torch.load(path, weights_only=True)
         expected = reference_logits[feature]
@@ -60,7 +69,7 @@ def test_bcp_default_reference(server):  # noqa: F811
         expected_ids = reference["runs"]["none"]["records"][0]["input"]["ids"]
         # SGLang returns raw input; mini's legacy Drop record is compact active.
         assert ids == expected_ids, (name, len(ids), len(expected_ids))
-        output_ids = response["sglext"]["output_ids"]
+        (output_ids,) = response["sglext"]["output_ids"]
         same = [a == b for a, b in zip(output_ids, tokens, strict=True)]
         if fixed:
             assert all(same), name
