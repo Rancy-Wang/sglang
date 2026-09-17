@@ -1,6 +1,7 @@
 """Own isolated servers and run the approved complete-trajectory BCP method."""
 
 import argparse
+import hashlib
 import json
 import os
 import signal
@@ -60,6 +61,8 @@ def warmup(args, root):
                     "max_tokens": 64,
                     "ignore_eos": True,
                 }
+                if args.engine != "mini":
+                    body["chat_template_kwargs"] = {"preserve_thinking_history": True}
                 if feature != "none":
                     body["drop_message"] = {"2": [1]}
                 if feature == "drop_repos":
@@ -115,6 +118,17 @@ def main():
     ).strip()
     if subprocess.check_output(["git", "-C", str(repo), "status", "--porcelain"]):
         raise ValueError("Server checkout must be clean")
+    template_path = None
+    template_sha256 = None
+    if args.engine != "mini":
+        from sglang.srt.context_system.thinking_template import retained_template
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(args.model, local_files_only=True)
+        template, _ = retained_template(tokenizer.get_chat_template())
+        template_path = root / "retained_history.jinja"
+        template_path.write_text(template)
+        template_sha256 = hashlib.sha256(template.encode()).hexdigest()
     try:
         modes = ["prefill", "decode"] if args.engine == "pd" else ["normal"]
         for i, mode in enumerate(modes):
@@ -164,6 +178,8 @@ def main():
                     cmd += ["--drop-aware-eviction"]
             else:
                 cmd += [
+                    "--chat-template",
+                    str(template_path),
                     "--context-length",
                     str(args.context_length),
                     "--max-total-tokens",
@@ -205,6 +221,7 @@ def main():
                     "gpu": env["CUDA_VISIBLE_DEVICES"],
                     "head": head,
                     "mode": mode,
+                    "template_sha256": template_sha256,
                 }
             )
             (root / "launch.json").write_text(
@@ -277,6 +294,12 @@ def main():
                 "--url",
                 f"http://127.0.0.1:{args.port + len(modes) - 1}/v1/chat/completions",
                 *common,
+            ]
+            client += [
+                "--chat-template",
+                str(template_path),
+                "--template-kwargs",
+                json.dumps({"preserve_thinking_history": True}),
             ]
             if args.engine == "pd":
                 client += [
