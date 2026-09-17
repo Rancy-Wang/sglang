@@ -8,6 +8,115 @@ admission and contains page IDs, not extra model KV.
 import torch
 
 
+def needs_context_source_lease(req):
+    """Keep a Retry branch only for nonterminal reads or unadopted cached gaps."""
+    state = req.context_state
+    canonical = state.canonical_rows
+    present = canonical >= 0
+    if bool((~state.owned[canonical[present]] & (
+        canonical[present] != state.terminal_rows[present]
+    )).any()):
+        return True
+    recovery = req.context_recovery_plan
+    return recovery is not None and bool(
+        recovery.reusable_prefix[len(canonical):].any()
+    )
+
+
+def prefill_progress_reserve(req, query_end):
+    """Reserve singleton progress through future repair stages and final decode.
+
+    Existing owners are already excluded from allocator availability. Future
+    birth KV survives only to its Drop; intermediate copies coexist with those
+    sources for one forward. Final-position copies are deferred until needed.
+    Cache the CPU stage demand once per match, with no device page inspection.
+    """
+    import numpy as np
+
+    program = req.context_recompute_program or req.context_program
+    n = len(program.layout.positions)
+    output = max(0, req.sampling_params.max_new_tokens - len(req.output_ids)) + 1
+    window, plan = req.context_window_plan
+    start = int(window.segment_query_starts[0])
+    kept = plan.terminal_occurrences.numpy()
+    births = window.birth_occurrences.numpy()[start:query_end]
+    retained_birth = kept[start:query_end] == births
+    if query_end < n:
+        retained_birth |= program.visible_until.numpy()[start:query_end] > query_end
+    terminal_ids = np.zeros(window.occurrence_count, dtype=np.bool_)
+    terminal_ids[kept[kept >= 0]] = True
+    persistent = int(retained_birth.sum()) + int(
+        terminal_ids[plan.allocated_occurrences.numpy()].sum()
+    )
+    if query_end == n:
+        return persistent + output
+    recovery = req.context_recovery_plan
+    cached = getattr(req, "_context_progress_demand", None)
+    if cached is None or cached[0] is not program or cached[1] is not recovery:
+        from .occurrence import compile_occurrence_window
+
+        start = recovery.start if recovery is not None else len(req.prefix_indices)
+        pending = np.zeros(n, dtype=np.bool_)
+        for a, b in recovery.intervals if recovery is not None else ((start, n),):
+            pending[a:b] = True
+        canonical = program.layout.birth_positions.numpy().copy()
+        source = getattr(req, "context_recovery_source", None)
+        positions = source[1] if source is not None else req.context_source_positions
+        if positions is not None:
+            reused = ~pending[: len(positions)]
+            canonical[: len(positions)][reused] = positions.numpy()[reused]
+        window = compile_occurrence_window(
+            program.layout, program.visible_until, program.layout.positions,
+            query_start=start, query_end=n,
+        )
+        raw = window.occurrence_raw_tokens.numpy()
+        pos = window.occurrence_positions.numpy()
+        keys = window.segment_key_occurrences.numpy()
+        offsets = window.segment_key_offsets.numpy()
+        copies = np.zeros(n, dtype=np.int64)
+        for a, b, x, y in zip(
+            window.segment_query_starts.numpy(), window.segment_query_ends.numpy(),
+            offsets[:-1], offsets[1:], strict=True,
+        ):
+            selected = keys[x:y]
+            copies[a:b] = np.count_nonzero(pos[selected] != canonical[raw[selected]])
+        terminal = program.layout.keep_mask.numpy() & (
+            (program.layout.positions.numpy() != canonical)
+            | (
+                (np.arange(n) < (len(positions) if positions is not None else start))
+                & (np.arange(n) >= req.context_exact_prefix_len)
+                & ~pending
+            )
+        )
+        last = keys[offsets[-2] : offsets[-1]]
+        final_intermediate = int(np.count_nonzero(
+            (pos[last] != canonical[raw[last]])
+            & (pos[last] != program.layout.positions.numpy()[raw[last]])
+        ))
+        cached = req._context_progress_demand = (
+            program, recovery, pending, copies, terminal, final_intermediate,
+        )
+    _, _, pending, copies, terminal, final_intermediate = cached
+    future = pending.copy()
+    future[:query_end] = False
+    expiry = np.minimum(program.visible_until.numpy(), n)
+    live = np.cumsum(future, dtype=np.int64) - np.bincount(
+        expiry[future], minlength=n + 1,
+    ).cumsum()[:n]
+    demand = live + copies
+    # Active terminal copies coexist with the last query's reads, but a
+    # final-stage read at the terminal position uses that same occurrence.
+    # The union is bounded by terminal copies plus nonterminal read copies.
+    terminal = terminal.copy()
+    terminal[:query_end] &= (
+        req.context_window_plan[1].terminal_occurrences.numpy() < 0
+    )
+    demand[-1] = max(
+        demand[-1], live[-1] + int(terminal.sum()) + final_intermediate,
+    )
+    return persistent + int(demand[query_end:].max()) + output
+
+
 def handle_prefill_capacity_pressure(req, capacity, needed, tree_cache=None):
     """Distinguish self-pinned requests from transient pool pressure.
 

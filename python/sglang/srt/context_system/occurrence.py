@@ -585,6 +585,32 @@ class OccurrenceState:
             else None,
         )
 
+    def prefill_terminal_keep(self, layout, query_end):
+        start = len(self.canonical_rows)
+        # Match mini's recovery policy: historical queries may read a dropped
+        # token's birth KV, but no future decode needs its terminal cache copy.
+        # advance() retains those birth sources until their final query and
+        # retires private pages only after the completed forward.
+        keep = layout.keep_mask[:query_end].clone()
+        keep[:start] &= (self.canonical_rows >= 0) | (
+            self.terminal_rows >= 0
+        )
+        if query_end < len(layout.positions):
+            # Do not keep a third (final-position) version while a historical
+            # stage still needs birth and intermediate-position KV. Publish
+            # holes until the final forward; active birth sources stay private
+            # and live, so the final copy still rotates directly from its source.
+            available = (
+                layout.birth_positions[:query_end]
+                == layout.positions[:query_end]
+            )
+            available[:start] = (
+                self.canonical_positions
+                == layout.positions[:start]
+            ) | (self.terminal_rows >= 0)
+            keep &= available
+        return keep
+
     def plan(self, window, terminal_keep):
         start = len(self.canonical_rows)
         canonical = self.canonical_rows.numpy()
@@ -667,6 +693,15 @@ class OccurrenceState:
         kept = selected_terminal >= 0
         terminal[kept] = occurrences[selected_terminal[kept]]
         canonical = canonical[:end]
+        positions = window.occurrence_positions[window.birth_occurrences[:end]].clone()
+        positions[:start] = self.canonical_positions
+        same_position = (
+            positions.numpy()
+            == window.occurrence_positions[window.terminal_occurrences[:end]].numpy()
+        )
+        # A same-position COW is bit-identical. Future reads can use the target
+        # owner instead of pinning a second borrowed copy on the Retry branch.
+        canonical = np.where(kept & same_position, terminal, canonical)
         # Drops are monotonic. A source that no later prefill query can read is
         # no longer needed. Decode reads terminal positions, not birth versions.
         future_read = visible_until.numpy()[:end] > end
@@ -683,8 +718,6 @@ class OccurrenceState:
         next_terminal = np.full(end, -1, dtype=np.int64)
         next_canonical[canonical >= 0] = remap[canonical[canonical >= 0]]
         next_terminal[kept] = remap[terminal[kept]]
-        positions = window.occurrence_positions[window.birth_occurrences[:end]].clone()
-        positions[:start] = self.canonical_positions
         # Pack all gathers once. Index preparation and alias decisions stay CPU.
         fields = (
             np.maximum(occurrences, 0),

@@ -85,6 +85,80 @@ def test_retry_self_pin_falls_back_but_external_pressure_waits(compiler):
 pytest_plugins = ("test_ir",)
 
 
+def test_future_reservation_and_deferred_terminal_lifetime(compiler, monkeypatch):
+    import sys
+    import types
+    from test_ir import args
+    from test_occurrence_ownership import expiry_for
+
+    package = types.ModuleType("context_capacity_test")
+    package.__path__ = [str(ROOT / "python/sglang/srt/context_system")]
+    monkeypatch.setitem(sys.modules, package.__name__, package)
+    capacity = load_file(
+        "context_capacity_test.request_storage",
+        ROOT / "python/sglang/srt/context_system/request_storage.py",
+    )
+    from context_capacity_test.occurrence import OccurrenceState, compile_occurrence_window
+
+    n, pool = 128, 160
+    drops = {24: [(4, 12)], 56: [(16, 36)]}
+    layout = compiler(*args(list(range(n)), drops, [23, 55]))
+    expiry = expiry_for(n, drops)
+    req = SimpleNamespace(
+        context_program=SimpleNamespace(layout=layout, visible_until=expiry),
+        context_recompute_program=None, context_recovery_plan=None,
+        context_recovery_source=None, context_source_positions=None,
+        context_exact_prefix_len=0, prefix_indices=[], output_ids=[],
+        sampling_params=SimpleNamespace(max_new_tokens=4),
+    )
+    state = OccurrenceState.from_match(
+        torch.empty(0, dtype=torch.int64), torch.empty(0, dtype=torch.int32),
+        exact_prefix_len=0,
+    )
+    start, serial = 0, 1
+    while start < n:
+        length = min(64, n - start)
+        while length:
+            end = start + length
+            window = compile_occurrence_window(
+                layout, expiry, layout.positions, query_start=start, query_end=end,
+            )
+            plan = state.plan(window, state.prefill_terminal_keep(layout, end))
+            req.context_window_plan = window, plan
+            progress = capacity.prefill_progress_reserve(req, end)
+            current = length + plan.extra_page_count
+            if len(state.slots) + max(current, progress) + 1 < pool:
+                break
+            length //= 2
+        assert length, "An admitted request must retain singleton forward progress"
+        if start == 0:
+            assert current < progress  # This chunk alone understates admission.
+        step = state.advance(
+            window, plan, torch.arange(serial, serial + length),
+            torch.arange(serial + length, serial + current), expiry,
+        )
+        assert not set(step.retired_slots.tolist()) & set(step.state.slots.tolist())
+        state, start, serial = step.state, end, serial + current
+    assert torch.equal(state.terminal_rows >= 0, layout.keep_mask)
+
+
+def test_source_lease_releases_only_after_last_borrowed_read_and_gap():
+    state = SimpleNamespace(
+        canonical_rows=torch.tensor([0, 1]), terminal_rows=torch.tensor([-1, 1]),
+        owned=torch.tensor([False, False]),
+    )
+    req = SimpleNamespace(context_state=state, context_recovery_plan=None)
+    assert storage.needs_context_source_lease(req)
+    state.owned[0] = True  # Recomputed birth no longer borrows the old branch.
+    assert not storage.needs_context_source_lease(req)
+    req.context_recovery_plan = SimpleNamespace(
+        reusable_prefix=torch.tensor([False, False, True]),
+    )
+    assert storage.needs_context_source_lease(req)
+    req.context_recovery_plan.reusable_prefix[2] = False
+    assert not storage.needs_context_source_lease(req)
+
+
 def test_continuation_capacity_includes_future_terminal_copies(compiler):
     from test_ir import args
     from test_occurrence_ownership import expiry_for

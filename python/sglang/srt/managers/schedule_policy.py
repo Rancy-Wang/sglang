@@ -547,6 +547,7 @@ class _PrefillAdmission:
     max_new_tokens: int
     is_chunked: bool
     context_extra_pages: int = 0
+    context_future_pages: int = 0
 
 
 class PrefillAdder:
@@ -934,6 +935,19 @@ class PrefillAdder:
         )
 
         budget = self.memory_budget
+        from sglang.srt.context_system.request_storage import prefill_progress_reserve
+
+        if not getattr(self, "_context_decode_reserved", False):
+            # A long Context prefill must leave enough space for existing
+            # decoders to finish. Native's probabilistic output estimate can
+            # fall below even one overlap step near the end of a request.
+            if self.running_batch is not None:
+                budget.total_offset += sum(
+                    max(0, r.sampling_params.max_new_tokens - len(r.output_ids))
+                    + 1 - self._get_running_request_total_token_offset(r)
+                    for r in self.running_batch.reqs
+                )
+            self._context_decode_reserved = True
         if self.page_size != 1 or self.dllm_config is not None:
             raise ValueError("Context admission requires page_size=1 autoregression")
         if req.host_hit_length or req.swa_host_hit_length:
@@ -954,7 +968,8 @@ class PrefillAdder:
             )
             max_new = 0 if truncated else admission.max_new_tokens
             extra = req.plan_context_prefill(admission.prefix_len + length)
-            full = length + extra + max_new + self.page_size
+            progress = prefill_progress_reserve(req, admission.prefix_len + length)
+            full = max(length + extra + max_new, progress) + self.page_size
             fits = full < budget.remaining_total and (
                 length + extra + self.page_size <= budget.remaining_current
             )
@@ -971,7 +986,8 @@ class PrefillAdder:
                     fits = fits and swa <= budget.remaining_swa
             if fits:
                 return _PrefillAdmission(
-                    admission.prefix_len, length, max_new, truncated, extra
+                    admission.prefix_len, length, max_new, truncated, extra,
+                    full - length - extra - max_new - self.page_size,
                 )
             if self.rem_chunk_tokens is None or length == 1:
                 break
@@ -1028,6 +1044,7 @@ class PrefillAdder:
         is_chunked_continuation: bool = False,
         compute_charge: Optional[int] = None,
         context_extra_pages: int = 0,
+        context_future_pages: int = 0,
     ):
         """Charge one admitted request against the prefill budgets.
 
@@ -1058,6 +1075,7 @@ class PrefillAdder:
         self.cur_rem_token_offset += (
             extend_input_len + page_overhead + mamba_gap_reserve + context_extra_pages
         )
+        self.memory_budget.total_offset += context_future_pages
         if context_extra_pages:
             from sglang.srt.mem_cache.prefill_budget import SWAPrefillBudget
 
@@ -1279,6 +1297,7 @@ class PrefillAdder:
             mamba_gap_reserve=self._mamba_gap_budget_for_req(req),
             is_chunked_continuation=True,
             context_extra_pages=admission.context_extra_pages,
+            context_future_pages=admission.context_future_pages,
             compute_charge=req.extend_range.length if self.exact_chunk_fill else None,
         )
 
@@ -1713,6 +1732,7 @@ class PrefillAdder:
             req.retracted_stain,
             mamba_gap_reserve=mamba_gap_reserve,
             context_extra_pages=admission.context_extra_pages,
+            context_future_pages=admission.context_future_pages,
             # Compute budgets are billed forward-pass tokens under exact-chunk-fill.
             compute_charge=admission.extend_len if self.exact_chunk_fill else None,
         )
