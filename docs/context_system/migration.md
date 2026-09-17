@@ -30,9 +30,19 @@
 ## 追加验收与验收后的实验顺序（2026-09-18）
 
 用户在监控任务 `01a0b06e-a973-77e0-9306-1f70ba537820` 中追加并授权：R2 除上述
-95% 原生吞吐门槛外，PD C2 Drop+Repos 的 **TTFT 与 TPOT 都须优于普通调度
-C2 Drop+Repos**。普通调度和 PD 必须各自在同模型、同 task/turn 下通过 mini 数值
+95% 原生吞吐门槛外，原要求 PD C2 Drop+Repos 的 TTFT 与 TPOT 都优于普通调度
+C2 Drop+Repos。用户随后明确修订：**如果指标劣势主要来自大量 KV 传输，而 D 端没有
+普通调度那样的长时间等待和低效，允许 PD 的 TTFT/TPOT 不达该比较目标**。
+必须结合传输量、P/D 排队时间和长 decode 间隔给出证据，不能仅因使用 PD 就豁免。
+这不放宽相对同资源原生 SGLang 的 95% 吞吐门槛。普通调度和 PD 必须各自在同模型、同 task/turn 下通过 mini 数值
 误差校准。不能用修改版 no_drop 替代原生吞吐对照，也不能仅凭退出码或部分 smoke 验收。
+
+后续 PD 最小实验的原生及修改版均开启 `--enable-request-time-stats-logging`，每个完成
+请求各记录一条原生阶段摘要。注意 `ReqTimeStats.convert_to_duration` 的 D
+`transfer_duration` 从进入接收队列到 KV 就绪，也包含等待 P 计算，不能当作纯网络
+耗时；Mooncake 未提供 `transfer_latency_s` 时，`compute_and_observe_kv_transfer_metrics`
+只使用最后 chunk 的队列耗时，报告的总字节/速度不能当作全程有效带宽。
+证据不足时标记尚未归因，不宣称满足这一条件豁免。
 
 只有 R2 全部通过后，才开始以下独立实验阶段；当前尚未满足启动条件：
 
