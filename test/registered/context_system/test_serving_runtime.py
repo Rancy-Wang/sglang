@@ -62,6 +62,8 @@ def server(tmp_path_factory):
     backend = os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND")
     if backend:
         cmd += ["--attention-backend", backend]
+    if os.environ.get("CONTEXT_TRACE_DIR"):
+        cmd += ["--enable-custom-logit-processor"]
     with log_path.open("w") as log:
         proc = subprocess.Popen(
             cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True
@@ -100,7 +102,7 @@ def server(tmp_path_factory):
                     proc.wait(timeout=15)
 
 
-def call(base, feature, suffix=""):
+def call(base, feature, suffix="", *, trace_name=None, fixed=False):
     messages = [
         {"role": "user", "content": "Remember this text: " + "red blue green " * 32},
         {"role": "assistant", "content": "I have read the text."},
@@ -125,12 +127,51 @@ def call(base, feature, suffix=""):
         payload.update(drop_message={"1": [0]})
     elif feature:
         payload.update(drop_message={"1": [0]}, reposition=[1])
+    if trace_name is not None:
+        from serving_logits_probe import serialized_probe
+
+        params = {
+            "context_trace_path": str(
+                Path(os.environ["CONTEXT_TRACE_DIR"]) / (trace_name + ".pt")
+            ),
+            "context_trace_count": 8,
+        }
+        if fixed:
+            params["context_forced_tokens"] = [
+                785,
+                17951,
+                374,
+                264,
+                12767,
+                323,
+                25382,
+                2487,
+            ]
+        payload.update(custom_logit_processor=serialized_probe(), custom_params=params)
     response = requests.post(base + "/v1/chat/completions", json=payload, timeout=120)
     assert response.status_code == 200, response.text
     result = response.json()
     assert result["usage"]["completion_tokens"] == 8, result
     assert result["choices"][0]["finish_reason"] == "length", result
     return result
+
+
+def test_full_logits_http_diagnostic(server):
+    if not os.environ.get("CONTEXT_TRACE_DIR"):
+        pytest.skip(
+            "full logits instrumentation explicitly enabled only for numerical runs"
+        )
+    outputs = []
+    for fixed in (False, True):
+        for feature, name in ((False, "none"), ("drop", "drop"), (True, "drop_repos")):
+            assert requests.post(server + "/flush_cache", timeout=5).status_code == 200
+            path = f"{name}-{fixed}"
+            result = call(server, feature, trace_name=path, fixed=fixed)
+            outputs.append(result)
+            assert (Path(os.environ["CONTEXT_TRACE_DIR"]) / (path + ".pt")).exists()
+    (Path(os.environ["CONTEXT_TRACE_DIR"]) / "responses.json").write_text(
+        json.dumps(outputs)
+    )
 
 
 def test_chunk_retry_and_mixed_http_generation(server):
