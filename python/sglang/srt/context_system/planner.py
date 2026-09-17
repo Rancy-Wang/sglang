@@ -23,7 +23,7 @@
 from __future__ import annotations
 
 from bisect import bisect_right
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Any
 
 import torch
@@ -393,6 +393,107 @@ class TokenEventCompiler:
 class ContextProgram:
     layout: ContextLayout
     visible_until: torch.Tensor
+
+    def to_wire(self) -> dict[str, Any]:
+        """Use SGLang's native tensor-buffer IPC, without per-token Python lists.
+
+        Compilation happens once at the tokenizer boundary. Scheduler/TP workers
+        reconstruct views of the transported CPU tensors, not the event program.
+        The tensors are immutable by convention throughout the request lifetime.
+        """
+        return {
+            "version": 1,
+            "layout": vars(self.layout),
+            "visible_until": self.visible_until,
+        }
+
+    @classmethod
+    def from_wire(cls, wire: dict[str, Any], input_ids) -> ContextProgram:
+        """Check the internal payload before binding it to a scheduler request."""
+        if (
+            not isinstance(wire, dict)
+            or set(wire) != {"version", "layout", "visible_until"}
+            or type(wire["version"]) is not int
+            or wire["version"] != 1
+        ):
+            raise ValueError("Unsupported Context program wire version")
+        data = wire["layout"]
+        if not isinstance(data, dict) or set(data) != {
+            field.name for field in fields(ContextLayout)
+        }:
+            raise ValueError("Context layout fields do not match the wire schema")
+        layout = ContextLayout(**data)
+        n = len(input_ids)
+        scalar_names = {"next_position", "current_reposition", "compile_ns"}
+        bool_names = {
+            "virtual_mask",
+            "keep_mask",
+            "effective_repositions",
+            "ignored_repositions",
+        }
+        i64_names = {"key_to_token", "token_to_key", "drop_event_to_key"}
+        for name, value in data.items():
+            if name in scalar_names:
+                if type(value) is not int or value < (
+                    -1 if name == "current_reposition" else 0
+                ):
+                    raise ValueError(f"Invalid Context scalar {name}")
+                continue
+            dtype = (
+                torch.bool
+                if name in bool_names
+                else (torch.int64 if name in i64_names else torch.int32)
+            )
+            if (
+                not isinstance(value, torch.Tensor)
+                or value.device.type != "cpu"
+                or (
+                    value.dtype != dtype
+                    or not value.is_contiguous()
+                    or value.ndim != (2 if name == "records" else 1)
+                )
+            ):
+                raise ValueError(f"Invalid Context tensor {name}")
+        records = layout.records
+        if records.shape[1] != 4:
+            raise ValueError("Context key records must have four columns")
+        for name in (
+            "token_to_key",
+            "positions",
+            "repos_info",
+            "keep_mask",
+            "materialized_stage",
+            "birth_positions",
+            "birth_stages",
+        ):
+            if len(data[name]) != n:
+                raise ValueError(f"Context {name} does not cover the input tokens")
+        real_keys = torch.nonzero(records[:, 0] == 0, as_tuple=True)[0]
+        if not torch.equal(real_keys, layout.token_to_key) or not torch.equal(
+            records[real_keys, 1].to(torch.int64),
+            torch.as_tensor(input_ids, dtype=torch.int64),
+        ):
+            raise ValueError(
+                "Context program does not describe the canonical input IDs"
+            )
+        expiry = wire["visible_until"]
+        if (
+            not isinstance(expiry, torch.Tensor)
+            or expiry.device.type != "cpu"
+            or (
+                expiry.dtype != torch.int32
+                or expiry.ndim != 1
+                or len(expiry) != n
+                or not expiry.is_contiguous()
+            )
+            or bool(torch.any(expiry <= torch.arange(n)))
+        ):
+            raise ValueError("Invalid Context visibility metadata")
+        if not torch.equal(layout.positions, records[real_keys, 3]) or bool(
+            torch.any(layout.positions < 0) | torch.any(layout.birth_positions < 0)
+        ):
+            raise ValueError("Context positions disagree with the Radix key")
+        return cls(layout, expiry)
 
 
 def compile_chat_program(

@@ -324,3 +324,32 @@ def build_template_token_provenance(
         char_owners=char_owners,
         cross_owner_tokens=cross_owner_tokens,
     )
+
+
+def append_assistant_prefix(
+    trace: TemplateTokenProvenance, tokenizer, text: str, *, owner: int
+) -> TemplateTokenProvenance:
+    """Mirror native continue_final_message's separate encode and BOS removal.
+
+    Do not re-tokenize the joined text: SGLang deliberately appends independently
+    encoded assistant-prefix IDs. Their character offsets still point into the
+    joined text, so text Drop sees the same content and exact token boundaries.
+    """
+    encoded = tokenizer(text, return_offsets_mapping=True)
+    ids = list(encoded["input_ids"])
+    offsets = list(encoded["offset_mapping"])
+    if ids and ids[0] == tokenizer.bos_token_id:
+        ids = ids[1:]
+        offsets = offsets[1:]
+    if any(start < 0 or end < start or end > len(text) for start, end in offsets):
+        raise ValueError("Assistant prefix has an invalid tokenizer offset")
+    offset = len(trace.rendered_text)
+    return TemplateTokenProvenance(
+        input_ids=trace.input_ids + ids,
+        owners=trace.owners + [owner] * len(ids),
+        offsets=trace.offsets
+        + [(start + offset, end + offset) for start, end in offsets],
+        rendered_text=trace.rendered_text + text,
+        char_owners=trace.char_owners + [owner] * len(text),
+        cross_owner_tokens=trace.cross_owner_tokens,
+    )

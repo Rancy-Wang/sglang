@@ -1001,6 +1001,11 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
         obj: Union[GenerateReqInput, EmbeddingReqInput],
     ):
         """Tokenize one request."""
+        if isinstance(obj, GenerateReqInput) and obj.context_program is not None:
+            # Remove this admission guard only when the scheduler owns the
+            # Context KV lifecycle. Never silently serve a compiled program as
+            # ordinary attention while the integration is being constructed.
+            raise ValueError("Context scheduler integration is not yet enabled")
         # Tokenize
         input_embeds = None
         input_text = obj.text
@@ -1422,6 +1427,7 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
             tokenized_obj = TokenizedGenerateReqInput(
                 input_text=input_text,
                 input_ids=input_ids_arr,
+                context_program=obj.context_program,
                 mm_inputs=mm_inputs,
                 sampling_params=sampling_params,
                 return_logprob=obj.return_logprob,
