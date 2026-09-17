@@ -3194,6 +3194,8 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
                 window, plan, birth, allocated,
                 (req.context_recompute_program or req.context_program).visible_until,
             )
+            if step.unused_swa_slots is not None:
+                self.token_to_kv_pool_allocator.free_swa(step.unused_swa_slots)
             req.context_state = step.state
             req.context_prefill_started = True
             req.context_window_plan = None
@@ -3205,6 +3207,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             completions.append(ContextPrefillCompletion(
                 step.retired_slots, req.context_usage, plan.read_cached,
                 plan.repositioned_cached, length,
+                retired_swa_resident=step.retired_swa_resident,
             ))
         self.context_prefill_input = ContextPrefillInput(
             ContextAttentionPlan.merge(sequences), torch.cat(slots),

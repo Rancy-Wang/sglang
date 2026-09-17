@@ -718,6 +718,7 @@ class OccurrenceState:
             pairs.reshape(-1, 2).to(torch.int32),
             all_slots[release],
             all_slots[unused] if all_swa is not None else None,
+            torch.from_numpy(all_swa[retired]) if all_swa is not None else None,
         )
 
     def terminal_slots(self):
@@ -802,6 +803,15 @@ class OccurrenceState:
         )
         return self.slots[rows]
 
+    def nonterminal_private_residency(self):
+        """CPU SWA ownership for the private sources outside the raw table."""
+        if self.swa_resident is None:
+            return None
+        selected = self.owned.clone()
+        rows = self.terminal_rows
+        selected[rows[rows >= 0]] = False
+        return self.swa_resident[selected]
+
     def nonterminal_private_slots(self):
         """Private sources outside the raw table handled by native cache release."""
         selected = self.owned.numpy().copy()
@@ -825,6 +835,38 @@ class OccurrenceAdvance:
     # These fresh SWA peers have no valid source and no reader. Release only
     # their SWA mapping before binding the forward, keeping Full ownership.
     unused_swa_slots: torch.Tensor | None = None
+    retired_swa_resident: torch.Tensor | None = None
+
+
+def free_context_slots(allocator, slots, swa_resident=None):
+    """Release private page_size=1 owners without inspecting GPU mappings.
+
+    SWA validity is carried with CPU ownership from allocation through copies.
+    The ordinary/all-valid case keeps the allocator's existing fast path.
+    """
+    if swa_resident is None:
+        allocator.free(slots)
+        return
+    if (
+        swa_resident.device.type != "cpu"
+        or swa_resident.dtype != torch.bool
+        or swa_resident.shape != slots.shape
+    ):
+        raise ValueError("Context free SWA metadata must cover the owner slots")
+    if len(slots) == 0:
+        return
+    valid = swa_resident.numpy()
+    if valid.all():
+        allocator.free(slots)
+    elif not valid.any():
+        allocator.free_full(slots)
+    else:
+        live, dead = np.flatnonzero(valid), np.flatnonzero(~valid)
+        indices = torch.from_numpy(np.r_[live, dead]).to(
+            slots.device, non_blocking=True
+        )
+        allocator.free(slots[indices[: len(live)]])
+        allocator.free_full(slots[indices[len(live) :]])
 
 
 @dataclass
@@ -837,6 +879,7 @@ class ContextPrefillCompletion:
     repositioned_cached: torch.Tensor
     query_count: int
     completed: bool = False
+    retired_swa_resident: torch.Tensor | None = None
 
     def __post_init__(self):
         # Retraction may be prepared before this overlapped result is consumed.
@@ -853,7 +896,7 @@ class ContextPrefillCompletion:
             self.query_count,
             initial_match=self.initial_match,
         )
-        allocator.free(self.retired_slots)
+        free_context_slots(allocator, self.retired_slots, self.retired_swa_resident)
         self.completed = True
 
 

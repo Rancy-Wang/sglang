@@ -41,6 +41,7 @@ def _reposition_layers_kernel(
     position_stride_token,
     rope_stride_position,
     NEOX_STYLE: tl.constexpr,
+    SKIP_UNMAPPED: tl.constexpr,
     head_dim: tl.constexpr,
     half_dim: tl.constexpr,
     BLOCK_HALF: tl.constexpr,
@@ -54,6 +55,9 @@ def _reposition_layers_kernel(
 
     source = tl.load(source_slots + token).to(tl.int64)
     destination = tl.load(destination_slots + token).to(tl.int64)
+    if SKIP_UNMAPPED:  # noqa: SIM102 -- erase the branch for Full pools at compile time
+        if source <= 0 or destination <= 0:
+            return
     position_row = position_pairs + token * position_stride_token
     old_position = tl.load(position_row).to(tl.int64)
     new_position = tl.load(position_row + 1).to(tl.int64)
@@ -122,6 +126,7 @@ def reposition_kv_layers(
     *,
     is_neox_style: bool = True,
     page_size: int = 1,
+    skip_unmapped: bool = False,
 ) -> None:
     """Rotate K and copy V across native per-layer pools in one GPU launch.
 
@@ -207,6 +212,7 @@ def reposition_kv_layers(
         position_pairs.stride(0),
         cos_sin_cache.stride(0),
         NEOX_STYLE=is_neox_style,
+        SKIP_UNMAPPED=skip_unmapped,
         head_dim=head_dim,
         half_dim=head_dim // 2,
         BLOCK_HALF=triton.next_power_of_2(head_dim // 2),

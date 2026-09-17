@@ -988,7 +988,12 @@ class UnifiedRadixCache(BasePrefixCache):
             req, is_insert=is_insert, kv_len_to_handle=kv_len_to_handle, **kwargs
         )
         if state is not None:
-            self.token_to_kv_pool_allocator.free(state.nonterminal_private_slots())
+            from sglang.srt.context_system.occurrence import free_context_slots
+
+            free_context_slots(
+                self.token_to_kv_pool_allocator, state.nonterminal_private_slots(),
+                state.nonterminal_private_residency(),
+            )
             self._release_context_source_lease(req)
             req.context_state = None
             req.context_decode_layout = None
@@ -1200,20 +1205,52 @@ class UnifiedRadixCache(BasePrefixCache):
         return resident
 
     def _free_context_kv_row(self, req, ranges):
-        """Keep raw SWA floors while excluding holes using CPU ownership data."""
-        if ranges:
-            length = max(end for _, end in ranges)
-            resident = self._context_cache_residency(req, length)
-            if resident is not None:
-                from sglang.srt.context_system.recovery import mask_ranges
+        """Exclude Full holes and absent SWA peers using CPU ownership data."""
+        if not ranges:
+            return
+        length = max(end for _, end in ranges)
+        resident = self._context_cache_residency(req, length)
+        state = getattr(req, "context_state", None)
+        swa = state.terminal_swa_residency() if state is not None else None
+        if resident is None and swa is None:
+            self.free_kv_row(req.kv, ranges)
+            return
+        from sglang.srt.context_system.recovery import mask_ranges
+        from sglang.srt.mem_cache.common import coalesce_ranges
 
-                present = resident.numpy()
-                ranges = [
-                    (start + a, start + b)
-                    for start, end in ranges
-                    for a, b in mask_ranges(present[start:end])
-                ]
-        self.free_kv_row(req.kv, ranges)
+        present = (
+            resident if resident is not None else torch.ones(length, dtype=torch.bool)
+        )
+        if swa is None:
+            ranges = [
+                (start + a, start + b)
+                for start, end in coalesce_ranges(ranges)
+                for a, b in mask_ranges(present[start:end].numpy())
+            ]
+            self.free_kv_row(req.kv, ranges)
+            return
+        # Generated tokens beyond the prefill state have native fresh SWA peers;
+        # the native eviction floor remains authoritative for those positions.
+        alive = torch.ones(length, dtype=torch.bool)
+        count = min(length, len(swa))
+        alive[:count] = swa[:count]
+        alive[: min(length, req.kv.swa_evicted_seqlen)] = False
+        row = self.req_to_token_pool.req_to_token[req.kv.req_pool_idx]
+        live_segments, dead_segments = [], []
+        for start, end in coalesce_ranges(ranges):
+            for selected, output in (
+                (present[start:end] & alive[start:end], live_segments),
+                (present[start:end] & ~alive[start:end], dead_segments),
+            ):
+                output.extend(
+                    (row[start + a : start + b], start + a)
+                    for a, b in mask_ranges(selected.numpy())
+                )
+        allocator = self.token_to_kv_pool_allocator
+        if live_segments:
+            allocator.free_segments(live_segments)
+        if dead_segments:
+            allocator.free_full_segments(dead_segments)
 
     def _release_context_source_lease(self, req: Req):
         if req.context_source_lease is not None:
