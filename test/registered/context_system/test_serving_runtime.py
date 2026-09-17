@@ -117,6 +117,7 @@ def call(base, feature, suffix=""):
         "ignore_eos": True,
         "chat_template_kwargs": {"enable_thinking": False},
         "return_meta_info": True,
+        "logprobs": True,
     }
     if feature:
         payload.update(drop_message={"1": [0]}, reposition=[1])
@@ -130,8 +131,17 @@ def call(base, feature, suffix=""):
 
 def test_chunk_retry_and_mixed_http_generation(server):
     baseline = call(server, False)
+    retry = call(server, True)
+    assert requests.post(server + "/flush_cache", timeout=5).status_code == 200
     cold = call(server, True)
     hot = call(server, True)
+    print("HTTP_ISOLATED", json.dumps([retry, cold, hot]), flush=True)
+    for item in (retry, cold, hot):
+        for token in item["choices"][0]["logprobs"]["content"]:
+            assert token["logprob"] is not None, item
+        assert "\ufffd" not in (item["choices"][0]["message"].get("content") or ""), (
+            item
+        )
     assert cold["choices"][0]["message"] == hot["choices"][0]["message"]
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         outputs = list(

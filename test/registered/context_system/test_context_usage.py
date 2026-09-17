@@ -87,3 +87,21 @@ def test_overlapped_prefill_receipt_keeps_its_admission_provenance(usage_type):
     assert usage.snapshot().cached_tokens == 1
     assert usage.snapshot().drop_skipped_tokens == 1
     assert usage.snapshot().actual_prefill_tokens == 3
+
+
+def test_streaming_decode_snapshot_does_not_scan_prompt(usage_type, monkeypatch):
+    usage = usage_type(mask(1, 1), mask(0, 1))
+    usage.record_prefill(mask(1, 0), mask(0, 0), 3)
+    first = usage.snapshot()
+    module = __import__(usage_type.__module__)
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            module.np, "count_nonzero", lambda _: pytest.fail("decode scanned prompt")
+        )
+        for count in range(1, 8):
+            usage.record_decode()
+            result = usage.snapshot()
+            assert result.cached_tokens == first.cached_tokens
+            assert result.actual_decode_tokens == count
+    usage.record_prefill(mask(0, 1), mask(0, 0), 2)
+    assert usage.snapshot().drop_skipped_tokens == 0
