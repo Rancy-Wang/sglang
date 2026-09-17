@@ -94,6 +94,39 @@ BUS 已保存 `pd-native-c1-timing-analyzer-final.json`；本地 Ruff 与 py_com
 `python/sglang/srt/managers/scheduler_components/metrics_reporter.py:856`。
 上述是原生 C1 结果，尚不能替代修改版 C1/C2 的效率和等待归因验收。
 
+## PD 长历史 TCP 队列满与分批修复（2026-09-18）
+
+修改版 `d4b598572` 的 `minimal-pd120-c1-none-parser-v1` 已完成84请求、0失败，
+27390 / 1095.360421s = **25.005468 token/s**，比上述原生 PD C1 低 **0.816%**。
+全部84个 assistant 对象在仅剔除随机 tool-call ID 后相同；原始对象76/84相同，
+不能把随机 ID 导致的后续历史哈希变化当作生成内容分歧。阶段分析中 D KV 就绪后排队
+mean/max 为0.000134/0.000312秒，粗粒度 D 进度空隙最大约1.31秒。
+原始结果与对照分别保存为 `pd-modified-c1-none-timing-final.json`、
+`pd-c1-native-modified-content-comparison.json`。
+
+`minimal-pd120-c1-drop-parser-v1` 在第二个 task case786 的 turn31 失败，
+75成功/1传输错误，整组无效，不计作吞吐通过。P 的两个 TP rank 均记录
+`TCP lane queue-full rejection`，继而 P HTTP500 / D 接收失败；该请求 active39431、
+raw89930、cached86982、PF2948。前一 task 的 Reposition 与热缓存延续已经执行，
+但不能用这些部分成功替代全轨迹验收。
+
+BUS 安装 `mooncake-transfer-engine-cuda13==0.3.13`，无 HCA 时走 TCP。
+上游同版本 [`tcp_transport.cpp`](https://github.com/kvcache-ai/Mooncake/blob/v0.3.13/mooncake-transfer-engine/src/transport/tcp_transport/tcp_transport.cpp#L302)
+默认每 peer 排队1024项、pending admission1024项；
+[`enqueuePooledTransfer`](https://github.com/kvcache-ai/Mooncake/blob/v0.3.13/mooncake-transfer-engine/src/transport/tcp_transport/tcp_transport_lane_impl.h#L580)
+在两者均满时拒绝。Drop 后不连续的 page1 KV 区间跨所有 K/V 层展开，native 单次
+`batch_transfer_sync` 可以超出这个数量。原有按 token indices 分批的选项没有直接约束
+“区间数 × 层数”，且默认关闭。
+
+R2 修复限定 `MooncakeKVManager._transfer_data`：每次最多提交1024个地址区间，
+同步完成后才提交下一批；1024项以内保持一次调用，连续大 KV 不按字节拆分。当前支持的
+同构 TP、无 custom memory pool 路径把相同 peer 的 chunk 放在同一 worker 中串行发送。
+保留既有源页租约、最终元数据发布时机、失败处理，不添加部分写入后的盲目重试。
+本次边界按上述默认 TCP 队列配置验证；人为缩小底层队列或未支持的 custom pool 并行
+不是本次验证范围。测试 `test_mooncake_fragmented_transfer.py` 覆盖地址/长度与顺序、
+边界批次、失败后停止，以及可选的独立GPU进程 TCP 字节级校验。GPU验证和修复后的
+完整 C1/C2 Drop 性能仍待完成，R2尚未通过。
+
 ## PD 容量异常路径补修（2026-09-18）
 
 `capacity-pd-qwen-v2` 在 P=GPU0/110 KV、D=GPU1/640 KV、Qwen3-0.6B、chunk32、
