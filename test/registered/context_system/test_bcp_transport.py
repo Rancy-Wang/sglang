@@ -217,3 +217,74 @@ def test_streaming_counters_through_pinned_method(pd_failure):
         # Includes discarded/replayed overlap compute; not output_len - 1.
         assert report["actual"]["decode_tokens"] == 3
         assert bench.compute_metrics({"usage": {"prompt_tokens": 151}}) is None
+
+
+@pytest.mark.parametrize("native", [False, True])
+def test_concurrent_pd_rooms_preserve_reported_counters(native):
+    import json
+
+    bench = load_file(
+        "context_bcp_rooms", ROOT / "benchmark/context_system/test_serving.py"
+    )
+
+    async def run():
+        both_started = asyncio.Event()
+        rooms = []
+
+        class Session:
+            @asynccontextmanager
+            async def post(self, url, json):
+                if url == "prefill":
+
+                    async def response_json():
+                        return {}
+
+                    yield SimpleNamespace(status=200, json=response_json)
+                    return
+                rooms.append(json["bootstrap_room"])
+                if len(rooms) == 2:
+                    both_started.set()
+
+                async def content():
+                    await both_started.wait()
+                    if not native:
+                        yield (
+                            '{"sglext":{"context_usage":{"0":{'
+                            '"actual_prefill_tokens":11,"actual_decode_tokens":3,'
+                            '"cached_tokens":70,"repos_tokens":20,'
+                            '"drop_skipped_tokens":50}}}}'
+                        )
+                    yield '{"usage":{"prompt_tokens":151,"completion_tokens":2}}'
+                    yield "[DONE]"
+
+                yield SimpleNamespace(status=200, content=content(), text=None)
+
+        async def events(content):
+            async for event in content:
+                yield event
+
+        transport = bench.Transport(
+            Session(), SimpleNamespace(sse_events=events), "prefill", 1234
+        )
+
+        async def request():
+            async with transport.post("decode", json={}) as response:
+                async for line in response.content:
+                    if line.startswith(b"data: {"):
+                        event = json.loads(line[6:])
+                        if event.get("usage"):
+                            result = event["server_metrics"]
+            return result
+
+        return rooms, await asyncio.gather(request(), request())
+
+    rooms, results = asyncio.run(run())
+    assert len(set(rooms)) == 2
+    assert [row["pd_bootstrap_room"] for row in results] == rooms
+    for row in results:
+        if native:
+            assert set(row) == {"pd_bootstrap_room"}
+        else:
+            assert row["prefill_compute_tokens"] == 11
+            assert row["decode_compute_tokens"] == 3
+            assert row["drop_skipped_tokens"] == 50
