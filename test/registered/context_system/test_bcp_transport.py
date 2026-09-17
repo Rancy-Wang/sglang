@@ -10,6 +10,47 @@ import pytest
 from test_ir import ROOT, load_file
 
 
+def test_gpt_replay_named_tool_after_generated_final(tmp_path):
+    model = os.environ.get("CONTEXT_GPT_TOKENIZER")
+    if not model:
+        pytest.skip("real GPT-OSS tokenizer required")
+    from transformers import AutoTokenizer
+
+    launcher = load_file(
+        "context_bcp_launcher", ROOT / "benchmark/context_system/run_minimal.py"
+    )
+    bench = load_file(
+        "context_bcp_replay", ROOT / "benchmark/context_system/test_serving.py"
+    )
+    tokenizer = AutoTokenizer.from_pretrained(model, local_files_only=True)
+    template = launcher.replay_template(tokenizer.get_chat_template())
+    path = tmp_path / "replay.jinja"
+    path.write_text(template)
+    adapter = bench.NativeTemplateAdapter(
+        model, {"preserve_thinking_history": True}, path
+    )
+    history = [
+        {"role": "user", "content": "Find the answer."},
+        {"role": "assistant", "content": "A generated final answer."},
+        {"role": "tool", "name": "search", "content": "Recorded search result."},
+    ]
+    import copy
+
+    original = copy.deepcopy(history)
+    size, owners = adapter.render(history, [])
+    assert history == original
+    text = adapter.renderer.trace.rendered_text
+    assert "<|start|>functions.search to=assistant" in text
+    assert "A generated final answer." in text
+    assert size == len(owners)
+    assert 2 in owners
+    assert adapter.render(history, [])[0] == size
+    # Preserve the native error when neither the replay nor the history has a name.
+    history[-1].pop("name")
+    with pytest.raises(ValueError, match="no previous assistant"):
+        adapter.render(history, [])
+
+
 @pytest.mark.parametrize("blocked_at", ["headers", "stream"])
 def test_prefill_failure_wakes_blocked_decode(blocked_at):
     bench = load_file(
