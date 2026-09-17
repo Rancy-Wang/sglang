@@ -184,13 +184,76 @@ PD 旧双池测试暴露两个问题：page_size=1 的普通长 prompt 错受 D 
 GPT-OSS-120B 的 mini TP2 固定参考已生成，路径为
 `bcp778-mini-gpt120-tp2-store.json`；测试 helper 让 mini 自己持有 rendezvous store，
 避免 torchrun 的 agent-store 环境令所有 rank 同时等待一个不存在的服务端。
-SG TP2 普通新配置与 GPT-OSS-20B PD 新配置正在验证，最终结果需另行填写。
+共享 SWA 配置的 GPT-OSS-120B 普通/PD 与 GPT-OSS-20B PD 结果如下；吞吐尚未验收。
 
 BCP 吞吐 helper `benchmark/context_system/run_minimal.py` 保留完整任务、原输出长度、
 seed 42、C1/N2 与 C2/N4、K12/96Ki，不测 SLO。`a9e7970d9` 将原生 SG client 的
 journal 改为与 mini 相同的异步 FIFO 写入；计时前用无关合成输入单独预热，记录在
 `warmup.json`，不预热被测任务。mini 没有 HTTP cache flush，因此各引擎均保留这段
 无关前缀，并如实记录，不能声称测试从物理空缓存开始。仍需检查测量区间有无新 JIT。
+
+## 共享 SWA、长历史和思考历史追加证据
+
+以下均使用 BUS 的原生 GPT-OSS 默认 Triton attention、page_size=1 和
+`--disable-hybrid-swa-memory`。普通 120B 为 TP2；PD 120B 为 P GPU0/1 TP2、
+D GPU2/3 TP2，D Radix 关闭，无 D→P 输出 KV。固定路径仍与同输入 8927 tokens
+的 mini 参考比较，门限沿用上文同模型无功能校准。
+
+| 路径 | 120B 普通 max / mean / p99 | 120B PD max / mean / p99 | 20B PD max / mean / p99 |
+| --- | --- | --- | --- |
+| none | 6.09375 / 0.224397 / 1.339844 | 6.09375 / 0.224397 / 1.339844 | 2.710938 / 0.069612 / 0.4375 |
+| Drop | 6.375 / 0.214703 / 1.292969 | 6.375 / 0.214703 / 1.292969 | 4.875 / 0.101741 / 0.875 |
+| Drop+R 冷 | 10.625 / 0.119297 / 0.988281 | 10.625 / 0.119297 / 0.988281 | 2.279297 / 0.064363 / 0.412109 |
+| Drop+R 热 | 6.625 / 0.129831 / 1.0625 | 10.625 / 0.121178 / 1 | 2.279297 / 0.064380 / 0.410156 |
+| 同源 Retry | 11.320313 / 0.135114 / 1.09375 | 11.320313 / 0.135114 / 1.09375 | 1.265625 / 0.057951 / 0.34375 |
+
+三个测试分别为 `1 passed in 446.83s`、`1 passed in 683.43s`、
+`1 passed in 428.48s`。这是含启动和 logits 采集的测试耗时，不能当作吞吐。
+结果目录依次为 `bcp778-sg-gpt120-tp2-shared-v3/`（`b6e3679d6`）、
+`bcp778-sg-pd-gpt120-shared-v1/`（`c773554a0`）、
+`bcp778-sg-pd-gpt20-shared-v3/`（`b6e3679d6`）。各目录的 `comparison.json`
+保留逐 token 误差、实际输出和 usage。热命中 cached/repos/skipped/prefill 为
+3384/0/5542/1；同源 Retry 为 432/3929/2820/1746；实际 decode 均 63。
+这些 PD 请求没有触发 retract，不代替前述专门的回收验证。
+
+20B 三条实际生成与 mini 的 64 tokens 全部相同。120B 普通与 PD 实际输出彼此相同，
+对 mini 的 none/Drop/Drop+R 分别有 43/62/64 tokens 相同；无功能路径已有生成分歧。
+固定路径误差通过不能证明自由生成逐字相同。这些 64-token 结果只是 reasoning 片段，
+完整 Agentic 输出质量仍由完整 BCP 轨迹另行检查。
+
+`dacf9ceaa` 修复 raw 历史超过原生请求表宽度时的存储：
+`python/sglang/srt/context_system/request_storage.py:18-54`
+`prepare_request_row` 为溢出的 Context 请求分配 int32 页号行，并更新稳定的设备行指针；
+原生 Graph 捕获的表不扩容。`write_request_slots`（同文件 `:57-80`）批量写混合行；
+`validate_positions`（`:83-105`）分别检查 birth、迁移来源/目标、终态位置，
+不再把 raw 长度误当作模型位置。这里新增的是索引存储，不是全历史 KV 保留。
+
+BUS GPU3 的 `test_context_long_history.py` 在 GPT-OSS-20B 共享 SWA 下通过
+`1 passed in 315.94s`：raw 4668，五次 Drop+R，原生表宽 8192 与 2048 的冷、热
+路径各 8 个固定 tokens/logits 完全一致，热路径 Drop-skipped 超过 4000。
+证据为 `long-raw-gpt20-dacf9ceaa/comparison.json` 与两份服务器日志。
+另有针对行指针、CUDA Graph 和 admission 的 13 项 GPU 检查通过；这不等同于
+raw>128K 的完整 PD 压力已经通过。
+
+`a515fdaa3` / `f45b968b2` 补齐思考历史保留。原生 Qwen/GPT 模板会省略一部分历史
+reasoning；请求要求 ThinkingDrop 时，必须先确实保留对应文本，才能按准确 token
+来源删除。`context_system/thinking_template.py:14-59` 的 `retained_template`
+仅调整已识别模板的省略条件，`:62-80` 的 `prepare_thinking_history` 使用请求私有视图，
+不修改 tokenizer 全局状态。GPT 同时接受 OpenAI `reasoning_content`；冲突字段报错。
+未请求保留且没有 ThinkingDrop 的请求保持原渲染路径。所有路径仍使用原生工具、
+reasoning parser、模型与 sampler。
+
+BUS 使用四个必验模型的真实 tokenizer 检查保留、准确 Drop 来源、无功能不变、
+模板幂等性和原生 Jinja 独立使用，最终 `4 passed in 24.68s`。
+`benchmark/context_system/run_minimal.py:122-131` 为修改版与冻结原版 SGLang
+生成同一保留历史模板，启动时通过原生 `--chat-template` 传入，并记录 SHA256。
+服务端和客户端使用同一模板与 `preserve_thinking_history=true`，避免省略历史带来
+虚假的性能提升；mini 对照使用其已验证的 `MINISGL_PRESERVE_HARMONY_HISTORY=1`。
+原生模板间仍存在格式差异，不能仅据此宣称完整轨迹 input IDs 相同。
+
+完整吞吐实验正在进行：mini GPU0/1、修改版 SGLang GPU2/3，TP2 C1/N2 no_drop，
+输出位于 `minimal-mini120-c1-none-v1/` 和 `minimal-sg120-c1-none-v1/`。
+目前没有最终吞吐数字，也没有完成冻结原版、Drop、C2 或 PD 吞吐验收。
 
 ## 最终设置
 
