@@ -61,6 +61,39 @@ C2 Drop+Repos。用户随后明确修订：**如果指标劣势主要来自大�
   小量验证不测 SLO 的范围。
 - 本任务保持唯一修改和实验启动者；不影响 InfiniAI-BUS GPU0/1 的参考实验。
 
+## 原生 PD C1 基线与阶段分析（2026-09-18）
+
+BUS `minimal-native-pd120-c1-none-parser-v1` 使用原生兼容基线 `d7a3df66a`，
+P=GPU0/1 TP2、D=GPU2/3 TP2、GPT-OSS-120B、默认 Triton、page1、chunk8192、
+KV262144、CUDA Graph。2/2 首遍 task 完成，84 请求成功、0 失败、无 filler，
+27390 输出 tokens / 1086.423733s = **25.211158 token/s**。
+TTFT mean/P90 为 `7479.460/8867.849 ms`，TPOT 为 `15.453/21.380 ms`，
+E2E 为 `12618.205/18973.562 ms`。原生实际 Prefill/Decode 计算计数缺失，记为 null。
+
+离线 `benchmark/context_system/analyze_pd_timing.py` 通过 bootstrap room 关联
+84/84 请求与 P/D 完成日志，无缺失。它不运行模型、不增加推理 hook；在完整 run
+目录上执行 `python benchmark/context_system/analyze_pd_timing.py RUN --output NEW.json`。
+BUS 已保存 `pd-native-c1-timing-analyzer-final.json`；本地 Ruff 与 py_compile 通过，
+对完整原始日志重新分析后的逐请求阶段值与先前独立分析一致。未完成 filler 的截止取消
+单列，不计为失败或缺失关联。请求数、完整性检查仍由原始 benchmark result 验收。
+
+| CPU 观测阶段 | mean / P90 / max（秒） |
+| --- | --- |
+| P forward，包含 chunk 间等待 | 7.135255 / 8.469192 / 10.879159 |
+| P 最后传输尾段 | 0.079292 / 0.089187 / 0.537503 |
+| P 完成到 D KV 就绪 | 0.081125 / 0.091506 / 0.538803 |
+| D 接收等待，包含 P 计算 | 7.225027 / 8.571852 / 10.988711 |
+| D KV 就绪后排队 | 0.000141 / 0.000221 / 0.000328 |
+
+日志只报告 TP0 的传输量，mean/P90/max 为 `2178.71/3895.37/4603.46 MiB`；
+不能把它当作两卡实测总量。现有 Decode 日志每40次 forward 记录一次，时间戳精度1秒；
+用请求完成点校准后，在正式 D forward 区间内的采样空隙最大约1.23秒。
+客户端最长 SSE 间隔约5秒，其间 D 仍有进度日志，不能把它写成5秒 GPU 停顿；
+这种粗粒度证据也不能排除较短停顿。默认间隔来自
+`python/sglang/srt/arg_groups/fields/observability.py:143`，记录条件位于
+`python/sglang/srt/managers/scheduler_components/metrics_reporter.py:856`。
+上述是原生 C1 结果，尚不能替代修改版 C1/C2 的效率和等待归因验收。
+
 ## PD 容量异常路径补修（2026-09-18）
 
 `capacity-pd-qwen-v2` 在 P=GPU0/110 KV、D=GPU1/640 KV、Qwen3-0.6B、chunk32、
