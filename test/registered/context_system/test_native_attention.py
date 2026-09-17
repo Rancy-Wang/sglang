@@ -99,15 +99,9 @@ def test_native_position_windows(
     pool_k = torch.randn(256, kv_heads, dim, device=device, dtype=dtype)
     pool_v = torch.randn_like(pool_k)
 
-    def native_view(pool):
-        if page_size == 1:
-            return pool
-        return (
-            pool.reshape(-1, page_size, kv_heads, dim).permute(0, 2, 1, 3).contiguous()
-        )
-
+    # Native Triton uses NHD storage for every page size. Its page quotient /
+    # remainder addressing must still cross physical page boundaries correctly.
     flat_pool_k, flat_pool_v = pool_k, pool_v
-    pool_k, pool_v = native_view(pool_k), native_view(pool_v)
     indices = torch.randperm(256, device=device)[:nk]
     qo = torch.tensor([0, 131, 148, 149], device=device, dtype=torch.int32)
     ki = torch.tensor([0, 69, 100, 100], device=device, dtype=torch.int32)

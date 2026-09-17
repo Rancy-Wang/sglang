@@ -51,8 +51,6 @@ def test_all_queries_and_chunk_windows(compiler, occurrence):
     checked = 0
     for tokens, drops, reposition in cases():
         layout = compiler(*args(tokens, drops, reposition))
-        if len(layout.transition_offsets) < 2:
-            continue
         expected, expiry = query_visibility(tokens, drops, reposition)
         n = len(tokens)
         for start, end in {(0, n), (n // 2, n), (0, max(1, n // 2))}:
