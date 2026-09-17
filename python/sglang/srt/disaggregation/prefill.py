@@ -402,6 +402,14 @@ class PrefillBootstrapQueue:
         req.time_stats.set_bootstrap_done_time()
         decode_prefix_len = req.disagg_kv_sender.pop_decode_prefix_len()
         num_kv_indices = len(req.origin_input_ids)
+        if req.context_program is not None:
+            from sglang.srt.disaggregation.context_transfer import transfer_plan
+
+            if decode_prefix_len:
+                raise ValueError("Context PD requires decode Radix disabled")
+            num_kv_indices = transfer_plan(
+                req, self.scheduler.token_to_kv_pool_allocator.device
+            ).active_count
         req.start_send_idx = decode_prefix_len
         # Base of the staging chunk grid (suffix-relative send coordinates).
         req.disagg_decode_prefix_len = decode_prefix_len
@@ -752,6 +760,8 @@ class SchedulerDisaggregationPrefillMixin:
 
         if copy_done is not None:
             copy_done.synchronize()
+        for completion in batch.context_completions:
+            completion.complete(self.token_to_kv_pool_allocator)
         auxiliary_output_starts = (
             self.batch_result_processor.snapshot_auxiliary_output_starts(batch, result)
         )
@@ -1251,6 +1261,10 @@ class SchedulerDisaggregationPrefillMixin:
                 running_batch.batch_is_full = False
 
     def maybe_send_cached_prefix_chunk(self: Scheduler, req: Req) -> None:
+        if req.context_program is not None:
+            # Context transport publishes final versions after their completion
+            # fence; birth-position cached prefixes are not valid D input.
+            return
         if not envs.SGLANG_DISAGG_PREFILL_EARLY_SEND_CACHED_PREFIX.get():
             return
 
@@ -1319,6 +1333,13 @@ class SchedulerDisaggregationPrefillMixin:
         """
         page_size = self.token_to_kv_pool_allocator.page_size
         start_idx = req.start_send_idx
+        context_plan = None
+        if req.context_program is not None:
+            if not last_chunk:
+                return
+            from sglang.srt.disaggregation.context_transfer import transfer_plan
+
+            context_plan = transfer_plan(req, self.token_to_kv_pool_allocator.device)
         transfer_input_len = len(req.origin_input_ids)
         end_idx = (
             end_idx
@@ -1377,6 +1398,10 @@ class SchedulerDisaggregationPrefillMixin:
                 window_kv_indices_full = self.req_to_token_pool.req_to_token[
                     req.kv.req_pool_idx, window_start:seq_len
                 ]
+                if context_plan is not None:
+                    window_kv_indices_full = context_plan.slots(
+                        req, self.req_to_token_pool, window=window_size
+                    )
                 window_kv_indices_swa = (
                     self.token_to_kv_pool_allocator.translate_swa_indices_for_transfer(
                         window_kv_indices_full
@@ -1486,6 +1511,8 @@ class SchedulerDisaggregationPrefillMixin:
             kv_indices = self.req_to_token_pool.req_to_token[
                 req.kv.req_pool_idx, seg_start:seg_end
             ]
+            if context_plan is not None:
+                kv_indices = context_plan.slots(req, self.req_to_token_pool)
             # Unified memory: req_to_token holds VIRTUAL ids; the transfer needs
             # physical ones. Per segment, since each is its own gather.
             kv_indices = (
@@ -1502,7 +1529,10 @@ class SchedulerDisaggregationPrefillMixin:
             req.disagg_kv_sender.send(
                 page_indices,
                 state_indices if segment_is_last else None,
-                num_kv_tokens=seg_end - seg_start,
+                num_kv_tokens=(
+                    context_plan.active_count if context_plan is not None
+                    else seg_end - seg_start
+                ),
             )
         req.start_send_idx = end_idx
         # A last chunk needs no entry: every `last_chunk=True` call site has

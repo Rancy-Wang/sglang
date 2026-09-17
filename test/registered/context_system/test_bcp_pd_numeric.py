@@ -1,0 +1,225 @@
+"""One real BCP task across independent native P/D processes and GPUs."""
+
+import concurrent.futures
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import pytest
+
+requests = pytest.importorskip("requests")
+torch = pytest.importorskip("torch")
+from bcp_numeric_fixture import request_for
+from serving_logits_probe import serialized_probe
+
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("CONTEXT_PD_BCP_ORACLE"),
+    reason="explicit PD BCP reference required",
+)
+
+
+@pytest.fixture(scope="module")
+def pd_servers():
+    directory = Path(os.environ["CONTEXT_TRACE_DIR"])
+    directory.mkdir(parents=True, exist_ok=True)
+    port = int(os.environ.get("CONTEXT_PD_PORT", "28961"))
+    bootstrap = port + 10
+    processes, logs = [], []
+    bases = []
+    try:
+        for i, mode in enumerate(("prefill", "decode")):
+            base = f"http://127.0.0.1:{port + i}"
+            bases.append(base)
+            env = os.environ.copy()
+            env["CUDA_VISIBLE_DEVICES"] = os.environ.get(
+                "CONTEXT_P_GPU" if i == 0 else "CONTEXT_D_GPU", str(i)
+            )
+            env["PYTHONPATH"] = os.pathsep.join(
+                [str(Path(__file__).parent.resolve()), env.get("PYTHONPATH", "")]
+            )
+            cmd = [
+                sys.executable,
+                "-m",
+                "sglang.launch_server",
+                "--model-path",
+                os.environ["CONTEXT_SERVER_MODEL"],
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(port + i),
+                "--nccl-port",
+                str(port + 20 + i),
+                "--disaggregation-mode",
+                mode,
+                "--disaggregation-bootstrap-port",
+                str(bootstrap),
+                "--page-size",
+                "1",
+                "--dtype",
+                "bfloat16",
+                "--max-total-tokens",
+                os.environ.get(
+                    "CONTEXT_P_KV" if i == 0 else "CONTEXT_D_KV",
+                    "24576" if i == 0 else "16384",
+                ),
+                "--context-length",
+                "16384",
+                "--max-running-requests",
+                "4",
+                "--chunked-prefill-size",
+                "512",
+                "--context-drop-aware-eviction",
+                "--cuda-graph-config",
+                json.dumps(
+                    {
+                        "decode": {"bs": [1, 2, 4], "max_bs": 4},
+                        "prefill": {"bs": [16, 32, 64], "max_bs": 64},
+                    }
+                ),
+                "--enable-custom-logit-processor",
+            ]
+            backend = os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND")
+            if backend:
+                cmd += ["--attention-backend", backend]
+            log_path = directory / f"{mode}-server.log"
+            log = log_path.open("w")
+            logs.append(log)
+            proc = subprocess.Popen(
+                cmd,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+                env=env,
+            )
+            processes.append(proc)
+            print(
+                "PD_SERVER",
+                mode,
+                env["CUDA_VISIBLE_DEVICES"],
+                json.dumps(cmd),
+                flush=True,
+            )
+            deadline = time.monotonic() + 240
+            while time.monotonic() < deadline:
+                if proc.poll() is not None:
+                    pytest.fail(log_path.read_text()[-16000:])
+                try:
+                    if requests.get(base + "/health", timeout=1).status_code == 200:
+                        break
+                except requests.RequestException:
+                    pass
+                time.sleep(1)
+            else:
+                pytest.fail(log_path.read_text()[-16000:])
+        yield (*bases, bootstrap)
+    finally:
+        for proc in processes:
+            if proc.poll() is None:
+                os.killpg(proc.pid, signal.SIGTERM)
+                try:
+                    proc.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    proc.wait(timeout=15)
+        for log in logs:
+            log.close()
+
+
+def test_bcp_pd_terminal_handoff(pd_servers):
+    p_base, d_base, bootstrap = pd_servers
+    reference_path = Path(os.environ["CONTEXT_PD_BCP_ORACLE"])
+    reference = json.loads(reference_path.read_text())
+    reference_logits = torch.load(str(reference_path) + ".pt", weights_only=True)
+    directory = Path(os.environ["CONTEXT_TRACE_DIR"])
+    processor = serialized_probe()
+    comparisons = {}
+    room = int(time.time_ns() % (1 << 53))
+
+    def call(feature, name):
+        nonlocal room
+        room += 1
+        tokens = reference["runs"][feature]["records"][0]["tokens"]
+        payload = {
+            **request_for(reference["fixture"], feature),
+            "model": os.environ["CONTEXT_SERVER_MODEL"],
+            "temperature": 0,
+            "max_tokens": len(tokens),
+            "ignore_eos": True,
+            "return_meta_info": True,
+            "return_input_ids_in_sglext": True,
+            "return_output_ids_in_sglext": True,
+            "bootstrap_host": "127.0.0.1",
+            "bootstrap_port": bootstrap,
+            "bootstrap_room": room,
+            "custom_logit_processor": processor,
+        }
+
+        def send(mode, base, count, offset):
+            body = dict(
+                payload,
+                custom_params={
+                    "context_trace_path": str(directory / f"{name}-{mode}.pt"),
+                    "context_trace_count": count,
+                    "context_forced_tokens": tokens,
+                    "context_forced_offset": offset,
+                },
+            )
+            response = requests.post(
+                base + "/v1/chat/completions", json=body, timeout=300
+            )
+            (directory / f"{name}-{mode}.json").write_text(response.text)
+            assert response.status_code == 200, response.text
+            return response.json()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            p = executor.submit(send, "prefill", p_base, 1, 0)
+            d = executor.submit(send, "decode", d_base, len(tokens) - 1, 1)
+            p.result()
+            response = d.result()
+        logits = torch.cat(
+            [
+                torch.load(directory / f"{name}-{mode}.pt", weights_only=True)
+                for mode in ("prefill", "decode")
+            ]
+        )
+        expected = reference_logits[feature]
+        assert logits.shape == expected.shape and torch.isfinite(logits).all(), name
+        assert (
+            response["sglext"]["input_ids"]
+            == reference["runs"]["none"]["records"][0]["input"]["ids"]
+        )
+        assert response["sglext"]["output_ids"] == [tokens], response
+        delta = (logits - expected).abs()
+        item = {
+            "max_abs": delta.max().item(),
+            "mean_abs": delta.mean().item(),
+            "p99_abs": torch.quantile(delta.flatten(), 0.99).item(),
+            "per_token_max": delta.max(-1).values.tolist(),
+            "context_usage": response["choices"][0]
+            .get("meta_info", {})
+            .get("context_usage"),
+        }
+        comparisons[name] = item
+        (directory / "comparison.json").write_text(json.dumps(comparisons, indent=2))
+        print("BCP_PD_COMPARE", name, json.dumps(item), flush=True)
+
+    for feature in ("none", "drop", "drop_repos"):
+        assert requests.post(p_base + "/flush_cache", timeout=5).status_code == 200
+        call(feature, feature)
+    call("drop_repos", "drop_repos-hot")
+    assert requests.post(p_base + "/flush_cache", timeout=5).status_code == 200
+    call("none", "none-retry-source")
+    call("drop_repos", "drop_repos-retry")
+    for name in ("drop", "drop_repos", "drop_repos-hot", "drop_repos-retry"):
+        for metric, floor in (
+            ("max_abs", 0.125),
+            ("mean_abs", 0.02),
+            ("p99_abs", 0.0625),
+        ):
+            assert comparisons[name][metric] <= max(
+                floor, 2 * comparisons["none"][metric]
+            ), (name, metric, comparisons)

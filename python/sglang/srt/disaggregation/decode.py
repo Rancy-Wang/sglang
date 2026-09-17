@@ -524,6 +524,18 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
         return self._swa_tail_len(len(req.origin_input_ids)) + len(req.output_ids)
 
     def _prealloc_kv_lens(self, req: Req) -> Tuple[int, int]:
+        if req.context_program is not None:
+            from sglang.srt.disaggregation.context_transfer import prepare_decode_transfer_plan
+
+            plan = prepare_decode_transfer_plan(
+                req, self.token_to_kv_pool_allocator.device, self._pre_alloc_fill_len(req)
+            )
+            window = self.scheduler.sliding_window_size
+            return (
+                plan.active_count,
+                plan.active_count - plan.swa_start(window)
+                if self.scheduler.tp_worker.is_hybrid_swa else plan.active_count,
+            )
         allocated_kv_len = self._pre_alloc_fill_len(req)
         if self._uses_swa_tail_prealloc():
             return allocated_kv_len, self._swa_tail_len(allocated_kv_len)
@@ -811,6 +823,8 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
         else:
             capacity = self.max_total_num_tokens
         input_len = self._rebootstrap_prefill_len(req)
+        if req.context_program is not None:
+            input_len = self._prealloc_kv_lens(req)[0]
         if input_len > capacity:
             message = f"Request {req.rid} exceeds the maximum number of tokens: {input_len} > {capacity}"
             logger.error(message)
@@ -1325,6 +1339,8 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
                 prefix_len = 0
                 total_prefix_len = 0
                 required_alloc_tokens = self._pre_alloc_fill_len(decode_req.req)
+                if decode_req.req.context_program is not None:
+                    required_alloc_tokens = self._prealloc_kv_lens(decode_req.req)[0]
 
             required_tokens_for_request = (
                 required_alloc_tokens + self.num_reserved_decode_tokens
@@ -1333,7 +1349,8 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
             if (
                 max(
                     required_tokens_for_request,
-                    origin_input_len
+                    (required_alloc_tokens if decode_req.req.context_program is not None
+                     else origin_input_len)
                     - prefix_len
                     + min(
                         decode_req.req.sampling_params.max_new_tokens,
@@ -1389,6 +1406,13 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
                     failed_reqs.append(decode_req)
                     indices_to_remove.add(i)
                     continue
+            if (
+                decode_req.req.context_program is not None
+                and self.scheduler.tp_worker.is_hybrid_swa
+                and self._prealloc_kv_lens(decode_req.req)[1]
+                > self.token_to_kv_pool_allocator.swa_available_size()
+            ):
+                break
             dst_kv_indices = self._pre_alloc(
                 decode_req.req,
                 prefix_indices,
@@ -1420,7 +1444,18 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
 
             page_size = self.token_to_kv_pool_allocator.page_size
             kv_transfer_page_size = page_size
-            if self.scheduler.enable_hisparse:
+            seq_len = origin_input_len
+            context_plan = None
+            if decode_req.req.context_program is not None:
+                from sglang.srt.disaggregation.context_transfer import transfer_plan
+
+                context_plan = transfer_plan(
+                    decode_req.req, self.token_to_kv_pool_allocator.device
+                )
+                kv_indices = self.token_to_kv_pool_allocator.translate_kv_indices_for_transfer(
+                    context_plan.slots(decode_req.req, self.req_to_token_pool)
+                )
+            elif self.scheduler.enable_hisparse:
                 # Direct-to-host sends host/C4 rows; keep allocator.page_size
                 # logical and use the compressed page size only for these indices.
                 kv_transfer_page_size = getattr(
@@ -1440,8 +1475,6 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
                     )
                 )
 
-            seq_len = origin_input_len
-
             def _mamba_payload():
                 return [
                     self.req_to_token_pool.translate_mamba_indices(
@@ -1460,6 +1493,10 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
                 window_kv_indices_full = self.req_to_token_pool.req_to_token[
                     decode_req.req.kv.req_pool_idx, window_start:seq_len
                 ]
+                if context_plan is not None:
+                    window_kv_indices_full = context_plan.slots(
+                        decode_req.req, self.req_to_token_pool, window=window_size
+                    )
                 window_kv_indices_swa = (
                     self.token_to_kv_pool_allocator.translate_swa_indices_for_transfer(
                         window_kv_indices_full
@@ -1863,6 +1900,25 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
 
         fill_len = self._pre_alloc_fill_len(req)
         req.kv.kv_committed_len = fill_len
+        if req.context_program is not None:
+            from sglang.srt.disaggregation.context_transfer import (
+                allocate_context_destination, prepare_decode_transfer_plan,
+            )
+
+            if prefix_len or total_prefix_len:
+                raise ValueError("Context PD requires decode Radix disabled")
+            prepare_decode_transfer_plan(
+                req, self.token_to_kv_pool_allocator.device, fill_len
+            )
+            slots = allocate_context_destination(
+                req, self.token_to_kv_pool_allocator, self.req_to_token_pool,
+                window=(self.scheduler.sliding_window_size
+                        if self.scheduler.tp_worker.is_hybrid_swa else None),
+            )
+            req.full_untruncated_fill_ids = req.origin_input_ids + req.output_ids
+            req.prefix_indices = torch.empty((0,), dtype=torch.int64)
+            req.set_extend_range(0, fill_len)
+            return slots
 
         if prefix_len > 0:
             self.req_to_token_pool.write(
@@ -2229,6 +2285,18 @@ class DecodeTransferQueue(DecodeHiCacheTransferMixin):
             return
 
         self._commit_hicache_local_restore_to_req(decode_req)
+        from sglang.srt.disaggregation.context_transfer import commit_context_metadata
+
+        try:
+            commit_context_metadata(
+                decode_req.req, cached_tokens,
+                self.scheduler.token_to_kv_pool_allocator.device
+            )
+        except ValueError as error:
+            prepare_abort(decode_req.req, str(error), status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
+            decode_req.kv_receiver.clear()
+            decode_req.kv_receiver = None
+            return
 
         # Case 3: Success - commit the transfer
         # PD true-retraction rebootstrap: the prefill recomputed the prefix KV

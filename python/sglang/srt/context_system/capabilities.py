@@ -31,7 +31,24 @@ def validate_context_request(args, model_config, request):
     if args.kv_cache_dtype not in ("auto", "float16", "bfloat16"):
         raise ValueError("Context requires unquantized FP16/BF16 KV")
     if args.disaggregation_mode != "null":
-        raise ValueError("Context PD transfer integration is not yet enabled")
+        from sglang.srt.environ import envs
+
+        for name in (
+            "disaggregation_decode_enable_radix_cache",
+            "disaggregation_decode_enable_offload_kvcache",
+            "disaggregation_enable_kv_checksum",
+        ):
+            if getattr(args, name, False):
+                raise ValueError(f"Context PD is not yet supported with {name}")
+        if (
+            getattr(args, "disaggregation_decode_retraction_backup", None)
+            == "host_pool"
+        ):
+            raise ValueError(
+                "Context PD currently requires CPU tensor retraction backup"
+            )
+        if envs.SGLANG_DISAGG_STAGING_BUFFER.get():
+            raise ValueError("Context PD staging transfer is not yet supported")
     if args.pp_size != 1 or args.attn_cp_size != 1 or args.dcp_size != 1:
         raise ValueError("Context currently supports TP without PP/CP/DCP")
     if args.speculative_algorithm or args.dllm_algorithm:
@@ -59,8 +76,7 @@ def validate_context_request(args, model_config, request):
         raise ValueError("Context LoRA cache compatibility is not yet supported")
     if (request.sampling_params or {}).get("beam_width", 1) > 1:
         raise ValueError("Context beam scheduling is not yet supported")
-    # HTTP JSON cannot construct the internal tensor-buffer wire. Validate here
-    # so a malformed /generate payload becomes a client error before IPC.
+    # Validate tensor IPC or native PD rebootstrap JSON before scheduler IPC.
     from sglang.srt.context_system.planner import ContextProgram
 
     ContextProgram.from_wire(request.context_program, request.input_ids)

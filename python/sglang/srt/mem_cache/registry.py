@@ -84,7 +84,10 @@ def default_radix_cache_factory(ctx: TreeCacheBuildContext) -> BasePrefixCache:
 
     if (
         ctx.disable_radix_cache
-        and get_disagg().disaggregation_decode_retraction_backup == "host_pool"
+        and (
+            get_disagg().disaggregation_decode_retraction_backup == "host_pool"
+            or get_disagg().disaggregation_mode == "decode"
+        )
     ):
         return _create_unified_radix_cache(ctx, server_args, params)
 

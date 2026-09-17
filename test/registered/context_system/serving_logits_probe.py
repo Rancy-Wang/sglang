@@ -42,7 +42,7 @@ def serialized_probe():
                 forced = params.get("context_forced_tokens")
                 if forced is not None:
                     logits[i].fill_(-float("inf"))
-                    logits[i, forced[step]] = 0
+                    logits[i, forced[step + params.get("context_forced_offset", 0)]] = 0
                 if len(rows) == params["context_trace_count"]:
                     # One transfer at request completion; no per-token D2H.
                     snapshot = torch.stack(rows).float().cpu()

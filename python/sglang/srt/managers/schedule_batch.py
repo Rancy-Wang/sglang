@@ -1054,6 +1054,7 @@ class Req(ReqDllmMixin):
         self.context_exact_prefix_len = 0
         self.context_state = None
         self.context_decode_layout = None
+        self.context_transfer_plan = None
         self.context_window_plan = None
         self.context_usage = None
         self.context_cache_published = False
@@ -2260,6 +2261,10 @@ class Req(ReqDllmMixin):
         token_indices = req_to_token_pool.req_to_token[
             self.kv.req_pool_idx, : self.seqlen - 1
         ]
+        if self.context_program is not None:
+            from sglang.srt.disaggregation.context_transfer import request_active_slots
+
+            token_indices = request_active_slots(self, req_to_token_pool, self.seqlen - 1)
         # Copies over both the kv cache and mamba state if available
         mamba_pool = self._mamba_pool_needing_backup(
             req_to_token_pool, token_to_kv_pool_allocator
@@ -2282,6 +2287,10 @@ class Req(ReqDllmMixin):
         token_indices = req_to_token_pool.req_to_token[
             self.kv.req_pool_idx, : self.seqlen - 1
         ]
+        if self.context_program is not None:
+            from sglang.srt.disaggregation.context_transfer import request_active_slots
+
+            token_indices = request_active_slots(self, req_to_token_pool, self.seqlen - 1)
         # Loads both the kv cache and mamba state if exists
         mamba_cpu = self.kv.retraction_backup.mamba_cpu
         if mamba_cpu is not None and self.kv.holds_mamba:
@@ -2344,6 +2353,12 @@ class Req(ReqDllmMixin):
             "routing_key": self.routing_key,
             "routed_dp_rank": self.disagg_prefill_dp_rank,
             "disagg_prefill_dp_rank": self.disagg_prefill_dp_rank,
+            **(
+                {"context_program": self.context_program.with_generated(
+                    self.output_ids
+                ).to_json_wire()}
+                if self.context_program is not None else {}
+            ),
         }
 
     def log_time_stats(self):

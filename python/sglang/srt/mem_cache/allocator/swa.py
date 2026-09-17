@@ -324,6 +324,19 @@ class SWATokenToKVPoolAllocator(BaseTokenToKVPoolAllocator):
 
         return alloc_full_indices
 
+    def alloc_context_swa_tail(self, count: int, tail: int):
+        """Page-one PD allocation with physical SWA only for active tail KV."""
+        assert self.page_size == 1 and not self._swa_req_ring
+        assert 0 <= tail <= count
+        if self.full_available_size() < count or self.swa_available_size() < tail:
+            return None
+        full = self.full_attn_allocator.alloc(count)
+        swa = self.swa_attn_allocator.alloc(tail) if tail else None
+        self.clear_full_to_swa_mapping(full[:count - tail])
+        if tail:
+            self.set_full_to_swa_mapping(full[count - tail:], swa)
+        return full
+
     def alloc_extend_swa_tail(
         self,
         prefix_lens: torch.Tensor,
