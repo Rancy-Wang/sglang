@@ -61,6 +61,8 @@ def server(tmp_path_factory):
         "--enable-mixed-chunk",
     ]
     cmd += ["--tp-size", os.environ.get("CONTEXT_TEST_TP", "1")]
+    if "gpt-oss" in os.environ["CONTEXT_SERVER_MODEL"].lower():
+        cmd += ["--tool-call-parser", "gpt-oss", "--reasoning-parser", "gpt-oss"]
     backend = os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND")
     if backend:
         cmd += ["--attention-backend", backend]
