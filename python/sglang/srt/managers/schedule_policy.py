@@ -725,6 +725,8 @@ class PrefillAdder:
         total_tokens: int,
         swa_host_hit_length: int,
     ) -> tuple[bool, Optional[int]]:
+        if getattr(req, "context_program", None) is not None:
+            return True, self.rem_chunk_tokens
         return self.memory_budget.check_prefill(
             extend_input_len=extend_input_len,
             total_tokens=total_tokens,
@@ -1272,7 +1274,11 @@ class PrefillAdder:
         if (x := self.prefill_max_requests) is not None and len(self.can_run_list) >= x:
             return AddReqResult.OTHER
 
-        if req.sampling_params.ignore_eos and getattr(self.tree_cache, "disable", True):
+        if (
+            req.sampling_params.ignore_eos
+            and getattr(self.tree_cache, "disable", True)
+            and getattr(req, "context_program", None) is None
+        ):
             return self.add_one_req_ignore_eos(req)
 
         # Reserve page_size for page-alignment overhead: the paged allocator may

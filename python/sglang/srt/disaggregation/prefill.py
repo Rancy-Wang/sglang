@@ -29,6 +29,8 @@ from typing import TYPE_CHECKING, List, Optional
 import numpy as np
 import torch
 
+from sglang.srt.context_system.request_storage import request_row
+
 from sglang.srt.disaggregation.base import KVPoll
 from sglang.srt.disaggregation.base.conn import StateType
 from sglang.srt.disaggregation.checksum import (
@@ -1521,13 +1523,9 @@ class SchedulerDisaggregationPrefillMixin:
 
         for seg_start, seg_end in segments:
             is_final_segment = seg_end == end_idx
-            kv_indices = self.req_to_token_pool.req_to_token[
-                req.kv.req_pool_idx, seg_start:seg_end
-            ]
+            kv_indices = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[seg_start:seg_end]
             if context_plan is not None:
-                kv_indices = self.req_to_token_pool.req_to_token[
-                    req.kv.req_pool_idx, context_chunk
-                ]
+                kv_indices = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[context_chunk]
             # Unified memory: req_to_token holds VIRTUAL ids; the transfer needs
             # physical ones. Per segment, since each is its own gather.
             kv_indices = (

@@ -18,6 +18,8 @@ from typing import (
 
 import torch
 
+from sglang.srt.context_system.request_storage import request_row
+
 from sglang.srt.mem_cache.allocator import BaseTokenToKVPoolAllocator
 from sglang.srt.mem_cache.events import KVCacheEventRecorder
 from sglang.srt.mem_cache.memory_pool import ReqToTokenPool
@@ -474,7 +476,7 @@ class BasePrefixCache(ABC, PrefixCacheTrait):
         """
         from sglang.srt.mem_cache.common import coalesce_ranges, free_kv_row_segments
 
-        row = self.req_to_token_pool.req_to_token[kv.req_pool_idx]
+        row = request_row(self.req_to_token_pool, kv.req_pool_idx)
         # Adjacent pieces whose seam falls inside one (DCP-widened) page would
         # free that page twice; the allocator rejects that, so merge them first.
         free_kv_row_segments(

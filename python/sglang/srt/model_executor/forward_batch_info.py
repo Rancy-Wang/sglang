@@ -960,7 +960,8 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
                 if model_runner.decode_attention_backend_str != "triton":
                     raise ValueError("Context decode currently requires native Triton")
                 registry = ContextDecodeRegistry(
-                    model_runner.kv_index_translator, model_runner.token_to_kv_pool
+                    model_runner.kv_index_translator, model_runner.token_to_kv_pool,
+                    model_runner.req_to_token_pool,
                 )
                 model_runner.context_decode_registry = registry
                 backends = [model_runner.attn_backend, model_runner.decode_attn_backend]

@@ -33,6 +33,12 @@ import numpy as np
 import torch
 from torch.distributed import ProcessGroup
 
+from sglang.srt.context_system.request_storage import (
+    prepare_request_row,
+    release_request_row,
+    write_request_slots,
+)
+
 from sglang.srt.configs.mamba_utils import Mamba2CacheParams
 from sglang.srt.constants import GPU_MEMORY_TYPE_KV_CACHE
 from sglang.srt.disaggregation.base import KVPoll
@@ -185,7 +191,7 @@ class DecodeReqToTokenPool:
         self._aux_cache: Any = None
 
     def write(self, indices, values):
-        self.req_to_token[indices] = values
+        write_request_slots(self, indices, values)
 
     def available_size(self):
         return len(self.free_slots)
@@ -225,14 +231,18 @@ class DecodeReqToTokenPool:
                 r.kv.req_pool_idx = select_index[offset]
                 self.req_generation[r.kv.req_pool_idx] += 1
                 offset += 1
+            prepare_request_row(self, r)
         return [r.kv.req_pool_idx for r in reqs]
 
     def free(self, req: Req):
         assert req.kv.holds_kv, "request must have req_pool_idx"
+        release_request_row(self, req.kv.req_pool_idx)
         self.free_slots.append(req.kv.req_pool_idx)
         req.kv.req_pool_idx = None
 
     def clear(self):
+        for index in tuple(getattr(self, "_context_rows", ())):
+            release_request_row(self, index)
         self.free_slots = list(range(1, self._alloc_size))
         self.req_generation.zero_()
 

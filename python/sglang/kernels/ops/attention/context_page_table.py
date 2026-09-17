@@ -9,7 +9,7 @@ def context_window_lengths(Registry, Rows, Lengths, Output, WINDOW: tl.constexpr
     b = tl.program_id(0)
     row = tl.load(Rows + b)
     length = tl.load(Lengths + b)
-    entry = Registry + row * 5
+    entry = Registry + row * 6
     pointer = tl.load(entry)
     result = tl.minimum(length, WINDOW)
     if pointer != 0:
@@ -52,11 +52,15 @@ def context_decode_indices(
     length = tl.load(Lengths + b)
     offset = tl.load(Indptr + b)
     start = tl.load(Starts + b) if HAS_START else 0
-    entry = Registry + row * 5
+    entry = Registry + row * 6
     pointer = tl.load(entry)
     active = tl.load(entry + 3).to(tl.int32)
     prompt = tl.load(entry + 2).to(tl.int32)
     raw_ids = pointer.to(tl.pointer_type(tl.int32))
+    row_pointer = tl.load(entry + 5)
+    raw_row = Table + row * ROW_STRIDE
+    if row_pointer != 0:
+        raw_row = row_pointer.to(tl.pointer_type(tl.int32))
     for block in range(tl.cdiv(length, BLOCK)):
         i = block * BLOCK + tl.arange(0, BLOCK)
         valid = i < length
@@ -66,7 +70,7 @@ def context_decode_indices(
             in_prompt = logical < active
             raw = tl.load(raw_ids + logical, mask=valid & in_prompt, other=0)
             raw = tl.where(in_prompt, raw, prompt + logical - active)
-        slot = tl.load(Table + row * ROW_STRIDE + raw, mask=valid, other=0)
+        slot = tl.load(raw_row + raw, mask=valid, other=0)
         if TRANSLATE:
             slot = tl.load(Mapping + slot, mask=valid, other=0) * MULTIPLIER
         tl.store(Output + offset + i, slot, mask=valid)

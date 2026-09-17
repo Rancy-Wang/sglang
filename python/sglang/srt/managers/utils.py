@@ -241,7 +241,10 @@ class GenerationBatchResult:
 
 
 def validate_input_length(
-    req: Req, max_req_input_len: int, allow_auto_truncate: bool
+    req: Req,
+    max_req_input_len: int,
+    allow_auto_truncate: bool,
+    context_position_limit: Optional[int] = None,
 ) -> Optional[str]:
     """Validate and potentially truncate input length.
 
@@ -253,6 +256,18 @@ def validate_input_length(
     Returns:
         Error message if validation fails, None if successful
     """
+    if getattr(req, "context_program", None) is not None:
+        from sglang.srt.context_system.request_storage import validate_positions
+
+        try:
+            active = validate_positions(
+                req.context_program, context_position_limit or max_req_input_len
+            )
+        except ValueError as exc:
+            return str(exc)
+        if active >= max_req_input_len:
+            return "Context active prompt exceeds the available KV capacity"
+        return None
     if len(req.origin_input_ids) >= max_req_input_len:
         if allow_auto_truncate:
             logger.warning(

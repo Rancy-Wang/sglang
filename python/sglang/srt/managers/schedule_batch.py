@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from sglang.srt.context_system.request_storage import request_row
+
 from sglang.srt.dllm.config import DllmConfig
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch
 from sglang.srt.runtime_context import (
@@ -2258,9 +2260,7 @@ class Req(ReqDllmMixin):
         return req_to_token_pool.mamba_pool
 
     def offload_kv_cache(self, req_to_token_pool, token_to_kv_pool_allocator):
-        token_indices = req_to_token_pool.req_to_token[
-            self.kv.req_pool_idx, : self.seqlen - 1
-        ]
+        token_indices = request_row(req_to_token_pool, self.kv.req_pool_idx)[: self.seqlen - 1]
         if self.context_program is not None:
             from sglang.srt.disaggregation.context_transfer import request_active_slots
 
@@ -2284,9 +2284,7 @@ class Req(ReqDllmMixin):
 
     def load_kv_cache(self, req_to_token_pool, token_to_kv_pool_allocator):
         assert self.kv.retraction_backup is not None
-        token_indices = req_to_token_pool.req_to_token[
-            self.kv.req_pool_idx, : self.seqlen - 1
-        ]
+        token_indices = request_row(req_to_token_pool, self.kv.req_pool_idx)[: self.seqlen - 1]
         if self.context_program is not None:
             from sglang.srt.disaggregation.context_transfer import request_active_slots
 
@@ -4231,7 +4229,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             if retain_floor is not None:
                 end = min(end, retain_floor)
             end = max(start, end)
-            row = self.req_to_token_pool.req_to_token[req.kv.req_pool_idx]
+            row = request_row(self.req_to_token_pool, req.kv.req_pool_idx)
             for left, right in req.context_state.live_swa_ranges(start, end):
                 self.token_to_kv_pool_allocator.free_swa_segment(
                     row[left:right], start_pos=left

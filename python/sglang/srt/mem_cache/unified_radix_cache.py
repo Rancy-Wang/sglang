@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Iterator, NamedTuple, Optional, Sequence, Type
 
 import torch
 
+from sglang.srt.context_system.request_storage import request_row
+
 from sglang.srt.distributed.communication_tags import P2PTag
 from sglang.srt.environ import envs
 from sglang.srt.managers.cache_controller import CacheOperation
@@ -1031,9 +1033,7 @@ class UnifiedRadixCache(BasePrefixCache):
             return
 
         token_ids = (req.origin_input_ids + req.output_ids)[:kv_len_to_handle]
-        kv_indices = self.req_to_token_pool.req_to_token[
-            req.kv.req_pool_idx, :kv_len_to_handle
-        ]
+        kv_indices = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[:kv_len_to_handle]
 
         result = None
         insert_params = None
@@ -1320,7 +1320,7 @@ class UnifiedRadixCache(BasePrefixCache):
         count = min(length, len(swa))
         alive[:count] = swa[:count]
         alive[: min(length, req.kv.swa_evicted_seqlen)] = False
-        row = self.req_to_token_pool.req_to_token[req.kv.req_pool_idx]
+        row = request_row(self.req_to_token_pool, req.kv.req_pool_idx)
         live_segments, dead_segments = [], []
         for start, end in coalesce_ranges(ranges):
             for selected, output in (
@@ -1350,15 +1350,11 @@ class UnifiedRadixCache(BasePrefixCache):
         token_ids = req.get_fill_ids()
 
         if self.disable:
-            kv_indices = self.req_to_token_pool.req_to_token[
-                req.kv.req_pool_idx, : len(token_ids)
-            ]
+            kv_indices = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[: len(token_ids)]
             req.prefix_indices = kv_indices.to(dtype=torch.int64, copy=True)
             return
 
-        kv_indices_orig = self.req_to_token_pool.req_to_token[
-            req.kv.req_pool_idx, : len(token_ids)
-        ]
+        kv_indices_orig = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[: len(token_ids)]
 
         # components prepare insert data + return effective cache_len
         insert_params = InsertParams(
@@ -1638,9 +1634,7 @@ class UnifiedRadixCache(BasePrefixCache):
         self, req: Req
     ) -> tuple[torch.Tensor, list[PoolTransfer]]:
         num_tokens = req.seqlen - 1
-        full_indices = self.req_to_token_pool.req_to_token[
-            req.kv.req_pool_idx, :num_tokens
-        ].to(torch.int64)
+        full_indices = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[:num_tokens].to(torch.int64)
         if req.context_program is not None:
             from sglang.srt.disaggregation.context_transfer import request_active_slots
 

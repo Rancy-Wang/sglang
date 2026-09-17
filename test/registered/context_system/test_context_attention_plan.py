@@ -10,6 +10,8 @@ pytest_plugins = ("test_ir", "test_planner")
 
 @pytest.fixture(scope="module")
 def attention_plan():
+    load_file("sglang.srt.context_system.request_storage",
+              ROOT / "python/sglang/srt/context_system/request_storage.py")
     return load_file(
         "context_test_attention_plan",
         ROOT / "python/sglang/srt/layers/attention/context_backend.py",

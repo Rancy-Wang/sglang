@@ -2524,6 +2524,12 @@ class Scheduler(
 
     def init_req_max_new_tokens(self, req):
         input_len = len(req.origin_input_ids)
+        position_limit = self.max_req_len - input_len - 1
+        if req.context_program is not None:
+            position_limit = (
+                self.model_config.context_len - req.context_program.layout.next_position
+            )
+            input_len = int(req.context_program.layout.keep_mask.count_nonzero())
         max_new_tokens = (
             req.sampling_params.max_new_tokens
             if req.sampling_params.max_new_tokens is not None
@@ -2543,7 +2549,7 @@ class Scheduler(
             0,
             min(
                 max_new_tokens,
-                self.max_req_len - input_len - 1,
+                position_limit,
             ),
         )
         max_new_tokens = self.token_to_kv_pool_allocator.max_new_tokens_for_memory(
@@ -3021,6 +3027,7 @@ class Scheduler(
             req,
             self.max_req_input_len,
             get_serving().allow_auto_truncate,
+            context_position_limit=self.model_config.context_len,
         )
         if error_msg:
             req.set_finish_with_abort(error_msg)
@@ -3485,6 +3492,7 @@ class Scheduler(
             req,
             self.max_req_input_len,
             get_serving().allow_auto_truncate,
+            context_position_limit=self.model_config.context_len,
         )
         if error_msg:
             self._add_request_to_queue(req)

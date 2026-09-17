@@ -8,6 +8,8 @@ import torch
 import triton
 import triton.language as tl
 
+from sglang.srt.context_system.request_storage import row_pointers
+
 from sglang.kernels.ops.memory.common import (
     get_last_loc_triton,
     get_last_loc_triton_safe,
@@ -84,6 +86,7 @@ def write_cache_indices(
             extend_lens_tensor,
             out_cache_loc,
             req_to_token_pool.req_to_token.shape[1],
+            row_pointers(req_to_token_pool),
         )
     else:
         pt = 0

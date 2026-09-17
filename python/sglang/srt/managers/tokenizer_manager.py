@@ -1001,11 +1001,12 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
         obj: Union[GenerateReqInput, EmbeddingReqInput],
     ):
         """Tokenize one request."""
+        context_program = None
         if isinstance(obj, GenerateReqInput) and obj.context_program is not None:
             from sglang.srt.arg_groups.overrides import resolving_view
             from sglang.srt.context_system.capabilities import validate_context_request
 
-            validate_context_request(
+            context_program = validate_context_request(
                 resolving_view(self.server_args), self.model_config, obj
             )
         # Tokenize
@@ -1180,7 +1181,7 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
         else:
             mm_inputs = None
 
-        self._validate_one_request(obj, input_ids)
+        self._validate_one_request(obj, input_ids, context_program=context_program)
         return self._create_tokenized_object(
             obj, input_text, input_ids, input_embeds, mm_inputs, token_type_ids
         )
@@ -1217,17 +1218,33 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
         obj.mm_content_hashes = normalized
 
     def _validate_one_request(
-        self, obj: Union[GenerateReqInput, EmbeddingReqInput], input_ids: List[int]
+        self,
+        obj: Union[GenerateReqInput, EmbeddingReqInput],
+        input_ids: List[int],
+        *,
+        context_program=None,
     ) -> None:
         """Validates that the input token count and the requested token count doesn't exceed the model's context length."""
         # FIXME: unify the length validation logic with the one in the scheduler.
         _max_req_len = self.context_len
         input_token_num = len(input_ids) if input_ids is not None else 0
+        if context_program is None and getattr(obj, "context_program", None) is not None:
+            from sglang.srt.arg_groups.overrides import resolving_view
+            from sglang.srt.context_system.capabilities import validate_context_request
+
+            context_program = validate_context_request(
+                resolving_view(self.server_args), self.model_config, obj
+            )
+        if context_program is not None:
+            from sglang.srt.context_system.request_storage import validate_positions
+
+            validate_positions(context_program, self.context_len)
+            input_token_num = context_program.layout.next_position
         input_token_num += self.num_reserved_tokens
 
         # Validate input length
         if input_token_num >= self.context_len:
-            if self.allow_auto_truncate:
+            if self.allow_auto_truncate and context_program is None:
                 logger.warning(
                     f"The input ({input_token_num} tokens) is longer than the "
                     f"model's context length ({self.context_len} tokens). "
