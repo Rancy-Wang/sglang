@@ -11,6 +11,80 @@ storage = load_file(
 )
 
 
+def test_retry_self_pin_falls_back_but_external_pressure_waits(compiler):
+    from test_ir import args
+    from test_occurrence_ownership import expiry_for
+
+    occurrence = load_file(
+        "context_pressure_occurrence",
+        ROOT / "python/sglang/srt/context_system/occurrence.py",
+    )
+    n, start, capacity = 100, 99, 180
+    drops = {40: [(0, 20)]}
+    # Reposition after the matched prefix: source KV is at the same birth
+    # positions, so recovery does not replace this valid Retry by recomputation.
+    layout = compiler(*args(list(range(n)), drops, [98]))
+    expiry = expiry_for(n, drops)
+
+    def demand(begin, exact):
+        window = occurrence.compile_occurrence_window(
+            layout, expiry, layout.positions, query_start=begin, query_end=n
+        )
+        plan = occurrence.plan_occurrence_materialization(
+            window, torch.arange(begin, dtype=torch.int32),
+            torch.ones(begin, dtype=torch.bool), torch.zeros(begin, dtype=torch.bool),
+            torch.zeros(begin, dtype=torch.bool), torch.ones(n, dtype=torch.bool),
+            query_start=begin, query_end=n, exact_prefix_len=exact,
+        )
+        return n - begin + plan.extra_page_count + 4 + 1
+
+    req = SimpleNamespace(
+        context_prefill_started=False, context_recovery_source=None,
+        prefix_indices=torch.arange(start), context_resident=None,
+        context_force_miss=False, context_admission_error=None,
+    )
+    needed = demand(start, 20)
+    assert needed == 85 and needed >= capacity - start
+    # The same available pages with a larger physical pool can be explained by
+    # other live requests; do not throw away a reusable match in that case.
+    storage.handle_prefill_capacity_pressure(req, 256, needed)
+    assert not req.context_force_miss and req.context_admission_error is None
+    storage.handle_prefill_capacity_pressure(req, capacity, needed)
+    assert req.context_force_miss and req.context_admission_error is None
+    # Cold full prefill also exceeds this pool, but native chunking plus
+    # Drop-aware release makes progress with the same occurrence semantics.
+    state = occurrence.OccurrenceState.from_match(
+        torch.empty(0, dtype=torch.int64), torch.empty(0, dtype=torch.int32),
+        exact_prefix_len=0,
+    )
+    peaks = []
+    for begin, end in ((0, 64), (64, n)):
+        window = occurrence.compile_occurrence_window(
+            layout, expiry, layout.positions, query_start=begin, query_end=end
+        )
+        keep = torch.ones(end, dtype=torch.bool)
+        keep[:begin] = (state.canonical_rows >= 0) | (state.terminal_rows >= 0)
+        plan = state.plan(window, keep)
+        peaks.append(len(state.slots) + end - begin + plan.extra_page_count)
+        advance = state.advance(
+            window, plan, torch.arange(1000 + begin, 1000 + end),
+            torch.arange(2000 + begin, 2000 + begin + plan.extra_page_count), expiry,
+        )
+        state = advance.state
+        state = state.publish(state.terminal_slots())
+        state = state.drop_borrowed_raw(expiry[:end] <= end)
+    assert peaks == [108, 159] and max(peaks) + 4 + 1 < capacity
+    cold_needed = 1 + 4 + 1
+    req.prefix_indices = req.prefix_indices[:0]
+    storage.handle_prefill_capacity_pressure(req, capacity, cold_needed)
+    assert req.context_admission_error is None
+    storage.handle_prefill_capacity_pressure(req, cold_needed, cold_needed)
+    assert "without a cached prefix" in storage.prefill_capacity_error(req, cold_needed)
+
+
+pytest_plugins = ("test_ir",)
+
+
 def test_prefill_capacity_uses_actual_queries_and_invalidates_on_retry():
     # Drop 0:7 before q8: final active=3, but cold q7 must read eight keys.
     program = SimpleNamespace(

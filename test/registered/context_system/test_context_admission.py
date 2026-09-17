@@ -62,13 +62,20 @@ def test_capacity_rejection_preserves_program_and_releases_pd_metadata(
 
 @pytest.fixture
 def factory():
+    from functools import partial
+    from unittest.mock import patch
+
     module = load_file(
         "context_native_prefill_fixture",
         ROOT / "test/registered/unit/managers/test_prefill_adder.py",
     )
     fixture = module.TestPrefillAdder()
-    fixture.setUp()
+    # These native admission tests allocate CPU metadata only. Do not probe or
+    # initialize a GPU occupied by a concurrent model benchmark.
+    with patch.object(module, "ServerArgs", partial(module.ServerArgs, device="cpu")):
+        fixture.setUp()
     fixture.mock_tree_cache.supports_mamba.return_value = False
+    fixture.mock_token_allocator.size_full = 1_000_000
     yield fixture
     fixture.doCleanups()
 
@@ -137,6 +144,56 @@ def test_no_capacity_does_not_publish_a_plan(factory, compiler):
     assert adder.can_run_list == []
     assert req.context_window_plan is None
     assert adder.memory_budget.current_offset == 0
+
+
+def test_retry_self_pin_releases_lease_and_rematches_cold(factory, compiler):
+    import torch
+    from sglang.srt.context_system.planner import ContextProgram
+    from sglang.srt.managers.schedule_batch import Req
+    from sglang.srt.managers.schedule_policy import AddReqResult
+    from sglang.srt.mem_cache.base_prefix_cache import MatchResult
+    from sglang.srt.sampling.sampling_params import SamplingParams
+    from test_occurrence_ownership import expiry_for
+
+    drops = {40: [(0, 20)]}
+    program = ContextProgram(
+        compiler(*args(list(range(100)), drops, [98])), expiry_for(100, drops)
+    )
+    req = Req(
+        "self-pin", "", array("q", range(100)), SamplingParams(max_new_tokens=4),
+        context_program=program.to_wire(),
+    )
+    req._refresh_fill_ids()
+    req.prefix_indices = torch.arange(1, 100, dtype=torch.int64)
+    req.context_source_positions = torch.arange(99, dtype=torch.int32)
+    req.context_exact_prefix_len = 20
+    req.prepare_context_recovery()
+    assert req.context_recovery_plan.start == 99
+    factory.mock_token_allocator.size_full = 180
+    factory.mock_token_allocator.available_size.return_value = 81
+    adder = factory.create_adder(factory.create_running_batch(), rem_chunk_tokens=64)
+    assert adder.add_one_req(req, False, None) == AddReqResult.NO_TOKEN
+    assert req.context_force_miss and req.context_window_plan is None
+    assert not adder.can_run_list
+    factory.mock_tree_cache.dec_lock_ref.assert_called_once()
+    factory.mock_token_allocator.alloc.assert_not_called()
+
+    cache = factory.mock_tree_cache
+    cache.swa_reprefill_tail_tokens.return_value = 0
+    cache.match_prefix.return_value = MatchResult(
+        device_indices=torch.empty(0, dtype=torch.int64),
+        last_device_node=cache.root, last_host_node=cache.root,
+        best_match_node=cache.root,
+    )
+    req.init_next_round_input(cache)
+    assert len(cache.match_prefix.call_args.args[0].key) == 0
+    assert req.context_recovery_plan.start == 0
+    assert req.context_state is None and req.context_usage.resident.size == 0
+    factory.mock_token_allocator.available_size.return_value = 180
+    assert adder.add_one_req(req, False, None) in (
+        AddReqResult.CONTINUE, AddReqResult.OTHER
+    )
+    assert adder.can_run_list == [req] and req.extend_range.start == 0
 
 
 @pytest.mark.parametrize("chunk_limit", [64, None])

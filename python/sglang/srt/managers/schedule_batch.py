@@ -1061,6 +1061,8 @@ class Req(ReqDllmMixin):
         self.context_usage = None
         self.context_cache_published = False
         self.context_prefill_started = False
+        self.context_force_miss = False
+        self.context_admission_error = None
         self.context_source_lease = None
         if context_program is not None:
             from sglang.srt.context_system.ir import ContextKeyData
@@ -1839,6 +1841,8 @@ class Req(ReqDllmMixin):
         # avoiding an O(context) copy per prefill-batch build.
         token_ids_to_match = self.full_untruncated_fill_ids
         key_limit: Optional[int] = self._compute_max_prefix_len(input_len)
+        if self.context_force_miss:
+            key_limit = 0
 
         # SWA lives in a per-request ring that's not content-stable and is never
         # stored in the radix tree, so a reused prefix carries stale SWA. Cap the
@@ -2204,6 +2208,8 @@ class Req(ReqDllmMixin):
         self.context_recovery_source = None
         self.context_gap_prefix = None
         self.context_recompute_program = None
+        self.context_force_miss = False
+        self.context_admission_error = None
         if self.context_usage is not None:
             self.context_usage.begin_recompute()
 

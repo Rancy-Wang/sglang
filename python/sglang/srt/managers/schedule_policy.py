@@ -808,6 +808,17 @@ class PrefillAdder:
             if self.rem_chunk_tokens is None or length == 1:
                 break
             length //= 2
+        if (
+            length > 0
+            and not isinstance(budget, SWAPrefillBudget)
+            and budget.total_offset == 0
+            and budget.current_offset == 0
+        ):
+            from sglang.srt.context_system.request_storage import (
+                handle_prefill_capacity_pressure,
+            )
+
+            handle_prefill_capacity_pressure(req, budget.allocator.size_full, full)
         req.context_window_plan = None
         return AddReqResult.NO_TOKEN
 

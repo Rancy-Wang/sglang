@@ -8,6 +8,36 @@ admission and contains page IDs, not extra model KV.
 import torch
 
 
+def handle_prefill_capacity_pressure(req, capacity, needed):
+    """Distinguish self-pinned initial matches from transient pool pressure.
+
+    Called only after the smallest permitted forward failed, without other
+    reservations. Full-pool Context cache rows have one owner per resident raw
+    token. Inspect CPU residency, never copy physical page IDs back from CUDA.
+    A failed initial match owns no pages: the temporary native lease is released
+    by the caller, and the next scheduling pass can safely match from the root.
+    """
+    if req.context_prefill_started:
+        return
+    source = req.context_recovery_source
+    slots, resident = (
+        (source[0], source[2])
+        if source is not None
+        else (req.prefix_indices, req.context_resident)
+    )
+    pinned = len(slots) if resident is None else int(resident.count_nonzero())
+    # Admission uses strict '<' for its total reservation, including its guard.
+    if needed < capacity - pinned:
+        return
+    if pinned:
+        req.context_force_miss = True
+    else:
+        req.context_admission_error = (
+            f"Context prefill needs {needed} reserved KV tokens even without "
+            f"a cached prefix, but the KV pool holds {capacity}"
+        )
+
+
 def prefill_capacity_error(req, capacity):
     """Reject impossible query read sets after matching, before acquiring KV.
 
@@ -15,6 +45,8 @@ def prefill_capacity_error(req, capacity):
     requests may skip those queries, so only recovery intervals count. This is
     a lower bound, not an allocation estimate (COW copies are charged separately).
     """
+    if error := getattr(req, "context_admission_error", None):
+        return error
     program = req.context_recompute_program or req.context_program
     if program is None or len(program.visible_until) <= capacity:
         return None

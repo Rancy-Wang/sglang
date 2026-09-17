@@ -21,6 +21,12 @@
 权重版本、依赖版本、GPU 映射和后端选择。审计时使用过的 `923e4a56d` 与最终冻结点相比，
 本次迁移涉及的 SRT 源码没有变化；kernel 变化仅为 CPU 构建依赖。
 
+2026-09-18 用户修订性能验收：同模型、GPU、并发和工作负载下，启用 Drop/Reposition
+后的输出吞吐须达到原生 SGLang 的 **95% 以上**，即不得下降超过 5%。原生 SGLang
+无功能时慢于 mini-sglang 可以接受；mini 不再是吞吐硬门槛，仍是功能、计算和 SWA
+机制的对照。该修订替代此前约 3% 的目标。保留 TTFT、TPOT、实际计算量和输入差异，
+避免把少算 token、额外 JIT 或模板差异误归为实现开销；本轮不测 SLO。
+
 ## 当前实测状态（2026-09-17）
 
 普通调度的终态发布修复为 `feff22efd`，首轮真实 PD 接线为 `feb289a24`。
@@ -279,7 +285,7 @@ mini `2966eb4`。单位 tokens/s，实际吞吐排除 cache hit。
 
 C2 成功 turn 含 143 次 first-pass 和 7 次 filler；截止取消单列，不计失败或成功分子。
 所有返回长度均符合源任务要求。mini 四组已完成，修改版/原生 SGLang 及 PD 矩阵
-仍未全部完成，不能依据此表宣称 SGLang 达到约 3% 的效率目标。并行实验分别占用
+仍未全部完成，不能依据此表宣称 SGLang 达到修订后的 5% 原生对照门槛。并行实验分别占用
 0/1 和 2/3，但共享主机 CPU；小样本、首遇形状 JIT 和执行时段差异均须列为比较限制。
 
 2026-09-18 补充：`minimal-sg120-c1-none-v5` 完成 84/84、零失败，但测量跨越午夜，
@@ -448,7 +454,7 @@ KV 不增加 repos。SWA 自身窗口淘汰不当作 Drop-skipped。
 | GPU 内核 | 同位置 copy、多次 R、SWA/sinks、page_size=1 的非连续物理 slot | 对照实际 mini staged/occurrence 路径；不使用简化 dense 模型冒充 oracle |
 | PD | 普通 SGLang↔PD↔mini，首 token/终态/取消/传输重试 | D Radix 关闭，无输出回传；元数据和 active KV 对齐，无多算首 token |
 | 压力 | raw>128K 但 position 合法、低 KV、多请求长期运行 | 原生调度可推进，drop-aware 无 -1 进入 attention，池容量可回收 |
-| 性能 | 原生无功能↔带功能；mini↔普通 SGLang；PD 小矩阵 | 成对重复、实际计算量、TTFT/TPOT/E2E；约 3% 为目标，统计不足不得宣称达标 |
+| 性能 | 原生无功能↔带功能；mini 作为参考；PD 小矩阵 | 相对原生输出吞吐下降不超过 5%；实际计算量、TTFT/TPOT/E2E 和比较限制单列，统计不足不得宣称达标 |
 
 最小吞吐矩阵：GPT-OSS-120B；普通 mini/SGLang TP2；PD P=TP2 GPU0/1、D=TP2
 GPU2/3。所有对照固定 page_size=1；每种系统做 C1/N2、C2/N4，各含 no_drop+普通 eviction、Drop+drop-aware
