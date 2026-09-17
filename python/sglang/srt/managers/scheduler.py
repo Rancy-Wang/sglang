@@ -3324,7 +3324,8 @@ class Scheduler(
             sender = req.disagg_kv_sender
             if sender is not None:
                 try:
-                    sender.abort()
+                    # Unadmitted requests have no transfer chunks in flight.
+                    assert self.drain_context_capacity_abort(req, message)
                 except Exception:
                     logger.exception(
                         "Failed to notify KV sender of abort for %s", req.rid
@@ -3569,6 +3570,9 @@ class Scheduler(
             return
 
         capacity_error = getattr(req, "context_admission_error", None)
+        if capacity_error and self.disaggregation_mode == DisaggregationMode.PREFILL:
+            if not self.drain_context_capacity_abort(req, capacity_error):
+                return
         if capacity_error:
             prepare_abort(req, capacity_error, status_code=HTTPStatus.SERVICE_UNAVAILABLE)
         else:
@@ -3577,7 +3581,8 @@ class Scheduler(
         req.to_finish = None
         if self.disaggregation_mode == DisaggregationMode.PREFILL:
             self.clear_pending_chunk_send(req)
-            req.disagg_kv_sender.abort()
+            if not capacity_error:
+                req.disagg_kv_sender.abort()
             maybe_release_metadata_buffer(
                 req, self.req_to_metadata_buffer_idx_allocator
             )

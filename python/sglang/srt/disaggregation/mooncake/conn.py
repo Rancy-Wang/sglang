@@ -1890,7 +1890,12 @@ class MooncakeKVManager(StagingManagerMixin, CommonKVManager):
                             MooncakeRequestStage.MOONCAKE_WORKER_SEND.level,
                             thread_finish_flag=True,
                         )
-                    self._staging_outstanding.pop(kv_chunk.room, None)
+                    # Other workers may still be writing this same room.
+                    # Retire only this chunk; clearing the whole count would
+                    # allow abort notification/page reuse before those writes.
+                    self._staging_outstanding[kv_chunk.room] -= 1
+                    if self._staging_outstanding[kv_chunk.room] <= 0:
+                        self._staging_outstanding.pop(kv_chunk.room, None)
                     if self.enable_deferred_decode_kv_release:
                         # Skipped => nothing written for this aborted room; ack.
                         self._maybe_ack_drained_abort(kv_chunk.room)

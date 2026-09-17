@@ -627,6 +627,10 @@ class SchedulerDisaggregationPrefillMixin:
         last_batch: Optional[ScheduleBatch],
     ) -> NextBatchPlan:
         self.process_pending_chunked_abort()
+        if self._pending_chunked_abort_req is not None:
+            # Retain both peers' KV until the aborted transport drains. The
+            # overlap loop still resolves its preceding GPU result below.
+            return NextBatchPlan(batch_to_run=None, running_batch=running_batch)
         self._process_hicache_events()
 
         # HACK (byronhsu): reset the batch_is_full flag because we never enter update_running_batch which resets it
@@ -1120,6 +1124,36 @@ class SchedulerDisaggregationPrefillMixin:
         if self.metrics_reporter.enable_metrics:
             self.metrics_collector.increment_transfer_failed_reqs()
         return exc
+
+    def drain_context_capacity_abort(self: Scheduler, req: Req, message: str) -> bool:
+        """Notify D only after every P rank stopped reading/writing this room.
+
+        This is only called for a rejected Context request. Successful requests
+        do not allocate a CPU tensor or acquire an additional collective.
+        """
+        sender = req.disagg_kv_sender
+        manager, room = sender.kv_mgr, sender.bootstrap_room
+        if not hasattr(req, "_context_abort_targets"):
+            # Keep endpoints before a worker's final-chunk cleanup removes them.
+            req._context_abort_targets = manager._room_notify_targets(room)
+            sender.abort()  # Failed prevents queued/new chunks from writing.
+        busy = torch.tensor(
+            [manager._staging_outstanding.get(room, 0) > 0], dtype=torch.uint8
+        )
+        torch.distributed.all_reduce(
+            busy, op=torch.distributed.ReduceOp.MAX, group=self.attn_tp_cpu_group
+        )
+        if busy.item():
+            return False
+        manager.conclude_failure(
+            bootstrap_room=room,
+            failure_reason=message,
+            targets=req._context_abort_targets,
+        )
+        sender.clear()
+        with manager.failure_lock:
+            manager.failure_records.pop(room, None)
+        return True
 
     def clear_pending_chunk_send(self: Scheduler, req: Req) -> None:
         """Drop `req` from the sent-but-unconcluded chunk set.

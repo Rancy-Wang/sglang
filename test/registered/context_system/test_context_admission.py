@@ -39,6 +39,7 @@ def test_capacity_rejection_preserves_program_and_releases_pd_metadata(
     )
     scheduler = SimpleNamespace(
         _release_aborted_request=Mock(),
+        drain_context_capacity_abort=Mock(side_effect=lambda *_: (sender.abort(), True)[1]),
         beam_coordinator=Mock(),
         disaggregation_mode=(
             DisaggregationMode.PREFILL if prefill else DisaggregationMode.NULL
@@ -98,6 +99,7 @@ def test_continuation_capacity_abort_uses_native_cleanup(prefill):
         _pending_chunked_abort_req=req, chunked_req=req,
         disaggregation_mode=DisaggregationMode.PREFILL if prefill else DisaggregationMode.NULL,
         _release_aborted_request=Mock(), tree_cache=Mock(),
+        drain_context_capacity_abort=Mock(return_value=True),
         clear_pending_chunk_send=Mock(), req_to_metadata_buffer_idx_allocator=Mock(),
         ipc_channels=SimpleNamespace(send_to_tokenizer=Mock()),
     )
@@ -105,6 +107,13 @@ def test_continuation_capacity_abort_uses_native_cleanup(prefill):
         patch("sglang.srt.managers.scheduler.release_kv_cache") as release,
         patch("sglang.srt.managers.scheduler._make_abort_req") as notification,
     ):
+        if prefill:
+            scheduler.drain_context_capacity_abort.return_value = False
+            Scheduler.process_pending_chunked_abort(scheduler)
+            release.assert_not_called()
+            scheduler.req_to_metadata_buffer_idx_allocator.free.assert_not_called()
+            assert scheduler.chunked_req is req
+            scheduler.drain_context_capacity_abort.return_value = True
         Scheduler.process_pending_chunked_abort(scheduler)
         release.assert_called_once_with(req, scheduler.tree_cache, is_insert=False)
         reason = notification.call_args.kwargs["finished_reason"]
@@ -115,11 +124,54 @@ def test_continuation_capacity_abort_uses_native_cleanup(prefill):
     assert scheduler.chunked_req is None and scheduler._pending_chunked_abort_req is None
     if prefill:
         scheduler.clear_pending_chunk_send.assert_called_once_with(req)
-        req.disagg_kv_sender.abort.assert_called_once()
+        req.disagg_kv_sender.abort.assert_not_called()  # drain owns transport abort
+        assert scheduler.drain_context_capacity_abort.call_count == 2
         scheduler.req_to_metadata_buffer_idx_allocator.free.assert_called_once_with(4)
         assert not req.pending_bootstrap and req.metadata_buffer_index == -1
     else:
         req.disagg_kv_sender.abort.assert_not_called()
+
+
+
+def test_capacity_abort_waits_for_all_rank_transfers_before_notifying_decode():
+    import threading
+    from types import SimpleNamespace
+    from unittest.mock import Mock, patch
+
+    from sglang.srt.disaggregation.prefill import SchedulerDisaggregationPrefillMixin
+
+    room = 57
+    targets = [("127.0.0.1", 1234)]
+    manager = SimpleNamespace(
+        _staging_outstanding={room: 2},
+        _room_notify_targets=Mock(return_value=targets),
+        conclude_failure=Mock(), failure_lock=threading.Lock(),
+        failure_records={room: "aborted"},
+    )
+    sender = Mock(kv_mgr=manager, bootstrap_room=room)
+    req = SimpleNamespace(disagg_kv_sender=sender)
+    scheduler = SimpleNamespace(attn_tp_cpu_group=object())
+    drain = SchedulerDisaggregationPrefillMixin.drain_context_capacity_abort
+    with patch("torch.distributed.all_reduce") as reduce:
+        assert not drain(scheduler, req, "capacity")
+        manager.conclude_failure.assert_not_called()
+        sender.clear.assert_not_called()
+        manager._staging_outstanding[room] = 0
+        # Local writes ended, but another TP rank still owns a write.
+        reduce.side_effect = lambda tensor, **_: tensor.fill_(1)
+        assert not drain(scheduler, req, "capacity")
+        manager.conclude_failure.assert_not_called()
+        sender.clear.assert_not_called()
+        reduce.side_effect = None
+        assert drain(scheduler, req, "capacity")
+        assert reduce.call_count == 3
+    sender.abort.assert_called_once()
+    manager._room_notify_targets.assert_called_once_with(room)
+    manager.conclude_failure.assert_called_once_with(
+        bootstrap_room=room, failure_reason="capacity", targets=targets
+    )
+    sender.clear.assert_called_once()
+    assert room not in manager.failure_records
 
 
 def make_req(compiler, *, ignore_eos=False):
