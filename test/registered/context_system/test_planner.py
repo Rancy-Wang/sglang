@@ -4,8 +4,9 @@ import random
 
 import pytest
 import torch
+from test_ir import ROOT, args, cases, load_file
 
-from test_ir import ROOT, args, cases, compiler, load_file
+pytest_plugins = ("test_ir",)
 
 
 @pytest.fixture(scope="module")
@@ -55,19 +56,26 @@ def test_all_queries_and_chunk_windows(compiler, occurrence):
         expected, expiry = query_visibility(tokens, drops, reposition)
         n = len(tokens)
         for start, end in {(0, n), (n // 2, n), (0, max(1, n // 2))}:
-            window = occurrence(layout, expiry, layout.positions,
-                                query_start=start, query_end=end)
-            pairs = list(zip(window.occurrence_raw_tokens.tolist(),
-                             window.occurrence_positions.tolist()))
+            window = occurrence(
+                layout, expiry, layout.positions, query_start=start, query_end=end
+            )
+            pairs = list(
+                zip(
+                    window.occurrence_raw_tokens.tolist(),
+                    window.occurrence_positions.tolist(),
+                )
+            )
             covered = []
-            for a, b, x, y in zip(window.segment_query_starts.tolist(),
-                                  window.segment_query_ends.tolist(),
-                                  window.segment_key_offsets[:-1].tolist(),
-                                  window.segment_key_offsets[1:].tolist()):
+            for a, b, x, y in zip(
+                window.segment_query_starts.tolist(),
+                window.segment_query_ends.tolist(),
+                window.segment_key_offsets[:-1].tolist(),
+                window.segment_key_offsets[1:].tolist(),
+            ):
                 selected = window.segment_key_occurrences[x:y].tolist()
                 prefix_len = len(selected) - (b - a)
                 for query in range(a, b):
-                    actual = [pairs[i] for i in selected[:prefix_len + query - a + 1]]
+                    actual = [pairs[i] for i in selected[: prefix_len + query - a + 1]]
                     assert actual == expected[query], (start, end, query)
                     covered.append(query)
             assert covered == list(range(start, end))
@@ -92,13 +100,15 @@ def test_hole_dependency_graph(recovery):
             if query in needed:
                 for raw in range(min(query, matched)):
                     if query < expiry[raw] and (
-                        not present[raw] or incompatible[raw]
+                        not present[raw]
+                        or incompatible[raw]
                         or (query < matched and rewind[raw])
                     ):
                         needed.add(raw)
         plan = recovery.plan_recovery(
             torch.tensor(present, dtype=torch.bool),
-            torch.tensor(expiry, dtype=torch.int32), n,
+            torch.tensor(expiry, dtype=torch.int32),
+            n,
             torch.tensor(rewind, dtype=torch.bool),
             torch.tensor(incompatible, dtype=torch.bool),
         )
@@ -113,11 +123,14 @@ def test_hole_dependency_graph(recovery):
 
 
 def test_drop_skip_requires_matched_ancestor_event(recovery):
-    records = torch.tensor([
-        [0, 7, -1, 0], [0, 8, -1, 1], [1, -1, -3, -1], [0, 9, -1, 2]
-    ], dtype=torch.int32)
+    records = torch.tensor(
+        [[0, 7, -1, 0], [0, 8, -1, 1], [1, -1, -3, -1], [0, 9, -1, 2]],
+        dtype=torch.int32,
+    )
     # Raw 1 was dropped but an earlier repair query still needs its KV.
-    assert recovery.proven_skip_ranges(records, torch.tensor([False, True, True])) == [(0, 1)]
+    assert recovery.proven_skip_ranges(records, torch.tensor([False, True, True])) == [
+        (0, 1)
+    ]
     assert recovery.proven_skip_ranges(records[:2], torch.tensor([False, False])) == []
     records[2, 2] = -4  # References future raw 2: must never authorize eviction.
     with pytest.raises(ValueError, match="non-ancestor"):

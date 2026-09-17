@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -76,28 +77,47 @@ def compile_occurrence_window(
     tokens needed by the final-position Radix cache.
     """
     tensors = (
-        layout.birth_positions, layout.birth_stages, layout.transition_offsets,
-        layout.transition_raw_tokens, layout.transition_old_positions,
-        layout.transition_new_positions, full_token_visible_until, terminal_positions,
+        layout.birth_positions,
+        layout.birth_stages,
+        layout.transition_offsets,
+        layout.transition_raw_tokens,
+        layout.transition_old_positions,
+        layout.transition_new_positions,
+        full_token_visible_until,
+        terminal_positions,
     )
-    if any(t.device.type != "cpu" or t.dtype != torch.int32 or t.ndim != 1 for t in tensors):
-        raise ValueError("Compact occurrence inputs must be one-dimensional CPU int32 tensors.")
+    if any(
+        t.device.type != "cpu" or t.dtype != torch.int32 or t.ndim != 1 for t in tensors
+    ):
+        raise ValueError(
+            "Compact occurrence inputs must be one-dimensional CPU int32 tensors."
+        )
     birth, stages, offsets, changed_raw, old, new, expiry, terminal = (
         t.numpy() for t in tensors
     )
     n = len(birth)
     if n < 1 or len(stages) != n:
-        raise ValueError("Compact occurrence birth metadata must cover a nonempty prompt.")
+        raise ValueError(
+            "Compact occurrence birth metadata must cover a nonempty prompt."
+        )
     if len(expiry) != n or len(terminal) != n:
-        raise ValueError("Occurrence visibility and terminal positions must cover the prompt.")
+        raise ValueError(
+            "Occurrence visibility and terminal positions must cover the prompt."
+        )
     if not 0 <= query_start < query_end <= n:
         raise ValueError("Occurrence query window is outside the raw prompt.")
     if len(offsets) < 2:
-        raise ValueError("Paged-occurrence requires at least one effective Reposition stage.")
+        raise ValueError(
+            "Paged-occurrence requires at least one effective Reposition stage."
+        )
     if offsets[0] != 0 or np.any(offsets[1:] < offsets[:-1]):
-        raise ValueError("Occurrence transition offsets must start at zero and be monotonic.")
+        raise ValueError(
+            "Occurrence transition offsets must start at zero and be monotonic."
+        )
     if not offsets[-1] == len(changed_raw) == len(old) == len(new):
-        raise ValueError("Occurrence transition offsets do not cover the transition arrays.")
+        raise ValueError(
+            "Occurrence transition offsets do not cover the transition arrays."
+        )
     if np.any(birth < 0) or np.any(new < 0):
         raise ValueError("Occurrence positions must be non-negative.")
     stage_count = len(offsets) - 1
@@ -136,27 +156,40 @@ def compile_occurrence_window(
             begin, end = int(offsets[stage - 1]), int(offsets[stage])
             ids = changed_raw[begin:end]
             if np.any(ids < 0) or np.any(ids >= n):
-                raise ValueError("Reposition transition references an invalid raw token.")
+                raise ValueError(
+                    "Reposition transition references an invalid raw token."
+                )
             if np.any(ids[1:] <= ids[:-1]) and len(np.unique(ids)) != len(ids):
-                raise ValueError("One Reposition stage cannot transition a raw token twice.")
+                raise ValueError(
+                    "One Reposition stage cannot transition a raw token twice."
+                )
             if not np.array_equal(current_pos[ids], old[begin:end]):
-                raise ValueError("Reposition transition old positions do not match current state.")
+                raise ValueError(
+                    "Reposition transition old positions do not match current state."
+                )
             current_pos[ids] = new[begin:end]
         local_start = max(query_start, int(bounds[stage]))
         local_end = min(query_end, int(bounds[stage + 1]))
         if local_start >= local_end:
             continue
         if local_start != covered:
-            raise RuntimeError("Occurrence stages do not cover the requested query window.")
+            raise RuntimeError(
+                "Occurrence stages do not cover the requested query window."
+            )
         values = expiry[:local_end]
-        cuts = [local_start, *np.unique(values[(values > local_start) & (values < local_end)]),
-                local_end]
-        for start, end in zip(cuts, cuts[1:]):
+        cuts = [
+            local_start,
+            *np.unique(values[(values > local_start) & (values < local_end)]),
+            local_end,
+        ]
+        for start, end in pairwise(cuts):
             active = raw[:start][expiry[:start] > start]
             materialize(active)
             selected = np.concatenate((current_ids[active], raw[start:end]))
             if not len(selected) or selected[-1] != end - 1:
-                raise RuntimeError("Occurrence segment does not end at its final query token.")
+                raise RuntimeError(
+                    "Occurrence segment does not end at its final query token."
+                )
             starts.append(start)
             ends.append(end)
             keys.append(selected)
@@ -165,7 +198,9 @@ def compile_occurrence_window(
     if covered != query_end:
         raise RuntimeError("Occurrence stages do not cover the requested query window.")
     if not np.array_equal(current_pos, terminal):
-        raise ValueError("Compact occurrence transitions disagree with terminal Radix positions.")
+        raise ValueError(
+            "Compact occurrence transitions disagree with terminal Radix positions."
+        )
     materialize(raw)
     if key_offsets[-1] > np.iinfo(np.int32).max:
         raise ValueError("Occurrence segment offsets exceed int32 capacity.")

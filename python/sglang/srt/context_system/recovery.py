@@ -94,17 +94,27 @@ def plan_recovery(
     reads it. A reverse scan over missing tokens closes this relation: once a
     token is needed it becomes the earliest query for all preceding tokens.
     """
-    if resident.device.type != "cpu" or resident.dtype != torch.bool or resident.ndim != 1:
+    if (
+        resident.device.type != "cpu"
+        or resident.dtype != torch.bool
+        or resident.ndim != 1
+    ):
         raise ValueError("Recovery residency must be a CPU bool vector.")
-    if (visible_until.device.type != "cpu" or visible_until.dtype != torch.int32
-            or visible_until.ndim != 1):
+    if (
+        visible_until.device.type != "cpu"
+        or visible_until.dtype != torch.int32
+        or visible_until.ndim != 1
+    ):
         raise ValueError("Recovery visibility must be a CPU int32 vector.")
     for source_mask in (rewind_sources, incompatible_sources):
         if source_mask is not None and (
-            source_mask.device.type != "cpu" or source_mask.dtype != torch.bool
+            source_mask.device.type != "cpu"
+            or source_mask.dtype != torch.bool
             or source_mask.shape != resident.shape
         ):
-            raise ValueError("Recovery source masks must match the CPU residency vector.")
+            raise ValueError(
+                "Recovery source masks must match the CPU residency vector."
+            )
     present = resident.numpy()
     expiry = visible_until.numpy()
     matched = len(present)
@@ -112,15 +122,26 @@ def plan_recovery(
         raise ValueError("Recovery metadata must leave an uncached query suffix.")
     if np.any(expiry[:input_length] <= np.arange(input_length)):
         raise ValueError("A token must remain visible to its own birth query.")
-    rewind = np.zeros(matched, dtype=np.bool_) if rewind_sources is None else rewind_sources.numpy()
-    incompatible = (np.zeros(matched, dtype=np.bool_) if incompatible_sources is None
-                    else incompatible_sources.numpy())
+    rewind = (
+        np.zeros(matched, dtype=np.bool_)
+        if rewind_sources is None
+        else rewind_sources.numpy()
+    )
+    incompatible = (
+        np.zeros(matched, dtype=np.bool_)
+        if incompatible_sources is None
+        else incompatible_sources.numpy()
+    )
     suffix_demand = expiry[:matched] > matched
     if not np.any((~present | incompatible) & suffix_demand):
         # No suffix query needs an absent/version-incompatible KV. Rewind-only
         # sources are irrelevant until a historical query actually needs repair.
-        return RecoveryPlan(((matched, input_length),), torch.from_numpy(suffix_demand),
-                            matched, torch.from_numpy(present.copy()))
+        return RecoveryPlan(
+            ((matched, input_length),),
+            torch.from_numpy(suffix_demand),
+            matched,
+            torch.from_numpy(present.copy()),
+        )
     missing = np.flatnonzero(~present | rewind | incompatible)
     needed = np.zeros(input_length, dtype=np.bool_)
     needed[matched:] = True
@@ -137,7 +158,11 @@ def plan_recovery(
     next_query = np.minimum.accumulate(
         np.where(needed, np.arange(input_length), input_length)[::-1]
     )[::-1]
-    required = expiry[:matched] > next_query[1:matched + 1]
+    required = expiry[:matched] > next_query[1 : matched + 1]
     required |= needed[:matched]
-    return RecoveryPlan(tuple(mask_ranges(needed)), torch.from_numpy(required), matched,
-                        torch.from_numpy(present & ~needed[:matched]))
+    return RecoveryPlan(
+        tuple(mask_ranges(needed)),
+        torch.from_numpy(required),
+        matched,
+        torch.from_numpy(present & ~needed[:matched]),
+    )
