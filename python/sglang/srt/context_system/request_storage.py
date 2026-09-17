@@ -8,6 +8,36 @@ admission and contains page IDs, not extra model KV.
 import torch
 
 
+def context_publish_length(req, length):
+    """Largest prefix whose absent terminal rows have an on-path Drop proof.
+
+    A Drop at raw boundary b belongs to token b, so a b-token key does not
+    contain it yet. Deferred active copies never authorize holes. Vectorized
+    prefix maxima also handle an earlier hole whose proof lies past a later
+    unpublishable row, without repeatedly rescanning a shrinking prefix.
+    """
+    state = getattr(req, "context_state", None)
+    if state is None:
+        return length
+    import numpy as np
+
+    rows = state.terminal_rows.numpy()[:length]
+    missing = rows < 0
+    if not missing.any():
+        return length
+    program = req.context_recompute_program or req.context_program
+    proof_end = np.where(
+        program.layout.keep_mask.numpy()[:len(rows)],
+        length + 1,
+        program.visible_until.numpy()[:len(rows)].astype(np.int64) + 1,
+    )
+    required = np.maximum.accumulate(np.where(missing, proof_end, 0))
+    if required[-1] <= length:
+        return length
+    valid = np.flatnonzero(required <= np.arange(1, len(rows) + 1))
+    return int(valid[-1] + 1) if len(valid) else 0
+
+
 def needs_context_source_lease(req):
     """Keep a Retry branch only for nonterminal reads or unadopted cached gaps."""
     state = req.context_state

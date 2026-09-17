@@ -1784,6 +1784,15 @@ class Req(ReqDllmMixin):
             query_end=query_end,
         )
         keep = self.context_state.prefill_terminal_keep(program.layout, query_end)
+        # An existing target lease must not shrink before its Drop marker is
+        # on the inserted path. These aliases already exist at final positions;
+        # preserving them needs no allocation or RoPE copy. Newly computed
+        # birth sources stay private until safe publication.
+        protected = min(start, self.kv.cache_protected_len)
+        present = self.context_state.terminal_rows[:protected] >= 0
+        exact = min(protected, self.context_state.exact_prefix_len)
+        present[:exact] |= self.context_state.canonical_rows[:exact] >= 0
+        keep[:protected] |= present & (program.visible_until[:protected] >= query_end)
         plan = self.context_state.plan(window, keep)
         self.context_window_plan = (window, plan)
         return plan.extra_page_count

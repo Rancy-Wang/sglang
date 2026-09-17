@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Iterator, NamedTuple, Optional, Sequence, Type
 import torch
 
 from sglang.srt.context_system.request_storage import (
+    context_publish_length,
     needs_context_source_lease,
     request_row,
 )
@@ -1100,6 +1101,8 @@ class UnifiedRadixCache(BasePrefixCache):
             for comp in self._components_tuple:
                 effective_cache_len = comp.floor_cache_len(effective_cache_len)
 
+            effective_cache_len = context_publish_length(req, effective_cache_len)
+
             # Truncate if needed; the tail free is deferred and batched with
             # the unaligned tail below so a shared boundary page is emitted once.
             kv_indices_full = kv_indices
@@ -1133,7 +1136,9 @@ class UnifiedRadixCache(BasePrefixCache):
             # split is skipped there rather than handing the tree rows that
             # are about to be freed.
             prompt_key = req.make_prefix_key(
-                req.origin_input_ids, is_bigram=self.tree_core.is_eagle
+                req.origin_input_ids,
+                limit=context_publish_length(req, len(req.origin_input_ids)),
+                is_bigram=self.tree_core.is_eagle,
             ).page_aligned(self.page_size)
             if (
                 not result.rotation_tail_declined
@@ -1421,6 +1426,8 @@ class UnifiedRadixCache(BasePrefixCache):
         for comp in self._components_tuple:
             effective_cache_len = comp.floor_cache_len(effective_cache_len)
 
+        effective_cache_len = context_publish_length(req, effective_cache_len)
+
         radix_key = req.make_prefix_key(
             token_ids[:effective_cache_len], is_bigram=self.tree_core.is_eagle
         )
@@ -1518,7 +1525,7 @@ class UnifiedRadixCache(BasePrefixCache):
             self.configure_context_swa_lock(new_last_node, lock_result, demand)
             req.context_swa_resident = torch.cat((
                 demand,
-                insert_params.context_swa_resident[len(new_indices):len(kv_indices_orig)],
+                self._context_cache_swa_residency(req, len(kv_indices_orig))[len(new_indices):],
             ))
 
         # Update req fields

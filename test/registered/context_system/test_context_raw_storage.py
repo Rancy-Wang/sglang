@@ -11,6 +11,21 @@ storage = load_file(
 )
 
 
+@pytest.mark.parametrize("length, expected", [(4, 1), (5, 1), (6, 6), (8, 6)])
+def test_publication_waits_for_on_path_drop_and_deferred_active_copy(length, expected):
+    # Hole 1 needs token 5's Drop; hole 3 needs token 4's Drop. Cutting at
+    # hole 3 must not leave hole 1 unproven. Hole 6 is a deferred active copy.
+    req = SimpleNamespace(
+        context_state=SimpleNamespace(terminal_rows=torch.tensor([0, -1, 1, -1, 2, 3, -1, 4])),
+        context_recompute_program=None,
+        context_program=SimpleNamespace(
+            layout=SimpleNamespace(keep_mask=torch.tensor([1, 0, 1, 0, 1, 1, 1, 1], dtype=torch.bool)),
+            visible_until=torch.tensor([9, 5, 9, 4, 9, 9, 9, 9]),
+        ),
+    )
+    assert storage.context_publish_length(req, length) == expected
+
+
 def test_retry_self_pin_falls_back_but_external_pressure_waits(compiler):
     from test_ir import args
     from test_occurrence_ownership import expiry_for
