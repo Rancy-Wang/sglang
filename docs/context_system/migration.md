@@ -13,8 +13,8 @@
 | mini-sglang System | `89d8a9fd22a2784a8989bdd7b80e7a232d5e877e` |
 | mini-sglang main | `9a91cfafe754aa85daee49998176275667eb58f2` |
 | mini-sglang System-test | `2966eb49a522041f9c42bce7dca07119ef6929de`；只读参考 |
-| 历史清单 | 找到 52 份项目相关会话；已建立消息索引，设计决策核对仍在进行 |
-| System 相对 main | 75 个文件；逐文件范围见 `source_inventory.json` |
+| 历史清单 | 52 份清单内历史会话已逐条通读；阅读覆盖与运行时验证分开记录 |
+| System 相对 main | 75 个文件的完整 diff 已通读；逐文件范围见 `source_inventory.json` |
 | 生产功能 / GPU 验证 | 尚未完成，不能据此部署或宣称等价 |
 
 基线冻结以后不持续追逐上游移动的 main。后续实验记录实际 `system` commit、模型配置、
@@ -98,7 +98,75 @@ BUS CPU 验证命令：
 `CUDA_VISIBLE_DEVICES=9 PYTHONPATH=python python -m pytest -q test/registered/context_system/test_context_admission.py -k 'short_repair_interval or parked_chunk'`，
 结果 **4 passed, 13 deselected in 16.34s**。覆盖旧/本轮新 chunk、允许完整短请求，
 以及暂时/不可恢复容量不足。`minimal-sg120-c2-drop-parser-v3` 已按相同完整轨迹、
-GPU2/3 TP2、page1、默认 Triton、KV262144、chunk8192 重跑；尚无最终结果。
+GPU2/3 TP2、page1、默认 Triton、KV262144、chunk8192 重跑，最终仍失败：134 个成功请求、2 个错误。case864 turn28 的长 Prefill 持续占用 KV，case228 turn22 的 Decode 分配失败。此运行无效，不能作为吞吐达标证据。
+
+## 延迟副本、发布边界与稀疏所有权（2026-09-18）
+
+`5b31f7aeb` 将终态 Reposition 副本推迟到最终 Prefill，并在 admission 中预留后续
+阶段及现有 Decode 的推进空间。`32ba491c5` 的 BUS CPU admission 检查为
+`test_context_admission.py` **17 passed in 16.56s**。先前失败请求的 CPU 所有权回放
+峰值从保留全部终态副本时超过 302K 页降到 256969 页；这只是 CPU 容量证据。
+该提交的真实 GPT-OSS-20B BCP `bcp778-sg-gpt20-capacity-lifetime-v1` 仍失败：
+首个 Drop 冷算在 chunk 发布时触发 `Context insert hole has no Drop proof on the inserted path`。
+
+后续修复保留严格的 Radix 空洞校验。`request_storage.py` 的 `context_publish_length`
+（`python/sglang/srt/context_system/request_storage.py:11`）用 CPU 前缀最大值计算可证明的发布边界：边界 b 的 Drop 记录只有包含 token b 的
+key 才可使用；没有终态副本的 active token 不能冒充已 Drop 空洞。普通结束、未完成
+chunk 和 prompt/output 分节点都遵守同一边界。如果旧稀疏匹配依赖更后面的 Drop，
+则暂缓发布、保留原租约及请求的私有 KV，继续推进 raw cursor。
+
+真实 allocator 检查随后发现恢复路径会将私有副本与借用页交错放在所谓保护前缀内，
+旧的单个 `cache_protected_len` 无法表达所有权，表现为少回收 4 页。
+`0427574cd` 增加 Context CPU 所有权 mask，插入时只释放私有重复页，结束/中止时
+只释放请求自己的页；保留原生无 Context 的前缀规则。SWA 组件沿同一所有权边界
+处理替换，避免把借用页当成新 SWA 分配。该变更没有修改 attention 的数值计算。
+所有权入口为 `python/sglang/srt/mem_cache/unified_radix_cache.py:1348` 的
+`_context_cache_ownership`；暂缓发布在同文件 `:1216` 的 `cache_unfinished_req`。
+
+- 本地纯 CPU 边界/生命周期定向检查：**9 passed, 17 deselected**。
+- BUS `test_context_unified_cache.py test_drop_eviction.py -k 'occurrence_native or swa_holes or native_chunk'`：
+  **12 passed, 1 skipped, 32 deselected in 14.86s**，涵盖冷算、重复、Retry、缺页恢复、
+  Drop 尾边界、禁用缓存，以及暂缓发布时中止后的完整页回收。
+- `e6b219f0d` 修复自己刚插入的短 Context 前缀在 rematch 时误用新 Decode 请求的
+  SWA window 门槛。`context_cache_publication` 仅用于 chunk 重新绑定；仍保留实际
+  SWA residency，新请求匹配不变（`unified_radix_cache.py:1523` 和
+  `unified_cache/unified_tree_core.py:1053`，均在 `python/sglang/srt/mem_cache/`）。
+  BUS `test_drop_eviction.py -k swa_req_recovery` 为 **4 passed, 4 skipped, 22 deselected in 14.77s**。
+- `bcp778-sg-gpt20-capacity-lifetime-v2` 在 BUS GPU0、TP1、默认 GPT-OSS backend、
+  page1、chunk512、KV24576、生产提交 `0427574cd` 完成：
+  `python -m pytest -s -q test/registered/context_system/test_bcp_numeric.py`
+  **1 passed in 316.43s**。无功能、Drop、Drop+R 的实际生成均与 mini 64/64 token 相同。
+  fixed 的 max/mean/p99：无功能 `2.71094/0.069612/0.4375`，Drop `4.875/0.101741/0.875`，
+  Drop+R 冷 `2.27930/0.064363/0.412109`、热 `1.734375/0.062314/0.390625`、
+  Retry `1.265625/0.057951/0.34375`，均通过相同无功能校准门限，raw argmax 均64/64。
+  Retry 的 cached/repos/drop_skipped/actual_prefill 为 `432/3929/2820/1746`；
+  热命中为 `3384/0/0/1`。热请求的 Drop 页在初始匹配时已是物理空洞，故
+  `drop_skipped=0`；该计数只统计初始物理驻留却未读的 Drop KV，不把已释放空洞计入
+  （`python/sglang/srt/context_system/usage.py:103`，`ContextUsage.snapshot`）。
+- `minimal-sg120-c2-drop-parser-v4` 在 GPU2/3、`e6b219f0d` 跑完整 C2 轨迹，结果待确认。
+- 旧提交 `1478d3a05` 的普通 C1 no-drop 完整轨迹完成：84 成功、0 失败，
+  27390 输出 tokens / 1046.433687s = **26.174616 token/s**。这是对照结果，
+  不代替修复后 Drop C2 与原生的 95% 性能门槛。
+
+## 延迟终态副本的 PD 传输边界（2026-09-18）
+
+审计发现上述副本延迟生成后，旧 PD 仍按已计算 raw 长度发送，可能读取尚未生成的
+终态 active KV。另一个异步风险是，尚未交给 Radix 的私有副本可能在后续发布时被
+去重释放，不能在此之前作为未完成传输的源。
+
+`d2ef1d0f1` 的 `ContextTransferPlan.full_chunk`
+（`python/sglang/srt/disaggregation/context_transfer.py:54`）仅允许非末块发送连续、
+已生成且已交给缓存持有的终态页；遇到延迟副本或私有副本时保留 raw 发送游标。
+末块确认所有终态 active 页已存在，由原生 inflight 队列保护到发送完成。
+`SchedulerDisaggregationPrefillMixin._send_kv_chunk` 的接线位于 `python/sglang/srt/disaggregation/prefill.py:1361`；
+判断只读取 CPU occurrence 所有权，不增加 GPU 同步，也不改变普通请求传输。
+
+本地 `python -m pytest -q test/registered/context_system/test_context_transfer.py`
+**1 passed in 0.58s**，涵盖空洞、延迟副本、未发布私有页与最终发送不重不漏。
+首次 `bcp778-sg-pd-gpt20-capacity-lifetime-v1` 在启动时遇到 ZMQ socket 路径超过107字节，
+未进入模型请求；保留失败日志，以独立短临时目录重新启动。
+真实 `bcp778-sg-pd-gpt20-capacity-lifetime-v2` 已在 GPU0/1、独立 P/D、
+默认 GPT-OSS backend 启动，结果待确认；不能用此 CPU 检查代替 PD 数值验收。
 
 ## 当前实测状态（2026-09-17）
 
@@ -225,7 +293,7 @@ Harmony parser 兼容修复）：4/4首次 task，150成功/0失败，1520.22515
   其自有服务进程退出，GPU0回到36MiB。该证据覆盖普通调度真实拒绝与恢复，不自动
   扩展为PD容量拒绝或所有source lease压力场景已验证。
 
-mini System/main 的75份逐文件 diff 全部完成阅读；这不等于52份会话已全部复核或
+mini System/main 的75份逐文件 diff 与清单内52份历史会话均已通读；这不等于
 所有迁移功能已通过。补充差异与效率约束：
 
 - mini `scheduler/prefill.py` 的 occurrence 规划先试最大 chunk，再用预计算容量曲线
@@ -369,8 +437,9 @@ GPU 资源阻塞已解除：按用户随后授予的 GPU 0–3 全部任务释�
 本次分块区间 CPU 测试 `python -m pytest -q
 test/registered/context_system/test_context_transfer.py` 为 1 passed。新增 helper 和
 BCP 测试的 Ruff 通过；完整 `prefill.py` 的 Ruff 在修改前后均有 29 项相同既有
-诊断，无新增项，未为此格式化无关原生代码。全部 52 条会话已建立索引，但逐条完整
-审阅及全部源码差异审计尚未完成；本页风险清单不冒充全量审计通过。
+诊断，无新增项，未为此格式化无关原生代码。此处早期状态只完成了 52 条会话索引。后续已补齐清单内 52/52 会话通读和
+System 相对 main 的 75/75 文件完整 diff 阅读；System-test 额外差异仍按清单逐项核对。
+阅读完成不等于功能、数值或效率验收通过，本文继续保留每项实际验证与未决风险。
 
 ## 追加实测与 SWA 运行设置（2026-09-17）
 

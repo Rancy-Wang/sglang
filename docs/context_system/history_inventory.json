@@ -1,318 +1,318 @@
 {
   "schema_version": 1,
-  "note": "Local transcript contents and credentials are not included. Indexing is not a claim that every message was manually reviewed.",
+  "note": "Local transcript contents and credentials are not included. All 52 indexed historical conversations have been read; source and runtime verification remain separately reported in migration.md.",
   "sessions": [
     {
       "thread_id": "019f1a08-27b9-7d22-990a-a1ebada17758",
       "message_count": 39,
       "extracted_messages_sha256": "79e504afea4c1653ec6c35914a633389869e54157b95bfc8ad022ff94df1f85b",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fafc9-22dc-7c80-90a0-746297fe72eb",
       "message_count": 201,
       "extracted_messages_sha256": "f2ea923327c8f1d93493ca26ef262e5cc6683b3d2048eb04004b052bd544f3d5",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fafcd-ee9a-7cc1-a021-81d8514dffe0",
       "message_count": 7,
       "extracted_messages_sha256": "8b4ef5d795b5d37165dee0ba4cb407b597968f2cd9b4f97b17a4875db90f6a58",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fafce-0967-7171-974d-fe12fcbde7c7",
       "message_count": 9,
       "extracted_messages_sha256": "c91120e4aa855a12338975e29adf99ec45d8874c13d475db3d5b6a0827be3be4",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fafce-1e73-7a12-ba7d-66a0bcb39108",
       "message_count": 9,
       "extracted_messages_sha256": "fab306ba4ec48fc2f53c50ae7dbf5e20da00e7cb2caa77bab480d3d4dc44c6b5",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fafce-336c-7232-82cd-2602f3b9722c",
       "message_count": 9,
       "extracted_messages_sha256": "d0ada7476822f930cee741d652d765f90036bcc4098cc6cc5f7a9e8747e522d2",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fb43f-26e0-7600-b16c-20282b613e87",
       "message_count": 12,
       "extracted_messages_sha256": "8448d0183ca8ebd7c5ef5a3e9204dce1638924e1e6d954d0a9f4e1f1cb5d95a0",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fb459-24d7-7621-ac5c-ff479b3f4885",
       "message_count": 2,
       "extracted_messages_sha256": "e4748f0f5279d29f0bcd7305c080b00378f4f695bc93ab678a3332869cd1efe6",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fb46b-355d-7da3-9ab0-fd4a324fd2ac",
       "message_count": 6,
       "extracted_messages_sha256": "4901fd8da12ece0392dcc0ad6a5bb7174af65fa524210222421fcfcbcbcc0f09",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fb614-f0ce-7930-a7bf-e66afbb32310",
       "message_count": 20,
       "extracted_messages_sha256": "e5457fe4b437e45262e479aaf46ba378225d14f3ccdde37918c5c02fa670335d",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fb61d-299f-7362-a5de-c5b60011eaa1",
       "message_count": 19,
       "extracted_messages_sha256": "96ff568a0f09319d560a6cdff23f466c8de753e0844622ec84a2b9473bcfa008",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fb61d-487d-75f0-8769-a1e290b05fdb",
       "message_count": 3,
       "extracted_messages_sha256": "6bcd03d1e8e4570f7621cf4778ec895b768031caf777fed0cc9b2855389a273e",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fd005-b9d4-7e33-aa3e-050a7c0cf011",
       "message_count": 21,
       "extracted_messages_sha256": "f42fbc34f2be36e551ad1f15f9621ae712283021c72e89a166e037461c507103",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fd05b-b21e-73f0-8f4d-753c618e163f",
       "message_count": 7,
       "extracted_messages_sha256": "7a3400f715e5a7b1c6e1e53be8e0e1d447e14949406d3aacd8b37cd9ccd57544",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fd05b-db77-75e3-aae3-4de2657efc32",
       "message_count": 4,
       "extracted_messages_sha256": "f99270638c2a978dd1db1d514d9c0589a453dc0129b038dc1ab2fd978070da98",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fd05e-8b4f-78a0-8d90-cb23f361a438",
       "message_count": 8,
       "extracted_messages_sha256": "a4a6177099a6a850a0228c6a483f7e1c5a1798be04256feebabda959ce66d9ad",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fd061-a314-7602-8b4f-c94cc2253475",
       "message_count": 4,
       "extracted_messages_sha256": "c4b34dd368e5b0901883b5ccf4ee0ff1128d01704aa4bebf5caeda0cfd825e5e",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fd065-b6f6-7342-a232-96178882d443",
       "message_count": 10,
       "extracted_messages_sha256": "d2af4a8fb28032c24d96e01e0adc30998a80453e3d4ebae3dc3f262c1bf5b357",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fd092-eb2d-77a1-8832-cd889e6be65a",
       "message_count": 11,
       "extracted_messages_sha256": "bcdac80721d4b88097a87e06e1df4a7d93d9cbe247a3976bc2f333a002fd5093",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fd095-5437-74c1-ac18-d8e75f747bee",
       "message_count": 2,
       "extracted_messages_sha256": "202dffd43608fd8cf2268236909202bfcfa1efec372be70f9af7d8c0d219221f",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fd099-e56c-7c83-bd90-3d1e10a12b16",
       "message_count": 3,
       "extracted_messages_sha256": "246172ae577d765f00e7e5cfa5f1a2f0082e083232f5f55a18d9548a7b9dd731",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fd4f2-1eed-7b40-b621-7069bafde2fc",
       "message_count": 32,
       "extracted_messages_sha256": "57802b6eee1a4cc56b65b5b249f4c5a82db347eb282cddae7793f2543de0aa47",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fd5aa-c46d-73e1-8833-ac785369693d",
       "message_count": 347,
       "extracted_messages_sha256": "fee27f41229abba0874c999f873772aaf5146986a431b85528944776d0b24da3",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fe4e5-0a52-74f1-a408-b86fab0fc4ff",
       "message_count": 60,
       "extracted_messages_sha256": "59ff0158254b1c14378a78d639f83defc1f3be47aef510470ac26e45acd8a2b2",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a05dc4-e3bb-7ed1-9dca-345062e74216",
       "message_count": 1714,
       "extracted_messages_sha256": "7213c94aa6e8196e17030e7a8c11555945d6384574d762ff27a7f2d8c269c56a",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a06139-3a92-7b43-a320-b2b27558419c",
       "message_count": 18,
       "extracted_messages_sha256": "4d00350943c904c617846574a5ca492704fe1de56c14ced525015c940f24220d",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a06cea-beaf-7361-bad5-766aed153f45",
       "message_count": 55,
       "extracted_messages_sha256": "b1919df28e1423d41110e4ee30385583ecad1a90768f909e55558a5006da8779",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a06d31-91d6-7ad2-bf4e-d699f865f85a",
       "message_count": 23,
       "extracted_messages_sha256": "b17084a6b9149590b616c31140f99c1f10e8b2e4f16994b5d099d11f84f3f88d",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a07777-9cc5-73a2-8ad2-70009079b67e",
       "message_count": 115,
       "extracted_messages_sha256": "8be34b5bdacf4bbb94e9623ddce531f7c2ffb86a030d2c07427ed1a100c6535b",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a077b2-6c6c-7ec1-b0c6-397bf0aa1aed",
       "message_count": 202,
       "extracted_messages_sha256": "f94456a91ed91277538996a1ab597dcf029bbe132f34f0628b82538f4000b32c",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a07bf7-cdc0-7990-b2fa-83e3663354f4",
       "message_count": 122,
       "extracted_messages_sha256": "9b6e6f1e3e415cd7c7a04fbbe19dccddbc34b89ba0c56a0d2c34a45a285f6d69",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a07c59-0b1d-7130-8415-001cad9b7e5b",
       "message_count": 401,
       "extracted_messages_sha256": "8768b291b3f9e7d65159c5d35e2367c58689662e3fe9becb29d39da7794a4c82",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a086ac-3691-7e62-be59-387841cf1c60",
       "message_count": 515,
       "extracted_messages_sha256": "276384f820bf36b2b77de6deefed92e173a1a937d705819fa352c4f6743dfc52",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a08e0b-28d9-71d3-81d5-89303dc43003",
       "message_count": 1416,
       "extracted_messages_sha256": "8dfb4ae02f9567c8f0215023abf51b85564d5746839bc88fc7eaaf6a065a2c80",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a08fc1-c207-74a0-9056-17d7cfb28927",
       "message_count": 6,
       "extracted_messages_sha256": "54a4bfbe25cbea71ff76514b74191c84a509c036d82007a61e00eff1fd98d8b1",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a099fc-6673-7a10-93ff-323bc08e718b",
       "message_count": 364,
       "extracted_messages_sha256": "cda996e48c401cf4e8ca7fdbd2e7ae23cc97b60f7c3c566f830d24ffc0ff7e6a",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a0a2ee-e233-7fd2-88f8-32081056181a",
       "message_count": 7,
       "extracted_messages_sha256": "fabfa348a9fa71231084213cb2dcda9f2a106f9f875ae22280e967d92c3b99d7",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a0a59f-8e26-75c2-9fea-0ecb7430c2df",
       "message_count": 7,
       "extracted_messages_sha256": "9e127fa0958c236ad823a6ce0448659a2917776b26008e122a1dfe302ca16ce1",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a0a617-6f1b-7591-b6df-af4e8f087413",
       "message_count": 273,
       "extracted_messages_sha256": "a85a7089caca553bb9d50e0a9330ccb93d8a739142aa2f92d22c9f2d952b485e",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a0ab12-b9ee-7751-bee0-6a78dcac9c1f",
       "message_count": 111,
       "extracted_messages_sha256": "763ce4874b048d298721b5216cebfc8b66526e77059c7665c8a2cf7fd253b31b",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fafbc-6274-7972-aa61-b9c3d9c527c7",
       "message_count": 58,
       "extracted_messages_sha256": "b17b0491a12adae41c8d110fe24ac1cb401551487822eba2ce5d2a8978a9c859",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fcff0-3102-79a2-acf3-506f64bd80ed",
       "message_count": 5,
       "extracted_messages_sha256": "78ec76032b01da5c2c2320997297272d11f549636d010293ed406dc1fbf32b56",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fd4b7-78eb-7af0-bc33-e46d7d3c437a",
       "message_count": 9,
       "extracted_messages_sha256": "a09949a58561221bfea68d94ff7aa3f6440352209a5a119d286202e5892ed53e",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fd4c3-6b16-7e40-b735-a43f50b98877",
       "message_count": 6,
       "extracted_messages_sha256": "96b97f79b3dffd465d1d09ee395c1ef96f1aabe98a507330185529578bfae816",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "019fd4c3-85d5-7702-a272-7f22a8886d90",
       "message_count": 6,
       "extracted_messages_sha256": "d6e1578c39c56c33c5031e029bbf08d949483f9e70ad4bef2e79d140103e73aa",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a0128e-835c-7b12-92ce-b4ffc0433aa8",
       "message_count": 1491,
       "extracted_messages_sha256": "22d85ba2b743be92ba858ad405bf17fffce4c98d3435ee8adf916a580d9a230f",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a01337-f4e9-7320-9756-8027b723a7d6",
       "message_count": 15,
       "extracted_messages_sha256": "6098e0b17328120522e19a765e8cf5d1b2415de57bbc03f5c6df1715871398e4",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a050bf-df84-74d0-aee6-69bc804591c8",
       "message_count": 47,
       "extracted_messages_sha256": "c8c518c89968d54728c30255adfefe159bfcbdb5bf20ab56fc7a20eb8e7184f1",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a066c4-d21b-7260-93b8-2124f43c5feb",
       "message_count": 26,
       "extracted_messages_sha256": "cbae867eb719a87b6ff9cedb33d4670fb63230e45cdb3f23be36ae9d1e4c27e1",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a067b7-0780-7dd1-8756-a5d830160840",
       "message_count": 16,
       "extracted_messages_sha256": "e444ab8130f6ced5292ea53ccebe01380a59c10945607da6d75a9bc847088134",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a067bd-f50d-78e3-97d2-f319e2bf921b",
       "message_count": 2,
       "extracted_messages_sha256": "ff866c506ea57506e3d39284d28c22f7af2266eaae512317e0b39ca67729fbe0",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     },
     {
       "thread_id": "01a0aa3a-9cc3-7650-92dd-2b9d9a46b13f",
       "message_count": 4,
       "extracted_messages_sha256": "8e5446e2153894c5e5addc470e74d93b764b9a9506cea29e1ff82ac3275cf228",
-      "coverage": "indexed; design-decision review in progress"
+      "coverage": "indexed historical conversation fully read; semantic and runtime verification reported separately"
     }
   ]
 }
