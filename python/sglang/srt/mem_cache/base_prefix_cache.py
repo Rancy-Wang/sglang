@@ -70,6 +70,9 @@ class MatchPrefixParams:
     # Mamba specific
     cow_mamba: bool = False
     req: Optional[Req] = None
+    # Context-only longest compatible source selection. Returned positions must
+    # be reconciled with target occurrences before attention consumes the KV.
+    context_retry: bool = False
 
 
 @dataclasses.dataclass
@@ -261,6 +264,8 @@ class MatchResult(NamedTuple):
     full_kv_hit_length: int = 0
     # Actions the Controller applies: CacheActions itself, ComponentActions routed to the owning component.
     cache_actions: Sequence[CacheAction | ComponentAction] = ()
+    context_source_positions: torch.Tensor | None = None
+    context_retry: bool = False
 
 
 def zero_match_result(

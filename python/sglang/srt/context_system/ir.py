@@ -267,6 +267,9 @@ class ContextKeyData:
     records: array
     token_to_record: array
     special_tokens: array
+    retry_records: array
+    event_tokens: array
+    positions: array
 
     @classmethod
     def from_layout(cls, layout: ContextLayout) -> ContextKeyData:
@@ -286,7 +289,19 @@ class ContextKeyData:
         )
         special_tokens = array("q")
         special_tokens.frombytes(torch.nonzero(special).flatten().numpy().tobytes())
-        return cls(records, token_map, special_tokens)
+        retry = layout.records.clone()
+        retry[ids, 2:] = 0
+        retry_records = array("i")
+        retry_records.frombytes(retry.numpy().tobytes())
+        event_tokens = array("q")
+        event_tokens.frombytes(
+            torch.nonzero(ids != preceding + 1).flatten().numpy().tobytes()
+        )
+        positions = array("i")
+        positions.frombytes(layout.positions.numpy().tobytes())
+        return cls(
+            records, token_map, special_tokens, retry_records, event_tokens, positions
+        )
 
     def record_start(self, raw: int) -> int:
         return 0 if raw == 0 else self.token_to_record[raw - 1] + 1
@@ -296,31 +311,39 @@ class ContextKeyData:
         last = self.token_to_record[start + count - 1] + 1 if count else first
         return first, last
 
-    def plain_prefix(self, start: int, count: int) -> int:
-        index = bisect_left(self.special_tokens, start)
-        if index == len(self.special_tokens):
+    def plain_prefix(self, start: int, count: int, *, retry: bool = False) -> int:
+        boundaries = self.event_tokens if retry else self.special_tokens
+        index = bisect_left(boundaries, start)
+        if index == len(boundaries):
             return count
-        return min(count, self.special_tokens[index] - start)
+        return min(count, boundaries[index] - start)
 
-    def match(self, other: ContextKeyData, start: int, offset: int, count: int) -> int:
+    def match(
+        self,
+        other: ContextKeyData,
+        start: int,
+        offset: int,
+        count: int,
+        *,
+        retry: bool = False,
+    ) -> int:
         """Exact structured LCP, returned in real tokens (never virtual slots)."""
         if not count:
             return 0
         a, ae = self.record_span(start, count)
         b, be = other.record_span(offset, count)
         n = min(ae - a, be - b)
+        left = self.retry_records if retry else self.records
+        right = other.retry_records if retry else other.records
         lo, step = 0, 1
         while lo < n:
             hi = min(lo + step, n)
-            if (
-                self.records[4 * (a + lo) : 4 * (a + hi)]
-                != other.records[4 * (b + lo) : 4 * (b + hi)]
-            ):
+            if left[4 * (a + lo) : 4 * (a + hi)] != right[4 * (b + lo) : 4 * (b + hi)]:
                 while hi - lo > 1:
                     mid = (lo + hi) // 2
                     if (
-                        self.records[4 * (a + lo) : 4 * (a + mid)]
-                        == other.records[4 * (b + lo) : 4 * (b + mid)]
+                        left[4 * (a + lo) : 4 * (a + mid)]
+                        == right[4 * (b + lo) : 4 * (b + mid)]
                     ):
                         lo = mid
                     else:

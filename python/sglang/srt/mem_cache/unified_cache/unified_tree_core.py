@@ -114,6 +114,8 @@ class UnifiedTreeNode:
         # Plain dict (not defaultdict): a missing-key read must raise, never
         # silently mint an unregistered node outside the TreeCore arena.
         self.children: dict[Any, UnifiedTreeNode] = {}
+        self.context_retry_index = None
+        self.context_descendant_bound = 0
         self.parent: UnifiedTreeNode | None = None
         self.key: Optional[RadixKey] = None
         self.component_types = tree_components
@@ -794,6 +796,8 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         key = params.key
         if key.context is not None:
             self._validate_context_key(key)
+            if params.context_retry:
+                return self._match_context_retry(params)
         key, _ = key.maybe_to_bigram_view(self.is_eagle)
         if len(key) == 0:
             return self._empty_match_result
@@ -817,6 +821,99 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             best_match_device_value_len,
             full_kv_hit_length,
             action,
+        )
+
+    def _match_context_retry(self, params: MatchPrefixParams) -> MatchResult:
+        from sglang.srt.context_system.retry import (
+            RetrySelection,
+            longest_compatible_prefix,
+        )
+
+        key = params.key.page_aligned(self.page_size)
+        if not len(key):
+            return self._empty_match_result
+        swa = self.components_by_type.get(ComponentType.SWA)
+
+        def advance(node, length, suffix):
+            if node.evicted:
+                return None
+            if swa is None:
+                return True, suffix
+            if node.component_data[ComponentType.SWA].value is None:
+                return False, 0
+            suffix += length
+            return suffix >= swa.sliding_window_size, suffix
+
+        # Seed with the longest exact source, but keep selection read-only. An
+        # equally long Retry candidate must not displace this no-COW choice.
+        node, cursor, suffix = self.root_node, 0, float("inf")
+        exact = RetrySelection(node, 0, 0)
+        while cursor < len(key):
+            child = node.children.get(key.child_key_at(cursor, self.page_size))
+            if child is None:
+                break
+            length = child.key.match_at(key, cursor, self.page_size)
+            if not length:
+                break
+            validity = advance(child, length, suffix)
+            if validity is None:
+                break
+            valid, suffix = validity
+            cursor += length
+            if valid:
+                exact = RetrySelection(child, length, cursor)
+            if length < len(child.key):
+                break
+            node = child
+
+        selected = longest_compatible_prefix(
+            self.root_node, key, self.page_size, advance, initial=exact
+        )
+        if not selected.matched_length:
+            return self._empty_match_result
+        winner = selected.node
+        action = None
+        if selected.edge_length < len(winner.key):
+            winner, action = self._split_node(winner.key, winner, selected.edge_length)
+        path = []
+        node = winner
+        while node is not self.root_node:
+            path.append(node)
+            node = node.parent
+        path.reverse()
+        values, positions = [], []
+        cursor = 0
+        for node in path:
+            values.append(node.component_data[BASE_COMPONENT_TYPE].value)
+            source = node.key
+            if source.context is None:
+                positions.append(
+                    torch.arange(cursor, cursor + len(source), dtype=torch.int32)
+                )
+            else:
+                start = source.context_start
+                positions.append(
+                    torch.frombuffer(
+                        source.context.positions,
+                        dtype=torch.int32,
+                        count=len(source),
+                        offset=start * 4,
+                    )
+                )
+            cursor += len(source)
+        result = self._match_post_processor(
+            params, values, winner, winner, len(values), selected.matched_length, action
+        )
+        source_positions = torch.cat(positions)
+        target_positions = torch.frombuffer(
+            key.context.positions,
+            dtype=torch.int32,
+            count=selected.matched_length,
+            offset=key.context_start * 4,
+        )
+        return result._replace(
+            context_source_positions=source_positions,
+            context_retry=not torch.equal(source_positions, target_positions),
         )
 
     def _match_prefix_helper(
@@ -1368,6 +1465,18 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                 self._build_backup_kv_action(state.target_node)
             )
 
+    @staticmethod
+    def _context_note_child_link(
+        parent: UnifiedTreeNode, exact_key, child: UnifiedTreeNode
+    ):
+        if parent.context_retry_index is not None:
+            parent.context_retry_index.link(exact_key, child)
+        bound = len(child.key) + child.context_descendant_bound
+        while parent is not None and bound > parent.context_descendant_bound:
+            parent.context_descendant_bound = bound
+            bound += len(parent.key)
+            parent = parent.parent
+
     def _split_node(
         self, key: RadixKey, child: UnifiedTreeNode, split_len: int
     ) -> tuple[UnifiedTreeNode, Optional[CacheAction | ComponentAction]]:
@@ -1396,6 +1505,12 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         for component in self.components:
             component.redistribute_on_node_split(new_parent=new_node, child=child)
         new_node.parent.children[key.child_key(self.page_size)] = new_node
+        self._context_note_child_link(
+            new_node, child.key.child_key(self.page_size), child
+        )
+        self._context_note_child_link(
+            new_node.parent, key.child_key(self.page_size), new_node
+        )
 
         # A split of a backuped node tells the cache to fix its publish list.
         action: Optional[CacheAction | ComponentAction] = None
@@ -1443,6 +1558,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         new_node.rotation_base = rotation_base
         new_node.component_data[BASE_COMPONENT_TYPE].value = value.clone()
         parent.children[key.child_key(self.page_size)] = new_node
+        self._context_note_child_link(parent, key.child_key(self.page_size), new_node)
         self.component_evictable_size_[BASE_COMPONENT_TYPE] += len(value)
         if self.enable_storage or self.enable_external_cache_linker:
             new_node.hash_value = compute_node_hash_values(new_node, self.page_size)
@@ -1964,6 +2080,8 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         key = node.key.child_key(self.page_size)
         v = node.parent.children.pop(key, None)
         assert v == node
+        if node.parent.context_retry_index is not None:
+            node.parent.context_retry_index.unlink(key)
         # Deleted nodes must not linger in duplicate tracking as ghosts.
         self.full_host_duplicates.pop(node.id, None)
         self._unregister_node(node)
@@ -2191,6 +2309,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         new_node.hash_value = hash_value
         new_node.component_data[BASE_COMPONENT_TYPE].host_value = host_value.clone()
         node.children[child_key] = new_node
+        self._context_note_child_link(node, child_key, new_node)
         self._update_evictable_leaf_sets(new_node)
         self._update_evictable_leaf_sets(node)
         result.inserted_host_node = new_node.id

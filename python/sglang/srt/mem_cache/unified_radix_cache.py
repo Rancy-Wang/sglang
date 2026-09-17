@@ -553,6 +553,8 @@ class UnifiedRadixCache(BasePrefixCache):
         same_results=["result.full_kv_hit_length", "result.swa_host_hit_length"],
     )
     def match_prefix(self, params: MatchPrefixParams) -> MatchResult:
+        if params.key.context is not None and self._tree_core_backend != "python":
+            raise ValueError("Context Radix currently requires the native Python tree core")
         result = self.session.try_match_prefix(params)
         if result is not None:
             return result
@@ -581,6 +583,12 @@ class UnifiedRadixCache(BasePrefixCache):
         same_results=["result.prefix_len"],
     )
     def insert(self, params: InsertParams) -> InsertResult:
+        if (
+            params.key is not None
+            and params.key.context is not None
+            and self._tree_core_backend != "python"
+        ):
+            raise ValueError("Context Radix currently requires the native Python tree core")
         if self.disable:
             return InsertResult(prefix_len=0)
         # Fail fast on re-entrancy without touching the in-flight walk.
