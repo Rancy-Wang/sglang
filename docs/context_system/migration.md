@@ -170,6 +170,39 @@ BUS CPU 命令 `CUDA_VISIBLE_DEVICES=9 PYTHONPATH=python python -m pytest -q
 从队列结束、普通原生请求行为不变。下一项是失败附近两条 BCP 请求的缓存预热/并发
 重放；这是定向功能诊断，不是完整轨迹吞吐。R2仍未完成。
 
+## 连续 Reposition 的缓存保留与定向复测（2026-09-18）
+
+`182bdc5cc` 的 `bcp-c2-idle-pressure-v1` 用失败 C2 v4 保存的实际生成历史重建四条
+请求，逐轮核对 history hash，全部 HTTP200 且输出长度正确。两条预热 raw130697/55923
+耗时334.116/334.431s，后续 raw133364/58907耗时229.932/339.150s。这证明空闲调度
+可以继续推进，但 case864 turn28 的 cached/repos/drop-skipped仍均为0，实际重算
+133364 tokens；该诊断不是吞吐测试，也不算效率通过。
+
+`acc6222cc` 在 `Req.prepare_context_recovery`
+（`python/sglang/srt/managers/schedule_batch.py:1650`）对齐 mini 的两阶段恢复判断：
+先只根据缺页与真实依赖计算恢复范围；只有确需执行历史 query 时，才将不兼容位置的
+来源加入重建集合，避免低精度逆旋转污染恢复结果。仅追加下一次 Reposition、没有
+必要历史缺页时，保留缓存并用独立目标页旋转，不能因最终位置变化就冷算整个前缀。
+SWA residency、query窗口和终态需求在两次计划中均保留。
+
+BUS 隔离 checkout `sglang-r2-capacity-check` 已通过 Git bundle 从已推送提交快进到
+`d4b598572`（GitHub HTTPS 当次 TLS 中断，未直接修改远端源码）。CPU 命令
+`CUDA_VISIBLE_DEVICES=9 PYTHONPATH=python python -m pytest -q test/registered/context_system/test_context_admission.py`
+为 **23 passed in 16.99s**，新增完整缓存、不必恢复的 Drop 空洞、必须恢复的空洞三种检查。
+
+`d4b598572` 增加真实 BCP 连续 R 数值路径：先仅带首个 R 预热，再带两个 R 请求固定
+64-token路径，对照已保存的 mini logits；同时检查确有缓存复用和 Prefill减少。
+Qwen/Agentic/GPT20仅补该新增路径并复用旧无功能误差校准，120B普通/PD最终检查包含它。
+这些 GPU结果尚待完成，不以CPU计划一致代替模型输出验证。
+
+同一时段完成的 `minimal-sg120-c1-drop-final-v1` 使用 `d2ef1d0f1`、GPU0/1 TP2、
+page1、GPT-OSS默认Triton、共享Full/SWA池、KV262144、chunk8192：2/2 task完成，
+84成功、0失败，27390输出tokens / 1000.032115s = **27.389120 token/s**。
+原生C1为25.628504，提升 **6.8698%**，达到95%吞吐门槛；实际PF235943/D27306。
+17个请求含R，但本组没有连续两次R的长请求，不能替代C2复测。
+TTFT mean/P90为7619.376/9057.320ms，标准TPOT为12.118/13.356ms。
+原始证据为实验目录下`workload/result.json`和`events.jsonl`，不测SLO。
+
 ## 延迟终态副本的 PD 传输边界（2026-09-18）
 
 审计发现上述副本延迟生成后，旧 PD 仍按已计算 raw 长度发送，可能读取尚未生成的
