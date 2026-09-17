@@ -1046,6 +1046,8 @@ class Req(ReqDllmMixin):
         self.context_state = None
         self.context_window_plan = None
         self.context_usage = None
+        self.context_cache_published = False
+        self.context_source_lease = None
         if context_program is not None:
             from sglang.srt.context_system.ir import ContextKeyData
             from sglang.srt.context_system.planner import ContextProgram

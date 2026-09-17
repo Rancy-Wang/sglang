@@ -967,6 +967,21 @@ class UnifiedRadixCache(BasePrefixCache):
     def cache_finished_req(
         self, req: Req, is_insert: bool = True, *, kv_len_to_handle: int, **kwargs
     ) -> None:
+        state = getattr(req, "context_state", None)
+        if state is not None:
+            self._prepare_context_cache_row(req, retain_source=False)
+        self._cache_finished_req_native(
+            req, is_insert=is_insert, kv_len_to_handle=kv_len_to_handle, **kwargs
+        )
+        if state is not None:
+            self.token_to_kv_pool_allocator.free(state.nonterminal_private_slots())
+            self._release_context_source_lease(req)
+            req.context_state = None
+            req.context_window_plan = None
+
+    def _cache_finished_req_native(
+        self, req: Req, is_insert: bool = True, *, kv_len_to_handle: int, **kwargs
+    ) -> None:
         if self.session.try_cache_finished_req(req, is_insert=is_insert, **kwargs):
             return
 
@@ -1105,6 +1120,49 @@ class UnifiedRadixCache(BasePrefixCache):
 
     @rank_consensus(same_params=["req.rid", "chunked"])
     def cache_unfinished_req(self, req: Req, chunked: bool = False, **kwargs) -> None:
+        state = getattr(req, "context_state", None)
+        if state is not None:
+            self._prepare_context_cache_row(req, retain_source=True)
+        self._cache_unfinished_req_native(req, chunked=chunked, **kwargs)
+        if state is not None and not self.disable:
+            req.context_state = state.publish(
+                req.prefix_indices, cache_len=req.kv.cache_protected_len
+            )
+            req.context_cache_published = True
+            if not chunked and len(state.terminal_rows) == len(req.origin_input_ids):
+                # Final prefill results have passed their native completion event.
+                self._release_context_source_lease(req)
+
+    def _prepare_context_cache_row(self, req: Req, *, retain_source: bool):
+        state = req.context_state
+        if req.session is not None or req.kv_rotation_base is not None:
+            raise ValueError("Context cache does not support session/ring KV layouts")
+        if not req.context_cache_published and not self.disable:
+            if (
+                retain_source
+                and req.context_source_lease is None
+                and req.last_node is not None
+                and req.context_exact_prefix_len < req.kv.cache_protected_len
+            ):
+                # The native request lease moves to the target branch below.
+                # Keep the Retry source branch alive for remaining birth reads.
+                receipt = self.inc_lock_ref(req.last_node).to_dec_params()
+                req.context_source_lease = (req.last_node, receipt)
+            req.kv.cache_protected_len = min(
+                req.kv.cache_protected_len, req.context_exact_prefix_len
+            )
+        terminal = state.terminal_slots()
+        self.req_to_token_pool.write(
+            (req.kv.req_pool_idx, slice(0, len(terminal))), terminal
+        )
+
+    def _release_context_source_lease(self, req: Req):
+        if req.context_source_lease is not None:
+            node, receipt = req.context_source_lease
+            self.dec_lock_ref(node, receipt)
+            req.context_source_lease = None
+
+    def _cache_unfinished_req_native(self, req: Req, chunked: bool = False, **kwargs) -> None:
         if self.session.try_cache_unfinished_req(req, chunked=chunked, **kwargs):
             return
 
