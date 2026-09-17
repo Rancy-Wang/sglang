@@ -247,3 +247,140 @@ class ContextForwardMetadata:
                 raise ValueError("Context SWA metadata was not bound")
             return self.sliding_window
         return self.full
+
+
+@dataclass(frozen=True)
+class ContextPoolLayer:
+    layer_id: int
+    sliding_window: bool
+    k_ptr: torch.Tensor
+    v_ptr: torch.Tensor
+    k_buffer: torch.Tensor
+    v_buffer: torch.Tensor
+    cos_sin_cache: torch.Tensor
+    is_neox_style: bool
+
+
+class ContextModelBinding:
+    """Engine-lifetime native pool/RoPE bindings, built before Context dispatch.
+
+    Uses the model's existing rotary modules, including YaRN scaling and style.
+    Global layer IDs go through the native pool's mapping (including SWA), never
+    through an assumption about alternating layers or local TP head counts.
+    """
+
+    def __init__(self, model, pool, translator, *, page_size: int):
+        if page_size != 1:
+            raise ValueError("Context model binding requires page_size=1")
+        layers = []
+        for module in model.modules():
+            attn = getattr(module, "attn", None)
+            rotary = getattr(module, "rotary_emb", None)
+            if attn is None or rotary is None or not hasattr(attn, "layer_id"):
+                continue
+            layer_id = attn.layer_id
+            k, v = pool.get_kv_buffer(layer_id)
+            rope = getattr(rotary, "cos_sin_cache", None)
+            if (
+                k.ndim != 3
+                or v.shape != k.shape
+                or k.dtype not in (torch.float16, torch.bfloat16)
+                or v.dtype != k.dtype
+                or rope is None
+                or rope.ndim != 2
+                or rope.shape[1] != k.shape[-1]
+                or k.device != v.device
+                or k.device != rope.device
+                or k.stride(-1) != 1
+                or v.stride(-1) != 1
+            ):
+                raise ValueError("Context needs native NHD KV and full-head RoPE")
+            layers.append(
+                ContextPoolLayer(
+                    layer_id,
+                    attn.sliding_window_size is not None
+                    and attn.sliding_window_size > -1,
+                    torch.tensor([k.data_ptr()], dtype=torch.uint64, device=k.device),
+                    torch.tensor([v.data_ptr()], dtype=torch.uint64, device=v.device),
+                    k,
+                    v,
+                    rope,
+                    rotary.is_neox_style,
+                )
+            )
+        if not layers or len({layer.layer_id for layer in layers}) != len(layers):
+            raise ValueError("Context model must expose unique native attention layers")
+        self.layers = tuple(layers)
+        self.translator = translator
+        self.has_swa = any(layer.sliding_window for layer in layers)
+
+    def bind(self, inputs: ContextPrefillInput) -> ContextForwardMetadata:
+        # Translate virtual FULL ids once, then derive SWA ids using the same
+        # native contract as KV writes. Unused -1 entries are padding only;
+        # admission must have proved every referenced source is resident.
+        full_slots = self.translator.translate_full_attn_ids(
+            inputs.occurrence_slots.clamp(min=0)
+        )
+        copy_source = self.translator.translate_full_attn_ids(inputs.copy_sources)
+        copy_destination = self.translator.translate_full_attn_ids(
+            inputs.copy_destinations
+        )
+        full = inputs.attention_plan.bind(full_slots)
+        swa = None
+        if self.has_swa:
+            swa_slots = self.translator.sliding_window_write_loc_for(full_slots)
+            swa_source = self.translator.sliding_window_write_loc_for(copy_source)
+            swa_destination = self.translator.sliding_window_write_loc_for(
+                copy_destination
+            )
+            if swa_slots is None or swa_source is None or swa_destination is None:
+                raise ValueError("Context SWA pool is missing its native index mapping")
+            swa = inputs.attention_plan.bind(swa_slots)
+        copies = {}
+        if len(inputs.copy_sources):
+            for layer in self.layers:
+                source = swa_source if layer.sliding_window else copy_source
+                destination = (
+                    swa_destination if layer.sliding_window else copy_destination
+                )
+                copies[layer.layer_id] = ContextLayerCopy(
+                    layer.k_ptr,
+                    layer.v_ptr,
+                    layer.k_buffer,
+                    layer.v_buffer,
+                    source.to(torch.int32),
+                    destination.to(torch.int32),
+                    inputs.copy_positions,
+                    layer.cos_sin_cache,
+                    layer.is_neox_style,
+                )
+        return ContextForwardMetadata(full, swa, copies)
+
+
+@dataclass(frozen=True)
+class ContextPrefillInput:
+    """Immutable forward snapshot; all pages remain leased through completion."""
+
+    attention_plan: ContextAttentionPlan
+    occurrence_slots: torch.Tensor
+    copy_sources: torch.Tensor
+    copy_destinations: torch.Tensor
+    copy_positions: torch.Tensor
+    model_binding: ContextModelBinding
+
+    def bind(self) -> ContextForwardMetadata:
+        if (
+            self.copy_sources.ndim != 1
+            or self.copy_destinations.shape != self.copy_sources.shape
+            or self.copy_positions.shape != (len(self.copy_sources), 2)
+            or any(
+                value.dtype != torch.int32
+                for value in (
+                    self.copy_sources,
+                    self.copy_destinations,
+                    self.copy_positions,
+                )
+            )
+        ):
+            raise ValueError("Context copies require aligned int32 metadata")
+        return self.model_binding.bind(self)

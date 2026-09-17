@@ -92,3 +92,66 @@ def test_large_page_rejected_before_kernel(attention_plan):
         bound.forward(
             unexpected_kernel, None, None, None, None, None, None, page_size=16
         )
+
+
+def test_native_model_pool_and_rope_bind_once(attention_plan):
+    from types import SimpleNamespace
+
+    class Pool:
+        def __init__(self):
+            self.calls = []
+            self.buffers = {
+                i: (
+                    torch.empty(128, 2, 64, dtype=torch.bfloat16),
+                    torch.empty(128, 2, 64, dtype=torch.bfloat16),
+                )
+                for i in (7, 13)
+            }
+
+        def get_kv_buffer(self, layer_id):
+            self.calls.append(layer_id)
+            return self.buffers[layer_id]
+
+    class Translator:
+        def translate_full_attn_ids(self, ids):
+            return ids + 10
+
+        def sliding_window_write_loc_for(self, ids):
+            return ids + 50
+
+    ropes = [torch.randn(512, 64) for _ in range(2)]
+    modules = [
+        SimpleNamespace(
+            attn=SimpleNamespace(layer_id=i, sliding_window_size=window),
+            rotary_emb=SimpleNamespace(cos_sin_cache=rope, is_neox_style=style),
+        )
+        for i, window, rope, style in zip((7, 13), (-1, 128), ropes, (True, False))
+    ]
+    model = SimpleNamespace(modules=lambda: iter(modules))
+    pool = Pool()
+    binding = attention_plan.ContextModelBinding(model, pool, Translator(), page_size=1)
+    plan = attention_plan.ContextAttentionPlan.merge(
+        [attention_plan.ContextSequence.ordinary(3, 2)]
+    )
+    inputs = attention_plan.ContextPrefillInput(
+        plan,
+        torch.arange(1, 6),
+        torch.tensor([1], dtype=torch.int32),
+        torch.tensor([9], dtype=torch.int32),
+        torch.tensor([[17, 3]], dtype=torch.int32),
+        binding,
+    )
+    for _ in range(2):
+        metadata = inputs.bind()
+        assert metadata.full.kv_indices.tolist() == [11, 12, 13]
+        assert metadata.sliding_window.kv_indices.tolist() == [61, 62, 63]
+        assert metadata.layer_copies[7].source_slots.tolist() == [11]
+        assert metadata.layer_copies[13].source_slots.tolist() == [61]
+        assert metadata.layer_copies[7].destination_slots.tolist() == [19]
+        assert metadata.layer_copies[13].destination_slots.tolist() == [69]
+        assert metadata.layer_copies[13].cos_sin_cache is ropes[1]
+        assert not metadata.layer_copies[13].is_neox_style
+    assert pool.calls == [7, 13]
+    assert inputs.occurrence_slots.tolist() == [1, 2, 3, 4, 5]
+    with pytest.raises(ValueError, match="page_size=1"):
+        attention_plan.ContextModelBinding(model, pool, Translator(), page_size=16)

@@ -2370,6 +2370,9 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
     # HiSparse (engine-level coordinator ref, same across batches)
     hisparse_coordinator: Optional[HiSparseCoordinator] = None
 
+    # Immutable occurrence snapshot, retained with the forward/result batch.
+    context_prefill_input: object = None
+
     # === Batch-variant scheduler state (per-batch; not read by ForwardBatch) ===
     # Tell whether the current running batch is full so that we can skip
     # the check of whether to prefill new requests.

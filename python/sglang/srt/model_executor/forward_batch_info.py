@@ -941,6 +941,12 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
             spec_info=batch.spec_info,
         )
 
+        if batch.context_prefill_input is not None:
+            if not ret.forward_mode.is_extend() or ret.spec_info is not None:
+                raise ValueError("Context prefill metadata requires ordinary extend")
+            ret.context_attention = batch.context_prefill_input.bind()
+            ret.positions = ret.context_attention.full.query_positions
+
         ret._maybe_init_non_generation_fields(batch)
 
         device = model_runner.device
