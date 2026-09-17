@@ -1327,6 +1327,14 @@ class PrefillAdder:
             )
             if isinstance(admission, AddReqResult):
                 return admission
+            if admission.is_chunked and (
+                has_chunked_req or self.new_chunked_req is not None
+            ):
+                # Context repair intervals and memory-limited chunks can leave
+                # compute budget unused while the existing chunk still owns
+                # the scheduler's single continuation slot.
+                req.context_window_plan = None
+                return AddReqResult.OTHER
 
             # A rejected candidate must not report prefillable or queue H2D.
             if (self.prefill_delayer_single_pass is not None) and (

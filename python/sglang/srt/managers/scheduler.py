@@ -3954,6 +3954,11 @@ class Scheduler(
                 # The native deferred-abort path drains the preceding chunk
                 # before releasing its pages and PD transfer resources.
                 self._pending_chunked_abort_req = self.chunked_req
+            if self.chunked_req is not None and not adder.can_run_list:
+                # The retained chunk did not launch. Let decode free capacity;
+                # admitting other requests here would also incorrectly count
+                # an in-flight chunk for this parked request.
+                return None, running_batch
 
         if self.enable_lora:
             running_loras = {
