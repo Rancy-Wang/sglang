@@ -7,6 +7,7 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -174,7 +175,7 @@ def main():
         p.error("Native baseline is a no-Drop SGLang launch")
     root = Path(args.output_dir).resolve()
     root.mkdir(parents=True, exist_ok=False)
-    processes, logs, commands = [], [], []
+    processes, logs, commands, temporary_dirs = [], [], [], []
     repo = Path(args.server_repo).resolve()
     head = subprocess.check_output(
         ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
@@ -202,11 +203,17 @@ def main():
                 "SGLANG_CACHE_DIR",
                 "SGLANG_JIT_CACHE_DIR",
                 "TRITON_CACHE_DIR",
-                "TMPDIR",
             ):
                 directory = root / mode / key.lower()
                 directory.mkdir(parents=True)
                 env[key] = str(directory)
+            # ZMQ appends a socket filename to TMPDIR; the Linux address limit
+            # is 107 bytes, independent of the filesystem's path-length limit.
+            # Keep per-process temporary files isolated without nesting them
+            # under potentially long experiment output paths.
+            temporary = tempfile.TemporaryDirectory(prefix="sg-bcp-", dir="/tmp")
+            temporary_dirs.append(temporary)
+            env["TMPDIR"] = temporary.name
             port = args.port + i
             cmd = [
                 args.server_python,
@@ -290,6 +297,7 @@ def main():
                     "head": head,
                     "mode": mode,
                     "template_sha256": template_sha256,
+                    "tmpdir": env["TMPDIR"],
                 }
             )
             (root / "launch.json").write_text(
@@ -395,6 +403,8 @@ def main():
                     proc.wait(timeout=10)
         for log in logs:
             log.close()
+        for temporary in temporary_dirs:
+            temporary.cleanup()
 
 
 if __name__ == "__main__":
