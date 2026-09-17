@@ -1584,7 +1584,6 @@ class TritonAttnBackend(AttentionBackend):
                 self.use_mla
                 or self.dcp_size > 1
                 or self.enable_deterministic
-                or not save_kv_cache
                 or k is None
                 or v is None
                 or layer.k_scale is not None
@@ -1678,6 +1677,9 @@ class TritonAttnBackend(AttentionBackend):
         logits_soft_cap = logit_capping_mod(layer.logit_capping_method, layer.logit_cap)
 
         if context is not None:
+            # Native fused RoPE may already have stored the current K/V
+            # (save_kv_cache=False), while leaving rotated K available above.
+            # Apply COW copies after either write path and before prefix reads.
             copies = context.layer_copies.get(layer.layer_id)
             if copies is not None:
                 copies.apply()
