@@ -58,7 +58,7 @@ def prefix(a, b):
     return count
 
 
-def test_structured_native_key_pages_and_slices(compiler, key_types):
+def test_structured_native_key_tokens_and_slices(compiler, key_types):
     rng = random.Random(49238)
     for tokens, drops, reposition in cases():
         layout = compiler(*args(tokens, drops, reposition))
@@ -69,23 +69,20 @@ def test_structured_native_key_pages_and_slices(compiler, key_types):
         other = make_key(key_types, compiler(*args(tokens, drops, [])))
         other_units = units(compiler(*args(tokens, drops, [])))
         assert key.match(other) == prefix(oracle, other_units)
-        for page in (1, 4, 16, 64):
-            assert len(key.page_aligned(page)) == len(tokens) // page * page
-            for _ in range(4):
-                start = rng.randrange(len(tokens))
-                end = rng.randrange(start + 1, len(tokens) + 1)
-                edge = key[start:end]
-                assert edge.context is key.context
-                assert edge.match_at(key, start, page) == (end - start) // page * page
-                assert (
-                    edge.match_at(other, start, page)
-                    == prefix(oracle[start:end], other_units[start:]) // page * page
-                )
-                if end - start >= page:
-                    assert edge.child_key(page) == key.child_key_at(start, page)
-                    assert (
-                        edge.child_key(page) == other.child_key_at(start, page)
-                    ) == (edge.match_at(other, start, page) >= page)
+        assert key.page_aligned(1) is key
+        for _ in range(16):
+            start = rng.randrange(len(tokens))
+            end = rng.randrange(start + 1, len(tokens) + 1)
+            edge = key[start:end]
+            assert edge.context is key.context
+            assert edge.match_at(key, start) == end - start
+            assert edge.match_at(other, start) == prefix(
+                oracle[start:end], other_units[start:]
+            )
+            assert edge.child_key() == key.child_key_at(start)
+            assert (edge.child_key() == other.child_key_at(start)) == (
+                edge.match_at(other, start) >= 1
+            )
 
 
 def test_plain_prefix_shares_native_keys_and_namespaces(compiler, key_types):
@@ -93,13 +90,8 @@ def test_plain_prefix_shares_native_keys_and_namespaces(compiler, key_types):
     tokens = list(range(96))
     context = make_key(key_types, compiler(*args(tokens, {32: [(2, 9)]}, [])))
     plain = Key(array("q", tokens))
-    for page in (1, 4, 16, 64):
-        assert (
-            context.match(plain, page)
-            == plain.match(context, page)
-            == 32 // page * page
-        )
-        assert (context.child_key(page) == plain.child_key(page)) == (page <= 32)
+    assert context.match(plain) == plain.match(context) == 32
+    assert context.child_key() == plain.child_key()
     assert context[32:].child_key() != plain[32:].child_key()
     assert context[33:].match(plain[33:]) == 63
     for key in (context, plain):
@@ -148,3 +140,26 @@ def test_retry_preserves_events_and_ignores_only_token_positions(compiler, key_t
         assert (
             target.context_retry_child_key() == plain_repos.context_retry_child_key()
         ) == (prefix(left, right) > 0)
+
+
+@pytest.mark.parametrize("page_size", [4, 16, 64])
+def test_context_rejects_large_pages_but_native_keys_keep_them(
+    compiler, key_types, page_size
+):
+    Key, _ = key_types
+    tokens = list(range(128))
+    context = make_key(key_types, compiler(*args(tokens, {64: [(0, 16)]}, [])))
+    plain = Key(array("q", tokens))
+    for operation in (
+        lambda: context.page_aligned(page_size),
+        lambda: context.child_key(page_size),
+        lambda: context.match(context, page_size),
+        lambda: context.match(plain, page_size),
+        lambda: plain.match(context, page_size),
+        lambda: context.match_at(context, 0, page_size, context_retry=True),
+    ):
+        with pytest.raises(ValueError, match="page_size=1"):
+            operation()
+    assert len(plain.page_aligned(page_size)) == len(tokens)
+    assert plain.match(plain, page_size) == len(tokens)
+    assert plain.child_key(page_size) == tuple(tokens[:page_size])

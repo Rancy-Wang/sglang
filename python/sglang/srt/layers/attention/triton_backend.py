@@ -1543,6 +1543,8 @@ class TritonAttnBackend(AttentionBackend):
     ):
         context = forward_batch.context_attention
         if context is not None:
+            if self.page_size != 1:
+                raise ValueError("Context attention requires page_size=1")
             # Reject unsupported specializations before mutating any layer KV.
             # Ordinary requests retain every native backend specialization.
             if (

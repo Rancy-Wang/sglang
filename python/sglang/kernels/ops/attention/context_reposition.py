@@ -34,15 +34,12 @@ def _reposition_layers_kernel(
     destination_slots,
     position_pairs,
     cos_sin_cache,
-    k_stride_page,
     k_stride_slot,
     k_stride_head,
-    v_stride_page,
     v_stride_slot,
     v_stride_head,
     position_stride_token,
     rope_stride_position,
-    PAGE_SIZE: tl.constexpr,
     NEOX_STYLE: tl.constexpr,
     head_dim: tl.constexpr,
     half_dim: tl.constexpr,
@@ -69,18 +66,8 @@ def _reposition_layers_kernel(
     v_buffer = tl.load(v_data_ptrs + layer).to(
         tl.pointer_type(k_layout.dtype.element_ty)
     )
-    source_k = (
-        k_buffer
-        + (source // PAGE_SIZE) * k_stride_page
-        + (source % PAGE_SIZE) * k_stride_slot
-        + head * k_stride_head
-    )
-    destination_k = (
-        k_buffer
-        + (destination // PAGE_SIZE) * k_stride_page
-        + (destination % PAGE_SIZE) * k_stride_slot
-        + head * k_stride_head
-    )
+    source_k = k_buffer + source * k_stride_slot + head * k_stride_head
+    destination_k = k_buffer + destination * k_stride_slot + head * k_stride_head
     first_offsets = offsets if NEOX_STYLE else 2 * offsets
     second_offsets = half_dim + offsets if NEOX_STYLE else 2 * offsets + 1
     first = tl.load(source_k + first_offsets, mask=mask, other=0.0).to(tl.float32)
@@ -115,18 +102,8 @@ def _reposition_layers_kernel(
         mask=mask,
     )
 
-    source_v = (
-        v_buffer
-        + (source // PAGE_SIZE) * v_stride_page
-        + (source % PAGE_SIZE) * v_stride_slot
-        + head * v_stride_head
-    )
-    destination_v = (
-        v_buffer
-        + (destination // PAGE_SIZE) * v_stride_page
-        + (destination % PAGE_SIZE) * v_stride_slot
-        + head * v_stride_head
-    )
+    source_v = v_buffer + source * v_stride_slot + head * v_stride_head
+    destination_v = v_buffer + destination * v_stride_slot + head * v_stride_head
     value_first = tl.load(source_v + offsets, mask=mask, other=0.0)
     value_second = tl.load(source_v + half_dim + offsets, mask=mask, other=0.0)
     tl.store(destination_v + offsets, value_first, mask=mask)
@@ -144,12 +121,13 @@ def reposition_kv_layers(
     cos_sin_cache: torch.Tensor,
     *,
     is_neox_style: bool = True,
+    page_size: int = 1,
 ) -> None:
     """Rotate K and copy V across native per-layer pools in one GPU launch.
 
     Pointer tables are constructed once by the native KV pool. Each table's
     layers must have the exemplar's dtype and strides. Supports native NHD
-    [slot, head, dim] and HND [page, head, slot-in-page, dim]. SWA and full pools
+    [slot, head, dim] with page_size=1. SWA and full pools
     invoke this separately with their own physical slot mappings.
 
     The caller owns fresh, distinct destination slots disjoint from all source
@@ -157,6 +135,8 @@ def reposition_kv_layers(
     metadata until the stream finishes. This wrapper does no GPU-to-CPU reads
     and no synchronization. It does not allocate or release any KV page.
     """
+    if page_size != 1:
+        raise ValueError("Context Reposition requires page_size=1")
     tensors = (
         k_data_ptrs,
         v_data_ptrs,
@@ -172,11 +152,11 @@ def reposition_kv_layers(
     if k_layout.dtype not in (torch.float16, torch.bfloat16, torch.float32):
         raise ValueError("Context Reposition requires unquantized floating-point KV")
     if (
-        k_layout.ndim not in (3, 4)
+        k_layout.ndim != 3
         or v_layout.shape != k_layout.shape
         or v_layout.dtype != k_layout.dtype
     ):
-        raise ValueError("Reposition requires matching native NHD or HND K/V layouts")
+        raise ValueError("Reposition requires matching native NHD K/V layouts")
     if k_layout.stride(-1) != 1 or v_layout.stride(-1) != 1:
         raise ValueError("Reposition requires contiguous head dimensions")
     if (
@@ -212,22 +192,6 @@ def reposition_kv_layers(
         raise ValueError("Reposition requires a full-head native cos/sin RoPE cache")
     if count == 0 or len(k_data_ptrs) == 0:
         return
-    if k_layout.ndim == 3:
-        page_size = 1
-        k_page, k_slot, k_head = k_layout.stride(0), 0, k_layout.stride(1)
-        v_page, v_slot, v_head = v_layout.stride(0), 0, v_layout.stride(1)
-    else:
-        page_size = k_layout.shape[2]
-        k_page, k_slot, k_head = (
-            k_layout.stride(0),
-            k_layout.stride(2),
-            k_layout.stride(1),
-        )
-        v_page, v_slot, v_head = (
-            v_layout.stride(0),
-            v_layout.stride(2),
-            v_layout.stride(1),
-        )
     _reposition_layers_kernel[(count, len(k_data_ptrs), k_layout.shape[1])](
         k_layout,
         k_data_ptrs,
@@ -236,15 +200,12 @@ def reposition_kv_layers(
         destination_slots,
         position_pairs,
         cos_sin_cache,
-        k_page,
-        k_slot,
-        k_head,
-        v_page,
-        v_slot,
-        v_head,
+        k_layout.stride(0),
+        k_layout.stride(1),
+        v_layout.stride(0),
+        v_layout.stride(1),
         position_pairs.stride(0),
         cos_sin_cache.stride(0),
-        PAGE_SIZE=page_size,
         NEOX_STYLE=is_neox_style,
         head_dim=head_dim,
         half_dim=head_dim // 2,

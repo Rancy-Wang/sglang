@@ -82,11 +82,10 @@ def native_attention(tmp_path_factory):
 
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
-@pytest.mark.parametrize("page_size", [1, 4, 16, 64])
 @pytest.mark.parametrize("window", [-1, 16])
 @pytest.mark.parametrize("has_sink", [False, True])
 def test_native_position_windows(
-    native_attention, dtype, page_size, window, has_sink, record_property
+    native_attention, dtype, window, has_sink, record_property
 ):
     actual, reference = native_attention
     torch.manual_seed(104)
@@ -99,8 +98,7 @@ def test_native_position_windows(
     pool_k = torch.randn(256, kv_heads, dim, device=device, dtype=dtype)
     pool_v = torch.randn_like(pool_k)
 
-    # Native Triton uses NHD storage for every page size. Its page quotient /
-    # remainder addressing must still cross physical page boundaries correctly.
+    # Context uses native NHD storage with one token per page.
     flat_pool_k, flat_pool_v = pool_k, pool_v
     indices = torch.randperm(256, device=device)[:nk]
     qo = torch.tensor([0, 131, 148, 149], device=device, dtype=torch.int32)
@@ -142,7 +140,7 @@ def test_native_position_windows(
             1.0,
             1.0,
             sinks=sinks,
-            page_size=page_size,
+            page_size=1,
             extend_seq_lens_cpu=q_lens,
             **kwargs,
         )

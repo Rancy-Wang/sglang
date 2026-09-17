@@ -56,6 +56,8 @@ def longest_compatible_prefix(root, key, page_size, advance, *, initial=None):
     ``context_descendant_bound`` is a maintained upper bound; eviction may leave
     it conservatively high, which can cost search work but cannot prune a winner.
     """
+    if page_size != 1:
+        raise ValueError("Context Retry requires page_size=1")
     best = initial or RetrySelection(root, 0, 0)
     frontier = []
     visited = 0
