@@ -322,3 +322,72 @@ def test_repair_admission_excludes_reused_gap_from_total_and_tile_budget(
     assert adder.log_input_tokens == end - first
     assert adder.rem_input_tokens == 10000 - (end - first)
     factory.mock_token_allocator.alloc.assert_not_called()
+
+
+@pytest.mark.parametrize("existing_chunk", [False, True])
+def test_short_repair_interval_preserves_single_chunk_slot(factory, compiler, existing_chunk):
+    import torch
+    from sglang.srt.managers.schedule_policy import AddReqResult
+
+    factory.mock_token_allocator.available_size.return_value = 4096
+    adder = factory.create_adder(factory.create_running_batch(), rem_chunk_tokens=128)
+    first = make_req(compiler)
+    first.prefix_indices = torch.arange(1, 101, dtype=torch.int64)
+    first.context_source_positions = first.context_program.layout.positions[:100]
+    first.context_resident = torch.ones(100, dtype=torch.bool)
+    first.context_resident[36:40] = False
+    first.context_exact_prefix_len = 100
+    first.kv.cache_protected_len = 100
+    first.prepare_context_recovery()
+    if existing_chunk:
+        assert adder.add_chunked_req(first) is first
+    else:
+        assert adder.add_one_req(first, False, None) == AddReqResult.CONTINUE
+    assert 0 < adder.rem_chunk_tokens < 128
+    second = make_req(compiler)
+    assert adder.add_one_req(second, existing_chunk, None) == AddReqResult.OTHER
+    assert adder.can_run_list == [first]
+    assert adder.new_chunked_req is (None if existing_chunk else first)
+    assert second.context_window_plan is None
+    # Spare compute can still admit a request which finishes its entire prefill.
+    third = make_req(compiler)
+    third.prefix_indices = torch.arange(1, 128, dtype=torch.int64)
+    third.context_source_positions = third.context_program.layout.positions[:127]
+    third.context_exact_prefix_len = 127
+    third.prepare_context_recovery()
+    assert adder.add_one_req(third, existing_chunk, None) == AddReqResult.CONTINUE
+    assert adder.can_run_list == [first, third]
+
+
+@pytest.mark.parametrize("capacity_error", [None, "impossible"])
+def test_parked_chunk_returns_control_to_decode(factory, capacity_error):
+    from types import SimpleNamespace
+    from unittest.mock import Mock, patch
+    from sglang.srt.managers.scheduler import Scheduler
+
+    req = SimpleNamespace(
+        context_admission_error=capacity_error, init_next_round_input=Mock(),
+        inflight_middle_chunks=0,
+    )
+    adder = Mock(can_run_list=[], add_chunked_req=Mock(return_value=req))
+    running = factory.create_running_batch()
+    running.batch_is_full = False
+    scheduler = SimpleNamespace(
+        grammar_manager=Mock(has_waiting_grammars=Mock(return_value=False)),
+        enable_priority_preemption=False, is_hybrid_swa=False,
+        waiting_queue=[object()], chunked_req=req, min_free_slots_delayer=None,
+        get_num_allocatable_reqs=Mock(return_value=4), policy=Mock(),
+        processed_tokens_counter=0, chunked_prefill_size=32, dynamic_chunk_sizer=None,
+        tp_worker=Mock(), page_size=1, tree_cache=factory.mock_tree_cache,
+        token_to_kv_pool_allocator=factory.mock_token_allocator,
+        new_token_ratio_tracker=SimpleNamespace(current=1.0), max_prefill_tokens=32,
+        is_mixed_chunk=False, priority_scheduling_preemption_threshold=0,
+        max_prefill_bs=4, max_running_requests=4, dllm_config=None,
+        _pending_chunked_abort_req=None,
+    )
+    with patch("sglang.srt.managers.scheduler.PrefillAdder", return_value=adder):
+        batch, remaining = Scheduler._get_new_batch_prefill_raw(scheduler, None, running)
+    assert batch is None and remaining is running
+    assert scheduler.chunked_req is req and req.inflight_middle_chunks == 0
+    assert scheduler._pending_chunked_abort_req is (req if capacity_error else None)
+    adder.add_one_req.assert_not_called()
