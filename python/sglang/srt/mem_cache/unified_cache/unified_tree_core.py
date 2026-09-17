@@ -770,6 +770,29 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         receipt.context_skip_ranges = spans
         return receipt
 
+    def configure_context_swa_lock(self, node_id, receipt, required_raw):
+        if (
+            self.page_size != 1
+            or self.enable_hicache
+            or self.enable_storage
+            or self.enable_session_radix_cache
+            or self.enable_external_cache_linker
+            or self.is_eagle
+            or set(self.component_types) != {ComponentType.FULL, ComponentType.SWA}
+        ):
+            raise ValueError(
+                "Context SWA leases require page_size=1 device-only Python Full/SWA Radix"
+            )
+        node = self.node_by_id(node_id)
+        self._assert_receipt_anchor(node, receipt)
+        if receipt.node_id is None or receipt.skipped_lock_components:
+            raise ValueError(
+                "Context SWA lease requires acquired Full and SWA references"
+            )
+        return self.components_by_type[ComponentType.SWA].configure_context_lock(
+            node, receipt, required_raw
+        )
+
     def _update_context_candidate(self, node):
         candidates = self.context_eviction_candidates
         if candidates is None:
@@ -924,9 +947,13 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         swa_component = self.components_by_type.get(ComponentType.SWA)
         if swa_component is None:
             return result
-        swa_component.release_window_lock(
-            node, params.swa_uuid_for_lock, result.device_frees, result.host_frees
-        )
+        if params.context_swa_ranges is not None:
+            swa_component.release_component_lock(node, params)
+            params.context_swa_ranges = ()
+        else:
+            swa_component.release_window_lock(
+                node, params.swa_uuid_for_lock, result.device_frees, result.host_frees
+            )
 
         # Drop strictly-lower-priority locks co-located on the node, skipping
         # any the paired inc never took (matters for FULL+SWA+MAMBA models).
@@ -1648,6 +1675,12 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                 swa_already_freed = min(
                     max(state.params.swa_evicted_seqlen - abs_start, 0), dup.numel()
                 )
+                if state.params.context_swa_resident is not None and not bool(
+                    state.params.context_swa_resident[abs_start]
+                ):
+                    # The edge is homogeneous after the validity split above.
+                    # Missing SWA was already released by the request owner.
+                    swa_already_freed = dup.numel()
                 if swa_already_freed > 0:
                     step_actions.append(FreeDeviceKVFullOnly([dup[:swa_already_freed]]))
                 if swa_already_freed < dup.numel():
