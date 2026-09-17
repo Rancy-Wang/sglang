@@ -66,6 +66,23 @@ async def main():
 
     sampler.sample = raw_sample
     fixture = load_fixture()
+    if trace := fixture.get("native_sglang_trace"):
+        # Numerical isolation only: keep mini's default compiler, scheduler,
+        # mask/page-occurrence, model, sampler and kernels. Both engines consume
+        # SGLang's exact native prompt. Original mini-chat evidence is separate.
+        assert runner.tokenizer.is_gpt_oss and trace["model"] == model
+        assert len(trace["input_ids"]) == len(trace["owners"])
+
+        def normalized_harmony(messages, **kwargs):
+            assert messages == fixture["messages"]
+            runner.tokenizer._harmony_thinking_ranges = {}
+            return (
+                list(trace["input_ids"]),
+                list(trace["owners"]),
+                trace["generation_start"],
+            )
+
+        runner.tokenizer._render_harmony_message_drop = normalized_harmony
     result = {
         "head": (
             await asyncio.to_thread(
@@ -103,6 +120,20 @@ async def main():
             assert record["tokens"] == runner.forced_tokens
         result["runs"][feature] = run
         print("MINI_BCP", feature, run["responses"], flush=True)
+    if not reference and os.environ.get("CONTEXT_ORACLE_INCLUDE_RETRY") == "1":
+        runner.clear()
+        for feature in ("none", "drop_repos"):
+            runner.forced_tokens = result["runs"][feature]["records"][0]["tokens"]
+            run = await runner.generate(
+                "mask",
+                [request_for(fixture, feature)],
+                max_tokens=len(runner.forced_tokens),
+            )
+            (record,) = [r for r in run["records"] if not r["warmup"]]
+            assert record["tokens"] == runner.forced_tokens
+            key = feature + "-retry"
+            logits[key] = runner.full_logits[record["uid"]]
+            result["runs"][key] = run
     runner.clear()
     output = os.environ["CONTEXT_ORACLE_OUTPUT"]
     Path(output).write_text(json.dumps(result))

@@ -207,7 +207,12 @@ def test_bcp_pd_terminal_handoff(pd_servers):
                 for mode in ("prefill", "decode")
             ]
         )
-        expected = reference_logits[feature]
+        reference_key = (
+            "drop_repos-retry"
+            if name == "drop_repos-retry" and "drop_repos-retry" in reference_logits
+            else feature
+        )
+        expected = reference_logits[reference_key]
         assert logits.shape == expected.shape and torch.isfinite(logits).all(), name
         assert (
             response["sglext"]["input_ids"]
@@ -216,6 +221,7 @@ def test_bcp_pd_terminal_handoff(pd_servers):
         assert response["sglext"]["output_ids"] == [tokens], response
         delta = (logits - expected).abs()
         item = {
+            "reference_key": reference_key,
             "max_abs": delta.max().item(),
             "mean_abs": delta.mean().item(),
             "p99_abs": torch.quantile(delta.flatten(), 0.99).item(),
