@@ -47,3 +47,43 @@ def test_usage_input_ownership_and_validation(usage_type):
         usage.record_prefill(mask(1), mask(0), 1)
     with pytest.raises(ValueError, match="actual model queries"):
         usage.record_decode(True)
+
+
+def test_retraction_preserves_initial_cache_provenance_and_actual_work(usage_type):
+    usage = usage_type(mask(1, 1, 1), mask(0, 1, 0))
+    usage.record_prefill(mask(1, 0, 1), mask(0, 0, 1), 2)
+    usage.record_decode(3)
+    before = usage.snapshot()
+    usage.begin_recompute()
+    # A new admission can match zero tokens. Recomputed pages cannot retroactively
+    # change whether the original cached prefix was read or Drop-skipped.
+    usage.record_prefill(mask(), mask(), 6)
+    usage.record_decode(1)
+    after = usage.snapshot()
+    assert (after.cached_tokens, after.repos_tokens, after.drop_skipped_tokens) == (
+        before.cached_tokens,
+        before.repos_tokens,
+        before.drop_skipped_tokens,
+    )
+    assert (after.actual_prefill_tokens, after.actual_decode_tokens) == (8, 4)
+    with pytest.raises(ValueError, match="actual model queries"):
+        usage.record_prefill(mask(), mask(), 0)
+
+
+def test_overlapped_prefill_receipt_keeps_its_admission_provenance(usage_type):
+    from types import SimpleNamespace
+
+    occurrence = load_file(
+        "context_retract_receipt",
+        ROOT / "python/sglang/srt/context_system/occurrence.py",
+    )
+    usage = usage_type(mask(1, 1), mask(0, 1))
+    receipt = occurrence.ContextPrefillCompletion(
+        torch.empty(0, dtype=torch.int64), usage, mask(1, 0), mask(0, 0), 3
+    )
+    usage.begin_recompute()
+    receipt.complete(SimpleNamespace(free=lambda _: None))
+    receipt.complete(SimpleNamespace(free=lambda _: pytest.fail("double free")))
+    assert usage.snapshot().cached_tokens == 1
+    assert usage.snapshot().drop_skipped_tokens == 1
+    assert usage.snapshot().actual_prefill_tokens == 3

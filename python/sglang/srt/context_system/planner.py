@@ -394,6 +394,31 @@ class ContextProgram:
     layout: ContextLayout
     visible_until: torch.Tensor
 
+    def with_generated(self, token_ids) -> ContextProgram:
+        from .ir import append_generated_layout
+
+        layout = append_generated_layout(self.layout, token_ids)
+        if layout is self.layout:
+            return self
+        # Survivors remain visible throughout generation. A trailing Drop at
+        # the prompt boundary stays effective for the very first output query.
+        expiry = torch.where(
+            self.layout.keep_mask, torch.iinfo(torch.int32).max, self.visible_until
+        )
+        return ContextProgram(
+            layout,
+            torch.cat(
+                (
+                    expiry,
+                    torch.full(
+                        (len(token_ids),),
+                        torch.iinfo(torch.int32).max,
+                        dtype=torch.int32,
+                    ),
+                )
+            ),
+        )
+
     def to_wire(self) -> dict[str, Any]:
         """Use SGLang's native tensor-buffer IPC, without per-token Python lists.
 

@@ -387,3 +387,18 @@ def test_context_decode_native_graph_and_position_window(runtime):
     )
     assert torch.isfinite(as_extend).all()
     wrapper.clear()
+    # Recompute the exact generated token path after losing all request KV.
+    # This exercises output birth positions and the final Drop state, including
+    # GPT-OSS's true-position SWA window, through the normal prefill consumer.
+    recompute = prepare_batch(
+        runner, [tokens + generated], programs=[program.with_generated(generated)]
+    )
+    restored = forward(runner, recompute)
+    error = (restored.float() - logits.float()).abs()
+    print(
+        "RECOMPUTE_LOGITS",
+        {"max": error.max().item(), "mean": error.mean().item()},
+        flush=True,
+    )
+    assert torch.isfinite(restored).all()
+    wrapper.clear()

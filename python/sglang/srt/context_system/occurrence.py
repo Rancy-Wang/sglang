@@ -716,13 +716,20 @@ class ContextPrefillCompletion:
     query_count: int
     completed: bool = False
 
+    def __post_init__(self):
+        # Retraction may be prepared before this overlapped result is consumed.
+        self.initial_match = not self.usage.recomputing
+
     def complete(self, allocator):
         # Copies of ScheduleBatch share the same receipt. Duplicate notification
         # must neither free pages twice nor count the same queries twice.
         if self.completed:
             return
         self.usage.record_prefill(
-            self.read_cached, self.repositioned_cached, self.query_count
+            self.read_cached,
+            self.repositioned_cached,
+            self.query_count,
+            initial_match=self.initial_match,
         )
         allocator.free(self.retired_slots)
         self.completed = True
