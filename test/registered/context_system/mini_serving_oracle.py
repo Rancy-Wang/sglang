@@ -12,6 +12,9 @@ from bcp_numeric_fixture import load_fixture, request_for
 
 
 async def main():
+    # Mini owns a separate TCPStore on port 2333. Torchrun's agent store is
+    # elsewhere; older PyTorch otherwise treats both ranks as store clients.
+    os.environ["TORCHELASTIC_USE_AGENT_STORE"] = "False"
     root = Path(os.environ["CONTEXT_MINI_ROOT"])
     sys.path.insert(0, str(root / "python"))
     spec = importlib.util.spec_from_file_location(
