@@ -203,6 +203,50 @@ page1、GPT-OSS默认Triton、共享Full/SWA池、KV262144、chunk8192：2/2 tas
 TTFT mean/P90为7619.376/9057.320ms，标准TPOT为12.118/13.356ms。
 原始证据为实验目录下`workload/result.json`和`events.jsonl`，不测SLO。
 
+### 连续 R 的真实长请求与数值结果
+
+`d4b598572` 的 `bcp-c2-idle-pressure-v2` 重放相同实际历史，四请求均HTTP200、完整
+输出长度。冷预热两条为331.075/331.391s；case864 turn28为20.7476s，
+actual_prefill2551、cached7920/repos81644；case228 turn21为21.4710s，
+actual_prefill2983、cached34099/repos0。相对v1减少的是不必要重算，不能把这组诊断
+耗时直接作为完整轨迹吞吐。`minimal-sg120-c2-drop-parser-v5`随后按完整方法启动。
+
+120B普通数值 `bcp778-sg-gpt120-capacity-lifetime-final-v1`：BUS GPU0/1 TP2、
+默认Triton、page1、共享Full/SWA池，`test_bcp_numeric.py` **1 passed in 269.82s**。
+连续R的max/mean/p99相对mini冷算为 `10.125/0.119956/0.90625`，
+cached470/repos2913/actual_prefill2/D63。无功能、Drop、R冷、热、Retry均通过相同
+无功能校准；自由生成与mini的逐位置匹配数仍为43/62/64，不冒充完全相同。
+
+新增矩阵 `bcp-consecutive-models-v1`：Qwen普通 **1 passed in 128.80s**，
+连续R max/mean/p99为`1.0625/0.064690/0.28125`，actual_prefill3、
+cached1638/repos3237；GPT20普通 **1 passed in 184.71s**，actual_prefill2、
+cached470/repos2913，64/64 raw argmax与参考相同。
+
+Agentic普通首次对mini冷算参考 **1 failed in 134.03s**：max2.359375超过原校准
+上限2.0；mean0.075452/p990.390625在界内。没有放宽门限或修改生产计算。
+`763a65af1`补充相同缓存路径的mini参考：同一fixture、首个R预热1token，第二个R
+固定64tokens；mini原生mask/page-occurrence、默认FA、CUDA Graph保持不变。
+`bcp778-mini-agentic-consecutive.json`记录mini HEAD2966eb49a和全部输入/阶段。
+核实raw索引对应的active token、预热及目标forced token一致，目标有63次graph replay。
+
+离线复用上述已保存SGLang logits，与同路径mini比较为
+`1.8125/0.069156/0.34375`，64/64 raw argmax一致，**通过原门限**。
+保留初次冷算参考失败结果及`agentic-normal/matched-consecutive-comparison.json`，
+不把原pytest失败改写为通过。
+
+`763a65af1` 的连续R PD补验：Qwen **1 passed in 228.25s**，Agentic
+**1 passed in 246.15s**，P=GPU0/D=GPU1、各TP1；Qwen使用原参考，Agentic使用
+上述同缓存路径参考。相对mini的max/mean/p99分别为
+`1.0625/0.064690/0.28125`、`1.8125/0.069156/0.34375`，沿用原门限。
+两者实际PF3/D63、cached1638/repos3237，无retract。
+离线拼接P首步与D后63步，与普通调度已保存张量比较：两个模型均逐元素完全一致、
+64/64 raw argmax一致；结果保存在各PD目录的`normal-pd-comparison.json`。
+GPT20 PD随后 **1 passed in 301.14s**，默认Triton、共享Full/SWA池，
+max/mean/p99为`1.375/0.062624/0.371094`，PF2/D63、cached470/repos2913，
+无retract；普通与PD的64步logits也逐元素完全一致。六项连续R普通/PD补验完成，
+矩阵`result.json`为valid；Agentic普通仍明确使用离线同路径参考的通过记录。
+尚待120B PD和完整小量吞吐矩阵，R2未完成。
+
 ## 延迟终态副本的 PD 传输边界（2026-09-18）
 
 审计发现上述副本延迟生成后，旧 PD 仍按已计算 raw 长度发送，可能读取尚未生成的
