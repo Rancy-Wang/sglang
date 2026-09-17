@@ -210,3 +210,119 @@ def test_large_page_context_rejected_without_changing_native_cache(compiler):
     assert torch.equal(
         cache.match_prefix(MatchPrefixParams(key=plain)).device_indices, values
     )
+
+
+@pytest.mark.parametrize("mode", ["cold", "duplicate", "retry", "disabled"])
+def test_context_occurrence_native_publication_and_release(compiler, mode):
+    from sglang.srt.context_system.planner import ContextProgram
+    from sglang.srt.managers.schedule_batch import Req
+    from sglang.srt.mem_cache.allocator.token import TokenToKVPoolAllocator
+    from sglang.srt.mem_cache.base_prefix_cache import (
+        EvictParams,
+        InsertParams,
+        MatchPrefixParams,
+    )
+    from sglang.srt.mem_cache.cache_init_params import CacheInitParams
+    from sglang.srt.mem_cache.memory_pool import ReqToTokenPool
+    from sglang.srt.mem_cache.radix_cache import RadixKey
+    from sglang.srt.mem_cache.unified_cache.component_type import ComponentType
+    from sglang.srt.mem_cache.unified_radix_cache import UnifiedRadixCache
+    from sglang.srt.runtime_context import publish, reset_context
+    from sglang.srt.sampling.sampling_params import SamplingParams
+    from sglang.srt.server_args import ServerArgs
+    from test_occurrence_ownership import expiry_for
+
+    reset_context()
+    publish(ServerArgs(model_path="dummy", page_size=1), role="scheduler")
+    try:
+        tokens = list(range(128))
+        drops, repos = {24: [(4, 12)], 56: [(16, 36)]}, [23, 55]
+        layout = compiler(*args(tokens, drops, repos))
+        program = ContextProgram(layout, expiry_for(len(tokens), drops))
+        req = Req(
+            mode,
+            "",
+            array("q", tokens),
+            SamplingParams(max_new_tokens=1),
+            context_program=program.to_wire(),
+        )
+        req._refresh_fill_ids()
+        allocator = TokenToKVPoolAllocator(
+            size=2048, dtype=torch.bfloat16, device="cpu", kvcache=None, need_sort=False
+        )
+        pool = ReqToTokenPool(4, 256, "cpu", False)
+        cache = UnifiedRadixCache(
+            CacheInitParams(
+                disable=mode == "disabled",
+                req_to_token_pool=pool,
+                token_to_kv_pool_allocator=allocator,
+                page_size=1,
+                tree_components=(ComponentType.FULL,),
+            )
+        )
+        pool.alloc([req])
+        req.last_node = cache.root_node_handle()
+        if mode == "duplicate":
+            cache.insert(
+                InsertParams(
+                    key=RadixKey.from_context(layout), value=allocator.alloc(128)
+                )
+            )
+        if mode == "retry":
+            source_tokens = tokens.copy()
+            source_tokens[64] = 999
+            source_drops = {**drops, 96: [(36, 48)]}
+            source = compiler(*args(source_tokens, source_drops, [*repos, 95]))
+            cache.insert(
+                InsertParams(
+                    key=RadixKey.from_context(source), value=allocator.alloc(128)
+                )
+            )
+            matched = cache.match_prefix(
+                MatchPrefixParams(
+                    key=RadixKey.from_context(layout)[:64],
+                    context_retry=True,
+                )
+            )
+            assert len(matched.device_indices) == 64
+            assert matched.context_exact_prefix_len < 64
+            req.prefix_indices = matched.device_indices
+            req.context_source_positions = matched.context_source_positions
+            req.context_exact_prefix_len = matched.context_exact_prefix_len
+            req.kv.cache_protected_len = 64
+            req.last_node = matched.last_device_node
+            req.lock_receipt = cache.inc_lock_ref(req.last_node).to_dec_params()
+        for end in [80, 128] if mode == "retry" else [17, 57, 128]:
+            start = len(req.prefix_indices)
+            extra = req.plan_context_prefill(end)
+            window, plan = req.context_window_plan
+            advanced = req.context_state.advance(
+                window,
+                plan,
+                allocator.alloc(end - start),
+                allocator.alloc(extra),
+                program.visible_until,
+            )
+            req.context_state = advanced.state
+            req.set_extend_range(start, end)
+            req.kv.kv_committed_len = end
+            # Simulate the native completion event before any release. Actual
+            # layer writes/COW and graph replay are covered by model tests.
+            allocator.free(advanced.retired_slots)
+            cache.cache_unfinished_req(req, chunked=end < 128)
+            assert torch.equal(req.context_state.terminal_slots(), req.prefix_indices)
+            assert (
+                len(torch.unique(allocator.get_all_free_pages()))
+                == allocator.available_size()
+            )
+            cache.sanity_check()
+        cache.cache_finished_req(req, kv_len_to_handle=128)
+        assert req.context_state is None
+        assert req.context_source_lease is None
+        pool.free(req)
+        cache.evict(EvictParams(num_tokens=2048))
+        assert allocator.available_size() == 2048
+        assert len(torch.unique(allocator.get_all_free_pages())) == 2048
+        cache.sanity_check()
+    finally:
+        reset_context()

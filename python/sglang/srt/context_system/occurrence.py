@@ -588,7 +588,7 @@ class OccurrenceState:
         result[ids] = self.slots[source]
         return result
 
-    def publish(self, matched_terminal_slots):
+    def publish(self, matched_terminal_slots, *, cache_len=None):
         """Transfer terminal ownership after native Radix insert and rematch.
 
         Native insert may free duplicate input slots. Canonical aliases must be
@@ -603,7 +603,11 @@ class OccurrenceState:
             or matched_terminal_slots.device != self.slots.device
         ):
             raise ValueError("Context publication must cover the raw terminal table")
-        present = np.flatnonzero(rows >= 0)
+        if cache_len is None:
+            cache_len = len(rows)
+        if not 0 <= cache_len <= len(rows):
+            raise ValueError("Context cache publication length exceeds the raw table")
+        present = np.flatnonzero(rows[:cache_len] >= 0)
         target = rows[present]
         if len(np.unique(target)) != len(target):
             raise ValueError("Distinct raw tokens cannot publish the same KV owner")
@@ -630,6 +634,16 @@ class OccurrenceState:
             self.slots.device, non_blocking=True
         )
         return self.slots[rows]
+
+    def nonterminal_private_slots(self):
+        """Private sources outside the raw table handled by native cache release."""
+        selected = self.owned.numpy().copy()
+        rows = self.terminal_rows.numpy()
+        selected[rows[rows >= 0]] = False
+        indices = torch.from_numpy(np.flatnonzero(selected)).to(
+            self.slots.device, non_blocking=True
+        )
+        return self.slots[indices]
 
 
 @dataclass(frozen=True)
