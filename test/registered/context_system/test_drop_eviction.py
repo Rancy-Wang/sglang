@@ -468,7 +468,7 @@ def test_sparse_swa_request_release_and_completion(native_cache):
     cache.req_to_token_pool = SimpleNamespace(req_to_token=slots[None, :])
     req = SimpleNamespace(
         context_state=state,
-        kv=SimpleNamespace(req_pool_idx=0, swa_evicted_seqlen=3),
+        kv=SimpleNamespace(req_pool_idx=0, swa_evicted_seqlen=3, cache_protected_len=0),
     )
     # Leave the final four slots to an overlapped completion receipt. In native
     # decode all new peers are resident; this separate receipt tests mixed COW.
@@ -650,7 +650,8 @@ def test_context_decode_window_releases_sparse_prompt_then_generated_peers(
         context_state=state,
         context_decode_layout=decode,
         kv=SimpleNamespace(
-            req_pool_idx=0, swa_evicted_seqlen=0, holds_kv=True, swa_dead_lo=lambda _: 0
+            req_pool_idx=0, swa_evicted_seqlen=0, holds_kv=True, swa_dead_lo=lambda _: 0,
+            cache_protected_len=0,
         ),
     )
     for computed in (24, 25, 30, 40):
