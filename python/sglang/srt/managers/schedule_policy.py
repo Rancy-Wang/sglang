@@ -818,7 +818,9 @@ class PrefillAdder:
                 handle_prefill_capacity_pressure,
             )
 
-            handle_prefill_capacity_pressure(req, budget.allocator.size_full, full)
+            handle_prefill_capacity_pressure(
+                req, budget.allocator.size_full, full, self.tree_cache
+            )
         req.context_window_plan = None
         return AddReqResult.NO_TOKEN
 
