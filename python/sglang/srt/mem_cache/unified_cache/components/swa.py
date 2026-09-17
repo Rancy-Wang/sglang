@@ -954,6 +954,12 @@ class SWAComponent(TreeComponent):
     def _free_out_of_window_slots(self, req: Req, pre_len: int) -> None:
         if self.sliding_window_size is None:
             return
+        if getattr(req, "context_program", None) is not None:
+            if req.context_decode_layout is None:
+                return
+            pre_len = req.context_decode_layout.swa_raw_floor(
+                pre_len, self.sliding_window_size
+            ) + self.sliding_window_size
         free_swa_out_of_window_slots(
             req,
             pre_len,

@@ -33,7 +33,7 @@ def runtime():
         attention_backend=os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND"),
         cuda_graph_config={
             "decode": {"bs": [1, 2], "max_bs": 2},
-            "prefill": {"bs": [16, 32, 64, 96, 128], "max_bs": 128},
+            "prefill": {"bs": [16, 32, 64, 96, 128, 256], "max_bs": 256},
         },
     )
     args.resolve_once()
@@ -281,3 +281,93 @@ def test_drop_reposition_real_model_chunk_lifetime(runtime):
     )
     assert error.max().item() <= maximum
     assert error.mean().item() <= mean
+
+
+@torch.no_grad()
+def test_context_decode_native_graph_and_position_window(runtime):
+    from sglang.srt.context_system.ir import compile_context_layout
+    from sglang.srt.context_system.planner import ContextProgram
+    from sglang.srt.model_executor.forward_batch_info import ForwardBatch
+    from test_ir import args
+    from test_occurrence_ownership import expiry_for
+
+    wrapper, tokenizer, _ = runtime
+    runner = wrapper.torch_runner
+    tokens = tokenizer.encode(
+        "The library contains red books and blue notebooks. " * 40
+    )[:256]
+    drops = {60: [(4, 14)], 140: [(70, 90)]}
+    layout = compile_context_layout(*args(tokens, drops, [59, 139]))
+    program = ContextProgram(layout, expiry_for(len(tokens), drops))
+    wrapper.clear()
+    batch = prepare_batch(runner, [tokens], programs=[program])
+    logits = forward(runner, batch)
+    torch.cuda.synchronize()
+    req = batch.reqs[0]
+    for receipt in batch.context_completions:
+        receipt.complete(runner.token_to_kv_pool_allocator)
+    # The HTTP scheduler publishes this terminal row via cache_unfinished_req.
+    terminal = req.context_state.terminal_slots()
+    runner.req_to_token_pool.write((req.kv.req_pool_idx, slice(0, len(tokens))), terminal)
+    generated = []
+    for step in range(4):
+        token = int(logits.argmax(-1)[0])
+        generated.append(token)
+        req.output_ids.append(token)
+        batch.input_ids = torch.tensor([token], device=runner.device, dtype=torch.int64)
+        batch.prepare_for_decode()
+        fb = ForwardBatch.init_new(
+            batch, runner, return_hidden_states_before_norm=False
+        )
+        assert int(fb.positions[0]) == layout.next_position + step
+        assert int(fb.seq_lens[0]) == int(layout.keep_mask.sum()) + step + 1
+        assert int(batch.seq_lens[0]) == len(tokens) + step + 1
+        result = runner.forward(fb)
+        assert result.can_run_graph, "Context decode must replay the native model graph"
+        logits = result.logits_output.next_token_logits.clone()
+        # Inspect the graph's actual read indices once, beyond GPT-OSS's SWA window.
+        if step == 3:
+            backend = runner.decode_attn_backend
+            metadata = backend.forward_metadata
+            active_raw = torch.cat(
+                (
+                    layout.keep_mask.nonzero().flatten(),
+                    torch.arange(len(tokens), len(tokens) + 4),
+                )
+            ).to(runner.device)
+            raw_slots = runner.req_to_token_pool.req_to_token[
+                req.kv.req_pool_idx, active_raw
+            ]
+            expected = runner.kv_index_translator.translate_full_attn_ids(raw_slots)
+            count = int(metadata.kv_indptr[1])
+            torch.testing.assert_close(
+                metadata.kv_indices[:count], expected.to(torch.int64)
+            )
+            if runner.sliding_window_size is not None:
+                positions = torch.cat(
+                    (
+                        layout.positions[layout.keep_mask],
+                        torch.arange(layout.next_position, layout.next_position + 4),
+                    )
+                ).to(runner.device)
+                visible = (
+                    positions >= layout.next_position + 3 - runner.sliding_window_size
+                )
+                swa = runner.kv_index_translator.sliding_window_write_loc_for(
+                    expected[visible]
+                )
+                count = int(metadata.window_kv_indptr[1])
+                torch.testing.assert_close(
+                    metadata.window_kv_indices[:count], swa.to(torch.int64)
+                )
+                print(
+                    "DECODE_SWA_COUNT",
+                    count,
+                    "WINDOW_DISTANCE",
+                    runner.sliding_window_size,
+                    flush=True,
+                )
+    torch.cuda.synchronize()
+    print("DECODE_GENERATED", generated, "GRAPH_REPLAYS", 4, flush=True)
+    assert torch.isfinite(logits).all()
+    wrapper.clear()

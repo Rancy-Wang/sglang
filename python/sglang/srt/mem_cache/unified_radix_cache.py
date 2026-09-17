@@ -977,6 +977,7 @@ class UnifiedRadixCache(BasePrefixCache):
             self.token_to_kv_pool_allocator.free(state.nonterminal_private_slots())
             self._release_context_source_lease(req)
             req.context_state = None
+            req.context_decode_layout = None
             req.context_window_plan = None
             req.context_prefill_started = False
             req.context_cache_published = False
