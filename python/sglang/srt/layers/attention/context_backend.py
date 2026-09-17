@@ -368,6 +368,101 @@ class ContextPrefillInput:
     copy_positions: torch.Tensor
     model_binding: ContextModelBinding | None
 
+    @classmethod
+    def from_prepared_batch(cls, batch, *, decode: bool):
+        """Wrap native rows when an ordinary prefill mixes with Context decode."""
+        sequences, slots = [], []
+        for i, (req, raw_len) in enumerate(
+            zip(batch.reqs, batch.seq_lens_cpu.tolist())
+        ):
+            query_len = 1 if decode else batch.extend_lens[i]
+            raw_row = batch.req_to_token_pool.req_to_token[
+                req.kv.req_pool_idx, :raw_len
+            ]
+            if req.context_program is None:
+                sequences.append(
+                    ContextSequence.ordinary(raw_len - query_len, query_len)
+                )
+                slots.append(raw_row)
+                continue
+            if not decode:
+                raise ValueError(
+                    "Context prefill must use its admitted occurrence plan"
+                )
+            view = req.context_decode_layout
+            if view is None:
+                from sglang.srt.context_system.occurrence import ContextDecodeLayout
+
+                view = ContextDecodeLayout.from_layout(
+                    req.context_program.layout, raw_row.device
+                )
+                req.context_decode_layout = view
+            generated = raw_len - view.prompt_length
+            if generated < 1:
+                raise ValueError(
+                    "Mixed Context decode requires its native allocated query"
+                )
+            raw = np.concatenate(
+                (view.raw_indices, np.arange(view.prompt_length, raw_len))
+            )
+            positions = np.concatenate(
+                (
+                    view.positions,
+                    np.arange(view.next_position, view.next_position + generated),
+                )
+            )
+            n = len(raw)
+            sequences.append(
+                ContextSequence(
+                    n,
+                    (1,),
+                    np.asarray([0, n - 1], dtype=np.int64),
+                    np.arange(n - 1, dtype=np.int64),
+                    positions[-1:],
+                    positions[:-1],
+                )
+            )
+            indices = torch.from_numpy(raw).to(raw_row.device, non_blocking=True)
+            slots.append(raw_row[indices])
+        empty = batch.out_cache_loc[:0].to(torch.int32)
+        return cls(
+            ContextAttentionPlan.merge(sequences),
+            torch.cat(slots),
+            empty,
+            empty,
+            empty.reshape(0, 2),
+            None,
+        )
+
+    @classmethod
+    def concatenate(cls, inputs):
+        sequences = []
+        for item in inputs:
+            plan = item.attention_plan
+            fields = [
+                plan.packed[a:b].numpy()
+                for a, b in zip(plan.field_offsets[:-1], plan.field_offsets[1:])
+            ]
+            _, offsets, occurrences, query_positions, prefix_positions = fields
+            sequences.append(
+                ContextSequence(
+                    plan.occurrence_count,
+                    plan.query_lengths,
+                    offsets,
+                    occurrences,
+                    query_positions,
+                    prefix_positions,
+                )
+            )
+        return cls(
+            ContextAttentionPlan.merge(sequences),
+            torch.cat([item.occurrence_slots for item in inputs]),
+            torch.cat([item.copy_sources for item in inputs]),
+            torch.cat([item.copy_destinations for item in inputs]),
+            torch.cat([item.copy_positions for item in inputs]),
+            None,
+        )
+
     def bind(self, model_runner=None) -> ContextForwardMetadata:
         if (
             self.copy_sources.ndim != 1

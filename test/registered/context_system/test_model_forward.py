@@ -308,7 +308,9 @@ def test_context_decode_native_graph_and_position_window(runtime):
         receipt.complete(runner.token_to_kv_pool_allocator)
     # The HTTP scheduler publishes this terminal row via cache_unfinished_req.
     terminal = req.context_state.terminal_slots()
-    runner.req_to_token_pool.write((req.kv.req_pool_idx, slice(0, len(tokens))), terminal)
+    runner.req_to_token_pool.write(
+        (req.kv.req_pool_idx, slice(0, len(tokens))), terminal
+    )
     generated = []
     for step in range(4):
         token = int(logits.argmax(-1)[0])
@@ -327,7 +329,7 @@ def test_context_decode_native_graph_and_position_window(runtime):
         logits = result.logits_output.next_token_logits.clone()
         # Inspect the graph's actual read indices once, beyond GPT-OSS's SWA window.
         if step == 3:
-            backend = runner.decode_attn_backend
+            backend = runner.decode_attn_backend or runner.attn_backend
             metadata = backend.forward_metadata
             active_raw = torch.cat(
                 (
@@ -370,4 +372,17 @@ def test_context_decode_native_graph_and_position_window(runtime):
     torch.cuda.synchronize()
     print("DECODE_GENERATED", generated, "GRAPH_REPLAYS", 4, flush=True)
     assert torch.isfinite(logits).all()
+    # DP/mixed scheduling may route exactly this decode query through extend.
+    batch.convert_decode_to_extend()
+    as_extend = forward(runner, batch)
+    difference = (logits.float() - as_extend.float()).abs()
+    print(
+        "DECODE_EXTEND_LOGITS",
+        {
+            "max": difference.max().item(),
+            "mean": difference.mean().item(),
+        },
+        flush=True,
+    )
+    assert torch.isfinite(as_extend).all()
     wrapper.clear()

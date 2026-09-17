@@ -3278,6 +3278,17 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             merged_seq_lens_cpu = None
         out_cache_loc = torch.cat([self.out_cache_loc, running_out_cache_loc])
 
+        if self.context_prefill_input is not None or any(
+            req.context_program is not None for req in running_batch.reqs
+        ):
+            from sglang.srt.layers.attention.context_backend import ContextPrefillInput
+
+            prefill_input = self.context_prefill_input
+            if prefill_input is None:
+                prefill_input = ContextPrefillInput.from_prepared_batch(self, decode=False)
+            decode_input = ContextPrefillInput.from_prepared_batch(running_batch, decode=True)
+            self.context_prefill_input = ContextPrefillInput.concatenate((prefill_input, decode_input))
+            self.context_completions += running_batch.context_completions
         self.merge_batch(running_batch)
         self.out_cache_loc = out_cache_loc
         if merged_seq_lens_cpu is not None:
@@ -3329,6 +3340,10 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
         self.extend_logprob_start_lens = [0] * bs
         self.decoding_reqs = self.reqs
         self.is_prefill_only = False
+        if any(req.context_program is not None for req in self.reqs):
+            from sglang.srt.layers.attention.context_backend import ContextPrefillInput
+
+            self.context_prefill_input = ContextPrefillInput.from_prepared_batch(self, decode=True)
 
     def new_tokens_required_next_decode(
         self, selected_indices: Optional[List[int]] = None
@@ -3689,6 +3704,13 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
         # Sum is recomputed lazily by ForwardBatch.init_new.
         self.seq_lens_sum = None
 
+        if any(req.context_program is not None for req in self.reqs):
+            from sglang.srt.context_system.occurrence import ContextDecodeCompletion
+
+            self.context_completions = tuple(
+                ContextDecodeCompletion(req.context_usage)
+                for req in self.reqs if req.context_program is not None
+            )
         if self.hisparse_coordinator is not None:
             self.hisparse_coordinator.map_last_loc_to_buffer(
                 self.seq_lens,
