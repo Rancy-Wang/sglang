@@ -366,9 +366,9 @@ class ContextPrefillInput:
     copy_sources: torch.Tensor
     copy_destinations: torch.Tensor
     copy_positions: torch.Tensor
-    model_binding: ContextModelBinding
+    model_binding: ContextModelBinding | None
 
-    def bind(self) -> ContextForwardMetadata:
+    def bind(self, model_runner=None) -> ContextForwardMetadata:
         if (
             self.copy_sources.ndim != 1
             or self.copy_destinations.shape != self.copy_sources.shape
@@ -383,4 +383,17 @@ class ContextPrefillInput:
             )
         ):
             raise ValueError("Context copies require aligned int32 metadata")
-        return self.model_binding.bind(self)
+        binding = self.model_binding
+        if binding is None:
+            if model_runner is None:
+                raise ValueError("Context prefill needs a native model binding")
+            binding = getattr(model_runner, "context_model_binding", None)
+            if binding is None:
+                binding = ContextModelBinding(
+                    model_runner.model,
+                    model_runner.token_to_kv_pool,
+                    model_runner.kv_index_translator,
+                    page_size=1,
+                )
+                model_runner.context_model_binding = binding
+        return binding.bind(self)

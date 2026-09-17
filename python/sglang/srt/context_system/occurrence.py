@@ -416,3 +416,251 @@ def plan_occurrence_materialization(
         torch.from_numpy(read_cached),
         torch.from_numpy(rotated_cached),
     )
+
+
+@dataclass(frozen=True)
+class OccurrenceState:
+    """Request-local page ownership between prefill forwards.
+
+    CPU rows identify entries in ``slots``, never physical page numbers. This
+    permits alias tracking and retirement without a device-to-host page read.
+    Borrowed rows remain protected by the caller's Radix source leases. Each
+    successor replaces its predecessor as owner; forward snapshots only retain
+    tensor references and do not independently own allocator pages.
+    """
+
+    slots: torch.Tensor
+    owned: torch.Tensor
+    canonical_rows: torch.Tensor
+    terminal_rows: torch.Tensor
+    canonical_positions: torch.Tensor
+    exact_prefix_len: int
+
+    @classmethod
+    def from_match(cls, slots, positions, *, exact_prefix_len):
+        if (
+            slots.ndim != 1
+            or slots.dtype not in (torch.int32, torch.int64)
+            or positions.device.type != "cpu"
+            or positions.dtype != torch.int32
+            or positions.shape != slots.shape
+            or not 0 <= exact_prefix_len <= len(slots)
+        ):
+            raise ValueError("Invalid Context match ownership metadata")
+        return cls(
+            slots,
+            torch.zeros(len(slots), dtype=torch.bool),
+            torch.arange(len(slots), dtype=torch.int64),
+            torch.full((len(slots),), -1, dtype=torch.int64),
+            positions.clone(),
+            exact_prefix_len,
+        )
+
+    def plan(self, window, terminal_keep):
+        start = len(self.canonical_rows)
+        canonical = self.canonical_rows.numpy()
+        present = canonical >= 0
+        owned = np.zeros(start, dtype=np.bool_)
+        owned[present] = self.owned.numpy()[canonical[present]]
+        return plan_occurrence_materialization(
+            window,
+            self.canonical_positions,
+            torch.from_numpy(present),
+            torch.from_numpy(owned),
+            self.terminal_rows >= 0,
+            terminal_keep,
+            query_start=start,
+            query_end=int(window.segment_query_ends[-1]),
+            exact_prefix_len=self.exact_prefix_len,
+        )
+
+    def advance(self, window, plan, query_slots, extra_slots, visible_until):
+        """Bind one admitted forward and return its successor plus retirement.
+
+        ``query_slots`` were allocated by native extend admission; extra slots
+        must also have been charged before dispatch. No allocator operation is
+        performed here. Retired pages remain live until this forward completes,
+        even when the successor is prepared on an overlapping scheduler stream.
+        """
+        n = len(window.birth_occurrences)
+        start, end = len(self.canonical_rows), len(plan.terminal_occurrences)
+        if (
+            query_slots.ndim != 1
+            or extra_slots.ndim != 1
+            or len(query_slots) != end - start
+            or len(extra_slots) != plan.extra_page_count
+            or query_slots.dtype != self.slots.dtype
+            or extra_slots.dtype != self.slots.dtype
+            or (len(self.slots) and query_slots.device != self.slots.device)
+            or extra_slots.device != query_slots.device
+            or visible_until.device.type != "cpu"
+            or visible_until.dtype != torch.int32
+            or visible_until.shape != (n,)
+        ):
+            raise ValueError("Context admission does not cover the selected window")
+        old_count = len(self.slots)
+        old_slots = self.slots if old_count else query_slots[:0]
+        all_slots = torch.cat((old_slots, query_slots, extra_slots))
+        all_owned = np.r_[
+            self.owned.numpy(), np.ones(len(query_slots) + len(extra_slots), dtype=bool)
+        ]
+        canonical = np.full(n, -1, dtype=np.int64)
+        canonical[:start] = self.canonical_rows.numpy()
+        canonical[start:end] = np.arange(old_count, old_count + len(query_slots))
+        terminal = np.full(n, -1, dtype=np.int64)
+        terminal[:start] = self.terminal_rows.numpy()
+        source_rows = np.r_[canonical, terminal]
+        rows = plan.source_rows.numpy()
+        occurrences = np.full(len(rows), -1, dtype=np.int64)
+        reuse = rows >= 0
+        occurrences[reuse] = source_rows[rows[reuse]]
+        if np.any(occurrences[reuse] < 0):
+            raise ValueError("Context ownership plan references a missing source")
+        fresh = np.arange(old_count + len(query_slots), len(all_slots))
+        occurrences[plan.allocated_occurrences.numpy()] = fresh
+        copy_rows = source_rows[plan.copy_source_rows.numpy()]
+        if np.any(copy_rows < 0):
+            raise ValueError("Context copy references a missing canonical source")
+        selected_terminal = plan.terminal_occurrences.numpy()
+        terminal = np.full(end, -1, dtype=np.int64)
+        kept = selected_terminal >= 0
+        terminal[kept] = occurrences[selected_terminal[kept]]
+        canonical = canonical[:end]
+        # Drops are monotonic. A source that no later prefill query can read is
+        # no longer needed. Decode reads terminal positions, not birth versions.
+        future_read = visible_until.numpy()[:end] > end
+        if end == n:
+            future_read[:] = False
+        canonical = np.where(future_read, canonical, -1)
+        retained = np.unique(np.r_[canonical[canonical >= 0], terminal[terminal >= 0]])
+        live = np.zeros(len(all_slots), dtype=bool)
+        live[retained] = True
+        retired = np.flatnonzero(all_owned & ~live)
+        remap = np.full(len(all_slots), -1, dtype=np.int64)
+        remap[retained] = np.arange(len(retained))
+        next_canonical = np.full(end, -1, dtype=np.int64)
+        next_terminal = np.full(end, -1, dtype=np.int64)
+        next_canonical[canonical >= 0] = remap[canonical[canonical >= 0]]
+        next_terminal[kept] = remap[terminal[kept]]
+        positions = window.occurrence_positions[window.birth_occurrences[:end]].clone()
+        positions[:start] = self.canonical_positions
+        # Pack all gathers once. Index preparation and alias decisions stay CPU.
+        fields = (
+            np.maximum(occurrences, 0),
+            copy_rows,
+            occurrences[plan.copy_occurrences.numpy()],
+            retained,
+            retired,
+            plan.copy_position_pairs.numpy().reshape(-1),
+        )
+        offsets = np.r_[0, np.cumsum([len(field) for field in fields])]
+        packed = torch.from_numpy(np.concatenate(fields).astype(np.int64, copy=False))
+        packed = packed.to(query_slots.device, non_blocking=True)
+        occ, src, dst, keep, release, pairs = (
+            packed[a:b] for a, b in pairwise(offsets)
+        )
+        successor = OccurrenceState(
+            all_slots[keep],
+            torch.from_numpy(all_owned[retained]),
+            torch.from_numpy(next_canonical),
+            torch.from_numpy(next_terminal),
+            positions,
+            self.exact_prefix_len,
+        )
+        return OccurrenceAdvance(
+            successor,
+            all_slots[occ],
+            all_slots[src].to(torch.int32),
+            all_slots[dst].to(torch.int32),
+            pairs.reshape(-1, 2).to(torch.int32),
+            all_slots[release],
+        )
+
+    def terminal_slots(self):
+        """Raw-order final-position table; holes keep the explicit -1 sentinel."""
+        rows = self.terminal_rows.numpy()
+        present = np.flatnonzero(rows >= 0)
+        packed = torch.from_numpy(np.r_[present, rows[present]]).to(
+            self.slots.device, non_blocking=True
+        )
+        ids, source = packed[: len(present)], packed[len(present) :]
+        result = self.slots.new_full((len(rows),), -1)
+        result[ids] = self.slots[source]
+        return result
+
+    def publish(self, matched_terminal_slots):
+        """Transfer terminal ownership after native Radix insert and rematch.
+
+        Native insert may free duplicate input slots. Canonical aliases must be
+        rebound to the resulting cache slots at the same time. Nonterminal birth
+        sources keep their independent request ownership. The caller must hold
+        the new Radix lease before releasing any previous source lease.
+        """
+        rows = self.terminal_rows.numpy()
+        if (
+            matched_terminal_slots.shape != rows.shape
+            or matched_terminal_slots.dtype != self.slots.dtype
+            or matched_terminal_slots.device != self.slots.device
+        ):
+            raise ValueError("Context publication must cover the raw terminal table")
+        present = np.flatnonzero(rows >= 0)
+        target = rows[present]
+        if len(np.unique(target)) != len(target):
+            raise ValueError("Distinct raw tokens cannot publish the same KV owner")
+        packed = torch.from_numpy(np.r_[target, present]).to(
+            self.slots.device, non_blocking=True
+        )
+        dst, src = packed[: len(target)], packed[len(target) :]
+        slots = self.slots.clone()
+        slots[dst] = matched_terminal_slots[src]
+        owned = self.owned.clone()
+        owned[target] = False
+        return OccurrenceState(
+            slots,
+            owned,
+            self.canonical_rows,
+            self.terminal_rows,
+            self.canonical_positions,
+            self.exact_prefix_len,
+        )
+
+    def private_slots(self):
+        """Request pages only; borrowed Radix pages are released through leases."""
+        rows = torch.from_numpy(np.flatnonzero(self.owned.numpy())).to(
+            self.slots.device, non_blocking=True
+        )
+        return self.slots[rows]
+
+
+@dataclass(frozen=True)
+class OccurrenceAdvance:
+    state: OccurrenceState
+    occurrence_slots: torch.Tensor
+    copy_source_slots: torch.Tensor
+    copy_destination_slots: torch.Tensor
+    copy_position_pairs: torch.Tensor
+    # Caller releases exactly once, after the forward's native completion event.
+    retired_slots: torch.Tensor
+
+
+@dataclass
+class ContextPrefillCompletion:
+    """Result-batch receipt; consume after its native GPU completion event."""
+
+    retired_slots: torch.Tensor
+    usage: object
+    read_cached: torch.Tensor
+    repositioned_cached: torch.Tensor
+    query_count: int
+    completed: bool = False
+
+    def complete(self, allocator):
+        # Copies of ScheduleBatch share the same receipt. Duplicate notification
+        # must neither free pages twice nor count the same queries twice.
+        if self.completed:
+            return
+        self.usage.record_prefill(
+            self.read_cached, self.repositioned_cached, self.query_count
+        )
+        allocator.free(self.retired_slots)
+        self.completed = True

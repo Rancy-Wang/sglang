@@ -265,6 +265,8 @@ class SchedulerBatchResultProcessor:
         if self.is_generation:
             if result.copy_done is not None:
                 result.copy_done.synchronize()
+            for completion in batch.context_completions:
+                completion.complete(self.token_to_kv_pool_allocator)
             auxiliary_output_starts = self.snapshot_auxiliary_output_starts(
                 batch, result
             )
