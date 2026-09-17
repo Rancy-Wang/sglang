@@ -23,7 +23,7 @@ def test_gpt_replay_named_tool_after_generated_final(tmp_path):
         "context_bcp_replay", ROOT / "benchmark/context_system/test_serving.py"
     )
     tokenizer = AutoTokenizer.from_pretrained(model, local_files_only=True)
-    template = launcher.replay_template(tokenizer.get_chat_template())
+    template = launcher.replay_template(tokenizer.get_chat_template(), "2026-09-18")
     path = tmp_path / "replay.jinja"
     path.write_text(template)
     adapter = bench.NativeTemplateAdapter(
@@ -41,6 +41,8 @@ def test_gpt_replay_named_tool_after_generated_final(tmp_path):
     assert history == original
     text = adapter.renderer.trace.rendered_text
     assert "<|start|>functions.search to=assistant" in text
+    assert "Current date: 2026-09-18" in text
+    assert "strftime_now" not in template
     assert "A generated final answer." in text
     assert size == len(owners)
     assert 2 in owners

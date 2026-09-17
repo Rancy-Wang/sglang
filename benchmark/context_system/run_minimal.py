@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
-def replay_template(template):
+def replay_template(template, reference_date=None):
     """Allow recorded, explicitly named tool returns after fixed-length output.
 
     Like mini's BCP method, the next tool response comes from the dataset even
@@ -26,6 +26,14 @@ def replay_template(template):
 
     template, family = retained_template(template)
     if family == "gpt-oss":
+        # Native GPT-OSS inserts the wall-clock date near the prompt start.
+        # Freeze it once per launch so crossing midnight cannot invalidate
+        # every cached prefix in the middle of a measured trajectory.
+        reference_date = reference_date or time.strftime("%Y-%m-%d")
+        clock = 'strftime_now("%Y-%m-%d")'
+        if template.count(clock) != 1:
+            raise ValueError("Unrecognized GPT-OSS system-date template")
+        template = template.replace(clock, json.dumps(reference_date))
         guard = "{%- if last_tool_call.name is none %}"
         speaker = '"<|start|>functions." + last_tool_call.name'
         if template.count(guard) != 1 or template.count(speaker) != 1:
@@ -237,6 +245,7 @@ def main():
                     cmd += ["--drop-aware-eviction"]
             else:
                 cmd += [
+                    "--enable-cache-report",
                     "--chat-template",
                     str(template_path),
                     "--context-length",
