@@ -119,7 +119,11 @@ def call(base, feature, suffix=""):
         "return_meta_info": True,
         "logprobs": True,
     }
-    if feature:
+    if feature == "identity":
+        payload.update(reposition=[0])
+    elif feature == "drop":
+        payload.update(drop_message={"1": [0]})
+    elif feature:
         payload.update(drop_message={"1": [0]}, reposition=[1])
     response = requests.post(base + "/v1/chat/completions", json=payload, timeout=120)
     assert response.status_code == 200, response.text
@@ -131,6 +135,9 @@ def call(base, feature, suffix=""):
 
 def test_chunk_retry_and_mixed_http_generation(server):
     baseline = call(server, False)
+    identity = call(server, "identity")
+    drop = call(server, "drop")
+    print("HTTP_CONTROLS", json.dumps([baseline, identity, drop]), flush=True)
     retry = call(server, True)
     assert requests.post(server + "/flush_cache", timeout=5).status_code == 200
     cold = call(server, True)
