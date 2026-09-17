@@ -705,7 +705,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             else:
                 start, end = key.context.record_span(key.context_start, len(key))
                 records.append(
-                    np.frombuffer(key.context.records, dtype=np.int64).reshape(-1, 4)[
+                    np.frombuffer(key.context.records, dtype=np.int32).reshape(-1, 4)[
                         start:end
                     ]
                 )
