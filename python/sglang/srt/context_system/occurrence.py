@@ -106,10 +106,8 @@ def compile_occurrence_window(
         )
     if not 0 <= query_start < query_end <= n:
         raise ValueError("Occurrence query window is outside the raw prompt.")
-    if len(offsets) < 2:
-        raise ValueError(
-            "Paged-occurrence requires at least one effective Reposition stage."
-        )
+    if len(offsets) < 1:
+        raise ValueError("Occurrence transition offsets require an initial zero.")
     if offsets[0] != 0 or np.any(offsets[1:] < offsets[:-1]):
         raise ValueError(
             "Occurrence transition offsets must start at zero and be monotonic."
