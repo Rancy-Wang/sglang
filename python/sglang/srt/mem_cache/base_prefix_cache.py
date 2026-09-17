@@ -75,6 +75,9 @@ class MatchPrefixParams:
     # Context-only longest compatible source selection. Returned positions must
     # be reconciled with target occurrences before attention consumes the KV.
     context_retry: bool = False
+    # Rebind an already inserted chunk, whose future SWA demand may be beyond
+    # this short prefix. This is not admission of a new request for decode.
+    context_cache_publication: bool = False
 
 
 @dataclasses.dataclass

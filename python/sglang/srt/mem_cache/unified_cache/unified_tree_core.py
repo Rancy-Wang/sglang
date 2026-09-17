@@ -1050,7 +1050,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         def advance(node, length, suffix):
             if node.evicted:
                 return None
-            if swa is None:
+            if swa is None or params.context_cache_publication:
                 return True, suffix
             if node.component_data[ComponentType.SWA].value is None:
                 return False, 0
