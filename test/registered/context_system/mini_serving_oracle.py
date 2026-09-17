@@ -22,6 +22,10 @@ async def main():
     original_config = module.SchedulerConfig
 
     def bounded_config(**kwargs):
+        kwargs["tp_info"] = module.DistributedInfo(
+            int(os.environ.get("LOCAL_RANK", "0")),
+            int(os.environ.get("WORLD_SIZE", "1")),
+        )
         kwargs.update(
             max_seq_len_override=24576,
             num_page_override=24576,
@@ -143,8 +147,9 @@ async def main():
             result["runs"][key] = run
     runner.clear()
     output = os.environ["CONTEXT_ORACLE_OUTPUT"]
-    Path(output).write_text(json.dumps(result))
-    module.torch.save(logits, output + ".pt")
+    if int(os.environ.get("LOCAL_RANK", "0")) == 0:
+        Path(output).write_text(json.dumps(result))
+        module.torch.save(logits, output + ".pt")
 
 
 if __name__ == "__main__":

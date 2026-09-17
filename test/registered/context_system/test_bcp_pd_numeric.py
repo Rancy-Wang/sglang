@@ -92,6 +92,7 @@ def pd_servers():
                 ),
                 "--enable-custom-logit-processor",
             ]
+            cmd += ["--tp-size", os.environ.get("CONTEXT_TEST_TP", "1")]
             backend = os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND")
             if backend:
                 cmd += ["--attention-backend", backend]
