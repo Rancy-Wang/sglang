@@ -56,6 +56,40 @@
   对照；另有 10000 个分块输入与修改前解析事件和剩余 buffer 完全一致。新测试
   **2 passed**。完整 parser Ruff 的 20 项既有诊断无新增，新测试 Ruff 通过。
 
+追加核验（2026-09-18，以下均不表示整体 R2 已验收）：
+
+- Harmony parser 修复 `652810595` 在 BUS 执行
+  `CUDA_VISIBLE_DEVICES=9 PYTHONPATH=python python -m pytest -q test/registered/unit/parser/test_harmony_parser.py test/registered/context_system/test_harmony_whitespace.py`：
+  **45 passed in 16.63s**。原生对照 `d7a3df66a` 应用同一修复；新 C2 运行使用此配对口径。
+- 首次 GPT-OSS-20B shared-KV 普通调度复测失败是输入日期不同：mini oracle 为 9 月 17 日，
+  SGLang 模板为 9 月 18 日，首个差异的索引为 35。`441a55e07` 的 fixture
+  从 oracle 提取 `Current date`，仅固定测试模板的日期，再逐请求检查
+  input token IDs。没有放宽数值阈值，也没有改生产模板。PD fixture 在 `f63091f59`
+  支持独立长历史测试不提供 oracle 的情况。
+- 修正日期后，`f63091f59`、GPT-OSS-20B、GPU0/TP1、原生默认 Triton、共享全层 KV、
+  page1、chunk512、CUDA Graph 的 `test_bcp_numeric.py` 为 **1 passed in 346.67s**。
+  目录 `bcp778-sg-gpt20-shared-oracle-date-v1`。无功能、Drop、Drop+R 实际生成均与
+  mini 的 64 个 token 完全一致，输入也一致；固定路径 max/mean/p99 分别为：
+  无功能 `2.7109375/0.06961208/0.4375`，Drop `4.875/0.10174099/0.875`，
+  R 冷 `2.279296875/0.06436337/0.412109375`，
+  R 热 `1.734375/0.06231369/0.390625`，Retry `1.265625/0.05795066/0.34375`。
+  各路径 argmax 均为 64/64；均通过同模型无功能误差校准。
+  R 热 cached/repos/drop-skipped 为 `3384/0/5542`，实际 prefill/decode 为 `1/63`；
+  Retry 为 `432/3929/2820` 与 `1746/63`。
+- `b9d295063` 补齐已开始的 chunk 被自己持有的页永久阻塞的处理。真实 CPU occurrence
+  规划反例：raw100、Drop80→[0,40)、R98、pool110、chunk32，在 query74 已持有108页，
+  下一步至少再需3页。现在仅在容量失败分支按 CPU 所有权映射去重物理页，确认单请求
+  无法推进时走原生 pending-chunked-abort，普通与 PD 均保留 503 原因并释放 KV、锁、
+  sender 与传输元数据。外部请求造成的暂时压力继续等待。
+  本地 `test_context_raw_storage.py -k 'capacity or self_pin'`：**3 passed**；BUS 执行
+  `CUDA_VISIBLE_DEVICES=9 PYTHONPATH=python python -m pytest -q test/registered/context_system/test_context_admission.py test/registered/context_system/test_context_raw_storage.py -k 'not cuda'`：
+  **17 passed, 1 skipped in 16.48s**。GPU 行存储用例本轮跳过；503 清理使用定向 mock，
+  尚未新增真实模型的容量拒绝实验。该计数是自有映射的下界，不证明所有独立 source lease
+  的容量边界都已覆盖。不会把这个低频防停滞修复的 CPU 结果当作 GPU 吞吐结果。
+- 已保存输出离线审计 `offline-output-audit-20260918-010858.json`。固定长输出预算下，
+  原生和修改版均存在重复内容；简单重复检测不等于模型质量验收，也不能将每次重复
+  直接归因为 Drop/Reposition。必须结合原始输出、首次分歧、数值对照及 finish reason。
+
 以上日志均位于前述 BUS 实验根目录；双并发候选与 PD 小量吞吐仍需补齐。对比时必须
 注明 parser 等兼容修复是否同时应用于原生对照，不把修复原生卡顿带来的收益宣称为
 Drop/Reposition 本身的性能收益。
