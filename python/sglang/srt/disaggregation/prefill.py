@@ -1335,8 +1335,6 @@ class SchedulerDisaggregationPrefillMixin:
         start_idx = req.start_send_idx
         context_plan = None
         if req.context_program is not None:
-            if not last_chunk:
-                return
             from sglang.srt.disaggregation.context_transfer import transfer_plan
 
             context_plan = transfer_plan(req, self.token_to_kv_pool_allocator.device)
@@ -1368,6 +1366,21 @@ class SchedulerDisaggregationPrefillMixin:
                 end_idx,
             )
             return
+
+        context_chunk = None
+        if context_plan is not None:
+            context_start, context_end, end_idx = context_plan.full_chunk(
+                start_idx, end_idx, last_chunk=last_chunk
+            )
+            if context_start == context_end and not last_chunk:
+                req.start_send_idx = end_idx
+                return
+            # Chunk publication already put terminal versions in this raw row.
+            # They remain locked by the request through native transfer completion;
+            # future queries write birth pages and never mutate these versions.
+            context_chunk = context_plan.decode.device_indices[
+                context_start:context_end
+            ]
 
         state_indices: Optional[List] = None
         if last_chunk:
@@ -1512,7 +1525,9 @@ class SchedulerDisaggregationPrefillMixin:
                 req.kv.req_pool_idx, seg_start:seg_end
             ]
             if context_plan is not None:
-                kv_indices = context_plan.slots(req, self.req_to_token_pool)
+                kv_indices = self.req_to_token_pool.req_to_token[
+                    req.kv.req_pool_idx, context_chunk
+                ]
             # Unified memory: req_to_token holds VIRTUAL ids; the transfer needs
             # physical ones. Per segment, since each is its own gather.
             kv_indices = (
@@ -1530,7 +1545,8 @@ class SchedulerDisaggregationPrefillMixin:
                 page_indices,
                 state_indices if segment_is_last else None,
                 num_kv_tokens=(
-                    context_plan.active_count if context_plan is not None
+                    len(context_chunk)
+                    if context_plan is not None
                     else seg_end - seg_start
                 ),
             )

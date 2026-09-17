@@ -66,6 +66,16 @@ def test_pd_final_versions_holes_identity_and_usage(compiler, monkeypatch):
     assert torch.equal(req.context_state.private_slots(), slots)
     assert req.context_state.nonterminal_private_slots().numel() == 0
     plan = transfer.transfer_plan(req, "cpu")
+    # Raw chunks cross Drop holes; every final page is sent exactly once.
+    cursor, sent = 0, []
+    for raw_end in (3, 6, 9, 12, 12):
+        final = len(sent) == 8
+        begin, end, cursor = plan.full_chunk(cursor, raw_end, last_chunk=final)
+        sent.extend(plan.decode.raw_indices[begin:end].tolist())
+        if not final:
+            assert len(sent) < plan.active_count
+    assert sent == plan.decode.raw_indices.tolist()
+    assert cursor == 12
     assert plan.slots(req, pool, window=3).tolist() == [106, 107, 108]
     table[0, 12:] = torch.tensor([109, 110, 111])
     assert transfer.request_active_slots(req, pool, 15).tolist() == list(

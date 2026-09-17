@@ -50,6 +50,21 @@ class ContextTransferPlan:
             req.kv.req_pool_idx, self.decode.device_indices[start : self.active_count]
         ]
 
+    def full_chunk(self, raw_start, raw_end, *, last_chunk):
+        """Map a completed raw prefix into consecutive final-version pages.
+
+        Keep one page for the final send: native transports infer completion
+        from the cumulative page count, when the metadata/SWA payload is ready.
+        Returned raw cursor never advances past a withheld page.
+        """
+        begin, end = np.searchsorted(self.decode.raw_indices, (raw_start, raw_end))
+        if not last_chunk:
+            end = min(int(end), max(0, self.active_count - 1))
+        cursor = raw_end
+        if end < self.active_count:
+            cursor = min(cursor, int(self.decode.raw_indices[end]))
+        return int(begin), int(end), cursor
+
     def header(self):
         return (1, self.active_count, self.decode.next_position, *self.signature)
 
