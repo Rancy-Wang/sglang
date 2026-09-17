@@ -190,15 +190,24 @@ async def run(args):
     root = Path(args.output_dir)
     root.mkdir(parents=True, exist_ok=False)
     rows = []
+    writes = []
     loop = asyncio.get_running_loop()
     with (
-        ThreadPoolExecutor(max_workers=1) as rendering,
         (root / "events.jsonl").open("w") as journal,
+        ThreadPoolExecutor(max_workers=1) as rendering,
+        ThreadPoolExecutor(max_workers=1) as writer,
     ):
 
         def emit(event):
-            journal.write(json.dumps(event, ensure_ascii=False) + "\n")
-            journal.flush()
+            # Match mini's FIFO writer: snapshot in the event loop, serialize
+            # and flush outside timed scheduling/network work.
+            frozen = copy.deepcopy(event)
+
+            def save():
+                journal.write(json.dumps(frozen, ensure_ascii=False) + "\n")
+                journal.flush()
+
+            writes.append(writer.submit(save))
 
         async with aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=args.timeout),
@@ -261,6 +270,8 @@ async def run(args):
 
             scheduler = method.Scheduler(cases, args.concurrency, execute, emit)
             await scheduler.run()
+    for future in writes:
+        future.result()
     count = sum(
         item["instance"]["status"] == "all_turns_completed"
         for item in scheduler.completed

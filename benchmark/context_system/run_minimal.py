@@ -9,7 +9,79 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+
+def warmup(args, root):
+    """Compile representative kernels before the measured complete trajectories.
+
+    All engines keep this small, disjoint prefix cached; mini has no HTTP cache
+    flush. No source task, generated history or measured token is warmed up.
+    """
+    room = time.time_ns() % (1 << 52)
+    observations = []
+
+    def post(port, body):
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{port}/v1/chat/completions",
+            data=json.dumps(body).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request, timeout=600) as response:
+            value = json.load(response)
+        if not value.get("choices"):
+            raise RuntimeError(f"Warmup did not produce a completion: {value}")
+        return value.get("usage")
+
+    for feature in ["none", "drop", "drop_repos"] if args.drop else ["none"]:
+        started = time.perf_counter()
+        with ThreadPoolExecutor(max_workers=2 * args.concurrency) as executor:
+            pending = []
+            for index in range(args.concurrency):
+                body = {
+                    "model": args.model,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": f"Kernel warmup only, lane {index}.",
+                        },
+                        {"role": "user", "content": "red green blue " * 4096},
+                        {
+                            "role": "assistant",
+                            "content": "I have read the warmup text.",
+                        },
+                        {
+                            "role": "user",
+                            "content": "List the colors in a short sentence.",
+                        },
+                    ],
+                    "temperature": 0,
+                    "max_tokens": 64,
+                    "ignore_eos": True,
+                }
+                if feature != "none":
+                    body["drop_message"] = {"2": [1]}
+                if feature == "drop_repos":
+                    body["reposition"] = [2]
+                if args.engine == "pd":
+                    room += 1
+                    body.update(
+                        bootstrap_host="127.0.0.1",
+                        bootstrap_port=args.port + 10,
+                        bootstrap_room=room,
+                    )
+                    pending.append(executor.submit(post, args.port + 1, body))
+                pending.append(executor.submit(post, args.port, body))
+            usage = [future.result() for future in pending]
+        observations.append(
+            {
+                "feature": feature,
+                "seconds": time.perf_counter() - started,
+                "usage": usage,
+            }
+        )
+        (root / "warmup.json").write_text(json.dumps(observations, indent=2))
 
 
 def main():
@@ -164,6 +236,7 @@ def main():
                 except (urllib.error.URLError, TimeoutError):
                     pass
                 time.sleep(1)
+        warmup(args, root)
         common = [
             "--model",
             args.model,
