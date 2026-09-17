@@ -1023,6 +1023,7 @@ class Req(ReqDllmMixin):
         multi_item_delimiter_indices: Optional[List[int]] = None,
         session_id: Optional[str] = None,
         cache_salt: Optional[str] = None,
+        context_program: Optional[dict] = None,
     ):
         # Input and output info
         self.rid = rid
@@ -1038,6 +1039,19 @@ class Req(ReqDllmMixin):
         # full_untruncated_fill_ids from lengths alone, so in-place rewrites
         # that preserve length would silently corrupt fill_ids.
         self.output_ids = array("q")
+        self.context_program = None
+        self.context_key_data = None
+        self.context_source_positions = None
+        if context_program is not None:
+            from sglang.srt.context_system.ir import ContextKeyData
+            from sglang.srt.context_system.planner import ContextProgram
+
+            self.context_program = ContextProgram.from_wire(
+                context_program, origin_input_ids
+            )
+            self.context_key_data = ContextKeyData.from_layout(
+                self.context_program.layout
+            )
         # Full untruncated sequence: origin + output (+ DLLM mask block).
         # Kept in sync by _refresh_fill_ids; admission only updates
         # extend_range, never mutates this array's length.
@@ -1553,6 +1567,37 @@ class Req(ReqDllmMixin):
         else:
             self.full_untruncated_fill_ids = self.origin_input_ids + self.output_ids
 
+    def make_prefix_key(
+        self, token_ids: array, *, limit: Optional[int] = None, is_bigram: bool = False
+    ) -> RadixKey:
+        """One identity for scheduler lookup and computed-KV cache insertion."""
+        data = self.context_key_data
+        if data is not None:
+            if is_bigram:
+                raise ValueError("Context Radix does not support speculative bigrams")
+            # Output IDs are append-only. A cache insertion may cover less than
+            # the full output (the last sampled token has not been forwarded).
+            # Never extend the key beyond the caller's computed-token boundary.
+            required = len(token_ids) if limit is None else min(limit, len(token_ids))
+            existing = len(data.token_to_record)
+            if required > existing:
+                layout = self.context_program.layout
+                data.append_tokens(
+                    token_ids[existing:required],
+                    next_position=layout.next_position + existing - len(layout.positions),
+                    current_reposition=layout.current_reposition,
+                )
+            # Freeze this key's length even if the backing request ID array grows.
+            limit = required
+        return RadixKey(
+            token_ids,
+            extra_key=self.extra_key,
+            limit=limit,
+            is_bigram=is_bigram,
+            cache_salt=self.cache_salt,
+            context=data,
+        )
+
     def init_next_round_input(
         self,
         tree_cache: Optional[BasePrefixCache] = None,
@@ -1616,14 +1661,10 @@ class Req(ReqDllmMixin):
                 key_limit = capped if key_limit is None else min(key_limit, capped)
             match_result = tree_cache.match_prefix(
                 MatchPrefixParams(
-                    key=RadixKey(
-                        token_ids=token_ids_to_match,
-                        extra_key=self.extra_key,
-                        limit=key_limit,
-                        cache_salt=self.cache_salt,
-                    ),
+                    key=self.make_prefix_key(token_ids_to_match, limit=key_limit),
                     req=self,
                     cow_mamba=cow_mamba,
+                    context_retry=self.context_program is not None,
                 )
             )
             if envs.SGLANG_RADIX_FORCE_MISS.get():
@@ -1651,6 +1692,8 @@ class Req(ReqDllmMixin):
                 match_result.mamba_host_hit_length,
                 match_result.mamba_branching_seqlen,
             )
+            if self.context_program is not None:
+                self.context_source_positions = match_result.context_source_positions
             if match_result.cache_protected_len is not None:
                 self.kv.cache_protected_len = match_result.cache_protected_len
             else:
@@ -1932,6 +1975,7 @@ class Req(ReqDllmMixin):
         # Increment retraction count before resetting other state. We should not reset this
         # since we are tracking the total number of retractions for each request.
         self.retraction_count += 1
+        self.context_source_positions = None
 
         self.prefix_indices = torch.empty((0,), dtype=torch.int64)
         self.routed_experts = None

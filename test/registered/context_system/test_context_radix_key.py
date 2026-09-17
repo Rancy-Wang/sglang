@@ -163,3 +163,43 @@ def test_context_rejects_large_pages_but_native_keys_keep_them(
     assert len(plain.page_aligned(page_size)) == len(tokens)
     assert plain.match(plain, page_size) == len(tokens)
     assert plain.child_key(page_size) == tuple(tokens[:page_size])
+
+
+def test_decode_suffix_matches_full_compiler_and_preserves_published_edges(
+    compiler, key_types
+):
+    Key, Data = key_types
+    suffix = array("q", [999, 13, 2, 71])
+    for tokens, drops, reposition in cases():
+        layout = compiler(*args(tokens, drops, reposition))
+        data = Data.from_layout(layout)
+        prompt = Key(array("q", tokens), context=data)
+        old_records = data.records[:]
+        old_hash = prompt.hash_page(0, len(prompt))
+        for i, token in enumerate(suffix):
+            data.append_tokens(
+                array("q", [token]),
+                next_position=layout.next_position + i,
+                current_reposition=layout.current_reposition,
+            )
+        oracle = compiler(*args(tokens + list(suffix), drops, reposition))
+        extended = Key(array("q", tokens) + suffix, context=data)
+        expected = make_key(key_types, oracle)
+        assert extended.match(expected) == len(extended)
+        assert data.records[: len(old_records)] == old_records
+        assert prompt.hash_page(0, len(prompt)) == old_hash
+        assert list(data.positions) == oracle.positions.tolist()
+        assert data.event_tokens == expected.context.event_tokens
+        assert data.special_tokens == expected.context.special_tokens
+        assert data.retry_records == expected.context.retry_records
+
+
+def test_invalid_decode_suffix_is_atomic(compiler, key_types):
+    _, Data = key_types
+    layout = compiler(*args([1, 2, 3], {3: [(0, 1)]}, []))
+    data = Data.from_layout(layout)
+    before = tuple(bytes(value) for value in vars(data).values())
+    for suffix, pos in [(array("q", [4, -1]), 3), (array("q", [4, 5]), 2**31 - 1)]:
+        with pytest.raises(ValueError, match="int32"):
+            data.append_tokens(suffix, next_position=pos, current_reposition=-1)
+        assert tuple(bytes(value) for value in vars(data).values()) == before

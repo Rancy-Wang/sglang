@@ -65,7 +65,7 @@ from sglang.srt.mem_cache.base_prefix_cache import (
     MatchPrefixParams,
     zero_match_result,
 )
-from sglang.srt.mem_cache.radix_cache import RadixCache, RadixKey, TreeNode
+from sglang.srt.mem_cache.radix_cache import RadixCache, TreeNode
 
 if TYPE_CHECKING:
     from sglang.srt.mem_cache.allocator import BaseTokenToKVPoolAllocator
@@ -172,12 +172,8 @@ def match_prefix_for_req(
 
     match_result = tree_cache.match_prefix(
         MatchPrefixParams(
-            key=RadixKey(
-                token_ids=token_ids,
-                extra_key=req.extra_key,
-                limit=key_limit,
-                cache_salt=req.cache_salt,
-            ),
+            key=req.make_prefix_key(token_ids, limit=key_limit),
+            context_retry=req.context_program is not None,
             cow_mamba=cow_mamba,
             req=req if include_req else None,
         )
@@ -203,6 +199,8 @@ def match_prefix_for_req(
         match_result.swa_host_hit_length,
         match_result.mamba_host_hit_length,
     )
+    if req.context_program is not None:
+        req.context_source_positions = match_result.context_source_positions
     max_len = req._compute_max_prefix_len(len(token_ids))
     req.num_matched_prefix_tokens = min(
         len(req.prefix_indices) + req.host_hit_length, max_len
@@ -364,7 +362,6 @@ class SchedulePolicy:
         for r in waiting_queue:
             prefix_ids = r.origin_input_ids + r.output_ids
             extra_key = r.extra_key
-            cache_salt = r.cache_salt
             match_result = match_prefix_for_req(
                 self.tree_cache, r, prefix_ids, include_req=True
             )
@@ -379,11 +376,7 @@ class SchedulePolicy:
             if len(r.prefix_indices) <= IN_BATCH_PREFIX_CACHING_CHECK_THRESHOLD:
                 match_result = self.waiting_queue_radix_tree.match_prefix(
                     MatchPrefixParams(
-                        key=RadixKey(
-                            token_ids=prefix_ids,
-                            extra_key=extra_key,
-                            cache_salt=cache_salt,
-                        )
+                        key=r.make_prefix_key(prefix_ids)
                     )
                 )
                 if envs.SGLANG_RADIX_FORCE_MISS.get():
@@ -400,11 +393,7 @@ class SchedulePolicy:
                     # Insert with a dummy key
                     self.waiting_queue_radix_tree.insert(
                         InsertParams(
-                            key=RadixKey(
-                                token_ids=prefix_ids,
-                                extra_key=extra_key,
-                                cache_salt=cache_salt,
-                            ),
+                            key=r.make_prefix_key(prefix_ids),
                             value=torch.empty(len(prefix_ids), dtype=torch.bool),
                         )
                     )

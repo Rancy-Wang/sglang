@@ -238,3 +238,89 @@ def test_real_model_template_token_ids(chat, model_path):
         assert result.prompt_ids == plain.prompt_ids, Path(model_path).name
         program = ContextProgram.from_wire(result.context_program, result.prompt_ids)
         assert len(program.layout.drop_ranges) > 0
+
+
+@pytest.mark.parametrize("repos", [None, [1]])
+def test_req_decode_key_and_native_cache_lifecycle(chat, repos):
+    import torch
+    from sglang.srt.managers.schedule_batch import Req
+    from sglang.srt.managers.schedule_policy import match_prefix_for_req
+    from sglang.srt.mem_cache.allocator.token import TokenToKVPoolAllocator
+    from sglang.srt.mem_cache.base_prefix_cache import EvictParams, MatchPrefixParams
+    from sglang.srt.mem_cache.cache_init_params import CacheInitParams
+    from sglang.srt.mem_cache.memory_pool import ReqToTokenPool
+    from sglang.srt.mem_cache.unified_cache.component_type import ComponentType
+    from sglang.srt.mem_cache.unified_radix_cache import UnifiedRadixCache
+    from sglang.srt.sampling.sampling_params import SamplingParams
+
+    result = chat._process_messages(
+        request(drop_message={"1": [0]}, reposition=repos), False
+    )
+
+    def make_req(rid):
+        return Req(
+            rid,
+            "",
+            array("q", result.prompt_ids),
+            SamplingParams(temperature=0, max_new_tokens=8),
+            context_program=result.context_program,
+        )
+
+    req = make_req("writer")
+    program = req.context_program
+    prompt_len = len(req.origin_input_ids)
+    prompt_key = req.make_prefix_key(req.origin_input_ids)
+    prompt_hash = prompt_key.hash_page(0, len(prompt_key))
+    req.output_ids.extend((1, 2, 3))
+    req._refresh_fill_ids()
+    # The final sampled token does not yet own computed KV.
+    computed_len = prompt_len + 2
+    key = req.make_prefix_key(req.full_untruncated_fill_ids, limit=computed_len)
+    assert len(key) == computed_len
+    assert len(req.context_key_data.positions) == computed_len
+    assert list(req.context_key_data.positions[-2:]) == [
+        program.layout.next_position,
+        program.layout.next_position + 1,
+    ]
+    assert prompt_key.hash_page(0, len(prompt_key)) == prompt_hash
+    req.reset_for_retract()
+    assert req.context_program is program
+    assert req.context_key_data is key.context
+    assert req.context_source_positions is None
+
+    allocator = TokenToKVPoolAllocator(
+        size=256, dtype=torch.bfloat16, device="cpu", kvcache=None, need_sort=False
+    )
+    pool = ReqToTokenPool(4, 128, "cpu", False)
+    cache = UnifiedRadixCache(
+        CacheInitParams(
+            disable=False,
+            req_to_token_pool=pool,
+            token_to_kv_pool_allocator=allocator,
+            page_size=1,
+            tree_components=(ComponentType.FULL,),
+        )
+    )
+    pool.alloc([req])
+    slots = allocator.alloc(computed_len)
+    pool.write((req.kv.req_pool_idx, slice(0, computed_len)), slots.to(torch.int32))
+    req.kv.kv_committed_len = computed_len
+    req.last_node = cache.root_node_handle()
+    cache.cache_finished_req(req, kv_len_to_handle=computed_len)
+    assert (
+        cache.match_prefix(MatchPrefixParams(key=key)).device_indices.tolist()
+        == slots.tolist()
+    )
+    assert allocator.available_size() == 256 - computed_len
+
+    reader = make_req("reader")
+    matched = match_prefix_for_req(cache, reader)
+    assert len(matched.device_indices) == prompt_len
+    reader.init_next_round_input(cache)
+    assert len(reader.prefix_indices) == prompt_len - 1
+    assert reader.context_source_positions is not None
+    # No request keeps a cache lock after finished insertion or read-only match.
+    cache.evict(EvictParams(num_tokens=256))
+    assert allocator.available_size() == 256
+    assert len(torch.unique(allocator.get_all_free_pages())) == 256
+    cache.sanity_check()
