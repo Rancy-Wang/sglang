@@ -329,15 +329,27 @@ class ContextModelBinding:
         )
         full = inputs.attention_plan.bind(full_slots)
         swa = None
+        separate_swa_pool = False
         if self.has_swa:
             swa_slots = self.translator.sliding_window_write_loc_for(full_slots)
-            swa_source = self.translator.sliding_window_write_loc_for(copy_source)
-            swa_destination = self.translator.sliding_window_write_loc_for(
-                copy_destination
-            )
-            if swa_slots is None or swa_source is None or swa_destination is None:
-                raise ValueError("Context SWA pool is missing its native index mapping")
-            swa = inputs.attention_plan.bind(swa_slots)
+            if swa_slots is None:
+                # Native --disable-hybrid-swa-memory keeps SWA layers in the
+                # same token id space as Full layers, as mini-sglang does.
+                # Reuse the binding; sliding visibility is still applied by
+                # the layer's attention kernel using the occurrence positions.
+                swa = full
+                swa_source, swa_destination = copy_source, copy_destination
+            else:
+                separate_swa_pool = True
+                swa_source = self.translator.sliding_window_write_loc_for(copy_source)
+                swa_destination = self.translator.sliding_window_write_loc_for(
+                    copy_destination
+                )
+                if swa_source is None or swa_destination is None:
+                    raise ValueError(
+                        "Context SWA pool is missing its native index mapping"
+                    )
+                swa = inputs.attention_plan.bind(swa_slots)
         copies = {}
         if len(inputs.copy_sources):
             for layer in self.layers:
@@ -355,7 +367,7 @@ class ContextModelBinding:
                     inputs.copy_positions,
                     layer.cos_sin_cache,
                     layer.is_neox_style,
-                    skip_unmapped=layer.sliding_window,
+                    skip_unmapped=layer.sliding_window and separate_swa_pool,
                 )
         return ContextForwardMetadata(full, swa, copies)
 
