@@ -1043,6 +1043,9 @@ class Req(ReqDllmMixin):
         self.context_key_data = None
         self.context_source_positions = None
         self.context_exact_prefix_len = 0
+        self.context_state = None
+        self.context_window_plan = None
+        self.context_usage = None
         if context_program is not None:
             from sglang.srt.context_system.ir import ContextKeyData
             from sglang.srt.context_system.planner import ContextProgram
@@ -1598,6 +1601,48 @@ class Req(ReqDllmMixin):
             cache_salt=self.cache_salt,
             context=data,
         )
+
+    def plan_context_prefill(self, query_end: int) -> int:
+        """Plan CPU ownership before admission charges occurrence allocations."""
+        from sglang.srt.context_system.occurrence import (
+            OccurrenceState,
+            compile_occurrence_window,
+        )
+        from sglang.srt.context_system.usage import ContextUsage
+
+        program = self.context_program
+        if program is None:
+            return 0
+        start = len(self.prefix_indices)
+        if self.context_state is None:
+            positions = self.context_source_positions
+            if positions is None:
+                positions = program.layout.positions[:start]
+            self.context_state = OccurrenceState.from_match(
+                self.prefix_indices,
+                positions,
+                exact_prefix_len=self.context_exact_prefix_len,
+            )
+            self.context_usage = ContextUsage(
+                self.context_state.canonical_rows >= 0,
+                ~program.layout.keep_mask[:start],
+            )
+        if len(self.context_state.canonical_rows) != start:
+            raise RuntimeError("Context source ownership disagrees with native prefix")
+        window = compile_occurrence_window(
+            program.layout,
+            program.visible_until,
+            program.layout.positions,
+            query_start=start,
+            query_end=query_end,
+        )
+        keep = torch.ones(query_end, dtype=torch.bool)
+        keep[:start] = (self.context_state.canonical_rows >= 0) | (
+            self.context_state.terminal_rows >= 0
+        )
+        plan = self.context_state.plan(window, keep)
+        self.context_window_plan = (window, plan)
+        return plan.extra_page_count
 
     def init_next_round_input(
         self,
@@ -2372,6 +2417,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
 
     # Immutable occurrence snapshot, retained with the forward/result batch.
     context_prefill_input: object = None
+    context_completions: tuple = ()
 
     # === Batch-variant scheduler state (per-batch; not read by ForwardBatch) ===
     # Tell whether the current running batch is full so that we can skip
@@ -2986,6 +3032,66 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             self.model_config.vocab_size,
         )
 
+        if any(req.context_program is not None for req in reqs):
+            self._prepare_context_occurrences()
+
+    def _prepare_context_occurrences(self):
+        from sglang.srt.context_system.occurrence import ContextPrefillCompletion
+        from sglang.srt.layers.attention.context_backend import (
+            ContextAttentionPlan,
+            ContextPrefillInput,
+            ContextSequence,
+        )
+        from sglang.srt.mem_cache.allocation import alloc_token_slots
+
+        if self.tree_cache.page_size != 1:
+            raise ValueError("Context prefill requires page_size=1")
+        total = 0
+        for req in self.reqs:
+            if req.context_program is None:
+                continue
+            if req.context_window_plan is None:
+                raise RuntimeError("Context occurrence pages were not planned at admission")
+            window, plan = req.context_window_plan
+            if (
+                int(window.segment_query_starts[0]) != req.extend_range.start
+                or int(window.segment_query_ends[-1]) != req.extend_range.end
+            ):
+                raise RuntimeError("Context admitted window changed before allocation")
+            total += plan.extra_page_count
+        extra = alloc_token_slots(self.tree_cache, total) if total else self.out_cache_loc[:0]
+        sequences, slots, sources, destinations, positions, completions = [], [], [], [], [], []
+        q_offset = extra_offset = 0
+        for req, length in zip(self.reqs, self.extend_lens):
+            birth = self.out_cache_loc[q_offset : q_offset + length]
+            q_offset += length
+            if req.context_program is None:
+                sequences.append(ContextSequence.ordinary(len(req.prefix_indices), length))
+                slots.append(torch.cat((req.prefix_indices, birth)))
+                continue
+            window, plan = req.context_window_plan
+            allocated = extra[extra_offset : extra_offset + plan.extra_page_count]
+            extra_offset += plan.extra_page_count
+            step = req.context_state.advance(
+                window, plan, birth, allocated, req.context_program.visible_until
+            )
+            req.context_state = step.state
+            req.context_window_plan = None
+            sequences.append(ContextSequence.from_window(window))
+            slots.append(step.occurrence_slots)
+            sources.append(step.copy_source_slots)
+            destinations.append(step.copy_destination_slots)
+            positions.append(step.copy_position_pairs)
+            completions.append(ContextPrefillCompletion(
+                step.retired_slots, req.context_usage, plan.read_cached,
+                plan.repositioned_cached, length,
+            ))
+        self.context_prefill_input = ContextPrefillInput(
+            ContextAttentionPlan.merge(sequences), torch.cat(slots),
+            torch.cat(sources), torch.cat(destinations), torch.cat(positions), None,
+        )
+        self.context_completions = tuple(completions)
+
     def _mamba_radix_cache_v2_req_prepare_for_extend(
         self,
         req: Req,
@@ -3519,6 +3625,8 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
 
     def prepare_for_decode(self):
         self.forward_mode = ForwardMode.DECODE
+        self.context_prefill_input = None
+        self.context_completions = ()
         # Decode embeds the last output token via embed_tokens; clear the stale
         # prefill-time tensor so it doesn't leak into ForwardBatch.
         self.input_embeds = None
@@ -3774,6 +3882,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
         # original.
         return ScheduleBatch(
             reqs=self.reqs[:],
+            context_completions=self.context_completions,
             extend_lens=self.extend_lens,
             prefix_lens=self.prefix_lens,
             req_to_token_pool=self.req_to_token_pool,

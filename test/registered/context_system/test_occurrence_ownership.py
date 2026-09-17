@@ -166,7 +166,9 @@ def test_same_position_retry_copy_is_not_reposition_usage(compiler, occurrence):
     assert plan.read_cached[:start].all()
 
 
-@pytest.mark.skipif(os.environ.get("RUN_CONTEXT_GPU") != "1", reason="requires test GPU")
+@pytest.mark.skipif(
+    os.environ.get("RUN_CONTEXT_GPU") != "1", reason="requires test GPU"
+)
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("query_start", [0, 22, 70])
 def test_materialization_copy_and_attention_chain(
@@ -213,7 +215,12 @@ def test_materialization_copy_and_attention_chain(
     actual_copy(
         torch.tensor([k[0].data_ptr()], device="cuda", dtype=torch.uint64),
         torch.tensor([v[0].data_ptr()], device="cuda", dtype=torch.uint64),
-        k[0], v[0], source, destination, pairs, rope,
+        k[0],
+        v[0],
+        source,
+        destination,
+        pairs,
+        rope,
     )
     assert torch.equal(k, oracle_k)
     assert torch.equal(v, oracle_v)
@@ -227,9 +234,14 @@ def test_materialization_copy_and_attention_chain(
     )
     # Independently enumerate each query's semantic visible set. The reference
     # kernel is the frozen native implementation, with no Context extensions.
-    pair_ids = dict(enumerate(zip(
-        window.occurrence_raw_tokens.tolist(), window.occurrence_positions.tolist()
-    )))
+    pair_ids = dict(
+        enumerate(
+            zip(
+                window.occurrence_raw_tokens.tolist(),
+                window.occurrence_positions.tolist(),
+            )
+        )
+    )
     pair_to_occurrence = {pair: ident for ident, pair in pair_ids.items()}
     selected, offsets = [], [0]
     for demand in visible[query_start:]:
@@ -237,13 +249,166 @@ def test_materialization_copy_and_attention_chain(
         offsets.append(len(selected))
     oracle = torch.empty_like(q)
     baseline_attention(
-        q, keys, values, oracle, oracle_k[0], oracle_v[0],
+        q,
+        keys,
+        values,
+        oracle,
+        oracle_k[0],
+        oracle_v[0],
         torch.arange(len(q) + 1, device="cuda", dtype=torch.int64),
         torch.tensor(offsets, device="cuda"),
         slots[torch.tensor(selected, device="cuda", dtype=torch.int64)],
-        None, True, None, 1, 1.0, 1.0, page_size=1,
+        None,
+        True,
+        None,
+        1,
+        1.0,
+        1.0,
+        page_size=1,
         extend_seq_lens_cpu=[1] * len(q),
     )
     torch.testing.assert_close(
         result, oracle, rtol=torch.finfo(dtype).eps, atol=torch.finfo(dtype).eps
     )
+
+
+def test_chunk_lifetime_publication_and_deferred_retirement(compiler, occurrence):
+    """Recycle slots after each GPU boundary; alias bugs become stale reads."""
+    rng = np.random.default_rng(1021)
+    for tokens, drops, repositions in cases():
+        n = len(tokens)
+        layout = compiler(*args(tokens, drops, repositions))
+        expiry = expiry_for(n, drops)
+        start = int(rng.integers(0, n))
+        # Prefix comes from a separate live source lease, possibly a Retry.
+        sources = torch.arange(1, start + 1, dtype=torch.int64)
+        state = occurrence.OccurrenceState.from_match(
+            sources, layout.positions[:start], exact_prefix_len=start // 2
+        )
+        values = {
+            int(slot): (raw, int(layout.positions[raw]))
+            for raw, slot in enumerate(sources)
+        }
+        cache_slots = set(sources.tolist())
+        private = set()
+        available = list(range(start + 1, 16 * n + 1))
+        pending = []
+
+        def alloc(count, available=available, private=private):
+            selected = available[:count]
+            del available[:count]
+            private.update(selected)
+            return torch.tensor(selected, dtype=torch.int64)
+
+        def free(
+            slots,
+            private=private,
+            cache_slots=cache_slots,
+            available=available,
+            values=values,
+        ):
+            items = slots.tolist()
+            assert len(set(items)) == len(items)
+            assert set(items) <= private
+            assert not set(items) & cache_slots
+            private.difference_update(items)
+            # Immediate reuse is intentional: stale references fail deterministically.
+            available[:0] = items
+            for item in items:
+                values.pop(item, None)
+
+        while start < n:
+            end = min(n, start + int(rng.integers(1, 9)))
+            window = occurrence.compile_occurrence_window(
+                layout, expiry, layout.positions, query_start=start, query_end=end
+            )
+            plan = state.plan(window, torch.ones(end, dtype=torch.bool))
+            births, extra = alloc(end - start), alloc(plan.extra_page_count)
+            step = state.advance(window, plan, births, extra, expiry)
+            # Layer writes birth KV, then all independent canonical-source copies.
+            for raw, slot in zip(range(start, end), births.tolist()):
+                values[slot] = (raw, int(layout.birth_positions[raw]))
+            updates = {}
+            for src, dst, (old, new) in zip(
+                step.copy_source_slots.tolist(),
+                step.copy_destination_slots.tolist(),
+                step.copy_position_pairs.tolist(),
+            ):
+                raw, pos = values[src]
+                assert pos == old
+                assert dst in private and dst not in cache_slots
+                updates[dst] = (raw, new)
+            values.update(updates)
+            for occ in window.segment_key_occurrences.tolist():
+                slot = int(step.occurrence_slots[occ])
+                assert values[slot] == (
+                    int(window.occurrence_raw_tokens[occ]),
+                    int(window.occurrence_positions[occ]),
+                )
+            state = step.state
+            terminal = state.terminal_slots()
+            for raw, slot in enumerate(terminal.tolist()):
+                assert values[slot] == (raw, int(layout.positions[raw]))
+            assert not set(step.retired_slots.tolist()) & set(state.slots.tolist())
+            # Delay one batch's releases: scheduler can retain a preceding ticket
+            # while preparing another forward without mutating its ownership map.
+            pending.append(step.retired_slots)
+            if len(pending) > 1:
+                free(pending.pop(0))
+            # Native insertion may deduplicate independently owned terminal pages.
+            published = terminal.clone()
+            for raw, slot in enumerate(terminal.tolist()):
+                if slot not in private:
+                    continue
+                if raw % 2:
+                    replacement = int(alloc(1)[0])
+                    values[replacement] = values[slot]
+                    free(torch.tensor([slot]))
+                    slot = replacement
+                    published[raw] = replacement
+                private.remove(slot)
+                cache_slots.add(slot)
+            state = state.publish(published)
+            assert not set(state.private_slots().tolist()) & cache_slots
+            assert set(state.private_slots().tolist()) <= private
+            start = end
+        for retired in pending:
+            free(retired)
+        # Final publication owns all surviving terminal KV; no birth/private leak.
+        assert state.private_slots().numel() == 0
+        assert private == set()
+
+
+def test_hole_lifetime_and_publication_does_not_claim_missing_kv(compiler, occurrence):
+    n, start = 16, 8
+    drops = {start: [(0, 4)]}
+    layout = compiler(*args(list(range(n)), drops, [start - 1]))
+    expiry = expiry_for(n, drops)
+    # Four old pages are now holes. Only the remaining source rows are resident.
+    state = occurrence.OccurrenceState(
+        torch.arange(101, 105, dtype=torch.int64),
+        torch.zeros(4, dtype=torch.bool),
+        torch.tensor([-1] * 4 + list(range(4))),
+        torch.full((start,), -1),
+        layout.positions[:start],
+        start,
+    )
+    window = occurrence.compile_occurrence_window(
+        layout, expiry, layout.positions, query_start=start, query_end=n
+    )
+    keep = torch.ones(n, dtype=torch.bool)
+    keep[:4] = False
+    plan = state.plan(window, keep)
+    step = state.advance(
+        window,
+        plan,
+        torch.arange(201, 209),
+        torch.arange(301, 301 + plan.extra_page_count),
+        expiry,
+    )
+    terminal = step.state.terminal_slots()
+    assert terminal[:4].tolist() == [-1] * 4
+    assert not set(step.retired_slots.tolist()) & {101, 102, 103, 104}
+    published = step.state.publish(terminal)
+    assert published.terminal_slots().tolist() == terminal.tolist()
+    assert published.private_slots().numel() == 0

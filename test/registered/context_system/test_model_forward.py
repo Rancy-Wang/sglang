@@ -31,7 +31,10 @@ def runtime():
         context_length=2048,
         mem_fraction_static=0.75,
         attention_backend=os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND"),
-        cuda_graph_config={"decode": {"bs": [1, 2], "max_bs": 2}},
+        cuda_graph_config={
+            "decode": {"bs": [1, 2], "max_bs": 2},
+            "prefill": {"bs": [16, 32, 64, 96, 128], "max_bs": 128},
+        },
     )
     args.resolve_once()
     _set_envs_and_config(args)
@@ -43,6 +46,7 @@ def runtime():
     binding = ContextModelBinding(
         runner.model, runner.token_to_kv_pool, runner.kv_index_translator, page_size=1
     )
+    runner.context_model_binding = binding
     print(
         "MODEL",
         args.model_path,
@@ -54,7 +58,9 @@ def runtime():
     return wrapper, tokenizer, binding
 
 
-def prepare_batch(runner, token_lists):
+def prepare_batch(
+    runner, token_lists, *, programs=None, states=None, ends=None, usages=None
+):
     from sglang.benchmark.one_batch import TreeCacheNamespace
     from sglang.srt.managers.schedule_batch import Req, ScheduleBatch
     from sglang.srt.sampling.sampling_params import SamplingParams
@@ -67,10 +73,18 @@ def prepare_batch(runner, token_lists):
             "",
             array("q", tokens),
             SamplingParams(temperature=0, max_new_tokens=8),
+            context_program=programs[i].to_wire() if programs else None,
         )
         req.full_untruncated_fill_ids = req.origin_input_ids
         req.logprob_start_len = -1
-        req.set_extend_range(0, len(tokens))
+        end = ends[i] if ends else len(tokens)
+        if states is not None:
+            req.prefix_indices = states[i].terminal_slots()
+            req.context_state = states[i]
+            req.context_usage = usages[i]
+        req.set_extend_range(len(req.prefix_indices), end)
+        if programs:
+            req.plan_context_prefill(end)
         reqs.append(req)
     cache = TreeCacheNamespace(
         page_size=1,
@@ -141,3 +155,75 @@ def test_ordinary_context_consumer_matches_native_model(runtime):
         flush=True,
     )
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+@torch.no_grad()
+def test_drop_reposition_real_model_chunk_lifetime(runtime):
+    from sglang.srt.context_system.ir import compile_context_layout
+    from sglang.srt.context_system.planner import ContextProgram
+    from test_ir import args
+    from test_occurrence_ownership import expiry_for
+
+    wrapper, tokenizer, _ = runtime
+    runner = wrapper.torch_runner
+    tokens = tokenizer.encode(
+        "The library contains red books and blue notebooks. The librarian records every visit. "
+        * 12
+    )[:96]
+    assert len(tokens) == 96
+    cuts = [17, 31, 57, 74, 96]
+
+    def run(drops, repos, ends):
+        layout = compile_context_layout(*args(tokens, drops, repos))
+        program = ContextProgram(layout, expiry_for(len(tokens), drops))
+        wrapper.clear()
+        allocator = runner.token_to_kv_pool_allocator
+        available_before = allocator.available_size()
+        state = usage = None
+        for end in ends:
+            batch = prepare_batch(
+                runner,
+                [tokens],
+                programs=[program],
+                ends=[end],
+                states=[state] if state is not None else None,
+                usages=[usage] if usage is not None else None,
+            )
+            logits = forward(runner, batch)
+            completed = torch.cuda.Event()
+            completed.record()
+            completed.synchronize()
+            # Same receipts as BatchResultProcessor, including duplicate callback.
+            for receipt in batch.copy().context_completions:
+                receipt.complete(allocator)
+                receipt.complete(allocator)
+            req = batch.reqs[0]
+            state, usage = req.context_state, req.context_usage
+            runner.req_to_token_pool.free(req.kv.req_pool_idx)
+        assert usage.snapshot().actual_prefill_tokens == len(tokens)
+        allocator.free(state.private_slots())
+        assert allocator.available_size() == available_before
+        return logits
+
+    # Calibrate the native model's batch-shape rounding on the same token path.
+    plain_full, plain_chunks = run({}, [], [96]), run({}, [], cuts)
+    baseline_error = (plain_full.float() - plain_chunks.float()).abs()
+    drops, repos = {24: [(4, 12)], 56: [(16, 36)]}, [23, 55]
+    full, chunks = run(drops, repos, [96]), run(drops, repos, cuts)
+    error = (full.float() - chunks.float()).abs()
+    maximum = max(0.04, 2 * baseline_error.max().item())
+    mean = max(0.002, 2 * baseline_error.mean().item())
+    print(
+        "CHUNK_LOGITS",
+        {
+            "baseline_max": baseline_error.max().item(),
+            "baseline_mean": baseline_error.mean().item(),
+            "context_max": error.max().item(),
+            "context_mean": error.mean().item(),
+            "max_threshold": maximum,
+            "mean_threshold": mean,
+        },
+        flush=True,
+    )
+    assert error.max().item() <= maximum
+    assert error.mean().item() <= mean
