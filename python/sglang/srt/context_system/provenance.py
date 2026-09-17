@@ -272,6 +272,14 @@ def build_template_token_provenance(
         )
     if chat_template is None:
         chat_template = tokenizer.get_chat_template(tools=tools)
+    if template_kwargs and template_kwargs.get("preserve_thinking_history", False):
+        from sglang.srt.context_system.thinking_template import prepare_thinking_history
+
+        messages, template_kwargs = prepare_thinking_history(
+            tokenizer, messages, tools, {**template_kwargs, "chat_template": chat_template}
+        )
+        template_kwargs = dict(template_kwargs)
+        chat_template = template_kwargs.pop("chat_template")
     traced_text, _, marker_pattern = _render_traced_template(
         tokenizer,
         chat_template,

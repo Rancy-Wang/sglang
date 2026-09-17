@@ -1632,6 +1632,9 @@ class OpenAIServingChat(OpenAIServingBase):
             if request.chat_template_kwargs:
                 extra_template_kwargs.update(request.chat_template_kwargs)
 
+            if getattr(context_rule, "type", None) == "thinking_drop":
+                extra_template_kwargs["preserve_thinking_history"] = True
+
             rc = self.template_manager.reasoning_config
             if rc is not None and rc.effort_kwarg is not None:
                 if request.reasoning_effort == "low":
@@ -1771,6 +1774,12 @@ class OpenAIServingChat(OpenAIServingBase):
             context_trace[:] = [trace]
             return trace.rendered_text, trace.input_ids, None
         cache_key = None
+        if template_kwargs.get("preserve_thinking_history", False):
+            from sglang.srt.context_system.thinking_template import prepare_thinking_history
+
+            messages, template_kwargs = prepare_thinking_history(
+                self.tokenizer_manager.tokenizer, messages, tools, template_kwargs
+            )
         if use_cache:
             try:
                 cache_key = orjson.dumps(
