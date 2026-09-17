@@ -78,6 +78,25 @@ def test_pd_final_versions_holes_identity_and_usage(compiler, monkeypatch):
             assert len(sent) < plan.active_count
     assert sent == plan.decode.raw_indices.tolist()
     assert cursor == 12
+    # A deferred final rotation leaves an active hole, then a private copy.
+    # Neither can be streamed early; later final publication sends it once.
+    rows = req.context_state.terminal_rows.clone()
+    owners = torch.zeros(len(slots), dtype=torch.bool)
+    rows[4] = -1
+    begin, end, cursor = plan.full_chunk(
+        0, 9, last_chunk=False, terminal_rows=rows, owned=owners,
+    )
+    assert (begin, end, cursor) == (0, 1, 4)
+    with pytest.raises(ValueError, match="missing terminal KV"):
+        plan.full_chunk(cursor, 12, last_chunk=True, terminal_rows=rows, owned=owners)
+    rows[4] = 1
+    owners[1] = True
+    assert plan.full_chunk(
+        cursor, 12, last_chunk=False, terminal_rows=rows, owned=owners,
+    ) == (1, 1, 4)
+    assert plan.full_chunk(
+        cursor, 12, last_chunk=True, terminal_rows=rows, owned=owners,
+    ) == (1, 9, 12)
     assert plan.slots(req, pool, window=3).tolist() == [106, 107, 108]
     table[0, 12:] = torch.tensor([109, 110, 111])
     assert transfer.request_active_slots(req, pool, 15).tolist() == list(

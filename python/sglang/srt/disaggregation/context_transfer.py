@@ -51,7 +51,7 @@ class ContextTransferPlan:
             self.decode.device_indices[start : self.active_count]
         ]
 
-    def full_chunk(self, raw_start, raw_end, *, last_chunk):
+    def full_chunk(self, raw_start, raw_end, *, last_chunk, terminal_rows=None, owned=None):
         """Map a completed raw prefix into consecutive final-version pages.
 
         Keep one page for the final send: native transports infer completion
@@ -59,6 +59,22 @@ class ContextTransferPlan:
         Returned raw cursor never advances past a withheld page.
         """
         begin, end = np.searchsorted(self.decode.raw_indices, (raw_start, raw_end))
+        if terminal_rows is not None:
+            raw = self.decode.raw_indices[begin:end]
+            rows = terminal_rows.numpy()[raw]
+            ready = rows >= 0
+            if last_chunk:
+                if not ready.all():
+                    raise ValueError("Context final transfer has missing terminal KV")
+            else:
+                # Private copies may be deduplicated by a later publication.
+                # Only stable cache owners can outlive an asynchronous send;
+                # the final send is protected by native inflight retirement.
+                if owned is not None:
+                    ready[ready] = ~owned.numpy()[rows[ready]]
+                missing = np.flatnonzero(~ready)
+                if len(missing):
+                    end = int(begin) + int(missing[0])
         if not last_chunk:
             end = min(int(end), max(0, self.active_count - 1))
         cursor = raw_end
