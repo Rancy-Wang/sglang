@@ -322,7 +322,8 @@ def test_chunk_lifetime_publication_and_deferred_retirement(compiler, occurrence
             window = occurrence.compile_occurrence_window(
                 layout, expiry, layout.positions, query_start=start, query_end=end
             )
-            plan = state.plan(window, torch.ones(end, dtype=torch.bool))
+            keep = state.prefill_terminal_keep(layout, end)
+            plan = state.plan(window, keep)
             births, extra = alloc(end - start), alloc(plan.extra_page_count)
             step = state.advance(window, plan, births, extra, expiry)
             # Layer writes birth KV, then all independent canonical-source copies.
@@ -348,7 +349,11 @@ def test_chunk_lifetime_publication_and_deferred_retirement(compiler, occurrence
             state = step.state
             terminal = state.terminal_slots()
             for raw, slot in enumerate(terminal.tolist()):
-                assert values[slot] == (raw, int(layout.positions[raw]))
+                if slot < 0:
+                    assert not keep[raw]
+                else:
+                    assert keep[raw]
+                    assert values[slot] == (raw, int(layout.positions[raw]))
             assert not set(step.retired_slots.tolist()) & set(state.slots.tolist())
             # Delay one batch's releases: scheduler can retain a preceding ticket
             # while preparing another forward without mutating its ownership map.
@@ -375,6 +380,7 @@ def test_chunk_lifetime_publication_and_deferred_retirement(compiler, occurrence
         for retired in pending:
             free(retired)
         # Final publication owns all surviving terminal KV; no birth/private leak.
+        assert torch.equal(state.terminal_rows >= 0, layout.keep_mask)
         assert state.private_slots().numel() == 0
         assert private == set()
 

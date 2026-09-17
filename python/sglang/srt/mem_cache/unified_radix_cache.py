@@ -10,7 +10,10 @@ from typing import TYPE_CHECKING, Iterator, NamedTuple, Optional, Sequence, Type
 
 import torch
 
-from sglang.srt.context_system.request_storage import request_row
+from sglang.srt.context_system.request_storage import (
+    needs_context_source_lease,
+    request_row,
+)
 
 from sglang.srt.distributed.communication_tags import P2PTag
 from sglang.srt.environ import envs
@@ -1216,8 +1219,10 @@ class UnifiedRadixCache(BasePrefixCache):
             req.context_cache_published = True
             if get_memory().context_drop_aware_eviction:
                 self._configure_context_drop_eviction(req)
-            if not chunked and len(state.terminal_rows) >= len(req.origin_input_ids):
-                # Final prefill results have passed their native completion event.
+            if not needs_context_source_lease(req):
+                # This chunk has completed and the target lease is installed.
+                # Recomputed sources need no old branch; same-position COW
+                # reads have already moved to their target owners.
                 self._release_context_source_lease(req)
 
     def _configure_context_drop_eviction(self, req):
@@ -1281,6 +1286,7 @@ class UnifiedRadixCache(BasePrefixCache):
                 retain_source
                 and req.context_source_lease is None
                 and req.last_node is not None
+                and needs_context_source_lease(req)
                 and (
                     req.context_exact_prefix_len < req.kv.cache_protected_len
                     or req.context_recovery_source is not None

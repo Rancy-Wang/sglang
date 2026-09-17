@@ -1783,10 +1783,7 @@ class Req(ReqDllmMixin):
             query_start=start,
             query_end=query_end,
         )
-        keep = torch.ones(query_end, dtype=torch.bool)
-        keep[:start] = (self.context_state.canonical_rows >= 0) | (
-            self.context_state.terminal_rows >= 0
-        )
+        keep = self.context_state.prefill_terminal_keep(program.layout, query_end)
         plan = self.context_state.plan(window, keep)
         self.context_window_plan = (window, plan)
         return plan.extra_page_count
