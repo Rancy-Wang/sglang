@@ -80,6 +80,48 @@ def factory():
     fixture.doCleanups()
 
 
+@pytest.mark.parametrize("prefill", [False, True])
+def test_continuation_capacity_abort_uses_native_cleanup(prefill):
+    from types import SimpleNamespace
+    from unittest.mock import Mock, patch
+
+    from sglang.srt.disaggregation.utils import DisaggregationMode
+    from sglang.srt.managers.scheduler import Scheduler
+
+    req = SimpleNamespace(
+        rid="capacity-continuation", context_admission_error="retains 108 KV tokens",
+        time_stats=SimpleNamespace(trace_ctx=Mock()), to_finish=None,
+        disagg_kv_sender=Mock(), metadata_buffer_index=4, pending_bootstrap=True,
+        return_logprob=False,
+    )
+    scheduler = SimpleNamespace(
+        _pending_chunked_abort_req=req, chunked_req=req,
+        disaggregation_mode=DisaggregationMode.PREFILL if prefill else DisaggregationMode.NULL,
+        _release_aborted_request=Mock(), tree_cache=Mock(),
+        clear_pending_chunk_send=Mock(), req_to_metadata_buffer_idx_allocator=Mock(),
+        ipc_channels=SimpleNamespace(send_to_tokenizer=Mock()),
+    )
+    with (
+        patch("sglang.srt.managers.scheduler.release_kv_cache") as release,
+        patch("sglang.srt.managers.scheduler._make_abort_req") as notification,
+    ):
+        Scheduler.process_pending_chunked_abort(scheduler)
+        release.assert_called_once_with(req, scheduler.tree_cache, is_insert=False)
+        reason = notification.call_args.kwargs["finished_reason"]
+        assert reason["status_code"] == 503
+        assert "retains 108" in reason["message"]
+        Scheduler.process_pending_chunked_abort(scheduler)
+        release.assert_called_once()  # retrying the scheduling step cannot double-free
+    assert scheduler.chunked_req is None and scheduler._pending_chunked_abort_req is None
+    if prefill:
+        scheduler.clear_pending_chunk_send.assert_called_once_with(req)
+        req.disagg_kv_sender.abort.assert_called_once()
+        scheduler.req_to_metadata_buffer_idx_allocator.free.assert_called_once_with(4)
+        assert not req.pending_bootstrap and req.metadata_buffer_index == -1
+    else:
+        req.disagg_kv_sender.abort.assert_not_called()
+
+
 def make_req(compiler, *, ignore_eos=False):
     from sglang.srt.context_system.planner import ContextProgram
     from sglang.srt.managers.schedule_batch import Req

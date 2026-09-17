@@ -9,15 +9,29 @@ import torch
 
 
 def handle_prefill_capacity_pressure(req, capacity, needed):
-    """Distinguish self-pinned initial matches from transient pool pressure.
+    """Distinguish self-pinned requests from transient pool pressure.
 
     Called only after the smallest permitted forward failed, without other
     reservations. Full-pool Context cache rows have one owner per resident raw
     token. Inspect CPU residency, never copy physical page IDs back from CUDA.
-    A failed initial match owns no pages: the temporary native lease is released
-    by the caller, and the next scheduling pass can safely match from the root.
+    A failed initial match owns no pages: its temporary lease can be released
+    and the next pass can match from the root. Continuations must instead use
+    the scheduler's deferred abort to drain work and release their ownership.
     """
     if req.context_prefill_started:
+        state = req.context_state
+        if state is not None and len(state.slots) + needed >= capacity:
+            # Rows are CPU ownership IDs, not GPU page numbers. Count aliases
+            # once and exclude holes in a borrowed recovery gap. This is a
+            # lower bound on this request's leases; other requests cannot make
+            # these live canonical/terminal owners evictable.
+            rows = torch.cat((state.canonical_rows, state.terminal_rows))
+            pinned = len(rows[rows >= 0].unique())
+            if pinned + needed >= capacity:
+                req.context_admission_error = (
+                    f"Context prefill retains {pinned} KV tokens and needs "
+                    f"{needed} more reserved tokens, but the KV pool holds {capacity}"
+                )
         return
     source = req.context_recovery_source
     slots, resident = (
