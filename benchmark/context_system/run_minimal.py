@@ -44,7 +44,7 @@ def warmup(args, root):
                     "messages": [
                         {
                             "role": "system",
-                            "content": f"Kernel warmup only, lane {index}.",
+                            "content": f"Kernel warmup only, {feature}, lane {index}.",
                         },
                         {"role": "user", "content": "red green blue " * 4096},
                         {

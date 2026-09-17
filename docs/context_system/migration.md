@@ -121,16 +121,76 @@ SGLang `models/gpt_oss.py:129` `get_attention_sliding_window_size` 的结果由
 SGLang 引用前缀为 `python/sglang/srt/`，mini 为 `python/minisgl/`。
 该核对不替代 GPT-OSS 全模型数值测试。
 
-环境限制：GPU 0–3 每张空闲约 6 GB，利用率约 90%；足够当前小 Qwen 功能诊断，
-不足以完成必验大模型与可解释的吞吐实验。sudo 需要交互认证，且宿主 GPU PID 在当前
-命名空间不可见，尚无法核实并停止用户授权的 liuenshu/cdllm 任务。已请求用户处理资源，
-没有停止任何无关任务。后续只对新修改和未覆盖功能运行必要测试，不重复完整旧测试集。
+GPU 资源阻塞已解除：按用户随后授予的 GPU 0–3 全部任务释放权限，核实宿主进程
+归属后停止了前四卡的占用任务。GPU 4–7 的其他训练保留；特权会话已关闭。当前必验
+模型实验显式分配 0–3，记录独立进程、输出、端口及实际 HEAD。后续只对新修改和未覆盖
+功能运行必要测试，不重复完整旧测试集。
 
 本次分块区间 CPU 测试 `python -m pytest -q
 test/registered/context_system/test_context_transfer.py` 为 1 passed。新增 helper 和
 BCP 测试的 Ruff 通过；完整 `prefill.py` 的 Ruff 在修改前后均有 29 项相同既有
 诊断，无新增项，未为此格式化无关原生代码。全部 52 条会话已建立索引，但逐条完整
 审阅及全部源码差异审计尚未完成；本页风险清单不冒充全量审计通过。
+
+## 追加实测与 SWA 运行设置（2026-09-17）
+
+AgenticQwen-8B 的普通与 PD 固定路径均已执行。Retry 必须与 mini 的同源 Retry 对照：
+mini 自身 Retry 相对冷算已有差异，不能将两种不同计算路径混为误差基线。使用已保存的
+mini Retry logits 复核后，普通及 PD 的 max/mean/p99 为
+1.33984375/0.068649568/0.359375，低于同模型无功能校准门限；没有重跑 GPU 来生成
+重复证据。原始与匹配对照保存在 `bcp778-mini-agentic-retry.json`、
+`bcp778-agentic-matched-retry-comparison.json`。实际生成的原生语法结束行为仍单独记录。
+
+GPT-OSS-20B 普通调度在 `4a726e827` 的 BCP 验证通过，测试耗时 361.42 秒（含启动和
+logits 诊断，不是吞吐）。none/Drop/Drop+R 冷算的实际输出各 64 tokens 均与 mini 相同。
+输入先对齐到 SGLang 原生 Harmony 模板的 8927 tokens，mini 仅在测试 renderer 中
+使用同一输入；这证明计算对齐，不证明两个服务端的默认模板相同。
+
+| GPT-OSS-20B 路径 | max / mean / p99 |
+| --- | --- |
+| none | 2.7109375 / 0.069612078 / 0.4375 |
+| Drop | 4.875 / 0.101740994 / 0.875 |
+| Drop+R 冷 | 2.279296875 / 0.064363368 / 0.412109375 |
+| Drop+R 热 | 1.734375 / 0.062313691 / 0.390625 |
+| 同源 Retry | 1.8125 / 0.060070530 / 0.359375 |
+
+各路径 raw argmax 均 64/64 一致。热路径 cached/repos/skipped/prefill 为
+3384/0/5542/1，同源 Retry 为 3252/3916/0/1759。结果位于
+`bcp778-sg-gpt20-aligned/`，参考为 `bcp778-mini-gpt20-native-input.json`。
+以上是独立 SWA 池旧配置的证据；下述新配置正在补齐验证，不能直接沿用为其验收结果。
+
+用户要求 SWA+Drop+R 使用 mini 机制。mini 的 `python/minisgl/kvcache/mha_pool.py`
+`MHAKVCache` 将所有层绑定在同一 token page；SGLang 的独立 SWA pool 会回收窗口外
+SWA 同伴页，未来 Retry 可能多做修复。R2 运行配置从 `342daa299` 开始对 GPT-OSS
+普通、P、D 显式传入原生 `--disable-hybrid-swa-memory`。它通过
+`configs/model_config.py` 的 `ModelConfig._derive_hybrid_model` 关闭独立 SWA pool，
+**不关闭 SWA attention**：原生 GPT-OSS 层的窗口、sinks、MoE 和默认 Triton backend
+全部保留。mask/page-occurrence 按 query 所在阶段的 true position 选择可见版本，
+Retry 与正常 Drop 共用 Full/SWA 页生命周期，来源页只读、目标 RoPE 旋转使用独立页。
+生产无功能请求仍走原生计算分支。只开 `--context-drop-aware-eviction` 不会隐式改变
+SGLang 的物理池；部署时必须同时采用这里的 SWA 配置。
+
+这一配置使 P/D 均使用同构全层 KV 页，传输最终 active 页；D Radix 仍关闭，无 D→P
+输出 KV。它增加了相对独立 SWA 尾窗口传输的字节数，不能宣称已保留该优化的带宽收益。
+最小吞吐的原版 SGLang 对照也采用相同物理池设置，避免把不同 KV 容量当成补丁开销。
+原生独立 SWA 池仍保留，但不作为本次 mini 等价路径的完成依据。
+
+PD 旧双池测试暴露两个问题：page_size=1 的普通长 prompt 错受 D 的 SWA 小池限制
+（8927 > 2052），`ebbd491d9` 增加页大小为一的尾窗口分配；随后已完成请求在 overlap
+队列中尚未过滤、Context layout 已释放，admission 访问空 layout 导致 D 退出。
+`2c24bf6b9` 将无 KV 所有权的请求排除出回收预算，测试增加不注入 probe 的 PD 实际
+生成对照。失败日志 `bcp778-sg-pd-gpt20-tail/` 保留，不能算作 PD 完整通过。
+
+GPT-OSS-120B 的 mini TP2 固定参考已生成，路径为
+`bcp778-mini-gpt120-tp2-store.json`；测试 helper 让 mini 自己持有 rendezvous store，
+避免 torchrun 的 agent-store 环境令所有 rank 同时等待一个不存在的服务端。
+SG TP2 普通新配置与 GPT-OSS-20B PD 新配置正在验证，最终结果需另行填写。
+
+BCP 吞吐 helper `benchmark/context_system/run_minimal.py` 保留完整任务、原输出长度、
+seed 42、C1/N2 与 C2/N4、K12/96Ki，不测 SLO。`a9e7970d9` 将原生 SG client 的
+journal 改为与 mini 相同的异步 FIFO 写入；计时前用无关合成输入单独预热，记录在
+`warmup.json`，不预热被测任务。mini 没有 HTTP cache flush，因此各引擎均保留这段
+无关前缀，并如实记录，不能声称测试从物理空缓存开始。仍需检查测量区间有无新 JIT。
 
 ## 最终设置
 
