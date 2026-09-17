@@ -52,6 +52,7 @@
 | 默认缓存是 UnifiedRadixCache | `python/sglang/srt/mem_cache/registry.py` 的 `default_radix_cache_factory`；`kv_cache_builder.py` | 接入 unified tree/components 的插入、分裂、锁和回收，不能只补旧 RadixCache |
 | 两者都缓存已计算的输出 KV | SGLang `unified_radix_cache.py:959` `cache_finished_req` 使用 prompt+output；mini `core.py:764` `append_host` | 普通 scheduler 保留输出缓存；未做 forward 的最终采样 token 不能冒充 KV |
 | SGLang 会缓存未完成 chunk | `unified_radix_cache.py:1105` `cache_unfinished_req`；mini `scheduler/cache.py:422` 对 contextual/delta unfinished 返回 | chunk cache 必须带阶段/版本语义；不能把临时 occurrence 作为最终 cache 提交 |
+| Unified insert 自行释放重复输入 KV | `unified_tree_core.py` 的 `_insert_walk_step` 生成 `FreeDeviceKV`；`unified_radix_cache.py` 的 `insert` 执行动作 | 调用方不得再次释放 `prefix_len` 对应输入；本次 Retry 测试的重复释放已据此修正 |
 | unified SWA 有独立有效范围与锁 | `unified_cache/components/{full,swa}.py`、`unified_tree_core.py` | full 与 SWA 有效页不同，Drop-skipped 不能因 SWA 窗口裁剪而增加 |
 | 原生支持真实 retract | `managers/schedule_batch.py` 的 `reset_for_retract`、`retract_decode` | 释放 KV 后保留可重建的 Context 状态，恢复不能退化为裸 token 普通 prefill |
 | mini occurrence 某些混合 batch 限制 | mini `attention/{fi,fa}.py` | 不迁移其 mixed-batch 限制到 SGLang；请求间 metadata 必须独立 |

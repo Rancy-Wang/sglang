@@ -137,9 +137,14 @@ def test_longest_retry_and_one_sided_reposition(compiler):
     for key in (bad, good):
         slots = allocator.alloc(320)
         inserted = cache.insert(InsertParams(key=key, value=slots))
-        # The native cache adopts only the new suffix; deduplicated incoming
-        # prefix pages are still the inserting request's responsibility.
-        allocator.free(slots[: inserted.prefix_len])
+        # Native UnifiedRadixCache already releases duplicate incoming slots
+        # through its insert actions. The caller must not free them again.
+        expected_resident = 320 if key is bad else 640 - inserted.prefix_len
+        assert allocator.available_size() == 2048 - expected_resident
+        assert (
+            len(torch.unique(allocator.get_all_free_pages()))
+            == allocator.available_size()
+        )
     good_slots = cache.match_prefix(MatchPrefixParams(key=good)).device_indices
     before = len(cache.tree_core._node_arena)
     selected = cache.match_prefix(MatchPrefixParams(key=target, context_retry=True))
@@ -162,6 +167,7 @@ def test_longest_retry_and_one_sided_reposition(compiler):
     # Eviction must remove the lazy Retry child entries, as well as native keys.
     cache.evict(EvictParams(num_tokens=2048))
     assert allocator.available_size() == 2048
+    assert len(torch.unique(allocator.get_all_free_pages())) == 2048
     assert not len(
         cache.match_prefix(
             MatchPrefixParams(key=target, context_retry=True)
