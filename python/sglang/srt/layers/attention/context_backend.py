@@ -467,7 +467,7 @@ class ContextPrefillInput:
             plan = item.attention_plan
             fields = [
                 plan.packed[a:b].numpy()
-                for a, b in zip(plan.field_offsets[:-1], plan.field_offsets[1:])
+                for a, b in plan.field_ranges
             ]
             _, offsets, occurrences, query_positions, prefix_positions = fields
             sequences.append(
