@@ -771,6 +771,12 @@ class PrefillAdder:
         if isinstance(budget, SWAPrefillBudget) and budget.req_ring:
             raise ValueError("Context occurrence ownership does not use SWA rings")
         length = admission.extend_len
+        recovery = getattr(req, "context_recovery_plan", None)
+        if recovery is not None:
+            start, end = recovery.next_interval(admission.prefix_len)
+            if start != admission.prefix_len:
+                raise RuntimeError("Context recovery gap was not adopted before admission")
+            length = min(length, end - start)
         while length > 0:
             truncated = admission.is_chunked or length < admission.extend_len
             max_new = 0 if truncated else admission.max_new_tokens

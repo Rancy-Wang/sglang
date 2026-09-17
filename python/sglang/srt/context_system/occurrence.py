@@ -513,6 +513,47 @@ class OccurrenceState:
             exact_prefix_len,
         )
 
+    def reuse_match_gap(
+        self, matched_slots, matched_positions, resident, end, *, exact_prefix_len
+    ):
+        """Advance over a resident gap between recovery query intervals.
+
+        The original matched path must remain leased. Gap slots are borrowed
+        canonical sources, not target-version pages: the next forward makes
+        any required COW/RoPE copies before cache publication. This operation
+        allocates metadata only and never retires or allocates a physical page.
+        """
+        start = len(self.canonical_rows)
+        if (
+            not start <= end <= len(matched_slots)
+            or matched_positions.device.type != "cpu"
+            or matched_positions.dtype != torch.int32
+            or resident.device.type != "cpu"
+            or resident.dtype != torch.bool
+            or matched_positions.shape != matched_slots.shape
+            or resident.shape != matched_slots.shape
+            or matched_slots.ndim != 1
+            or matched_slots.dtype != self.slots.dtype
+            or matched_slots.device != self.slots.device
+            or not self.exact_prefix_len <= exact_prefix_len <= len(matched_slots)
+        ):
+            raise ValueError("Invalid matched gap ownership metadata")
+        if end == start:
+            return self
+        count = end - start
+        rows = torch.arange(len(self.slots), len(self.slots) + count, dtype=torch.int64)
+        rows[~resident[start:end]] = -1
+        return OccurrenceState(
+            torch.cat((self.slots, matched_slots[start:end])),
+            torch.cat((self.owned, torch.zeros(count, dtype=torch.bool))),
+            torch.cat((self.canonical_rows, rows)),
+            torch.cat(
+                (self.terminal_rows, torch.full((count,), -1, dtype=torch.int64))
+            ),
+            torch.cat((self.canonical_positions, matched_positions[start:end])),
+            min(end, exact_prefix_len),
+        )
+
     def plan(self, window, terminal_keep):
         start = len(self.canonical_rows)
         canonical = self.canonical_rows.numpy()

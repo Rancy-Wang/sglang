@@ -213,7 +213,17 @@ def test_large_page_context_rejected_without_changing_native_cache(compiler):
 
 
 @pytest.mark.parametrize(
-    "mode", ["cold", "duplicate", "retry", "disabled", "holes", "holes_abort"]
+    "mode",
+    [
+        "cold",
+        "duplicate",
+        "retry",
+        "disabled",
+        "holes",
+        "holes_abort",
+        "recovery",
+        "recovery_gap_abort",
+    ],
 )
 def test_context_occurrence_native_publication_and_release(compiler, mode):
     from sglang.srt.context_system.planner import ContextProgram
@@ -317,10 +327,43 @@ def test_context_occurrence_native_publication_and_release(compiler, mode):
             req.kv.cache_protected_len = 64
             req.last_node = matched.last_device_node
             req.lock_receipt = cache.inc_lock_ref(req.last_node).to_dec_params()
-        for end in (
+        ends = (
             [80, 128] if mode == "retry" or mode.startswith("holes") else [17, 57, 128]
-        ):
+        )
+        if mode.startswith("recovery"):
+            source_tokens = tokens.copy()
+            source_tokens[40] = 999
+            source_layout = compiler(*args(source_tokens, drops, repos))
+            resident = program.visible_until[:64] > 64
+            slots = torch.full((64,), -1, dtype=torch.int64)
+            slots[resident] = allocator.alloc(int(resident.sum()))
+            cache.insert(
+                InsertParams(
+                    key=RadixKey.from_context(source_layout)[:64],
+                    value=slots,
+                    context_resident=resident,
+                )
+            )
+            req.init_next_round_input(cache)
+            assert req.context_recovery_plan.matched_length == 40
+            assert req.context_recovery_plan.start < 40
+            req.lock_receipt = cache.inc_lock_ref(req.last_node).to_dec_params()
+            ends = [
+                min(a + 7, end)
+                for start, end in req.context_recovery_plan.intervals
+                for a in range(start, end, 7)
+            ]
+        queried = []
+        for end in ends:
+            req.advance_context_recovery_gap()
+            if mode == "recovery_gap_abort" and req.context_gap_prefix is not None:
+                before = allocator.available_size()
+                cache.cache_unfinished_req(req, chunked=True)
+                assert allocator.available_size() == before
+                break
+            req.commit_context_recovery_gap()
             start = len(req.prefix_indices)
+            queried.extend(range(start, end))
             extra = req.plan_context_prefill(end)
             window, plan = req.context_window_plan
             advanced = req.context_state.advance(
@@ -343,8 +386,15 @@ def test_context_occurrence_native_publication_and_release(compiler, mode):
                 == allocator.available_size()
             )
             cache.sanity_check()
+        if mode == "recovery":
+            assert queried == [
+                q for a, b in req.context_recovery_plan.intervals for q in range(a, b)
+            ]
+            assert len(queried) < 128
         cache.cache_finished_req(
-            req, kv_len_to_handle=128, is_insert=mode != "holes_abort"
+            req,
+            kv_len_to_handle=req.kv.kv_committed_len,
+            is_insert=mode not in {"holes_abort", "recovery_gap_abort"},
         )
         assert req.context_state is None
         assert req.context_source_lease is None

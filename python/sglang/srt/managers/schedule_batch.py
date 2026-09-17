@@ -1044,6 +1044,9 @@ class Req(ReqDllmMixin):
         self.context_key_data = None
         self.context_source_positions = None
         self.context_resident = None
+        self.context_recovery_plan = None
+        self.context_recovery_source = None
+        self.context_gap_prefix = None
         self.context_exact_prefix_len = 0
         self.context_state = None
         self.context_decode_layout = None
@@ -1608,6 +1611,81 @@ class Req(ReqDllmMixin):
             context=data,
         )
 
+    def prepare_context_recovery(self):
+        """Choose repair intervals while the match is still admission-only."""
+        from sglang.srt.context_system.recovery import plan_recovery
+        from sglang.srt.context_system.usage import ContextUsage
+
+        program = self.context_recompute_program or self.context_program
+        if program is None:
+            return
+        matched = len(self.prefix_indices)
+        positions = self.context_source_positions
+        if positions is None:
+            positions = program.layout.positions[:matched]
+        resident = self.context_resident
+        if resident is None:
+            resident = torch.ones(matched, dtype=torch.bool)
+        rewind = resident & (positions != program.layout.birth_positions[:matched])
+        incompatible = rewind & (positions != program.layout.positions[:matched])
+        recovery = plan_recovery(
+            resident,
+            program.visible_until,
+            len(program.layout.positions),
+            rewind,
+            incompatible,
+        )
+        self.context_recovery_plan = recovery
+        self.context_recovery_source = None
+        self.context_gap_prefix = None
+        if self.context_usage is None:
+            self.context_usage = ContextUsage(
+                recovery.reusable_prefix,
+                ~program.layout.keep_mask[:matched],
+            )
+        if recovery.start < matched:
+            self.context_recovery_source = (
+                self.prefix_indices,
+                positions,
+                resident,
+                self.context_exact_prefix_len,
+            )
+            self.prefix_indices = self.prefix_indices[: recovery.start]
+            self.context_source_positions = positions[: recovery.start]
+            self.context_resident = resident[: recovery.start]
+            self.kv.cache_protected_len = min(self.kv.cache_protected_len, recovery.start)
+
+    def advance_context_recovery_gap(self):
+        recovery = self.context_recovery_plan
+        source = self.context_recovery_source
+        if recovery is None or source is None or self.context_state is None:
+            return
+        cursor = len(self.context_state.canonical_rows)
+        start, _ = recovery.next_interval(cursor)
+        if start > cursor:
+            slots, positions, resident, exact = source
+            self.context_state = self.context_state.reuse_match_gap(
+                slots,
+                positions,
+                resident,
+                start,
+                exact_prefix_len=exact,
+            )
+            self.prefix_indices = torch.cat(
+                (self.prefix_indices[:cursor], slots[cursor:start])
+            )
+            # Commit this borrowed gap's ownership only when the next forward
+            # is dispatched. An admission retry/abort still owns the old range.
+            self.context_gap_prefix = min(start, exact)
+
+    def commit_context_recovery_gap(self):
+        if self.context_gap_prefix is not None:
+            self.kv.cache_protected_len = max(
+                self.kv.cache_protected_len,
+                self.context_gap_prefix,
+            )
+            self.context_gap_prefix = None
+
     def plan_context_prefill(self, query_end: int) -> int:
         """Plan CPU ownership before admission charges occurrence allocations."""
         from sglang.srt.context_system.occurrence import (
@@ -1627,7 +1705,7 @@ class Req(ReqDllmMixin):
             self.context_state = OccurrenceState.from_match(
                 self.prefix_indices,
                 positions,
-                exact_prefix_len=self.context_exact_prefix_len,
+                exact_prefix_len=min(start, self.context_exact_prefix_len),
                 resident=self.context_resident,
             )
             if self.context_usage is None:
@@ -1772,8 +1850,14 @@ class Req(ReqDllmMixin):
             else:
                 self.kv.cache_protected_len = len(self.prefix_indices)
 
+            if self.context_program is not None:
+                self.prepare_context_recovery()
+
             if self.is_dllm():
                 self._update_block_offset_for_dllm()
+
+        if tree_cache is None:
+            self.advance_context_recovery_gap()
 
         if (
             self.is_retracted
@@ -2051,6 +2135,9 @@ class Req(ReqDllmMixin):
         self.context_source_positions = None
         self.context_exact_prefix_len = 0
         self.context_resident = None
+        self.context_recovery_plan = None
+        self.context_recovery_source = None
+        self.context_gap_prefix = None
         self.context_recompute_program = None
         if self.context_usage is not None:
             self.context_usage.begin_recompute()
@@ -3099,6 +3186,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
                 sequences.append(ContextSequence.ordinary(len(req.prefix_indices), length))
                 slots.append(torch.cat((req.prefix_indices, birth)))
                 continue
+            req.commit_context_recovery_gap()
             window, plan = req.context_window_plan
             allocated = extra[extra_offset : extra_offset + plan.extra_page_count]
             extra_offset += plan.extra_page_count

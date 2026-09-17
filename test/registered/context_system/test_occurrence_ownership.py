@@ -412,3 +412,98 @@ def test_hole_lifetime_and_publication_does_not_claim_missing_kv(compiler, occur
     published = step.state.publish(terminal)
     assert published.terminal_slots().tolist() == terminal.tolist()
     assert published.private_slots().numel() == 0
+
+
+def test_sparse_recovery_reuses_gaps_with_independent_position_versions(
+    compiler, occurrence
+):
+    recovery = load_file(
+        "context_gap_recovery", ROOT / "python/sglang/srt/context_system/recovery.py"
+    )
+    rng = np.random.default_rng(17391)
+    for trial in range(80):
+        n, matched = 32, 26
+        drops = {8: [(1, 4)], 20: [(8, 12)]}
+        layout = compiler(*args(list(range(n)), drops, [15, 23] if trial % 2 else []))
+        expiry = expiry_for(n, drops)
+        resident = torch.from_numpy(rng.random(matched) > 0.2)
+        source_positions = layout.positions[:matched].clone()
+        rewind = resident & (source_positions != layout.birth_positions[:matched])
+        recovery_plan = recovery.plan_recovery(resident, expiry, n, rewind)
+        first = recovery_plan.start
+        source_slots = torch.arange(1, matched + 1, dtype=torch.int64)
+        source_slots[~resident] = -1
+        state = occurrence.OccurrenceState.from_match(
+            source_slots[:first],
+            source_positions[:first],
+            exact_prefix_len=first,
+            resident=resident[:first],
+        )
+        next_slot = matched + 1
+        page_positions = dict(
+            zip(source_slots[resident].tolist(), source_positions[resident].tolist())
+        )
+        queried = []
+        owned_live = set()
+        for start, end in recovery_plan.intervals:
+            # Chunk a repair interval as well as jumping over retained gaps.
+            for a in range(start, end, 3):
+                b = min(a + 3, end)
+                state = (
+                    state.reuse_match_gap(
+                        source_slots,
+                        source_positions,
+                        resident,
+                        a,
+                        exact_prefix_len=matched,
+                    )
+                    if a <= matched
+                    else state
+                )
+                assert len(state.canonical_rows) == a
+                window = occurrence.compile_occurrence_window(
+                    layout,
+                    expiry,
+                    layout.positions,
+                    query_start=a,
+                    query_end=b,
+                )
+                keep = torch.ones(b, dtype=torch.bool)
+                keep[:a] = (state.canonical_rows >= 0) | (state.terminal_rows >= 0)
+                plan = state.plan(window, keep)
+                queries = torch.arange(next_slot, next_slot + b - a)
+                next_slot += len(queries)
+                extra = torch.arange(next_slot, next_slot + plan.extra_page_count)
+                next_slot += len(extra)
+                owned_live.update(queries.tolist() + extra.tolist())
+                page_positions.update(
+                    zip(queries.tolist(), layout.birth_positions[a:b].tolist())
+                )
+                step = state.advance(window, plan, queries, extra, expiry)
+                for src, dst, (old, new) in zip(
+                    step.copy_source_slots.tolist(),
+                    step.copy_destination_slots.tolist(),
+                    step.copy_position_pairs.tolist(),
+                ):
+                    assert src != dst
+                    assert page_positions[src] == old
+                    page_positions[dst] = new
+                read = window.segment_key_occurrences
+                for slot, pos in zip(
+                    step.occurrence_slots[read].tolist(),
+                    window.occurrence_positions[read].tolist(),
+                ):
+                    assert slot > 0 and page_positions[slot] == pos
+                retired = set(step.retired_slots.tolist())
+                assert retired <= owned_live
+                owned_live -= retired
+                state = step.state
+                assert set(state.slots[state.owned].tolist()) == owned_live
+                queried.extend(range(a, b))
+        assert queried == [q for a, b in recovery_plan.intervals for q in range(a, b)]
+        assert not set(queried) & set(
+            torch.nonzero(recovery_plan.reusable_prefix).flatten().tolist()
+        )
+        final = state.terminal_slots()
+        for raw in torch.nonzero(layout.keep_mask).flatten().tolist():
+            assert page_positions[int(final[raw])] == int(layout.positions[raw])

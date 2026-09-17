@@ -986,6 +986,9 @@ class UnifiedRadixCache(BasePrefixCache):
             req.context_state = None
             req.context_decode_layout = None
             req.context_recompute_program = None
+            req.context_recovery_plan = None
+            req.context_recovery_source = None
+            req.context_gap_prefix = None
             req.context_window_plan = None
             req.context_prefill_started = False
             req.context_cache_published = False
@@ -1134,6 +1137,10 @@ class UnifiedRadixCache(BasePrefixCache):
 
     @rank_consensus(same_params=["req.rid", "chunked"])
     def cache_unfinished_req(self, req: Req, chunked: bool = False, **kwargs) -> None:
+        if getattr(req, "context_gap_prefix", None) is not None:
+            # The preceding repair chunk is already published. Gap adoption
+            # alone has neither computed nor materialized target-version KV.
+            return
         state = getattr(req, "context_state", None)
         if state is not None:
             self._prepare_context_cache_row(req, retain_source=True)
@@ -1156,7 +1163,10 @@ class UnifiedRadixCache(BasePrefixCache):
                 retain_source
                 and req.context_source_lease is None
                 and req.last_node is not None
-                and req.context_exact_prefix_len < req.kv.cache_protected_len
+                and (
+                    req.context_exact_prefix_len < req.kv.cache_protected_len
+                    or req.context_recovery_source is not None
+                )
             ):
                 # The native request lease moves to the target branch below.
                 # Keep the Retry source branch alive for remaining birth reads.
