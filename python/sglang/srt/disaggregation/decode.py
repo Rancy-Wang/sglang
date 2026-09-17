@@ -452,14 +452,20 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
     def _uses_swa_tail_prealloc(self) -> bool:
         return (
             isinstance(self.token_to_kv_pool, (SWAKVPool, DeepSeekV4TokenToKVPool))
-            and self.token_to_kv_pool_allocator.page_size > 1
-            and hasattr(self.token_to_kv_pool_allocator, "alloc_extend_swa_tail")
+            and (
+                (
+                    self.token_to_kv_pool_allocator.page_size == 1
+                    and hasattr(self.token_to_kv_pool_allocator, "alloc_context_swa_tail")
+                )
+                or (
+                    self.token_to_kv_pool_allocator.page_size > 1
+                    and hasattr(self.token_to_kv_pool_allocator, "alloc_extend_swa_tail")
+                )
+            )
         )
 
     def _uses_separate_swa_budgets(self) -> bool:
-        # Native page-size-one requests still allocate the full SWA prompt.
-        # Once a Context request enters, admission must track both physical
-        # pools independently; _prealloc_kv_lens keeps native charges intact.
+        # Admission tracks the Full and SWA physical pools independently.
         return self._uses_swa_tail_prealloc() or getattr(
             self, "_context_swa_admission", False
         )
@@ -2111,7 +2117,11 @@ def alloc_for_decode_prealloc(
 ) -> torch.Tensor:
     req.kv.kv_allocated_len = fill_len
     if allocator.page_size == 1:
-        kv_loc = allocator.alloc(delta_len)
+        if uses_swa_tail:
+            kv_loc = allocator.alloc_context_swa_tail(delta_len, swa_tail_len)
+            req.kv.swa_evicted_seqlen = fill_len - swa_tail_len
+        else:
+            kv_loc = allocator.alloc(delta_len)
     else:
         device = allocator.device
         last_loc = (
