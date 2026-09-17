@@ -5,8 +5,8 @@ import triton.language as tl
 
 
 @triton.jit
-def write_row_slots(Pointers, Rows, Columns, Values, N: tl.constexpr):
-    i = tl.arange(0, triton.next_power_of_2(N))
+def write_row_slots(Pointers, Rows, Columns, Values, N: tl.constexpr, BLOCK: tl.constexpr):
+    i = tl.arange(0, BLOCK)
     valid = i < N
     row = tl.load(Rows + i, valid, 0)
     column = tl.load(Columns + i, valid, 0)

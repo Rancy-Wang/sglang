@@ -63,6 +63,8 @@ def write_request_slots(pool, indices, values):
     if isinstance(row, int):
         request_row(pool, row)[columns] = values
     elif pool.req_to_token.is_cuda:
+        import triton
+
         from sglang.kernels.ops.memory.context_rows import write_row_slots
 
         write_row_slots[(1,)](
@@ -71,6 +73,7 @@ def write_request_slots(pool, indices, values):
             columns,
             values,
             row.numel(),
+            triton.next_power_of_2(row.numel()),
         )
     else:
         for index, column, value in zip(row.tolist(), columns.tolist(), values):
