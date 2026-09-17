@@ -38,6 +38,7 @@ def pd_servers():
             env = os.environ.copy()
             for name, subdir in (
                 ("SGLANG_CACHE_DIR", "sglang-cache"),
+                ("SGLANG_JIT_CACHE_DIR", "sglang-jit-cache"),
                 ("TRITON_CACHE_DIR", "triton-cache"),
                 ("TMPDIR", "tmp"),
             ):
