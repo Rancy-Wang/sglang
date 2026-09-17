@@ -11,9 +11,9 @@
       "added": 8,
       "deleted": 4,
       "sha256": "821a1f6f8f963dba741501065b1d69edb6f2a2cc17b9815311353d1ef618f198",
-      "classification": "review-native-adapter",
+      "classification": "retain-sglang-native; compare model/configuration semantics",
       "symbols": [],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/attention/base.py",
@@ -108,7 +108,7 @@
           "end_line": 1054
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/attention/fa.py",
@@ -158,7 +158,7 @@
           "end_line": 418
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/attention/fi.py",
@@ -193,7 +193,7 @@
           "end_line": 554
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/core.py",
@@ -243,7 +243,7 @@
           "end_line": 939
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/engine/engine.py",
@@ -278,7 +278,7 @@
           "end_line": 316
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/engine/graph.py",
@@ -313,7 +313,7 @@
           "end_line": 176
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/engine/sample.py",
@@ -343,7 +343,7 @@
           "end_line": 132
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/engine/tool_grammar.py",
@@ -363,7 +363,7 @@
           "end_line": 242
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kernel/__init__.py",
@@ -372,7 +372,7 @@
       "sha256": "aad256ca25cad2b04b120cf703cbf6f786d383586a43e2c4ac811687e33f8e95",
       "classification": "migrate-context-semantics",
       "symbols": [],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kernel/context_mask.py",
@@ -397,7 +397,7 @@
           "end_line": 98
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kernel/context_page_table.py",
@@ -427,7 +427,7 @@
           "end_line": 173
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kernel/context_plan.py",
@@ -497,7 +497,7 @@
           "end_line": 444
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kernel/csrc/jit/context_mask.cu",
@@ -506,7 +506,7 @@
       "sha256": "475e639f58d285d14467c3174f67cc437098528f864417f95f3ab76d622bfbaf",
       "classification": "migrate-context-semantics",
       "symbols": [],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kernel/csrc/src/context_page_table.cu",
@@ -515,7 +515,7 @@
       "sha256": "044c7ec000ec2d4835af41cc935d11b6a84f2c0f46ff1556dd90e21757b8c67a",
       "classification": "migrate-context-semantics",
       "symbols": [],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kernel/csrc/src/context_plan.cpp",
@@ -524,7 +524,7 @@
       "sha256": "64c0a603da9b37af8526a4ee62f4188786cd43df8ddf307e76041ec37e1a7f2e",
       "classification": "migrate-context-semantics",
       "symbols": [],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kernel/csrc/src/radix.cpp",
@@ -533,7 +533,7 @@
       "sha256": "b10c6282fb13814a25fe20a57f55296854b5f42039846b55bc089f4ca64753a1",
       "classification": "migrate-context-semantics",
       "symbols": [],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kernel/csrc/src/radix_reposition.cpp",
@@ -542,7 +542,7 @@
       "sha256": "3392b2524afd142a0efc4e901d2cd33edd16046fc35ec55619692d6e75e7b0aa",
       "classification": "migrate-context-semantics",
       "symbols": [],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kernel/csrc/src/text_match.cpp",
@@ -551,14 +551,14 @@
       "sha256": "694c334573bd926f75e0142081853243763a37049b8919e06c9162125a110a07",
       "classification": "migrate-context-semantics",
       "symbols": [],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kernel/pynccl.py",
       "added": 75,
       "deleted": 1,
       "sha256": "17b11310fe7c653b6f9a418a865eb821808b9de4f906d02d31dfe28064332e5a",
-      "classification": "migrate-context-semantics",
+      "classification": "retain-sglang-native; compare model/configuration semantics",
       "symbols": [
         {
           "name": "_nccl_library_directories",
@@ -586,7 +586,7 @@
           "end_line": 152
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kernel/radix.py",
@@ -651,7 +651,7 @@
           "end_line": 93
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kernel/radix_reposition.py",
@@ -696,7 +696,7 @@
           "end_line": 333
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kernel/reposition_kv.py",
@@ -716,7 +716,7 @@
           "end_line": 106
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kernel/text_match.py",
@@ -776,7 +776,7 @@
           "end_line": 313
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kernel/triton/reposition_kv.py",
@@ -791,7 +791,7 @@
           "end_line": 75
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kvcache/__init__.py",
@@ -826,7 +826,7 @@
           "end_line": 95
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kvcache/base.py",
@@ -866,7 +866,7 @@
           "end_line": 169
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kvcache/mha_pool.py",
@@ -881,7 +881,7 @@
           "end_line": 111
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kvcache/naive_cache.py",
@@ -901,7 +901,7 @@
           "end_line": 59
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/kvcache/radix_cache.py",
@@ -936,7 +936,7 @@
           "end_line": 852
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/layers/attention.py",
@@ -951,14 +951,14 @@
           "end_line": 72
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/layers/linear.py",
       "added": 6,
       "deleted": 4,
       "sha256": "97248931e3fc712dfc54efc3a8c9520c9a8bde12889a90b2fd941542a0b00886",
-      "classification": "review-native-adapter",
+      "classification": "retain-sglang-native; compare model/configuration semantics",
       "symbols": [
         {
           "name": "_LinearTPImpl",
@@ -991,7 +991,7 @@
           "end_line": 129
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/layers/rotary.py",
@@ -1026,7 +1026,7 @@
           "end_line": 196
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/llm/llm.py",
@@ -1051,7 +1051,7 @@
           "end_line": 114
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/message/__init__.py",
@@ -1060,7 +1060,7 @@
       "sha256": "ed4d767d3b34095d55bdd7832b0cfa73c2eb0652372cdd63e4dcf64466337b3e",
       "classification": "review-native-adapter",
       "symbols": [],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/message/backend.py",
@@ -1110,7 +1110,7 @@
           "end_line": 161
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/message/frontend.py",
@@ -1145,7 +1145,7 @@
           "end_line": 60
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/message/metrics.py",
@@ -1165,7 +1165,7 @@
           "end_line": 167
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/message/tokenizer.py",
@@ -1220,7 +1220,7 @@
           "end_line": 117
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/message/utils.py",
@@ -1250,14 +1250,14 @@
           "end_line": 76
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/models/config.py",
       "added": 117,
       "deleted": 5,
       "sha256": "e8b944f085c81392c871fc5d2ad9b77e8db4ee97475c9069c4647181c60e2dd3",
-      "classification": "retain-native-sglang",
+      "classification": "retain-sglang-native; compare model/configuration semantics",
       "symbols": [
         {
           "name": "_config_value",
@@ -1280,14 +1280,14 @@
           "end_line": 199
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/models/gpt_oss.py",
       "added": 155,
       "deleted": 0,
       "sha256": "9979ac9f09a7a8409f2fa74d4a9987a973e0100f4ff1301dae96ad7177cc1ac1",
-      "classification": "retain-native-sglang",
+      "classification": "retain-sglang-native; compare model/configuration semantics",
       "symbols": [
         {
           "name": "GptOssAttention",
@@ -1315,14 +1315,14 @@
           "end_line": 152
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/models/register.py",
       "added": 2,
       "deleted": 1,
       "sha256": "1f0a32af78d1fc6e5dfb79967197835f5dd33fb953c2e96137d1f0a90b1f56bc",
-      "classification": "retain-native-sglang",
+      "classification": "retain-sglang-native; compare model/configuration semantics",
       "symbols": [
         {
           "name": "get_model_class",
@@ -1330,14 +1330,14 @@
           "end_line": 22
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/models/weight.py",
       "added": 149,
       "deleted": 0,
       "sha256": "37962bec045abe12767a25b632b185befaf6e0eec82152e9c1c70c28bd253839",
-      "classification": "retain-native-sglang",
+      "classification": "retain-sglang-native; compare model/configuration semantics",
       "symbols": [
         {
           "name": "_pad_tensor",
@@ -1380,14 +1380,14 @@
           "end_line": 273
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/moe/mxfp4.py",
       "added": 231,
       "deleted": 0,
       "sha256": "0a17b27f59c1dea113e24eaa01f0086b4105805e01409e62daf3f5cf900ccaab",
-      "classification": "retain-native-sglang",
+      "classification": "retain-sglang-native; compare model/configuration semantics",
       "symbols": [
         {
           "name": "_load_triton_kernels_abi",
@@ -1410,7 +1410,7 @@
           "end_line": 228
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/scheduler/cache.py",
@@ -1440,7 +1440,7 @@
           "end_line": 955
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/scheduler/compact_indices.py",
@@ -1465,7 +1465,7 @@
           "end_line": 103
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/scheduler/config.py",
@@ -1485,7 +1485,7 @@
           "end_line": 47
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/scheduler/drop_recovery.py",
@@ -1520,7 +1520,7 @@
           "end_line": 190
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/scheduler/io.py",
@@ -1535,7 +1535,7 @@
           "end_line": 150
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/scheduler/metadata_indices.py",
@@ -1560,7 +1560,7 @@
           "end_line": 46
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/scheduler/overlap_state.py",
@@ -1585,7 +1585,7 @@
           "end_line": 111
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/scheduler/prefill.py",
@@ -1685,7 +1685,7 @@
           "end_line": 121
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/scheduler/radix_symbol.py",
@@ -1710,7 +1710,7 @@
           "end_line": 87
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/scheduler/reposition_occurrence.py",
@@ -1755,7 +1755,7 @@
           "end_line": 445
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/scheduler/reposition_sequence.py",
@@ -1770,7 +1770,7 @@
           "end_line": 329
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/scheduler/scheduler.py",
@@ -1820,7 +1820,7 @@
           "end_line": 53
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/scheduler/utils.py",
@@ -1840,7 +1840,7 @@
           "end_line": 80
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/server/api_server.py",
@@ -2250,7 +2250,7 @@
           "end_line": 123
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/tokenizer/drop_rules.py",
@@ -2365,7 +2365,7 @@
           "end_line": 189
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/tokenizer/reposition_sequence.py",
@@ -2380,7 +2380,7 @@
           "end_line": 374
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "python/minisgl/tokenizer/server.py",
@@ -2552,7 +2552,7 @@
       "added": 4,
       "deleted": 4,
       "sha256": "b8c31e03050e7c86424bcef9700e627a32dedac6f1f00e2362559809759fb276",
-      "classification": "review-native-adapter",
+      "classification": "retain-sglang-native; compare model/configuration semantics",
       "symbols": [
         {
           "name": "ZmqPushQueue",
@@ -2585,7 +2585,7 @@
           "end_line": 151
         }
       ],
-      "audit_status": "indexed; end-to-end review tracked in migration.md"
+      "audit_status": "full System-vs-main diff read; migration/end-to-end verification recorded separately in migration.md"
     },
     {
       "path": "tests/attention/test_gap_aware_sliding_window.py",
