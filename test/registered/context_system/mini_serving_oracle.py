@@ -73,8 +73,13 @@ async def main():
         assert runner.tokenizer.is_gpt_oss and trace["model"] == model
         assert len(trace["input_ids"]) == len(trace["owners"])
 
+        expected_messages = [
+            module.api.Message(**message).model_dump()
+            for message in fixture["messages"]
+        ]
+
         def normalized_harmony(messages, **kwargs):
-            assert messages == fixture["messages"]
+            assert messages == expected_messages
             runner.tokenizer._harmony_thinking_ranges = {}
             return (
                 list(trace["input_ids"]),
