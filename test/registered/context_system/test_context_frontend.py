@@ -282,6 +282,72 @@ def test_real_model_template_token_ids(chat, model_path):
         assert len(program.layout.drop_ranges) > 0
 
 
+@pytest.mark.parametrize(
+    "model_path",
+    [
+        path
+        for path in os.environ.get("CONTEXT_TOKENIZER_PATHS", "").split(os.pathsep)
+        if path
+    ]
+    or [None],
+)
+def test_real_thinking_retention_and_exact_drop(chat, model_path):
+    if model_path is None:
+        pytest.skip("mandatory-model tokenizer paths required")
+    from sglang.srt.context_system.planner import ContextProgram
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
+    original_template = tokenizer.chat_template
+    chat.tokenizer_manager.tokenizer = tokenizer
+    chat._tokenizer_auto_adds_specials = bool(tokenizer.encode(""))
+    history = [
+        {"role": "user", "content": "Find the answer"},
+        {
+            "role": "assistant",
+            "content": "",
+            "reasoning_content": "First investigate the source.",
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "lookup",
+                        "arguments": '{"query":"test"}',
+                    },
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_1", "content": "source answer"},
+        {
+            "role": "assistant",
+            "content": "answer",
+            "reasoning_content": "Now verify the answer.",
+        },
+        {"role": "user", "content": "Explain the answer"},
+    ]
+    kwargs = {"preserve_thinking_history": True}
+    retained = chat._process_messages(
+        request(messages=history, chat_template_kwargs=kwargs), False
+    )
+    dropped = chat._process_messages(
+        request(messages=history, drop_rule={"type": "thinking_drop"}), False
+    )
+    assert retained.prompt_ids == dropped.prompt_ids
+    text = tokenizer.decode(retained.prompt_ids)
+    for message in history:
+        reasoning = message.get("reasoning_content")
+        if reasoning:
+            assert text.count(reasoning) == 1, (Path(model_path).name, text)
+    program = ContextProgram.from_wire(dropped.context_program, dropped.prompt_ids)
+    assert not program.layout.keep_mask.all()
+    assert tokenizer.chat_template == original_template
+    # A retention preference must not modify messages with no reasoning.
+    plain = chat._process_messages(request(), False)
+    kept = chat._process_messages(request(chat_template_kwargs=kwargs), False)
+    assert plain.prompt_ids == kept.prompt_ids
+
+
 @pytest.mark.parametrize("repos", [None, [1]])
 def test_req_decode_key_and_native_cache_lifecycle(chat, repos):
     import torch
