@@ -11,6 +11,30 @@ storage = load_file(
 )
 
 
+def test_prefill_capacity_uses_actual_queries_and_invalidates_on_retry():
+    # Drop 0:7 before q8: final active=3, but cold q7 must read eight keys.
+    program = SimpleNamespace(
+        visible_until=torch.tensor([8] * 7 + [100] * 3, dtype=torch.int32)
+    )
+    req = SimpleNamespace(
+        context_program=program,
+        context_recompute_program=None,
+        context_recovery_plan=SimpleNamespace(intervals=((0, 10),)),
+    )
+    assert "at least 8" in storage.prefill_capacity_error(req, 6)
+    assert storage.prefill_capacity_error(req, 8) is None
+    # Same request can get a better cache match while waiting. Do not reject
+    # historical queries which will never run, including gaps between repairs.
+    req.context_recovery_plan.intervals = ((1, 2), (8, 10))
+    assert storage.prefill_capacity_error(req, 3) is None
+    assert "at least 3" in storage.prefill_capacity_error(req, 2)
+    # A new recompute program after retraction must invalidate the old peak.
+    req.context_recompute_program = SimpleNamespace(
+        visible_until=torch.full((10,), 100, dtype=torch.int32)
+    )
+    assert "at least 10" in storage.prefill_capacity_error(req, 6)
+
+
 def pool_and_request(device="cpu"):
     pool = SimpleNamespace(
         req_to_token=torch.zeros((3, 16), dtype=torch.int32, device=device),
