@@ -1013,11 +1013,8 @@ class UnifiedRadixCache(BasePrefixCache):
                 token_ids = token_ids[:effective_cache_len]
                 kv_indices = kv_indices[:effective_cache_len]
 
-            radix_key = RadixKey(
-                token_ids,
-                req.extra_key,
-                is_bigram=self.tree_core.is_eagle,
-                cache_salt=req.cache_salt,
+            radix_key = req.make_prefix_key(
+                token_ids, is_bigram=self.tree_core.is_eagle
             ).page_aligned(self.page_size)
             page_aligned_len = len(radix_key)
             values = kv_indices[:page_aligned_len].to(dtype=torch.int64, copy=True)
@@ -1035,11 +1032,8 @@ class UnifiedRadixCache(BasePrefixCache):
             # tail releases everything past the protected prefix below, so the
             # split is skipped there rather than handing the tree rows that
             # are about to be freed.
-            prompt_key = RadixKey(
-                req.origin_input_ids,
-                req.extra_key,
-                is_bigram=self.tree_core.is_eagle,
-                cache_salt=req.cache_salt,
+            prompt_key = req.make_prefix_key(
+                req.origin_input_ids, is_bigram=self.tree_core.is_eagle
             ).page_aligned(self.page_size)
             if (
                 not result.rotation_tail_declined
@@ -1139,11 +1133,8 @@ class UnifiedRadixCache(BasePrefixCache):
             if cl is not None:
                 effective_cache_len = min(effective_cache_len, cl)
 
-        radix_key = RadixKey(
-            token_ids[:effective_cache_len],
-            req.extra_key,
-            is_bigram=self.tree_core.is_eagle,
-            cache_salt=req.cache_salt,
+        radix_key = req.make_prefix_key(
+            token_ids[:effective_cache_len], is_bigram=self.tree_core.is_eagle
         )
 
         if envs.SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS.get():

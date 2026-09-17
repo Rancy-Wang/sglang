@@ -261,7 +261,7 @@ class ContextKeyData:
     A unit owns virtual records immediately before its TOKEN record. Tail events
     have no KV and remain in the request program; they become leading records of
     the next real token when that token is appended. Final TOKEN positions still
-    distinguish tail Reposition versions. Slices share this immutable storage.
+    distinguish tail Reposition versions. Slices share append-only storage; published records are never rewritten.
     """
 
     records: array
@@ -302,6 +302,40 @@ class ContextKeyData:
         return cls(
             records, token_map, special_tokens, retry_records, event_tokens, positions
         )
+
+    def append_tokens(
+        self, token_ids: array, *, next_position: int, current_reposition: int
+    ) -> None:
+        """Append decode identity without copying or recompiling the prompt.
+
+        A trailing Drop is already in records and becomes the leading event of
+        the first appended token. Existing token spans and tree slices remain
+        unchanged. Validate the complete suffix before mutating shared storage.
+        """
+        count = len(token_ids)
+        if not count:
+            return
+        if (
+            next_position < 0
+            or next_position + count > 2**31
+            or not -1 <= current_reposition < 2**31
+            or any(token < 0 or token >= 2**31 for token in token_ids)
+        ):
+            raise ValueError("Context decode tokens/positions exceed int32 range")
+        for offset, token in enumerate(token_ids):
+            raw = len(self.token_to_record)
+            record = len(self.records) // 4
+            preceding = self.token_to_record[-1] + 1 if raw else 0
+            position = next_position + offset
+            has_event = record != preceding
+            if has_event:
+                self.event_tokens.append(raw)
+            if has_event or current_reposition != -1 or position != raw:
+                self.special_tokens.append(raw)
+            self.records.extend((TOKEN_KIND, token, current_reposition, position))
+            self.retry_records.extend((TOKEN_KIND, token, 0, 0))
+            self.token_to_record.append(record)
+            self.positions.append(position)
 
     def record_start(self, raw: int) -> int:
         return 0 if raw == 0 else self.token_to_record[raw - 1] + 1
