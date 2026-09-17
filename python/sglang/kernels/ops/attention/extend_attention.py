@@ -934,6 +934,8 @@ def extend_attention_fwd(
     if use_context_positions != (context_kv_positions is not None):
         raise ValueError("Context attention requires both query and KV positions")
     if use_context_positions:
+        if page_size != 1:
+            raise ValueError("Context attention requires page_size=1")
         for positions, count in (
             (context_q_positions, q_extend.shape[0]),
             (context_kv_positions, kv_indices.numel()),

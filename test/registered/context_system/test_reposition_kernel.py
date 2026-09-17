@@ -33,12 +33,9 @@ def kernels():
 
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
-@pytest.mark.parametrize("page_size", [1, 4, 16, 64])
 @pytest.mark.parametrize("neox_style", [True, False])
 @pytest.mark.parametrize("head_dim", [64, 128])
-def test_native_layer_pointers_match_mini(
-    kernels, dtype, page_size, neox_style, head_dim
-):
+def test_native_layer_pointers_match_mini(kernels, dtype, neox_style, head_dim):
     reference, actual = kernels
     device = "cuda"
     torch.manual_seed(17)
@@ -46,17 +43,8 @@ def test_native_layer_pointers_match_mini(
     base_k = torch.randn((layers, slots, heads, head_dim), device=device, dtype=dtype)
     base_v = torch.randn_like(base_k)
 
-    def native_view(layer):
-        if page_size == 1:
-            return layer.clone()
-        return (
-            layer.reshape(slots // page_size, page_size, heads, head_dim)
-            .permute(0, 2, 1, 3)
-            .contiguous()
-        )
-
-    k_buffers = [native_view(layer) for layer in base_k]
-    v_buffers = [native_view(layer) for layer in base_v]
+    k_buffers = [layer.clone() for layer in base_k]
+    v_buffers = [layer.clone() for layer in base_v]
     k_ptrs = torch.tensor(
         [x.data_ptr() for x in k_buffers], dtype=torch.uint64, device=device
     )
@@ -110,13 +98,8 @@ def test_native_layer_pointers_match_mini(
         is_neox_style=neox_style,
     )
 
-    def flatten(layer):
-        if page_size == 1:
-            return layer
-        return layer.permute(0, 2, 1, 3).reshape(slots, heads, head_dim)
-
-    output_k = torch.stack([flatten(layer) for layer in k_buffers])
-    output_v = torch.stack([flatten(layer) for layer in v_buffers])
+    output_k = torch.stack(k_buffers)
+    output_v = torch.stack(v_buffers)
     assert torch.equal(to_neox(output_k), expected_k)
     assert torch.equal(output_v, expected_v)
     assert torch.equal(output_k[:, source.long()], base_k[:, source.long()])
@@ -125,3 +108,9 @@ def test_native_layer_pointers_match_mini(
     assert torch.equal(
         output_k[:, destination[same].long()], base_k[:, source[same].long()]
     )
+
+
+def test_reposition_rejects_large_page_before_device_access(kernels):
+    _, actual = kernels
+    with pytest.raises(ValueError, match="page_size=1"):
+        actual(*([None] * 8), page_size=16)

@@ -39,7 +39,9 @@
    下一轮 prompt 中包含上轮输出时，P 缺少的部分正常重算，并计入实际计算量。
 8. GPT-OSS 使用 SGLang 在实验硬件上自动选择的默认 attention backend，不强制切换 FI/FA。
 9. 无功能请求走原生快速路径；原生 chunking、overlap、mixed batch、retract 保持有效。
-   多 page 支持和默认 page size 的代价需要实测，不能仅用 page size=1 的结果宣称效率等价。
+   按用户后续修订，首阶段仅支持 `page_size=1`；撤回本次新增的大页 Reposition 分支与
+   多页功能验证矩阵。Context cache/Retry/attention 入口显式拒绝其他页大小；
+   SGLang 原生无功能请求的大页能力不变。
 
 ## 已确认的实现差异与接入要求
 
@@ -98,7 +100,7 @@ token。D 先分配自己的目标页，接收 KV 和首 token 等元数据，�
 | 重复逆旋转累积误差 | 保留正确 birth 来源；同位置直接复制；RoPE 参数来自原生模型 |
 | Drop-skipped 按终态 inactive 计算 | 必须覆盖本次所有实际 query 与所有 chunk 的真实读集 |
 | 用逻辑 prompt tokens 冒充计算吞吐 | cache hit、Drop skip、RoPE copy、graph padding 不计新 forward tokens |
-| 强制 page size=1 或更换默认后端掩盖代价 | 同后端/页配置比较特性开关，同时报告原生默认配置结果 |
+| 页配置或后端不同导致性能结论失真 | 按批准范围，功能开关均使用 page_size=1 和默认后端；结论限于该配置，不外推到原生默认页配置 |
 
 历史决策链重点：`01a05dc4…`（key、CPU 热点、重复模板），`01a077b2…`（一次正式
 prefill、usage、staged oracle），`01a07c59…`（occurrence/临时 KV/chunk），`01a086ac…`
@@ -120,13 +122,13 @@ KV 不增加 repos。SWA 自身窗口淘汰不当作 Drop-skipped。
 | 计划与缓存 | 冷/热/部分命中、相同/不同 R、最长 Retry、跨分支、cache-back | 逐 query 可见集相同；目标 K/V 与来源所有权独立 |
 | 生命周期 | chunk/mixed/overlap/abort/retract、叶/内部 evict、hole recovery | 无悬空/重复释放/泄漏；恢复后输出与无洞参考在允许误差内 |
 | 数值 | 三个必验模型，固定 token teacher forcing 与实际生成 | 按模型/dtype/backend 校准 logits 误差；定位首次分歧，报告原始数据 |
-| GPU 内核 | 同位置 copy、多次 R、SWA/sinks、page 跨界 | 对照实际 mini staged/occurrence 路径；不使用简化 dense 模型冒充 oracle |
+| GPU 内核 | 同位置 copy、多次 R、SWA/sinks、page_size=1 的非连续物理 slot | 对照实际 mini staged/occurrence 路径；不使用简化 dense 模型冒充 oracle |
 | PD | 普通 SGLang↔PD↔mini，首 token/终态/取消/传输重试 | D Radix 关闭，无输出回传；元数据和 active KV 对齐，无多算首 token |
 | 压力 | raw>128K 但 position 合法、低 KV、多请求长期运行 | 原生调度可推进，drop-aware 无 -1 进入 attention，池容量可回收 |
 | 性能 | 原生无功能↔带功能；mini↔普通 SGLang；PD 小矩阵 | 成对重复、实际计算量、TTFT/TPOT/E2E；约 3% 为目标，统计不足不得宣称达标 |
 
 最小吞吐矩阵：GPT-OSS-120B；普通 mini/SGLang TP2；PD P=TP2 GPU0/1、D=TP2
-GPU2/3。每种系统做 C1/N2、C2/N4，各含 no_drop+普通 eviction、Drop+drop-aware
+GPU2/3。所有对照固定 page_size=1；每种系统做 C1/N2、C2/N4，各含 no_drop+普通 eviction、Drop+drop-aware
 （PD 仅 P 开启）。同一固定 seed 的任务子集，完整轨迹与源输出长度，不截断 turn 或 output。
 
 测速沿 `01a0ab12-b9ee-7751-bee0-6a78dcac9c1f` 的 `test_serving.py`：同一 task 串行
@@ -177,3 +179,15 @@ SGLang checkout 保持不变。现有 Torch 2.11 cu130 原先无法初始化 GPU
 - 实现普通 scheduler/cache/attention，再接 PD，按上述门禁验证。
 - 所有实验在 Zhangyudong-BUS 的隔离 checkout/environment 上运行；通过 Git 同步代码。
 - 每个实现检查点精确提交到 `system`；测试失败按证据修复，不回写 mini，不覆盖远端已有修改。
+
+## 2026-09-17 页大小范围收缩
+
+用户明确要求先只支持 `page_size=1`。保留 paged-occurrence 的 birth/终态版本、
+Drop-skipped、最长兼容 Retry 和 COW RoPE 设计；这里的 occurrence 机制不要求一页
+包含多个 token。撤回新增 Reposition HND 四维大页寻址；Context Radix 的结构化
+key 仍是一项真实 token 对应一项 KV，保留 Drop/R 事件和最终位置的身份区分。
+
+已推送历史不做 reset 或重写，通过后续提交撤回相关实现。旧 HEAD `5e2f78326` 的
+多页 GPU 回归已按此范围修订主动中断（31 passed 后 KeyboardInterrupt），不作为
+最终验收。后续只运行 page_size=1 的正向功能测试；大页仅保留拒绝测试及原生能力
+未被改变的回归测试。模型和 PD 验证仍待完成。

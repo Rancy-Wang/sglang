@@ -192,6 +192,8 @@ class RadixKey:
     def page_aligned(self, page_size: int) -> RadixKey:
         if page_size == 1:
             return self
+        if self.context is not None:
+            raise ValueError("Context Radix requires page_size=1")
         aligned_len = len(self) // page_size * page_size
         return self[:aligned_len]
 
@@ -240,12 +242,14 @@ class RadixKey:
         assert type(t0) is type(t1), (type(t0), type(t1))
         n = min(self._raw_len(), other._raw_len() - offset)
 
+        if page_size != 1 and (self.context is not None or other.context is not None):
+            raise ValueError("Context Radix requires page_size=1")
         if self.context is not None and other.context is not None:
             matched = self.context.match(
                 other.context, self.context_start, other.context_start + offset, n,
                 retry=context_retry,
             )
-            return matched // page_size * page_size
+            return matched
         # A feature-free prefix shares the original namespace and native KV.
         # Once a structured event/final position differs, ordinary matching ends.
         if self.context is not None:
@@ -307,6 +311,8 @@ class RadixKey:
                 f"RadixKey child range out of bounds: offset={offset}, "
                 f"page_size={page_size}, len={len(self)}"
             )
+        if self.context is not None and page_size != 1:
+            raise ValueError("Context Radix requires page_size=1")
         t = self.token_ids
         if self.is_bigram:
             if page_size == 1:
@@ -320,11 +326,11 @@ class RadixKey:
                 t[offset] if page_size == 1 else tuple(t[offset : offset + page_size])
             )
         if self.context is not None and self.context.plain_prefix(
-            self.context_start + offset, page_size
-        ) < page_size:
+            self.context_start + offset, 1
+        ) < 1:
             plain = (
                 "context-v1",
-                self.context.child_records(self.context_start + offset, page_size),
+                self.context.child_records(self.context_start + offset, 1),
             )
         if self.cache_salt is not None:
             return ((self.extra_key, self.cache_salt), plain)

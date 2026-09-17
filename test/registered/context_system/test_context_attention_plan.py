@@ -77,3 +77,18 @@ def test_invalid_binding(attention_plan):
         plan.bind(torch.arange(4))
     with pytest.raises(ValueError, match="empty"):
         attention_plan.ContextAttentionPlan.merge([])
+
+
+def test_large_page_rejected_before_kernel(attention_plan):
+    plan = attention_plan.ContextAttentionPlan.merge(
+        [attention_plan.ContextSequence.ordinary(3, 2)]
+    )
+    bound = plan.bind(torch.arange(5))
+
+    def unexpected_kernel(*args, **kwargs):
+        pytest.fail("unsupported page size reached kernel")
+
+    with pytest.raises(ValueError, match="page_size=1"):
+        bound.forward(
+            unexpected_kernel, None, None, None, None, None, None, page_size=16
+        )

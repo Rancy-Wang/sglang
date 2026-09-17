@@ -19,7 +19,6 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
-@pytest.mark.parametrize("page_size", [1, 16, 64])
 @pytest.mark.parametrize("window_size", [-1, 16])
 def test_segmented_native_batch(
     compiler,
@@ -27,7 +26,6 @@ def test_segmented_native_batch(
     attention_plan,
     native_attention,
     dtype,
-    page_size,
     window_size,
 ):
     actual, reference = native_attention
@@ -69,7 +67,7 @@ def test_segmented_native_batch(
         pk,
         pv,
         sinks=sinks,
-        page_size=page_size,
+        page_size=1,
         sliding_window_size=window_size,
     )
     # Independent one-query subsequences materialize the staged oracle's visible
@@ -117,7 +115,7 @@ def test_segmented_native_batch(
         1.0,
         1.0,
         sinks=sinks,
-        page_size=page_size,
+        page_size=1,
         extend_seq_lens_cpu=[1] * len(q),
     )
     # Segmentation changes reduction order, so bound by one output rounding step

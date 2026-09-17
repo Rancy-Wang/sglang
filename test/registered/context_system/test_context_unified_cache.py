@@ -13,9 +13,8 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.mark.parametrize("page_size", [1, 4, 16, 64])
-def test_native_insert_split_lock_and_page_reclaim(compiler, page_size):
-    from sglang.srt.mem_cache.allocator.paged import PagedTokenToKVPoolAllocator
+def test_native_insert_split_lock_and_page_reclaim(compiler):
+    from sglang.srt.mem_cache.allocator.token import TokenToKVPoolAllocator
     from sglang.srt.mem_cache.base_prefix_cache import (
         EvictParams,
         InsertParams,
@@ -26,9 +25,8 @@ def test_native_insert_split_lock_and_page_reclaim(compiler, page_size):
     from sglang.srt.mem_cache.unified_cache.component_type import ComponentType
     from sglang.srt.mem_cache.unified_radix_cache import UnifiedRadixCache
 
-    allocator = PagedTokenToKVPoolAllocator(
+    allocator = TokenToKVPoolAllocator(
         size=1024,
-        page_size=page_size,
         dtype=torch.bfloat16,
         device="cpu",
         kvcache=None,
@@ -39,7 +37,7 @@ def test_native_insert_split_lock_and_page_reclaim(compiler, page_size):
             disable=False,
             req_to_token_pool=None,
             token_to_kv_pool_allocator=allocator,
-            page_size=page_size,
+            page_size=1,
             tree_components=(ComponentType.FULL,),
         )
     )
@@ -69,7 +67,7 @@ def test_native_insert_split_lock_and_page_reclaim(compiler, page_size):
     cache.dec_lock_ref(partial.last_device_node, receipt.to_dec_params())
     cache.evict(EvictParams(num_tokens=1024))
     assert allocator.available_size() == 1024
-    assert len(torch.unique(allocator.get_all_free_pages())) == 1024 // page_size
+    assert len(torch.unique(allocator.get_all_free_pages())) == 1024
     assert len(cache.match_prefix(MatchPrefixParams(key=key)).device_indices) == 0
 
 
@@ -97,9 +95,8 @@ def test_context_export_rejected_before_tree_mutation(compiler):
     assert len(cache.tree_core._node_arena) == before
 
 
-@pytest.mark.parametrize("page_size", [1, 4, 16, 64])
-def test_longest_retry_and_one_sided_reposition(compiler, page_size):
-    from sglang.srt.mem_cache.allocator.paged import PagedTokenToKVPoolAllocator
+def test_longest_retry_and_one_sided_reposition(compiler):
+    from sglang.srt.mem_cache.allocator.token import TokenToKVPoolAllocator
     from sglang.srt.mem_cache.base_prefix_cache import (
         EvictParams,
         InsertParams,
@@ -110,9 +107,8 @@ def test_longest_retry_and_one_sided_reposition(compiler, page_size):
     from sglang.srt.mem_cache.unified_cache.component_type import ComponentType
     from sglang.srt.mem_cache.unified_radix_cache import UnifiedRadixCache
 
-    allocator = PagedTokenToKVPoolAllocator(
+    allocator = TokenToKVPoolAllocator(
         size=2048,
-        page_size=page_size,
         dtype=torch.bfloat16,
         device="cpu",
         kvcache=None,
@@ -123,7 +119,7 @@ def test_longest_retry_and_one_sided_reposition(compiler, page_size):
             disable=False,
             req_to_token_pool=None,
             token_to_kv_pool_allocator=allocator,
-            page_size=page_size,
+            page_size=1,
             tree_components=(ComponentType.FULL,),
         )
     )
@@ -172,3 +168,38 @@ def test_longest_retry_and_one_sided_reposition(compiler, page_size):
         ).device_indices
     )
     assert not cache.tree_core.root_node.context_retry_index.signatures
+
+
+def test_large_page_context_rejected_without_changing_native_cache(compiler):
+    from sglang.srt.mem_cache.base_prefix_cache import InsertParams, MatchPrefixParams
+    from sglang.srt.mem_cache.cache_init_params import CacheInitParams
+    from sglang.srt.mem_cache.radix_cache import RadixKey
+    from sglang.srt.mem_cache.unified_cache.component_type import ComponentType
+    from sglang.srt.mem_cache.unified_radix_cache import UnifiedRadixCache
+
+    cache = UnifiedRadixCache(
+        CacheInitParams(
+            disable=False,
+            req_to_token_pool=None,
+            token_to_kv_pool_allocator=None,
+            page_size=16,
+            tree_components=(ComponentType.FULL,),
+        )
+    )
+    tokens = list(range(64))
+    plain = RadixKey(array("q", tokens))
+    values = torch.arange(64)
+    cache.insert(InsertParams(key=plain, value=values))
+    before = len(cache.tree_core._node_arena)
+    context = RadixKey.from_context(compiler(*args(tokens, {32: [(0, 16)]}, [])))
+    for operation in (
+        lambda: cache.insert(InsertParams(key=context, value=values)),
+        lambda: cache.match_prefix(MatchPrefixParams(key=context)),
+        lambda: cache.match_prefix(MatchPrefixParams(key=context, context_retry=True)),
+    ):
+        with pytest.raises(ValueError, match="page_size=1"):
+            operation()
+        assert len(cache.tree_core._node_arena) == before
+    assert torch.equal(
+        cache.match_prefix(MatchPrefixParams(key=plain)).device_indices, values
+    )

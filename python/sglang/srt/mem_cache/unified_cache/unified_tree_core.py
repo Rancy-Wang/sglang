@@ -774,6 +774,8 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         return DecLockRefResult()
 
     def _validate_context_key(self, key: RadixKey) -> None:
+        if self.page_size != 1:
+            raise ValueError("Context Radix requires page_size=1")
         # Storage hash/export and non-attention component state do not yet carry
         # Context records. Reject before a split, lock, allocation, or insertion.
         if (

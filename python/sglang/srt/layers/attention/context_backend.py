@@ -167,6 +167,8 @@ class ContextAttentionMetadata:
 
     def forward(self, kernel, q, k, v, output, k_pool, v_pool, **kwargs):
         """One native extend launch, after this layer's KV writes and COW."""
+        if kwargs.get("page_size", 1) != 1:
+            raise ValueError("Context attention requires page_size=1")
         if self.query_count != q.shape[0]:
             raise ValueError("Context query metadata does not cover model output")
         kernel(
