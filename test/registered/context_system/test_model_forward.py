@@ -201,15 +201,46 @@ def test_drop_reposition_real_model_chunk_lifetime(runtime):
             state, usage = req.context_state, req.context_usage
             runner.req_to_token_pool.free(req)
         assert usage.snapshot().actual_prefill_tokens == len(tokens)
+        saved = []
+        terminal = runner.kv_index_translator.translate_full_attn_ids(
+            state.terminal_slots()
+        )
+        for layer in runner.context_model_binding.layers[:4]:
+            saved.append(
+                (layer.k_buffer[terminal].clone(), layer.v_buffer[terminal].clone())
+            )
         allocator.free(state.private_slots())
         assert allocator.available_size() == available_before
-        return logits
+        return logits, saved
 
     # Calibrate the native model's batch-shape rounding on the same token path.
-    plain_full, plain_chunks = run({}, [], [96]), run({}, [], cuts)
+    (plain_full, _), (plain_chunks, _) = run({}, [], [96]), run({}, [], cuts)
     baseline_error = (plain_full.float() - plain_chunks.float()).abs()
     drops, repos = {24: [(4, 12)], 56: [(16, 36)]}, [23, 55]
-    full, chunks = run(drops, repos, [96]), run(drops, repos, cuts)
+    (drop_full, _), (drop_chunks, _) = run(drops, [], [96]), run(drops, [], cuts)
+    print(
+        "DROP_ONLY_LOGITS",
+        (drop_full.float() - drop_chunks.float()).abs().max().item(),
+        flush=True,
+    )
+    (full, full_kv), (chunks, chunk_kv) = (
+        run(drops, repos, [96]),
+        run(drops, repos, cuts),
+    )
+    for layer, (expected_kv, actual_kv) in enumerate(zip(full_kv, chunk_kv)):
+        for name, a, b in zip(("K", "V"), expected_kv, actual_kv):
+            per_raw = (a.float() - b.float()).abs().flatten(1).max(1).values
+            print(
+                "CHUNK_KV",
+                layer,
+                name,
+                {
+                    "max": per_raw.max().item(),
+                    "argmax_raw": per_raw.argmax().item(),
+                    "per_raw": per_raw.tolist(),
+                },
+                flush=True,
+            )
     error = (full.float() - chunks.float()).abs()
     maximum = max(0.04, 2 * baseline_error.max().item())
     mean = max(0.002, 2 * baseline_error.mean().item())
