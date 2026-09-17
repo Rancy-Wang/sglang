@@ -49,6 +49,22 @@ async def main():
     module._build_user_msg = native_dispatch
     model = os.environ["CONTEXT_SERVER_MODEL"]
     runner = module.Runner(model, reference_alignment=True)
+    sampler = runner.scheduler.engine.sampler
+    observed_sample = sampler.sample
+
+    def raw_sample(logits, args):
+        raw = logits.detach().clone()
+        output = observed_sample(logits, args)
+        for i, req in enumerate(runner.batch.reqs):
+            record = runner.records[req.uid]
+            if req.sample_is_committed:
+                record["logits_gpu"][-1] = raw[i]
+            else:
+                record["logits_gpu"].pop()
+                record["sample_rows"].pop()
+        return output
+
+    sampler.sample = raw_sample
     fixture = load_fixture()
     result = {
         "head": (

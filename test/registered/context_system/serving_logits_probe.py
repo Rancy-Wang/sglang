@@ -7,6 +7,23 @@ def serialized_probe():
     class Probe(CustomLogitProcessor):
         def __init__(self):
             self.rows = {}
+            # Installed only by this explicit diagnostic processor. Preserve
+            # raw model logits before the native grammar changes them in place.
+            from sglang.srt.sampling.sampling_batch_info import SamplingBatchInfo
+
+            if not getattr(SamplingBatchInfo, "_context_probe_installed", False):
+                native_bias = SamplingBatchInfo.apply_logits_bias
+
+                def observed_bias(info, logits):
+                    for i, params in enumerate(info.custom_params or []):
+                        if params and "context_trace_path" in params:
+                            params["_context_probe_raw_logits"] = (
+                                logits[i].detach().clone()
+                            )
+                    return native_bias(info, logits)
+
+                SamplingBatchInfo.apply_logits_bias = observed_bias
+                SamplingBatchInfo._context_probe_installed = True
 
         def __call__(self, logits, custom_param_list):
             import torch
@@ -20,7 +37,8 @@ def serialized_probe():
                 rows = params.setdefault("_context_probe_rows", [])
                 self.rows[key] = rows
                 step = len(rows)
-                rows.append(logits[i].detach().clone())
+                raw = params.pop("_context_probe_raw_logits", None)
+                rows.append(raw if raw is not None else logits[i].detach().clone())
                 forced = params.get("context_forced_tokens")
                 if forced is not None:
                     logits[i].fill_(-float("inf"))
