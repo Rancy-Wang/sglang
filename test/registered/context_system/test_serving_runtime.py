@@ -199,6 +199,71 @@ def test_full_logits_http_diagnostic(server):
     )
 
 
+@pytest.mark.skipif(
+    not os.environ.get("CONTEXT_CAPACITY_PRESSURE"),
+    reason="explicit 110-token KV pool required",
+)
+def test_context_capacity_rejection_recovers(server):
+    """A self-pinned continuation must fail promptly and release its pages."""
+    import torch
+
+    from sglang.srt.context_system.ir import (
+        compile_context_layout,
+        prewarm_context_layout,
+    )
+    from sglang.srt.context_system.planner import ContextProgram
+
+    assert os.environ["CONTEXT_KV_CAPACITY"] == "110"
+    assert os.environ["CONTEXT_CHUNK_SIZE"] == "32"
+    prewarm_context_layout()
+    tokens = [785] * 100
+    layout = compile_context_layout(
+        *(
+            torch.tensor(value, dtype=torch.int32)
+            for value in (tokens, [80], [0, 1], [0, 40], [98], [99])
+        )
+    )
+    expiry = torch.full((100,), torch.iinfo(torch.int32).max, dtype=torch.int32)
+    expiry[:40] = 80
+    body = {
+        "input_ids": tokens,
+        "context_program": ContextProgram(layout, expiry).to_json_wire(),
+        "sampling_params": {
+            "temperature": 0,
+            "max_new_tokens": 8,
+            "ignore_eos": True,
+        },
+    }
+    started = time.monotonic()
+    rejected = requests.post(server + "/generate", json=body, timeout=60)
+    elapsed = time.monotonic() - started
+    evidence = {
+        "status": rejected.status_code,
+        "seconds": elapsed,
+        "body": rejected.json(),
+    }
+    output = Path(os.environ["CONTEXT_CAPACITY_RESULT"])
+    output.write_text(json.dumps(evidence, indent=2))
+    assert rejected.status_code == 503, evidence
+    assert (
+        "retains" in rejected.text and "KV pool holds 110" in rejected.text
+    ), evidence
+    assert requests.post(server + "/flush_cache", timeout=5).status_code == 200
+    # Almost the whole pool is needed again. Leaked private pages or a live
+    # source receipt must not prevent a fresh native request from finishing.
+    healthy = requests.post(
+        server + "/generate",
+        json={"input_ids": [785] * 90, "sampling_params": body["sampling_params"]},
+        timeout=60,
+    )
+    evidence["subsequent_status"] = healthy.status_code
+    evidence["subsequent_body"] = healthy.json()
+    output.write_text(json.dumps(evidence, indent=2))
+    assert healthy.status_code == 200, evidence
+    assert healthy.json()["meta_info"]["completion_tokens"] == 8, evidence
+    assert requests.get(server + "/health", timeout=5).status_code == 200
+
+
 def test_chunk_retry_and_mixed_http_generation(server):
     baseline = call(server, False)
     identity = call(server, "identity")
