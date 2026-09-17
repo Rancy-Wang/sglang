@@ -91,6 +91,12 @@ def assert_allocator(cache, allocator, used):
         if used == 0:
             assert swa.available_size() == 128
             assert not allocator.full_to_swa_index_mapping[:-1].any()
+    cached = cache.all_values_flatten()
+    assert len(cached) == used
+    assert len(torch.unique(cached)) == used
+    assert bool(torch.all(cached > 0))
+    walk = cache.tree_core.walk_for_kv_canary(False, False)
+    assert sorted(walk.slot_indices.tolist()) == sorted(cached.tolist())
     cache.tree_core.sanity_check([], [])
 
 
@@ -145,7 +151,12 @@ def test_shared_reader_leaf_first_hole_refill_and_split(compiler, native_cache):
     # Split a leased hole after acquiring the receipt; release must follow the
     # inherited raw intervals, not stale node IDs for every edge.
     partial = cache.match_prefix(MatchPrefixParams(key=key[:3], context_retry=True))
-    assert partial.context_resident.tolist() == [True, False, False]
+    if hasattr(allocator, "swa_attn_allocator"):
+        # No Delta has been matched yet. Missing SWA inside its last window
+        # must retain the native safety cap instead of returning a usable hit.
+        assert partial.context_resident.tolist() == [True]
+    else:
+        assert partial.context_resident.tolist() == [True, False, False]
     assert_allocator(cache, allocator, 9)
     # Fresh computation fills only missing pages; duplicate resident pages are
     # released once by native insert, and the preserved suffix remains shared.

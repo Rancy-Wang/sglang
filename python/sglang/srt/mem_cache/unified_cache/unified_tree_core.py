@@ -3480,7 +3480,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             value = node.component_data[BASE_COMPONENT_TYPE].value
             node_slots = value.tolist() if isinstance(value, torch.Tensor) else []
 
-            emit = node is not self.root_node
+            emit = node is not self.root_node and not node.context_hole
             if unlocked_only:
                 # Unified SWA owns an independent component lock. A node can still
                 # hold Full KV for a running request while its SWA slots are unused.
@@ -3519,7 +3519,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         def _dfs(node: UnifiedTreeNode):
             for child in node.children.values():
                 v = child.component_data[BASE_COMPONENT_TYPE].value
-                if v is not None:
+                if v is not None and not child.context_hole:
                     values.append(v)
                 _dfs(child)
 
