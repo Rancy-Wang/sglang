@@ -401,7 +401,9 @@ def test_sparse_swa_request_release_and_completion(native_cache):
     # Leave the final four slots to an overlapped completion receipt. In native
     # decode all new peers are resident; this separate receipt tests mixed COW.
     cache._free_context_kv_row(req, [(0, 7), (7, 20)])
-    assert_allocator(cache, allocator, 4)
+    assert allocator.full_attn_allocator.available_size() == 124
+    assert len(torch.unique(allocator.full_attn_allocator.get_all_free_pages())) == 124
+    assert allocator.swa_attn_allocator.available_size() == 125
     usage = ContextUsage(
         torch.empty(0, dtype=torch.bool), torch.empty(0, dtype=torch.bool)
     )
