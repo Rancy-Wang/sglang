@@ -3568,8 +3568,12 @@ class Scheduler(
             self.abort_request(AbortReq(rid=req.rid))
             return
 
-        prepare_abort(req, "Aborted")
-        req.time_stats.trace_ctx.abort(abort_info={"reason": "Aborted"})
+        capacity_error = getattr(req, "context_admission_error", None)
+        if capacity_error:
+            prepare_abort(req, capacity_error, status_code=HTTPStatus.SERVICE_UNAVAILABLE)
+        else:
+            prepare_abort(req, "Aborted")
+        req.time_stats.trace_ctx.abort(abort_info={"reason": capacity_error or "Aborted"})
         req.to_finish = None
         if self.disaggregation_mode == DisaggregationMode.PREFILL:
             self.clear_pending_chunk_send(req)
@@ -3583,7 +3587,13 @@ class Scheduler(
 
         self.chunked_req = None
         self._pending_chunked_abort_req = None
-        self.ipc_channels.send_to_tokenizer.send_output(_make_abort_req(req), req)
+        self.ipc_channels.send_to_tokenizer.send_output(
+            _make_abort_req(
+                req,
+                finished_reason=req.finished_reason.to_json() if capacity_error else None,
+            ),
+            req,
+        )
         logger.debug(f"Abort chunked prefill request. {req.rid=}")
 
     def _build_hisparse_decode_batch(self, reqs):
@@ -3935,6 +3945,10 @@ class Scheduler(
         if self.chunked_req is not None:
             self.chunked_req.init_next_round_input()
             self.chunked_req = adder.add_chunked_req(self.chunked_req)
+            if self.chunked_req is not None and self.chunked_req.context_admission_error:
+                # The native deferred-abort path drains the preceding chunk
+                # before releasing its pages and PD transfer resources.
+                self._pending_chunked_abort_req = self.chunked_req
 
         if self.enable_lora:
             running_loras = {

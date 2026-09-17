@@ -85,6 +85,59 @@ def test_retry_self_pin_falls_back_but_external_pressure_waits(compiler):
 pytest_plugins = ("test_ir",)
 
 
+def test_continuation_capacity_includes_future_terminal_copies(compiler):
+    from test_ir import args
+    from test_occurrence_ownership import expiry_for
+
+    occurrence = load_file(
+        "context_continuation_occurrence",
+        ROOT / "python/sglang/srt/context_system/occurrence.py",
+    )
+    n, capacity = 100, 110
+    drops = {80: [(0, 40)]}
+    layout = compiler(*args(list(range(n)), drops, [98]))
+    expiry = expiry_for(n, drops)
+    state = occurrence.OccurrenceState.from_match(
+        torch.empty(0, dtype=torch.int64), torch.empty(0, dtype=torch.int32),
+        exact_prefix_len=0,
+    )
+    start, serial = 0, 1
+    while start < n:
+        length = min(32, n - start)
+        while length:
+            end = start + length
+            window = occurrence.compile_occurrence_window(
+                layout, expiry, layout.positions, query_start=start, query_end=end
+            )
+            keep = torch.ones(end, dtype=torch.bool)
+            keep[:start] = (state.canonical_rows >= 0) | (state.terminal_rows >= 0)
+            plan = state.plan(window, keep)
+            needed = length + plan.extra_page_count + 1 + int(end == n)
+            if len(state.slots) + needed < capacity:
+                break
+            length //= 2
+        if not length:
+            break
+        query = torch.arange(serial, serial + length)
+        serial += length
+        extra = torch.arange(serial, serial + plan.extra_page_count)
+        serial += len(extra)
+        state = state.advance(window, plan, query, extra, expiry).state
+        state = state.publish(state.terminal_slots())
+        state = state.drop_borrowed_raw(expiry[:end] <= end)
+        start = end
+
+    assert (start, len(state.slots), needed) == (74, 108, 3)
+    req = SimpleNamespace(
+        context_prefill_started=True, context_state=state,
+        context_admission_error=None,
+    )
+    storage.handle_prefill_capacity_pressure(req, 256, needed)
+    assert req.context_admission_error is None  # other live requests can finish
+    storage.handle_prefill_capacity_pressure(req, capacity, needed)
+    assert "retains 108" in storage.prefill_capacity_error(req, capacity)
+
+
 def test_prefill_capacity_uses_actual_queries_and_invalidates_on_retry():
     # Drop 0:7 before q8: final active=3, but cold q7 must read eight keys.
     program = SimpleNamespace(
