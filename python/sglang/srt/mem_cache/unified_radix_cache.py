@@ -1515,6 +1515,7 @@ class UnifiedRadixCache(BasePrefixCache):
                 key=radix_key,
                 req=req,
                 context_retry=req.context_program is not None,
+                context_cache_publication=req.context_program is not None,
             )
         )
         new_indices = match_result.device_indices

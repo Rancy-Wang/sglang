@@ -601,9 +601,12 @@ def test_swa_req_recovery_publication_and_pressure(
                     == allocator.swa_attn_allocator.available_size()
                 )
                 cache.sanity_check()
-                if drop_aware and stop >= 32:
+                if drop_aware and req.kv.cache_protected_len > 32:
                     assert req.lock_receipt.context_skip_ranges
                     assert torch.all(state.terminal_rows[8:16] < 0)
+        if drop_aware:
+            assert req.kv.cache_protected_len == 48
+            assert req.lock_receipt.context_skip_ranges
         cache.cache_finished_req(req, kv_len_to_handle=48)
         assert req.context_source_lease is None
         pool.free(req)
