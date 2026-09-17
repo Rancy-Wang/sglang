@@ -280,6 +280,10 @@ def main():
                         "--disable-hybrid-swa-memory",
                     ]
                 if args.engine == "pd":
+                    # Identical request-end observation for native and modified
+                    # servers, including spawned TP workers. Production code
+                    # and per-token execution remain untouched.
+                    cmd[1:3] = [str(Path(__file__).with_name("launch_pd_observed.py"))]
                     cmd += [
                         # One native summary per completed request, on both
                         # baseline and modified servers. D transfer_duration
