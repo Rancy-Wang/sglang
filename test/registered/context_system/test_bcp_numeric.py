@@ -127,8 +127,9 @@ def test_bcp_default_reference(server):  # noqa: F811
         assert path.exists(), name
         logits = torch.load(path, weights_only=True)
         reference_key = (
-            "drop_repos-retry"
-            if name == "drop_repos-retry" and "drop_repos-retry" in reference_logits
+            name
+            if name in ("drop_repos-retry", "drop_repos-consecutive")
+            and name in reference_logits
             else feature
         )
         expected = reference_logits[reference_key]

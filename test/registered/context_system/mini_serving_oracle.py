@@ -111,13 +111,31 @@ async def main():
         "runs": {},
     }
     logits = {}
-    reference_path = os.environ.get("CONTEXT_ORACLE_RETRY_REFERENCE")
+    consecutive_path = os.environ.get("CONTEXT_ORACLE_CONSECUTIVE_REFERENCE")
+    reference_path = consecutive_path or os.environ.get("CONTEXT_ORACLE_RETRY_REFERENCE")
     reference = json.loads(Path(reference_path).read_text()) if reference_path else None
     if reference is not None:
         assert reference["fixture"] == fixture and reference["model"] == model
         result["reference_path"] = reference_path
         result["comparison_kind"] = "matched_cache_retry_fixed_tokens"
-    features = ("none", "drop_repos") if reference else ("none", "drop", "drop_repos")
+    if consecutive_path:
+        result["comparison_kind"] = "matched_cache_consecutive_reposition_fixed_tokens"
+        runner.clear()
+        tokens = reference["runs"]["drop_repos"]["records"][0]["tokens"]
+        for key, warm in (("consecutive-source", True), ("drop_repos-consecutive", False)):
+            request = request_for(fixture, "drop_repos")
+            if warm:
+                request["reposition"] = fixture["reposition"][:1]
+            runner.forced_tokens = tokens[:1] if warm else tokens
+            run = await runner.generate("mask", [request], max_tokens=len(runner.forced_tokens))
+            (record,) = [r for r in run["records"] if not r["warmup"]]
+            assert record["tokens"] == runner.forced_tokens
+            logits[key] = runner.full_logits[record["uid"]]
+            result["runs"][key] = run
+            print("MINI_BCP", key, run["responses"], flush=True)
+    features = () if consecutive_path else (
+        ("none", "drop_repos") if reference else ("none", "drop", "drop_repos")
+    )
     for feature in features:
         if feature == "none" or reference is None:
             runner.clear()
