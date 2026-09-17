@@ -150,6 +150,7 @@ def test_longest_retry_and_one_sided_reposition(compiler):
     selected = cache.match_prefix(MatchPrefixParams(key=target, context_retry=True))
     assert len(cache.tree_core._node_arena) <= before + 1
     assert selected.device_indices.tolist() == good_slots[:256].tolist()
+    assert selected.context_exact_prefix_len == good.match(target)
     assert (
         selected.context_source_positions.tolist()
         == good_layout.positions[:256].tolist()

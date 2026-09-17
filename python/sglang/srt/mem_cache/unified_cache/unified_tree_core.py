@@ -884,10 +884,12 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             node = node.parent
         path.reverse()
         values, positions = [], []
-        cursor = 0
+        cursor = exact_source_length = 0
         for node in path:
             values.append(node.component_data[BASE_COMPONENT_TYPE].value)
             source = node.key
+            if exact_source_length == cursor:
+                exact_source_length += source.match_at(key, cursor, self.page_size)
             if source.context is None:
                 positions.append(
                     torch.arange(cursor, cursor + len(source), dtype=torch.int32)
@@ -907,15 +909,13 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             params, values, winner, winner, len(values), selected.matched_length, action
         )
         source_positions = torch.cat(positions)
-        target_positions = torch.frombuffer(
-            key.context.positions,
-            dtype=torch.int32,
-            count=selected.matched_length,
-            offset=key.context_start * 4,
-        )
         return result._replace(
             context_source_positions=source_positions,
-            context_retry=not torch.equal(source_positions, target_positions),
+            # This boundary belongs to the selected source, not to a shorter
+            # exact candidate in another branch. Even same-position Retry KV
+            # after this point needs independent ownership before target insert.
+            context_exact_prefix_len=exact_source_length,
+            context_retry=exact_source_length < selected.matched_length,
         )
 
     def _match_prefix_helper(
