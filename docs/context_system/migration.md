@@ -27,6 +27,30 @@
 机制的对照。该修订替代此前约 3% 的目标。保留 TTFT、TPOT、实际计算量和输入差异，
 避免把少算 token、额外 JIT 或模板差异误归为实现开销；本轮不测 SLO。
 
+## 追加验收与验收后的实验顺序（2026-09-18）
+
+用户在监控任务 `01a0b06e-a973-77e0-9306-1f70ba537820` 中追加并授权：R2 除上述
+95% 原生吞吐门槛外，PD C2 Drop+Repos 的 **TTFT 与 TPOT 都须优于普通调度
+C2 Drop+Repos**。普通调度和 PD 必须各自在同模型、同 task/turn 下通过 mini 数值
+误差校准。不能用修改版 no_drop 替代原生吞吐对照，也不能仅凭退出码或部分 smoke 验收。
+
+只有 R2 全部通过后，才开始以下独立实验阶段；当前尚未满足启动条件：
+
+- 两组均为 GPT-OSS-120B、PD 四卡，P=GPU0/1 TP2、D=GPU2/3 TP2。
+  A=drop-aware eviction + Drop+Repos；B=普通 eviction + no_drop；资源不足以并行时顺序跑。
+- 沿参考任务 `01a0ab12-b9ee-7751-bee0-6a78dcac9c1f` 的最终测速约定，依次
+  C=1/2/4/8/16/32，每组3轮，即3/6/12/24/48/96条不同首遍 task；每完成一个 C
+  立即输出 A/B 全部与逐轮指标。保留完整轨迹、seed、实际生成历史、源输出长度、
+  ignore_eos、恒定并发、filler 截止、Rolling Drop keep12、累计96Ki Reposition。
+- 报告实际 Prefill/Decode/All 吞吐、mean/P90 TTFT/TPOT/TBT/E2E、成功/失败/Abort/filler、
+  实际并发、cache/eviction 证据、长 TBT 次数及等待、原始 JSON。精确计算计数缺失时
+  标为缺失，不用逻辑 tokens 代替。标准 TPOT、排除首 decode gap 的自定义 TPOT
+  与 TBT 分列；客户端 SSE ITL 不冒充服务端 TBT。
+- 全部矩阵结束后才做 C1、96 tasks 的 A/B 同配置 SLO 基线，再补算 SLO；前期报告
+  标记待基线。不得使用本次 C1/N2 或旧跨主机结果代替。该阶段的 SLO 不改变 R2
+  小量验证不测 SLO 的范围。
+- 本任务保持唯一修改和实验启动者；不影响 InfiniAI-BUS GPU0/1 的参考实验。
+
 ## 当前实测状态（2026-09-17）
 
 2026-09-18 追加检查点（整体 R2 仍未完成）：
@@ -129,6 +153,32 @@
   本地默认 Anaconda 无 torch，收集失败；本地 py_compile 与 diff-check 通过。
 - 恢复 C2 Drop 为 `minimal-sg120-c2-drop-parser-v2`，后续 C1 无功能及 PD 队列继续。
   已完成 C2 无功能不重复跑；失败的 warmup 不进入任何吞吐平均值。
+
+原生配对 C2 `minimal-native120-c2-none-parser-v1` 已完成（`d7a3df66a`，共享同一
+Harmony parser 兼容修复）：4/4首次 task，150成功/0失败，1520.225151s，47377输出 tokens，
+**31.164463 token/s**。TTFT mean/P90 为8953.958/13943.135 ms；标准 TPOT mean/P90
+为31.6765/58.0744 ms；实际物理计算计数缺失。对应修改版无功能为31.232274 token/s，
+相差+0.22%，这只验证普通无功能对照，不能据此判断 Drop+Repos 的5%门槛。
+原始结果在 BUS 实验根的相应 `workload/result.json`；C2 Drop+Repos 仍在执行。
+
+mini System/main 的75份逐文件 diff 全部完成阅读；这不等于52份会话已全部复核或
+所有迁移功能已通过。补充差异与效率约束：
+
+- mini `scheduler/prefill.py` 的 occurrence 规划先试最大 chunk，再用预计算容量曲线
+  O(1) 判断候选；包括临时页、持久页与未来预留。同位置 Retry 的终态副本仍需独立所有权。
+  容量失败须区分自身页使推进不可能与外部读者暂时占用；chunk 完成只归还已无后续读者
+  的临时/birth 页。mini 部分 chunk 会阻止启动第二个 partial occurrence；不能照搬为
+  SGLang 的全局串行化约束。
+- mini 的旧 staged warmup、0.95 reuse 阈值不是 mask/page-occurrence 的生产设置。
+  本次迁移只做一次正式请求；SGLang 保留原生 tokenizer/model/MoE/parser。
+- mini `drop_rules.py` 保留部分匹配跨边界 token；整消息删除包含该消息模板归属。
+  KeepText 使用协议元数据与最右有序匹配；不得退化为只按字符串搜索。
+- mini System 的 Harmony 模板会处理旧 analysis；最终 System-test `2966eb49a` 的
+  stable history 是显式 opt-in。benchmark 与数值对照必须记录实际模板和输入 IDs，
+  不以旧分支默认值替代最后批准的 setting。
+- mini SWA 的位置空洞路径依据绝对位置，可见 KV 可能少于 compact 序列末128项；
+  连续尾部覆盖窗口后可恢复原生快速路径。已有 attention dense 对照只验证 kernel，
+  全模型数值依据仍来自真实 mini 固定路径。
 
 完整读取的 mini System/main diff 已逐项标在 `source_inventory.json`，与“端到端迁移验收”
 分开计数。attention adapter 的额外差异：mini FA/FI 在带位置空洞的 SWA decode 上避开
