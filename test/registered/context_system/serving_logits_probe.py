@@ -17,7 +17,8 @@ def serialized_probe():
                 if req.extend_range.end < len(req.origin_input_ids):
                     continue
                 key = params["context_trace_path"]
-                rows = self.rows.setdefault(key, [])
+                rows = params.setdefault("_context_probe_rows", [])
+                self.rows[key] = rows
                 step = len(rows)
                 rows.append(logits[i].detach().clone())
                 forced = params.get("context_forced_tokens")
@@ -33,6 +34,7 @@ def serialized_probe():
                     ):
                         torch.save(snapshot, key)
                     del self.rows[key]
+                    del params["_context_probe_rows"]
             return logits
 
     return Probe.to_str()
