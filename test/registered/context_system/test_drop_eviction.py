@@ -313,3 +313,52 @@ def test_swa_holes_remain_independent_across_insert_recovery_and_cow(
     cache.dec_lock_ref(first.last_device_node, lease.to_dec_params())
     cache.evict(EvictParams(num_tokens=128))
     assert_allocator(cache, allocator, 0)
+
+
+@pytest.mark.parametrize("early_release", [False, True])
+def test_exact_swa_lease_survives_split_and_reclaims_only_unread_pages(
+    compiler, native_cache, early_release
+):
+    from sglang.srt.mem_cache.base_prefix_cache import (
+        EvictParams,
+        InsertParams,
+        MatchPrefixParams,
+    )
+    from sglang.srt.mem_cache.radix_cache import RadixKey
+
+    cache, allocator = native_cache
+    if not hasattr(allocator, "swa_attn_allocator"):
+        pytest.skip("SWA-specific ownership")
+    key = RadixKey.from_context(compiler(*args(list(range(24)), {}, [])))
+    cache.insert(InsertParams(key=key, value=allocator.alloc(24)))
+    matched = cache.match_prefix(MatchPrefixParams(key=key, context_retry=True))
+    lease = cache.inc_lock_ref(matched.last_device_node)
+    needed = torch.zeros(24, dtype=torch.bool)
+    needed[2:5] = True
+    needed[14:17] = True
+    cache.configure_context_swa_lock(matched.last_device_node, lease, needed)
+    assert lease.context_swa_ranges == ((2, 5), (14, 17))
+    cache.tree_core.sanity_check([], [])
+    # A later match splits a held historical range; the receipt follows raw
+    # intervals through the new parent instead of relying on stale leaf IDs.
+    cache.match_prefix(MatchPrefixParams(key=key[:4], context_retry=True))
+    cache.evict(EvictParams(num_tokens=0, swa_num_tokens=128))
+    assert allocator.swa_attn_allocator.available_size() == 128 - 6
+    assert_allocator(cache, allocator, 24)
+    extended = needed.clone()
+    extended[18] = True
+    with pytest.raises(ValueError, match="cannot reacquire"):
+        cache.configure_context_swa_lock(matched.last_device_node, lease, extended)
+    shrunk = needed.clone()
+    shrunk[14:17] = False
+    cache.configure_context_swa_lock(matched.last_device_node, lease, shrunk)
+    cache.evict(EvictParams(num_tokens=0, swa_num_tokens=128))
+    assert allocator.swa_attn_allocator.available_size() == 128 - 3
+    receipt = lease.to_dec_params()
+    if early_release:
+        cache.dec_swa_lock_only(matched.last_device_node, receipt)
+        cache.evict(EvictParams(num_tokens=0, swa_num_tokens=128))
+        assert allocator.swa_attn_allocator.available_size() == 128
+    cache.dec_lock_ref(matched.last_device_node, receipt, skip_swa=early_release)
+    cache.evict(EvictParams(num_tokens=128, swa_num_tokens=128))
+    assert_allocator(cache, allocator, 0)

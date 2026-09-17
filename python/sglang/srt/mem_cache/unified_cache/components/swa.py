@@ -843,12 +843,102 @@ class SWAComponent(TreeComponent):
             result.swa_uuid_for_lock = swa_uuid
         return result
 
+    def configure_context_lock(self, node, receipt, required):
+        """Exchange a native SWA window lease for exact historical read ranges.
+
+        The caller already owns Full references on this source path and calls
+        before allocation/dispatch, or after every prior reader has completed.
+        Reconfiguration may shrink a live lease; newly needed ranges require a
+        fresh acquired receipt, never an implicit reacquire of evicted sources.
+        """
+        import numpy as np
+        from sglang.srt.context_system.recovery import mask_ranges
+
+        if (
+            required.device.type != "cpu"
+            or required.dtype != torch.bool
+            or required.ndim != 1
+        ):
+            raise ValueError("Context SWA demand must be a CPU bool vector")
+        path, cursor = [], 0
+        cur = node
+        while cur is not self.tree_core.root_node:
+            path.append(cur)
+            cursor += len(cur.key)
+            cur = cur.parent
+        if len(required) != cursor:
+            raise ValueError("Context SWA demand must cover the acquired raw prefix")
+        demand = required.numpy()
+        old = receipt.context_swa_ranges
+        if old is not None:
+            held = np.zeros(cursor, dtype=np.bool_)
+            for a, b in old:
+                held[a:b] = True
+            if np.any(demand & ~held):
+                raise ValueError(
+                    "A live Context SWA lease cannot reacquire released KV"
+                )
+        for cur in path:
+            start = cursor - len(cur.key)
+            if np.any(demand[start:cursor]):
+                if cur.component_data[self.component_type].value is None:
+                    raise ValueError("Context SWA read refers to an absent source")
+                if cur.component_data[BASE_COMPONENT_TYPE].lock_ref <= 0:
+                    raise ValueError("Context SWA read requires a Full source lease")
+            cursor = start
+        spans = tuple(mask_ranges(demand))
+        if old == spans:
+            return receipt
+        # No allocator or GPU operation occurs between release and replacement.
+        self.release_component_lock(node, receipt)
+        boundaries = sorted({p for span in spans for p in span})
+        cursor, cur = len(required), node
+        while cur is not self.tree_core.root_node:
+            start = cursor - len(cur.key)
+            for boundary in boundaries:
+                if start < boundary < cursor:
+                    _, action = self.tree_core._split_node(
+                        cur.key, cur, boundary - start
+                    )
+                    assert action is None
+                    start = boundary
+            cursor -= len(cur.key)
+            cur = cur.parent
+        self._update_context_lock_ranges(node, spans, 1)
+        receipt.context_swa_ranges = spans
+        return receipt
+
+    def _update_context_lock_ranges(self, node, ranges, delta):
+        path, cursor = [], 0
+        cur = node
+        while cur is not self.tree_core.root_node:
+            path.append(cur)
+            cursor += len(cur.key)
+            cur = cur.parent
+        ct = self.component_type
+        for cur in path:
+            start = cursor - len(cur.key)
+            if any(a <= start and cursor <= b for a, b in ranges):
+                cd = cur.component_data[ct]
+                old_ref = cd.lock_ref
+                assert old_ref + delta >= 0
+                cd.lock_ref += delta
+                if cd.value is not None and (old_ref == 0 or cd.lock_ref == 0):
+                    change = len(cd.value) * delta
+                    self.tree_core.component_evictable_size_[ct] -= change
+                    self.tree_core.component_protected_size_[ct] += change
+                self.tree_core._update_evictable_leaf_sets(cur)
+            cursor = start
+
     def release_component_lock(
         self,
         node: UnifiedTreeNode,
         params: DecLockRefParams,
         lock_host: bool = False,
     ) -> None:
+        if not lock_host and params.context_swa_ranges is not None:
+            self._update_context_lock_ranges(node, params.context_swa_ranges, -1)
+            return
         ct = self.component_type
         root = self.tree_core.root_node
         swa_uuid_for_lock = (
