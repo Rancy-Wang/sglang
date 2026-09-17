@@ -1002,10 +1002,9 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
     ):
         """Tokenize one request."""
         if isinstance(obj, GenerateReqInput) and obj.context_program is not None:
-            # Remove this admission guard only when the scheduler owns the
-            # Context KV lifecycle. Never silently serve a compiled program as
-            # ordinary attention while the integration is being constructed.
-            raise ValueError("Context scheduler integration is not yet enabled")
+            from sglang.srt.context_system.capabilities import validate_context_request
+
+            validate_context_request(self.server_args, self.model_config, obj)
         # Tokenize
         input_embeds = None
         input_text = obj.text
