@@ -771,8 +771,29 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         self._update_evictable_leaf_sets(node)
         return DecLockRefResult()
 
+    def _validate_context_key(self, key: RadixKey) -> None:
+        # Storage hash/export and non-attention component state do not yet carry
+        # Context records. Reject before a split, lock, allocation, or insertion.
+        if (
+            self.enable_hicache
+            or self.enable_storage
+            or self.enable_external_cache_linker
+            or self.kv_events.enabled
+            or self.is_eagle
+            or any(
+                ct not in (ComponentType.FULL, ComponentType.SWA)
+                for ct in self.component_types
+            )
+        ):
+            raise ValueError(
+                "Context Radix currently requires device-only Full/SWA cache, "
+                "without speculative decoding or KV cache event export"
+            )
+
     def match_prefix(self, params: MatchPrefixParams) -> MatchResult:
         key = params.key
+        if key.context is not None:
+            self._validate_context_key(key)
         key, _ = key.maybe_to_bigram_view(self.is_eagle)
         if len(key) == 0:
             return self._empty_match_result
@@ -1041,6 +1062,8 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             raise RuntimeError("concurrent insert walks")
         key = params.key
         value = params.value
+        if key.context is not None:
+            self._validate_context_key(key)
         key, value = key.maybe_to_bigram_view(self.is_eagle, value)
         key = key.page_aligned(self.page_size)
         if value is not None:

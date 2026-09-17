@@ -23,6 +23,8 @@
 from __future__ import annotations
 
 import time
+from array import array
+from bisect import bisect_left
 from dataclasses import dataclass
 
 import torch
@@ -250,3 +252,86 @@ def prewarm_context_layout() -> None:
         empty,
         empty,
     )
+
+
+@dataclass(frozen=True)
+class ContextKeyData:
+    """Shared CPU record storage for native, real-token-sized Radix edges.
+
+    A unit owns virtual records immediately before its TOKEN record. Tail events
+    have no KV and remain in the request program; they become leading records of
+    the next real token when that token is appended. Final TOKEN positions still
+    distinguish tail Reposition versions. Slices share this immutable storage.
+    """
+
+    records: array
+    token_to_record: array
+    special_tokens: array
+
+    @classmethod
+    def from_layout(cls, layout: ContextLayout) -> ContextKeyData:
+        # Bulk copies avoid boxing four integers for every raw token. The native
+        # compiler's outputs are CPU int32 / int64 and already range checked.
+        records = array("i")
+        records.frombytes(layout.records.numpy().tobytes())
+        token_map = array("q")
+        token_map.frombytes(layout.token_to_key.numpy().tobytes())
+        ids = layout.token_to_key
+        raw = torch.arange(len(ids), dtype=torch.int64)
+        preceding = torch.cat((torch.tensor([-1]), ids[:-1])) if len(ids) else ids
+        special = (
+            (ids != preceding + 1)
+            | (layout.repos_info != -1)
+            | (layout.positions != raw)
+        )
+        special_tokens = array("q")
+        special_tokens.frombytes(torch.nonzero(special).flatten().numpy().tobytes())
+        return cls(records, token_map, special_tokens)
+
+    def record_start(self, raw: int) -> int:
+        return 0 if raw == 0 else self.token_to_record[raw - 1] + 1
+
+    def record_span(self, start: int, count: int) -> tuple[int, int]:
+        first = self.record_start(start)
+        last = self.token_to_record[start + count - 1] + 1 if count else first
+        return first, last
+
+    def plain_prefix(self, start: int, count: int) -> int:
+        index = bisect_left(self.special_tokens, start)
+        if index == len(self.special_tokens):
+            return count
+        return min(count, self.special_tokens[index] - start)
+
+    def match(self, other: ContextKeyData, start: int, offset: int, count: int) -> int:
+        """Exact structured LCP, returned in real tokens (never virtual slots)."""
+        if not count:
+            return 0
+        a, ae = self.record_span(start, count)
+        b, be = other.record_span(offset, count)
+        n = min(ae - a, be - b)
+        lo, step = 0, 1
+        while lo < n:
+            hi = min(lo + step, n)
+            if (
+                self.records[4 * (a + lo) : 4 * (a + hi)]
+                != other.records[4 * (b + lo) : 4 * (b + hi)]
+            ):
+                while hi - lo > 1:
+                    mid = (lo + hi) // 2
+                    if (
+                        self.records[4 * (a + lo) : 4 * (a + mid)]
+                        == other.records[4 * (b + lo) : 4 * (b + mid)]
+                    ):
+                        lo = mid
+                    else:
+                        hi = mid
+                break
+            lo = hi
+            step *= 2
+        # Only completely equal TOKEN records contribute KV. A mismatched event
+        # cannot accidentally count the following token as a cache hit.
+        return min(count, bisect_left(self.token_to_record, a + lo) - start)
+
+    def child_records(self, start: int, count: int) -> tuple[int, ...]:
+        begin, end = self.record_span(start, count)
+        return tuple(self.records[4 * begin : 4 * end])
