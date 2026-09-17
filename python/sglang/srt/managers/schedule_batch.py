@@ -3259,6 +3259,17 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             if step.unused_swa_slots is not None:
                 self.token_to_kv_pool_allocator.free_swa(step.unused_swa_slots)
             req.context_state = step.state
+            program = req.context_recompute_program or req.context_program
+            if req.extend_range.end == len(program.layout.positions):
+                # Overlap can launch decode before prefill result processing
+                # inserts the terminal versions into Radix. Publish its page
+                # table now; this prefill reads its immutable occurrence slots
+                # and writes birth slots independently. Ownership and freeing
+                # still wait for the native completion/lease barriers.
+                terminal = step.state.terminal_slots()
+                self.req_to_token_pool.write(
+                    (req.kv.req_pool_idx, slice(0, len(terminal))), terminal
+                )
             req.context_prefill_started = True
             req.context_window_plan = None
             sequences.append(ContextSequence.from_window(window))
