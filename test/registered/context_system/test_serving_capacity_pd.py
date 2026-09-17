@@ -26,7 +26,9 @@ def test_capacity_rejection_releases_both_sides(pd_servers):
     from sglang.srt.context_system.planner import ContextProgram
 
     assert os.environ["CONTEXT_P_KV"] == "110"
-    assert os.environ["CONTEXT_D_KV"] == "110"
+    # Keep native D's 512-token decode reserve. Its pool must admit the
+    # 90-token recovery request as well as the rejected request's active KV.
+    assert os.environ["CONTEXT_D_KV"] == "640"
     assert os.environ["CONTEXT_CHUNK_SIZE"] == "32"
     p_base, d_base, bootstrap = pd_servers
     prewarm_context_layout()
