@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Optional
 
 import torch
@@ -14,6 +15,7 @@ from triton_kernels.matmul import (
     PrecisionConfig,
     matmul,
 )
+from triton_kernels.matmul_details import opt_flags as _opt_flags
 from triton_kernels.matmul_details.opt_flags import update_opt_flags_constraints
 from triton_kernels.numerics import InFlexData
 from triton_kernels.swiglu import swiglu_fn
@@ -25,6 +27,41 @@ from sglang.srt.utils import is_cuda
 if get_platform().is_sm120:
     # use the regular gather/scatter implementation for unsupported devices.
     update_opt_flags_constraints({"is_persistent": False})
+
+
+@contextmanager
+def _small_ampere_mxfp4_warps(hidden_states, weight, metadata, active_experts):
+    """Avoid the upstream one-warp MXFP4 decode configuration on SM80.
+
+    Triton kernels 3.7.1 chooses one warp for a 16x256 tile. On A800 this
+    makes the native packed-weight GEMM over 17x slower than four warps.
+    Keep native large-prefill tuning and explicit caller constraints intact.
+    Model execution is serial within each SGLang TP worker; restore the
+    process-local tuning state before another operator can be scheduled.
+    """
+    constraints = _opt_flags._opt_flags_constraints
+    previous = constraints.get("num_warps")
+    expected = metadata.expected_slice_size
+    if expected is None:
+        expected = max(1, hidden_states.shape[0] * active_experts // metadata.n_slices)
+    tune = (
+        get_platform().device_sm == 80
+        and weight.dtype == FP4
+        and expected <= 64
+        and previous is None
+    )
+    present = "num_warps" in constraints
+    if tune:
+        update_opt_flags_constraints({"num_warps": 4})
+    try:
+        yield
+    finally:
+        if tune:
+            if present:
+                update_opt_flags_constraints({"num_warps": previous})
+            else:
+                constraints.pop("num_warps", None)
+
 
 if is_cuda():
     from sglang.kernels.ops.activation.activation import gelu_and_mul, silu_and_mul
@@ -340,24 +377,25 @@ def triton_kernel_fused_experts_with_bias(
         (gemm1_alpha, gemm1_clamp_limit),
     )
 
-    intermediate_cache = matmul(
-        hidden_states,
-        w1,
-        b1,
-        a_ragged_metadata=a_ragged_metadata,
-        gather_indx=gather_indx,
-        precision_config=w1_pcg,
-        gammas=gate_scal if apply_router_weight_on_input else None,
-        fused_activation=act,
-    )
+    with _small_ampere_mxfp4_warps(hidden_states, w1, a_ragged_metadata, n_expts_act):
+        intermediate_cache = matmul(
+            hidden_states,
+            w1,
+            b1,
+            a_ragged_metadata=a_ragged_metadata,
+            gather_indx=gather_indx,
+            precision_config=w1_pcg,
+            gammas=gate_scal if apply_router_weight_on_input else None,
+            fused_activation=act,
+        )
 
-    output = matmul(
-        intermediate_cache.view(M * n_expts_act, N // 2),
-        w2,
-        b2,
-        a_ragged_metadata=a_ragged_metadata,
-        scatter_indx=scatter_indx,
-        precision_config=w2_pcg,
-        gammas=None if apply_router_weight_on_input else gate_scal,
-    )
+        output = matmul(
+            intermediate_cache.view(M * n_expts_act, N // 2),
+            w2,
+            b2,
+            a_ragged_metadata=a_ragged_metadata,
+            scatter_indx=scatter_indx,
+            precision_config=w2_pcg,
+            gammas=None if apply_router_weight_on_input else gate_scal,
+        )
     return output.view(-1, K)
