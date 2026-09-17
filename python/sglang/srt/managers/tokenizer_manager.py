@@ -1002,9 +1002,12 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
     ):
         """Tokenize one request."""
         if isinstance(obj, GenerateReqInput) and obj.context_program is not None:
+            from sglang.srt.arg_groups.overrides import resolving_view
             from sglang.srt.context_system.capabilities import validate_context_request
 
-            validate_context_request(self.server_args, self.model_config, obj)
+            validate_context_request(
+                resolving_view(self.server_args), self.model_config, obj
+            )
         # Tokenize
         input_embeds = None
         input_text = obj.text
