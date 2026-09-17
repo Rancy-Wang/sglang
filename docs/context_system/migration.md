@@ -113,13 +113,20 @@ Agentic 回答通过。`9a2bfc811` 将实际生成与固定路径验证拆开，
 上一份 mask。迁移没有为了凑长度修改这两个原生语法行为。需在必验大模型上完成
 实际生成对照，并据其原生协议记录真实终止原因。
 
-GPT-OSS 窗口边界经端到端源码核对，并不存在“mini 128 对 SGLang 129”的差异：
-两者模型均把配置 window 转为 `window - 1` 的左窗口。
-SGLang `models/gpt_oss.py:129` `get_attention_sliding_window_size` 的结果由
-`model_executor/model_runner_components/load_model_utils.py:139`
-`resolve_sliding_window_size` 优先采用；mini 的 `models/gpt_oss.py:42` 同样减一。
+GPT-OSS 的模型配置都把 window=128 转为左距离 127，但这不足以证明完整
+SWA 路径一致。继续追踪发现冻结版原生 Triton decode 的
+`layers/attention/triton_backend.py:2660` `update_sliding_window_buffer` 使用
+`min(seq_len, sliding_window_size)`，长序列实际取 127 个 KV；mini 的
+`attention/fa.py:137` 则将 127 作为左距离，包含当前 token 时共 128 个。
 SGLang 引用前缀为 `python/sglang/srt/`，mini 为 `python/minisgl/`。
-该核对不替代 GPT-OSS 全模型数值测试。
+此前仅根据模型 getter 认定无窗口差异的结论已更正。
+
+迁移的 Context decode 使用 `python/sglang/kernels/ops/attention/context_page_table.py:8`
+`context_window_lengths`，按 `key_position >= query_position - 127` 搜索，
+与 mini 一样最多保留 128 个连续位置；Drop 空洞不能用更早 KV 补齐。Context prefill
+在原生 extend kernel 内同样按真实位置施加窗口。普通无功能 lane 保留原生行为，
+不会因同批存在 Context 请求而改变窗口。当前没有修改原生模型或普通 attention 的
+窗口定义；这是跨系统无功能校准需要记录的计算差异，不能全部归为浮点舍入。
 
 GPU 资源阻塞已解除：按用户随后授予的 GPU 0–3 全部任务释放权限，核实宿主进程
 归属后停止了前四卡的占用任务。GPU 4–7 的其他训练保留；特权会话已关闭。当前必验
@@ -251,9 +258,50 @@ BUS 使用四个必验模型的真实 tokenizer 检查保留、准确 Drop 来�
 虚假的性能提升；mini 对照使用其已验证的 `MINISGL_PRESERVE_HARMONY_HISTORY=1`。
 原生模板间仍存在格式差异，不能仅据此宣称完整轨迹 input IDs 相同。
 
-完整吞吐实验正在进行：mini GPU0/1、修改版 SGLang GPU2/3，TP2 C1/N2 no_drop，
-输出位于 `minimal-mini120-c1-none-v1/` 和 `minimal-sg120-c1-none-v1/`。
-目前没有最终吞吐数字，也没有完成冻结原版、Drop、C2 或 PD 吞吐验收。
+### 已完成的最小吞吐子集
+
+以下来自完整轨迹最终 JSON，非中途估计；GPT-OSS-120B TP2、BUS GPU0/1，
+mini `2966eb4`。单位 tokens/s，实际吞吐排除 cache hit。
+
+| 配置 | 首次任务 | 成功 turn / 失败 | 测量秒数 | 实际 Prefill / Decode / All |
+| --- | --- | --- | --- | --- |
+| C1 no_drop | 2/2 | 84 / 0 | 850.903 | 252.298 / 32.091 / 284.389 |
+| C1 Drop+R | 2/2 | 84 / 0 | 824.251 | 260.506 / 33.128 / 293.634 |
+| C2 no_drop | 4/4 | 150 / 0 | 1321.638 | 324.724 / 35.734 / 360.457 |
+
+相对上述 BUS 实验根目录，证据分别为：
+
+- `minimal-mini120-c1-none-v1/workload/20260917_223811_238167_no_drop_C1.json`
+- `minimal-mini120-c1-drop-v1/workload/20260917_225617_541427_drop_C1.json`
+- `minimal-mini120-c2-none-v1/workload/20260917_231258_426732_no_drop_C2.json`
+
+C2 成功 turn 含 143 次 first-pass 和 7 次 filler；截止取消单列，不计失败或成功分子。
+所有返回长度均符合源任务要求。当前 mini C2 Drop、修改版/原生 SGLang 及 PD 矩阵
+仍未全部完成，不能依据此表宣称 SGLang 达到约 3% 的效率目标。并行实验分别占用
+0/1 和 2/3，但共享主机 CPU；小样本、首遇形状 JIT 和执行时段差异均须列为比较限制。
+
+### Native allreduce 与长 raw P/D 补充
+
+GPT-OSS-120B 在恢复原生 custom allreduce 后，普通调度六条 BCP 固定路径复核为
+`1 passed in 288.45s`，测试 HEAD `30bdff1b6`，GPU2/3 TP2。
+`bcp778-sg-gpt120-native-ar-v1/` 中的逐项误差与上述普通 120B 表相同；不能将
+此前关闭 custom allreduce 的未完成吞吐运行当作有效基线。原生 IPC 的两处构建兼容
+修复只补声明和限定 `tvm::ffi::get` 名字查找；独立 allreduce 检查两 rank 各 180 种
+dtype/size/algorithm/eager/graph 组合通过，日志 `allreduce-ipc-v1.log`。
+吞吐原生对照使用 `b21177f2e`，即冻结官方基线加同样的 SM80 MoE 调优和这两处构建
+修复，不称为未经改动的官方版本。
+
+长 raw PD 证据 `long-raw-pd-gpt20-30bdff1b6-v1/` 使用 GPT-OSS-20B、P GPU2、
+D GPU3，raw=4668 超过原生行宽 2048，五次 Drop+R，8 个固定输出。
+原始 pytest 因热路径过严对照失败（304.40s）；保留失败，不改称 pytest 通过。
+定位到原生 P 在传输前进行 unfinished-cache 去重：重算的末 prompt KV 被冷缓存
+canonical 页替代，而普通热路径继续使用重算页。因此 P 首 logits 与普通热算完全
+相同，D 后七步与普通冷算完全相同。保存的 GPU 数据按这一原生交接路径复核为逐元素
+完全一致，有限值、input/output IDs、usage 均通过；`2dcec1f19` 的测试 oracle 按
+此路径修正，没有为改断言重复运行模型。普通热路径诊断 max/mean/p99 为
+0.4375/0.024850/0.15625，八步 argmax 相同；热缓存 cached=142、repos=0、
+Drop-skipped=4525、实际 prefill=1、decode=7。后验核验文件为
+`posthoc-handoff-validation.json`，与原始失败报告一并保留。
 
 ## 最终设置
 
