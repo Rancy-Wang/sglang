@@ -43,6 +43,7 @@ class ContextUsage:
         self.prefill_queries = 0
         self.decode_queries = 0
         self.recomputing = False
+        self._cache_counts = None
 
     def begin_recompute(self) -> None:
         """Freeze initial cache provenance; subsequent work still costs tokens."""
@@ -78,6 +79,7 @@ class ContextUsage:
         # A scheduled transform that no query reads never contributes to repos.
         self.transformed |= transformed_raw.numpy()[:n] & used
         self.prefill_queries += query_count
+        self._cache_counts = None
 
     def record_decode(self, query_count: int = 1) -> None:
         if type(query_count) is not int or query_count < 1:
@@ -85,13 +87,17 @@ class ContextUsage:
         self.decode_queries += query_count
 
     def snapshot(self) -> ContextUsageSnapshot:
-        used = self.resident & self.read
+        # Cache provenance changes only on prefill completion. Streaming decode
+        # reports counters in O(1), without rescanning the historical prompt.
+        if self._cache_counts is None:
+            used = self.resident & self.read
+            self._cache_counts = (
+                int(np.count_nonzero(used & ~self.transformed)),
+                int(np.count_nonzero(used & self.transformed)),
+                int(np.count_nonzero(self.resident & self.dropped & ~self.read)),
+            )
         return ContextUsageSnapshot(
-            cached_tokens=int(np.count_nonzero(used & ~self.transformed)),
-            repos_tokens=int(np.count_nonzero(used & self.transformed)),
-            drop_skipped_tokens=int(
-                np.count_nonzero(self.resident & self.dropped & ~self.read)
-            ),
+            *self._cache_counts,
             actual_prefill_tokens=self.prefill_queries,
             actual_decode_tokens=self.decode_queries,
         )

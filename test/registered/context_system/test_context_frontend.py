@@ -405,3 +405,50 @@ def test_context_admission_limits_preserve_native_tp_and_overlap(chat):
         with pytest.raises(ValueError, match=error):
             validate_context_request(args, config, obj)
         setattr(args, field, previous)
+
+
+def test_context_usage_streams_scalar_snapshot_in_mixed_batch():
+    from types import SimpleNamespace
+
+    import torch
+    from sglang.srt.context_system.usage import ContextUsage
+    from sglang.srt.managers.io_struct import unwrap_from_pickle
+    from sglang.srt.managers.tokenizer_manager import TokenizerManager
+
+    fixture = load_file(
+        "context_native_output_fixture",
+        ROOT / "test/registered/unit/managers/test_output_streamer_customized_info.py",
+    )
+    context = fixture._FakeReq("context", [11, 12], finished=True)
+    context.context_usage = ContextUsage(
+        torch.ones(2, dtype=torch.bool), torch.tensor([False, True])
+    )
+    context.context_usage.record_prefill(
+        torch.tensor([True, False]), torch.zeros(2, dtype=torch.bool), 3
+    )
+    context.context_usage.record_decode()
+    accumulator = fixture._accumulator()
+    for req in (
+        fixture._FakeReq("before", [9], finished=True),
+        context,
+        fixture._FakeReq("after", [10], finished=True),
+    ):
+        accumulator.accept(req=req)
+    payload = accumulator.to_payload(dp_rank=0, is_idle_batch=False)
+    values = unwrap_from_pickle(payload.customized_info)
+    manager = TokenizerManager.__new__(TokenizerManager)
+    state = SimpleNamespace(customized_info_accumulated={})
+    for index in range(3):
+        meta = {}
+        manager.update_request_meta_info(meta, state, values, index, {"type": "length"})
+        if index == 1:
+            assert meta["context_usage"] == {
+                "cached_tokens": 1,
+                "repos_tokens": 0,
+                "drop_skipped_tokens": 1,
+                "actual_prefill_tokens": 3,
+                "actual_decode_tokens": 1,
+            }
+        else:
+            assert "context_usage" not in meta
+    assert state.customized_info_accumulated == {}

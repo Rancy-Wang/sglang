@@ -2600,6 +2600,10 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
     ) -> None:
         """Accumulate metadata; subclasses may use finish_reason for terminal data."""
         for key, values in customized_info.items():
+            if key == "context_usage":
+                if values[index] and values[index][-1] is not None:
+                    meta_info[key] = values[index][-1]
+                continue
             self._accumulate_request_meta_info(
                 meta_info,
                 state,

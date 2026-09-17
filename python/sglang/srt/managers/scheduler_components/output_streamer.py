@@ -687,6 +687,12 @@ class _GenerationStreamAccumulator:
             if len(per_request_values) < len(self.output_ids):
                 per_request_values.append([None] * current_output_len)
 
+        if getattr(req, "context_usage", None) is not None:
+            # One scalar snapshot per emitted chunk, not one copy per token.
+            if "context_usage" not in self.customized_info:
+                self.customized_info["context_usage"] = [[] for _ in self.output_ids]
+            self.customized_info["context_usage"][-1] = [vars(req.context_usage.snapshot())]
+
     def to_payload(
         self, *, dp_rank: int, is_idle_batch: bool
     ) -> Optional[BatchTokenIDOutput]:
