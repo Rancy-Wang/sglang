@@ -217,16 +217,23 @@ def test_native_admission_charges_copies_once(factory, compiler, ignore_eos):
 
 def test_continuation_shrinks_before_allocation(factory, compiler):
     factory.mock_token_allocator.available_size.return_value = 90
-    adder = factory.create_adder(factory.create_running_batch(), rem_chunk_tokens=64)
+    adder = factory.create_adder(factory.create_running_batch(), rem_chunk_tokens=128)
     req = make_req(compiler)
+    # Ninety pages fit a short first chunk but cannot finish this request.
+    # Wait for external pressure to clear before reserving a viable forward.
+    assert adder.add_chunked_req(req) is req
+    assert adder.can_run_list == [] and req.context_window_plan is None
+    assert req.context_admission_error is None
+    factory.mock_token_allocator.available_size.return_value = 150
     assert adder.add_chunked_req(req) is req
     assert adder.can_run_list == [req]
-    assert 0 < req.extend_range.length < 64
+    assert req.extend_range.length == 64
     _, plan = req.context_window_plan
     assert adder.memory_budget.current_offset == (
         req.extend_range.length + plan.extra_page_count + 1
     )
     assert adder.memory_budget.remaining_current > 0
+    assert adder.memory_budget.total_offset > adder.memory_budget.current_offset
     factory.mock_token_allocator.alloc.assert_not_called()
 
 
