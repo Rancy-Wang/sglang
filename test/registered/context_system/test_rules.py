@@ -240,6 +240,20 @@ def test_context_program_wire_preserves_canonical_tokens(context_modules, repos)
     restored = planner.ContextProgram.from_wire(wire, trace.input_ids)
     assert restored.layout.records is program.layout.records
     assert restored.visible_until is program.visible_until
+    # Native PD rebootstrap carries generated prefix through HTTP JSON.
+    import json
+
+    generated = [31, 32, 33]
+    replay = program.with_generated(generated)
+    encoded = json.loads(json.dumps(replay.to_json_wire()))
+    restored = planner.ContextProgram.from_wire(encoded, [*trace.input_ids, *generated])
+    assert torch.equal(restored.layout.records, replay.layout.records)
+    assert torch.equal(restored.layout.positions, replay.layout.positions)
+    assert torch.equal(restored.visible_until, replay.visible_until)
+    corrupt_json = copy.deepcopy(encoded)
+    corrupt_json["layout"]["records"]["data"] += "!"
+    with pytest.raises(ValueError):
+        planner.ContextProgram.from_wire(corrupt_json, [*trace.input_ids, *generated])
     with pytest.raises(ValueError, match="canonical input IDs"):
         planner.ContextProgram.from_wire(wire, [1] * len(trace.input_ids))
     corrupt = copy.deepcopy(wire)

@@ -432,9 +432,89 @@ class ContextProgram:
             "visible_until": self.visible_until,
         }
 
+    def to_json_wire(self) -> dict[str, Any]:
+        """Bounded binary JSON for rare native PD rebootstrap HTTP requests."""
+        import base64
+
+        def encode(value):
+            if not isinstance(value, torch.Tensor):
+                return value
+            return {
+                "shape": list(value.shape),
+                "data": base64.b64encode(value.numpy().tobytes()).decode("ascii"),
+            }
+
+        return {
+            "version": 2,
+            "layout": {
+                name: encode(value) for name, value in vars(self.layout).items()
+            },
+            "visible_until": encode(self.visible_until),
+        }
+
     @classmethod
     def from_wire(cls, wire: dict[str, Any], input_ids) -> ContextProgram:
         """Check the internal payload before binding it to a scheduler request."""
+        if (
+            isinstance(wire, dict)
+            and type(wire.get("version")) is int
+            and wire["version"] == 2
+        ):
+            import base64
+            import math
+
+            scalar = {"next_position", "current_reposition", "compile_ns"}
+            boolean = {
+                "virtual_mask",
+                "keep_mask",
+                "effective_repositions",
+                "ignored_repositions",
+            }
+            wide = {"key_to_token", "token_to_key", "drop_event_to_key"}
+
+            def decode(name, value):
+                if name in scalar:
+                    return value
+                if not isinstance(value, dict) or set(value) != {"shape", "data"}:
+                    raise ValueError("Invalid Context JSON tensor")
+                shape = value["shape"]
+                if (
+                    not isinstance(shape, list)
+                    or len(shape) != (2 if name == "records" else 1)
+                    or any(type(n) is not int or n < 0 for n in shape)
+                    or not isinstance(value["data"], str)
+                ):
+                    raise ValueError("Invalid Context JSON tensor shape")
+                dtype = (
+                    torch.bool
+                    if name in boolean
+                    else torch.int64
+                    if name in wide
+                    else torch.int32
+                )
+                raw = base64.b64decode(value["data"], validate=True)
+                width = torch.empty((), dtype=dtype).element_size()
+                if len(raw) != math.prod(shape) * width:
+                    raise ValueError("Context JSON tensor byte length mismatch")
+                if dtype == torch.bool and any(b > 1 for b in raw):
+                    raise ValueError("Invalid Context JSON boolean")
+                return (
+                    torch.frombuffer(bytearray(raw), dtype=dtype).reshape(shape)
+                    if raw
+                    else torch.empty(shape, dtype=dtype)
+                )
+
+            if set(wire) != {"version", "layout", "visible_until"} or not isinstance(
+                wire["layout"], dict
+            ):
+                raise ValueError("Invalid Context JSON wire")
+            wire = {
+                "version": 1,
+                "layout": {
+                    name: decode(name, value) for name, value in wire["layout"].items()
+                },
+                "visible_until": decode("visible_until", wire["visible_until"]),
+            }
         if (
             not isinstance(wire, dict)
             or set(wire) != {"version", "layout", "visible_until"}

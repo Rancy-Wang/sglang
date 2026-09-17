@@ -1,0 +1,67 @@
+"""PD identity, compact ownership and accounting without a model launch."""
+
+import sys
+from types import SimpleNamespace
+
+import pytest
+import torch
+from test_ir import ROOT, args, load_file
+
+pytest_plugins = ("test_ir",)
+
+
+def test_pd_final_versions_holes_identity_and_usage(compiler, monkeypatch):
+    occurrence = load_file(
+        "pd_occurrence", ROOT / "python/sglang/srt/context_system/occurrence.py"
+    )
+    usage = load_file("pd_usage", ROOT / "python/sglang/srt/context_system/usage.py")
+    monkeypatch.setitem(sys.modules, "sglang.srt.context_system.occurrence", occurrence)
+    monkeypatch.setitem(sys.modules, "sglang.srt.context_system.usage", usage)
+    transfer = load_file(
+        "pd_transfer", ROOT / "python/sglang/srt/disaggregation/context_transfer.py"
+    )
+    layout = compiler(*args(list(range(12)), {6: [(1, 4)]}, [7]))
+    program = SimpleNamespace(
+        layout=layout, visible_until=torch.full((12,), 99, dtype=torch.int32)
+    )
+    req = SimpleNamespace(
+        context_program=program,
+        context_recompute_program=None,
+        kv=SimpleNamespace(req_pool_idx=0),
+    )
+    table = torch.full((1, 12), -99, dtype=torch.int64)
+    pool = SimpleNamespace(
+        req_to_token=table, write=lambda index, values: table.__setitem__(index, values)
+    )
+    allocated = []
+
+    def alloc(count):
+        allocated.append(count)
+        return torch.arange(100, 100 + count, dtype=torch.int64)
+
+    allocator = SimpleNamespace(device="cpu", alloc=alloc)
+    slots = transfer.allocate_context_destination(req, allocator, pool)
+    assert allocated == [9]
+    assert table.tolist() == [[100, -1, -1, -1, 101, 102, 103, 104, 105, 106, 107, 108]]
+    assert req.context_decode_layout.positions.tolist() == list(range(9))
+    assert req.kv.kv_allocated_len == 12
+    assert torch.equal(req.context_state.private_slots(), slots)
+    assert req.context_state.nonterminal_private_slots().numel() == 0
+    plan = transfer.transfer_plan(req, "cpu")
+    assert plan.slots(req, pool, window=3).tolist() == [106, 107, 108]
+    req.context_usage = usage.ContextUsage.from_snapshot(
+        usage.ContextUsageSnapshot(2, 3, 4, 5, 0)
+    )
+    row = torch.full((16,), -99, dtype=torch.int32)
+    transfer.write_context_metadata(req, row)
+    assert row[:7].tolist() == [-99] * 7
+    transfer.commit_context_metadata(req, row, "cpu")
+    req.context_usage.record_decode(2)
+    assert req.context_usage.snapshot() == usage.ContextUsageSnapshot(2, 3, 4, 5, 2)
+    row[10] ^= 1
+    with pytest.raises(ValueError, match="identity"):
+        transfer.commit_context_metadata(req, row, "cpu")
+    req.context_program = None
+    transfer.write_context_metadata(req, row)
+    assert not row[7:].any()
+    transfer.commit_context_metadata(req, row, "cpu")

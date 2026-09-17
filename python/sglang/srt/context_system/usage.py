@@ -49,6 +49,20 @@ class ContextUsage:
         """Freeze initial cache provenance; subsequent work still costs tokens."""
         self.recomputing = True
 
+    @classmethod
+    def from_snapshot(cls, snapshot: ContextUsageSnapshot):
+        """D inherits P's completed work; later decode reporting stays O(1)."""
+        result = cls(torch.empty(0, dtype=torch.bool), torch.empty(0, dtype=torch.bool))
+        result._cache_counts = (
+            snapshot.cached_tokens,
+            snapshot.repos_tokens,
+            snapshot.drop_skipped_tokens,
+        )
+        result.prefill_queries = snapshot.actual_prefill_tokens
+        result.decode_queries = snapshot.actual_decode_tokens
+        result.recomputing = True
+        return result
+
     def record_prefill(
         self,
         read_raw: torch.Tensor,
