@@ -143,10 +143,32 @@ chunk 和 prompt/output 分节点都遵守同一边界。如果旧稀疏匹配�
   热命中为 `3384/0/0/1`。热请求的 Drop 页在初始匹配时已是物理空洞，故
   `drop_skipped=0`；该计数只统计初始物理驻留却未读的 Drop KV，不把已释放空洞计入
   （`python/sglang/srt/context_system/usage.py:103`，`ContextUsage.snapshot`）。
-- `minimal-sg120-c2-drop-parser-v4` 在 GPU2/3、`e6b219f0d` 跑完整 C2 轨迹，结果待确认。
+- `minimal-sg120-c2-drop-parser-v4` 在 GPU2/3、`e6b219f0d` 完成 133 个请求后停滞；
+  本次运行已中断并标记无效，具体诊断与修复见下节，不能计入吞吐达标。
 - 旧提交 `1478d3a05` 的普通 C1 no-drop 完整轨迹完成：84 成功、0 失败，
   27390 输出 tokens / 1046.433687s = **26.174616 token/s**。这是对照结果，
   不代替修复后 Drop C2 与原生的 95% 性能门槛。
+
+## 空闲容量重试被 full 标志阻塞（2026-09-18）
+
+上述 C2 v4 在 case864 turn27 / case228 turn20 之后停滞。BUS 03:49 的 `/v1/loads`
+显示 running=0、waiting=2、GPU2/3 利用率为0；3秒 `py-spy` 采样显示 scheduler
+仍在接收/广播循环，客户端在等待响应。保存 `stall-evidence.json` 与 `stall-stack.txt`。
+本次请求实际生成历史不同于旧 v3；待发 case864 turn28 的 raw 长度为133364，
+不能沿用旧请求132996的容量数值作为这次的精确证据。
+
+`PrefillAdder._fit_context_admission` 可设置 `context_force_miss`，要求下一轮放弃
+自锁定的缓存匹配冷算；原生 scheduler 却对该 NO_TOKEN 无条件设置 `batch_is_full`。
+没有 running 请求时，也就没有 decode 完成来清除该标志，下一轮直接跳过队列。
+`182bdc5cc` 在 `Scheduler._get_new_batch_prefill_raw`
+（`python/sglang/srt/managers/scheduler.py:4060`）处理准入新产生的 Context 容量错误，
+并且仅在仍有可运行请求时对 Context 的 NO_TOKEN 设置 full。普通请求规则不变。
+
+BUS CPU 命令 `CUDA_VISIBLE_DEVICES=9 PYTHONPATH=python python -m pytest -q
+ test/registered/context_system/test_context_admission.py -k idle_rejected`
+为 **3 passed, 17 deselected in 15.51s**：空闲冷算请求能再次尝试、不可恢复容量错误
+从队列结束、普通原生请求行为不变。下一项是失败附近两条 BCP 请求的缓存预热/并发
+重放；这是定向功能诊断，不是完整轨迹吞吐。R2仍未完成。
 
 ## 延迟终态副本的 PD 传输边界（2026-09-18）
 
@@ -188,6 +210,44 @@ Drop+R 冷算及 Retry 的张量逐元素完全一致；热命中 max/mean/p99 �
 0.9375/0.030352/0.21875，64/64 argmax 一致。原始结果为该 PD 目录下
 `comparison.json`、`normal-pd-comparison.json` 及逐路径 `.pt`。
 本次覆盖稳定终态传输、冷算、热命中和 Retry，不替代 120B PD 与完整轨迹吞吐门槛。
+
+## 最终 Qwen / Agentic BCP 三方对照（2026-09-18）
+
+`d2ef1d0f1` 在 BUS 的 `final-qwen-bcp-lifetime-v1` 使用相同 BCP 输入和已保存的 mini
+默认 logits；未额外运行 mini forward。BF16、page1、Triton、context16384、chunk512，
+普通 KV24576；PD P24576/D16384、P GPU0 / D GPU1，D Radix关闭。普通 Qwen GPU0、
+Agentic GPU1；PD在普通检查结束后顺序执行，CUDA Graph保持开启。
+
+命令分别为 `python -m pytest -s -q test/registered/context_system/test_bcp_numeric.py`
+及 `test_bcp_pd_numeric.py`，通过时间包含启动：Qwen普通 **1 passed in 133.58s**、
+PD **1 passed in 238.89s**；Agentic普通 **1 passed in 157.65s**、
+PD **1 passed in 270.71s**。Agentic Retry沿用已保存的匹配状态 mini Retry参考，
+来源记录在 `reference-sources.json`。
+
+| 模型 / 路径 | 普通及 PD 相对 mini 的 max / mean / p99 |
+| --- | --- |
+| Qwen 无功能 | 1.125 / 0.054271 / 0.218750 |
+| Qwen Drop | 0.5625 / 0.049975 / 0.187500 |
+| Qwen Drop+R 冷 | 1.125 / 0.065057 / 0.312500 |
+| Qwen Retry | 0.625 / 0.050695 / 0.187500 |
+| Agentic 无功能 | 1.000 / 0.054687 / 0.312500 |
+| Agentic Drop | 0.968750 / 0.045616 / 0.218750 |
+| Agentic Drop+R 冷 | 1.578125 / 0.068580 / 0.312500 |
+| Agentic Retry | 1.339844 / 0.068650 / 0.359375 |
+
+热命中相对 mini：Qwen普通 `1.046875/0.064866/0.296875`、
+PD `1.125/0.065100/0.312500`；Agentic普通 `1.101562/0.059618/0.271484`、
+PD `1.578125/0.068670/0.312500`。全部通过既有同模型无功能误差校准。
+两模型的热命中均实际PF1/D63、cached4877/repos0/drop-skipped0；
+Retry均PF2002/D63、cached1508/repos4122/drop-skipped2850。
+
+离线读取已保存张量直接比较普通与PD：两模型无功能、Drop冷、R冷、Retry均逐元素
+一致；热命中Qwen `0.5625/0.043355/0.15625`，Agentic `0.65625/0.049008/0.1875`，
+均64/64 raw argmax一致。各三条实际生成路径普通与PD均64/64 tokens相同。
+与mini的自由生成仍有此前已定位的原生语法/采样行为差异：Qwen逐位置相同数为
+1/1/5，Agentic为1/2/1（无功能/Drop/R，各64 tokens）。不能将固定token通过或
+普通与PD一致改写成自由生成与mini完全相同；原始消息、首次分歧与数值证据保留。
+各目录 `comparison.json`、`normal-pd-comparison.json` 为本次结果。
 
 ## 当前实测状态（2026-09-17）
 
