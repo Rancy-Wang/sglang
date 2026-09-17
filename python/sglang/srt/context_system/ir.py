@@ -27,7 +27,6 @@ from dataclasses import dataclass
 
 import torch
 
-
 TOKEN_KIND = 0
 DELTA_KIND = 1
 REPOSITION_KIND = 2
@@ -99,13 +98,19 @@ def compile_context_layout(
         "reposition_insert_offsets": reposition_insert_offsets,
     }
     for name, value in vectors.items():
-        if (value.device.type != "cpu" or value.ndim != 1
-                or value.dtype not in (torch.int32, torch.int64)):
+        if (
+            value.device.type != "cpu"
+            or value.ndim != 1
+            or value.dtype not in (torch.int32, torch.int64)
+        ):
             raise ValueError(f"{name} must be a one-dimensional CPU integer tensor.")
         # Validate before narrowing: a wrapped offset can address unrelated KV.
-        if value.dtype == torch.int64 and len(value):
-            if int(value.min()) < -(2**31) or int(value.max()) >= 2**31:
-                raise ValueError(f"{name} exceeds the signed int32 range.")
+        if (
+            value.dtype == torch.int64
+            and len(value)
+            and (int(value.min()) < -(2**31) or int(value.max()) >= 2**31)
+        ):
+            raise ValueError(f"{name} exceeds the signed int32 range.")
     token_ids = token_ids.contiguous()
     drop_insert_offsets = drop_insert_offsets.to(torch.int32).contiguous()
     drop_range_offsets = drop_range_offsets.to(torch.int32).contiguous()
@@ -144,14 +149,24 @@ def compile_context_layout(
     materialized_stage = torch.empty(token_count, dtype=torch.int32, device="cpu")
     birth_positions = torch.empty(token_count, dtype=torch.int32, device="cpu")
     birth_stages = torch.empty(token_count, dtype=torch.int32, device="cpu")
-    transition_offsets = torch.empty(reposition_count + 1, dtype=torch.int32, device="cpu")
-    transition_raw_tokens = torch.empty(transition_count, dtype=torch.int32, device="cpu")
-    transition_old_positions = torch.empty(transition_count, dtype=torch.int32, device="cpu")
-    transition_new_positions = torch.empty(transition_count, dtype=torch.int32, device="cpu")
+    transition_offsets = torch.empty(
+        reposition_count + 1, dtype=torch.int32, device="cpu"
+    )
+    transition_raw_tokens = torch.empty(
+        transition_count, dtype=torch.int32, device="cpu"
+    )
+    transition_old_positions = torch.empty(
+        transition_count, dtype=torch.int32, device="cpu"
+    )
+    transition_new_positions = torch.empty(
+        transition_count, dtype=torch.int32, device="cpu"
+    )
     effective_reposition_stages = torch.full(
         (reposition_count,), -1, dtype=torch.int32, device="cpu"
     )
-    drop_event_to_key = torch.full((len(drop_insert_offsets),), -1, dtype=torch.int64, device="cpu")
+    drop_event_to_key = torch.full(
+        (len(drop_insert_offsets),), -1, dtype=torch.int64, device="cpu"
+    )
     effective = torch.zeros(reposition_count, dtype=torch.bool, device="cpu")
     ignored = torch.zeros(reposition_count, dtype=torch.bool, device="cpu")
     status = torch.zeros(6, dtype=torch.int64, device="cpu")

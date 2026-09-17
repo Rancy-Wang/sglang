@@ -8,14 +8,13 @@ These tests do not claim scheduler or GPU coverage.
 import dataclasses
 import importlib.util
 import os
-from pathlib import Path
 import random
 import sys
 import types
+from pathlib import Path
 
 import pytest
 import torch
-
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -34,9 +33,7 @@ def compiler():
         "context_test_kernel",
         ROOT / "python/sglang/kernels/ops/attention/context_plan.py",
     )
-    ir = load_file(
-        "context_test_ir", ROOT / "python/sglang/srt/context_system/ir.py"
-    )
+    ir = load_file("context_test_ir", ROOT / "python/sglang/srt/context_system/ir.py")
     ir._load_module = kernel.load_context_plan
     ir.prewarm_context_layout()
     return ir.compile_context_layout
@@ -47,8 +44,14 @@ def args(tokens, drops, reposition):
     for spans in drops.values():
         ranges.extend(value for span in spans for value in span)
         offsets.append(len(ranges) // 2)
-    values = (tokens, list(drops), offsets, ranges, reposition,
-              [boundary + 1 for boundary in reposition])
+    values = (
+        tokens,
+        list(drops),
+        offsets,
+        ranges,
+        reposition,
+        [boundary + 1 for boundary in reposition],
+    )
     return tuple(torch.tensor(value, dtype=torch.int32) for value in values)
 
 
@@ -66,8 +69,9 @@ def oracle(tokens, drops, reposition):
         if insertion - 1 in reposition:
             if not active:
                 raise ValueError("empty active set")
-            changes = [(raw, rank) for rank, raw in enumerate(active)
-                       if positions[raw] != rank]
+            changes = [
+                (raw, rank) for rank, raw in enumerate(active) if positions[raw] != rank
+            ]
             effective.append(bool(changes))
             ignored.append(not changes)
             effective_stages.append(stage + 1 if changes else -1)
@@ -107,17 +111,28 @@ def oracle(tokens, drops, reposition):
             keys.append([0, tokens[insertion], repos[insertion], positions[insertion]])
             virtual.append(False)
             key_raw.append(insertion)
-    return dict(
-        records=keys, virtual_mask=virtual, key_to_token=key_raw,
-        token_to_key=raw_key, positions=positions, repos_info=repos,
-        keep_mask=[raw in active for raw in range(n)], materialized_stage=ready,
-        birth_positions=birth, birth_stages=birth_stages,
-        transition_offsets=transition_offsets, transition_raw_tokens=changed,
-        transition_old_positions=old, transition_new_positions=new,
-        effective_reposition_stages=effective_stages, drop_event_to_key=drop_key,
-        effective_repositions=effective, ignored_repositions=ignored,
-        next_position=next_position, current_reposition=current,
-    )
+    return {
+        "records": keys,
+        "virtual_mask": virtual,
+        "key_to_token": key_raw,
+        "token_to_key": raw_key,
+        "positions": positions,
+        "repos_info": repos,
+        "keep_mask": [raw in active for raw in range(n)],
+        "materialized_stage": ready,
+        "birth_positions": birth,
+        "birth_stages": birth_stages,
+        "transition_offsets": transition_offsets,
+        "transition_raw_tokens": changed,
+        "transition_old_positions": old,
+        "transition_new_positions": new,
+        "effective_reposition_stages": effective_stages,
+        "drop_event_to_key": drop_key,
+        "effective_repositions": effective,
+        "ignored_repositions": ignored,
+        "next_position": next_position,
+        "current_reposition": current,
+    }
 
 
 def cases():
@@ -146,7 +161,9 @@ def test_staged_event_oracle(compiler, tokens, drops, reposition):
     actual = compiler(*args(tokens, drops, reposition))
     for name, expected in oracle(tokens, drops, reposition).items():
         value = getattr(actual, name)
-        assert (value.tolist() if isinstance(value, torch.Tensor) else value) == expected, name
+        assert (
+            value.tolist() if isinstance(value, torch.Tensor) else value
+        ) == expected, name
 
 
 def test_empty_reposition_rejected(compiler):
@@ -187,7 +204,9 @@ def test_fixed_mini_compiler_differential(compiler):
     package = types.ModuleType("mini_context_reference")
     package.__path__ = [str(kernel)]
     sys.modules[package.__name__] = package
-    reference = load_file(package.__name__ + ".radix_reposition", kernel / "radix_reposition.py")
+    reference = load_file(
+        package.__name__ + ".radix_reposition", kernel / "radix_reposition.py"
+    )
     for tokens, drops, reposition in cases():
         values = args(tokens, drops, reposition)
         expected = reference.compile_radix_reposition_layout(*values)
@@ -196,4 +215,8 @@ def test_fixed_mini_compiler_differential(compiler):
             if field.name == "compile_ns":
                 continue
             left, right = getattr(actual, field.name), getattr(expected, field.name)
-            assert torch.equal(left, right) if isinstance(left, torch.Tensor) else left == right
+            assert (
+                torch.equal(left, right)
+                if isinstance(left, torch.Tensor)
+                else left == right
+            )
