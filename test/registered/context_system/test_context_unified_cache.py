@@ -66,9 +66,7 @@ def test_native_insert_split_lock_and_page_reclaim(compiler, page_size):
         cache.match_prefix(MatchPrefixParams(key=key)).device_indices.tolist()
         == values[:192].tolist()
     )
-    cache.dec_lock_ref(
-        partial.last_device_node, receipt.to_dec_params()
-    )
+    cache.dec_lock_ref(partial.last_device_node, receipt.to_dec_params())
     cache.evict(EvictParams(num_tokens=1024))
     assert allocator.available_size() == 1024
     assert len(torch.unique(allocator.get_all_free_pages())) == 1024 // page_size
@@ -97,3 +95,80 @@ def test_context_export_rejected_before_tree_mutation(compiler):
     with pytest.raises(ValueError, match="event export"):
         cache.insert(InsertParams(key=key, value=torch.arange(4)))
     assert len(cache.tree_core._node_arena) == before
+
+
+@pytest.mark.parametrize("page_size", [1, 4, 16, 64])
+def test_longest_retry_and_one_sided_reposition(compiler, page_size):
+    from sglang.srt.mem_cache.allocator.paged import PagedTokenToKVPoolAllocator
+    from sglang.srt.mem_cache.base_prefix_cache import (
+        EvictParams,
+        InsertParams,
+        MatchPrefixParams,
+    )
+    from sglang.srt.mem_cache.cache_init_params import CacheInitParams
+    from sglang.srt.mem_cache.radix_cache import RadixKey
+    from sglang.srt.mem_cache.unified_cache.component_type import ComponentType
+    from sglang.srt.mem_cache.unified_radix_cache import UnifiedRadixCache
+
+    allocator = PagedTokenToKVPoolAllocator(
+        size=2048,
+        page_size=page_size,
+        dtype=torch.bfloat16,
+        device="cpu",
+        kvcache=None,
+        need_sort=False,
+    )
+    cache = UnifiedRadixCache(
+        CacheInitParams(
+            disable=False,
+            req_to_token_pool=None,
+            token_to_kv_pool_allocator=allocator,
+            page_size=page_size,
+            tree_components=(ComponentType.FULL,),
+        )
+    )
+    tokens = list(range(320))
+    target_layout = compiler(*args(tokens[:256], {64: [(0, 32)]}, [127]))
+    target = RadixKey.from_context(target_layout)
+    # The earlier/higher-bound branch disagrees at raw 160. Greedy selection
+    # loses the later branch that supplies all 256 compatible tokens.
+    bad_tokens = tokens.copy()
+    bad_tokens[160] = 9999
+    source_drops = {64: [(0, 32)], 256: [(32, 48)]}
+    bad = RadixKey.from_context(compiler(*args(bad_tokens, source_drops, [127, 319])))
+    good_layout = compiler(*args(tokens, source_drops, [127, 287]))
+    good = RadixKey.from_context(good_layout)
+    for key in (bad, good):
+        slots = allocator.alloc(320)
+        inserted = cache.insert(InsertParams(key=key, value=slots))
+        # The native cache adopts only the new suffix; deduplicated incoming
+        # prefix pages are still the inserting request's responsibility.
+        allocator.free(slots[: inserted.prefix_len])
+    good_slots = cache.match_prefix(MatchPrefixParams(key=good)).device_indices
+    before = len(cache.tree_core._node_arena)
+    selected = cache.match_prefix(MatchPrefixParams(key=target, context_retry=True))
+    assert len(cache.tree_core._node_arena) <= before + 1
+    assert selected.device_indices.tolist() == good_slots[:256].tolist()
+    assert (
+        selected.context_source_positions.tolist()
+        == good_layout.positions[:256].tolist()
+    )
+    assert selected.context_retry
+    # A same-length exact match is preferred and needs no position conversion.
+    same = cache.match_prefix(MatchPrefixParams(key=good[:256], context_retry=True))
+    assert not same.context_retry
+    assert same.device_indices.tolist() == good_slots[:256].tolist()
+    # An event in only one key must stop matching before the following query.
+    no_r = RadixKey.from_context(compiler(*args(tokens[:256], {64: [(0, 32)]}, [])))
+    stopped = cache.match_prefix(MatchPrefixParams(key=no_r, context_retry=True))
+    assert len(stopped.device_indices) == 128
+    assert stopped.context_source_positions.numel() == 128
+    # Eviction must remove the lazy Retry child entries, as well as native keys.
+    cache.evict(EvictParams(num_tokens=2048))
+    assert allocator.available_size() == 2048
+    assert not len(
+        cache.match_prefix(
+            MatchPrefixParams(key=target, context_retry=True)
+        ).device_indices
+    )
+    assert not cache.tree_core.root_node.context_retry_index.signatures

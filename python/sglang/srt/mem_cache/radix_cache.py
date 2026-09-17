@@ -226,7 +226,10 @@ class RadixKey:
         """Logical-unit prefix length shared with ``other``. Result is rounded down to ``page_size``."""
         return self.match_at(other, offset=0, page_size=page_size)
 
-    def match_at(self, other: RadixKey, offset: int, page_size: int = 1) -> int:
+    def match_at(
+        self, other: RadixKey, offset: int, page_size: int = 1,
+        *, context_retry: bool = False,
+    ) -> int:
         """Match without slicing while preserving bigram boundaries and limit semantics."""
         self._check_compatible(other)
         if self.is_bigram != other.is_bigram:
@@ -239,15 +242,18 @@ class RadixKey:
 
         if self.context is not None and other.context is not None:
             matched = self.context.match(
-                other.context, self.context_start, other.context_start + offset, n
+                other.context, self.context_start, other.context_start + offset, n,
+                retry=context_retry,
             )
             return matched // page_size * page_size
         # A feature-free prefix shares the original namespace and native KV.
         # Once a structured event/final position differs, ordinary matching ends.
         if self.context is not None:
-            n = self.context.plain_prefix(self.context_start, n)
+            n = self.context.plain_prefix(self.context_start, n, retry=context_retry)
         elif other.context is not None:
-            n = other.context.plain_prefix(other.context_start + offset, n)
+            n = other.context.plain_prefix(
+                other.context_start + offset, n, retry=context_retry
+            )
 
         # Exponential search for the first diverging token: gallop in doubling
         # windows (one C-level slice compare each), then binary-search the window
@@ -277,6 +283,18 @@ class RadixKey:
         if page_size == 1:
             return matched_tokens
         return (matched_tokens // page_size) * page_size
+
+    def context_retry_child_key(self, offset: int = 0):
+        """Index compatible children by first real token and preceding events."""
+        if offset < 0 or offset >= len(self):
+            raise IndexError("Context Retry child offset outside key")
+        events = ()
+        if self.context is not None:
+            raw = self.context_start + offset
+            start = self.context.record_start(raw)
+            end = self.context.token_to_record[raw]
+            events = tuple(self.context.records[4 * start : 4 * end])
+        return self.extra_key, self.cache_salt, self.token_ids[offset], events
 
     def child_key(self, page_size: int = 1):
         """Hashable dict-key for the first ``page_size`` logical units, namespaced by ``extra_key``."""

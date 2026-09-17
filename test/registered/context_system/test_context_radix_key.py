@@ -131,3 +131,20 @@ def test_event_identity_final_positions_and_tail_events(compiler, key_types):
     assert drop_a.hash_page(4, 8) != drop_b.hash_page(4, 8)
     with pytest.raises(ValueError, match="bigrams"):
         drop_a.maybe_to_bigram_view(True)
+
+
+def test_retry_preserves_events_and_ignores_only_token_positions(compiler, key_types):
+    for tokens, drops, reposition in cases():
+        target = make_key(key_types, compiler(*args(tokens, drops, reposition)))
+        plain_repos = make_key(key_types, compiler(*args(tokens, drops, [])))
+        left = units(compiler(*args(tokens, drops, reposition)))
+        right = units(compiler(*args(tokens, drops, [])))
+        for sequence in (left, right):
+            for unit in sequence:
+                unit[-1][2:] = [0, 0]
+        assert target.match_at(plain_repos, 0, context_retry=True) == prefix(
+            left, right
+        )
+        assert (
+            target.context_retry_child_key() == plain_repos.context_retry_child_key()
+        ) == (prefix(left, right) > 0)
