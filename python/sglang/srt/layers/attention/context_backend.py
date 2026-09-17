@@ -214,6 +214,7 @@ class ContextLayerCopy:
     position_pairs: torch.Tensor
     cos_sin_cache: torch.Tensor
     is_neox_style: bool
+    skip_unmapped: bool = False
 
     def apply(self):
         from sglang.kernels.ops.attention.context_reposition import reposition_kv_layers
@@ -230,6 +231,7 @@ class ContextLayerCopy:
             self.position_pairs,
             self.cos_sin_cache,
             is_neox_style=self.is_neox_style,
+            skip_unmapped=self.skip_unmapped,
         )
 
 
@@ -353,6 +355,7 @@ class ContextModelBinding:
                     inputs.copy_positions,
                     layer.cos_sin_cache,
                     layer.is_neox_style,
+                    skip_unmapped=layer.sliding_window,
                 )
         return ContextForwardMetadata(full, swa, copies)
 

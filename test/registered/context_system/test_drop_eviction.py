@@ -362,3 +362,60 @@ def test_exact_swa_lease_survives_split_and_reclaims_only_unread_pages(
     cache.dec_lock_ref(matched.last_device_node, receipt, skip_swa=early_release)
     cache.evict(EvictParams(num_tokens=128, swa_num_tokens=128))
     assert_allocator(cache, allocator, 0)
+
+
+def test_sparse_swa_request_release_and_completion(native_cache):
+    from sglang.srt.context_system.occurrence import (
+        ContextPrefillCompletion,
+        OccurrenceState,
+    )
+    from sglang.srt.context_system.usage import ContextUsage
+
+    cache, allocator = native_cache
+    if not hasattr(allocator, "swa_attn_allocator"):
+        pytest.skip("SWA-specific ownership")
+    slots = allocator.alloc(24)
+    swa = torch.ones(24, dtype=torch.bool)
+    swa[[0, 1, 2, 5, 8, 9, 13, 19, 23]] = False
+    allocator.free_swa(slots[~swa])
+    # Raw 8 is a Full hole; 20:24 are generated after prefill. Raw 0:3 was
+    # released by native window eviction, independently of Context SWA metadata.
+    allocator.free_full(slots[8:9])
+    rows = torch.arange(20)
+    rows[8] = -1
+    state = OccurrenceState(
+        slots[:20],
+        torch.ones(20, dtype=torch.bool),
+        rows.clone(),
+        rows.clone(),
+        torch.arange(20, dtype=torch.int32),
+        0,
+        swa[:20].clone(),
+    )
+    state.swa_resident[:3] = True  # The native floor must win over stale metadata.
+    cache.req_to_token_pool = SimpleNamespace(req_to_token=slots[None, :])
+    req = SimpleNamespace(
+        context_state=state,
+        kv=SimpleNamespace(req_pool_idx=0, swa_evicted_seqlen=3),
+    )
+    # Leave the final four slots to an overlapped completion receipt. In native
+    # decode all new peers are resident; this separate receipt tests mixed COW.
+    cache._free_context_kv_row(req, [(0, 7), (7, 20)])
+    assert_allocator(cache, allocator, 4)
+    usage = ContextUsage(
+        torch.empty(0, dtype=torch.bool), torch.empty(0, dtype=torch.bool)
+    )
+    receipt = ContextPrefillCompletion(
+        slots[20:],
+        usage,
+        torch.empty(0, dtype=torch.bool),
+        torch.empty(0, dtype=torch.bool),
+        4,
+        retired_swa_resident=swa[20:],
+    )
+    receipt.complete(allocator)
+    receipt.complete(allocator)
+    assert usage.snapshot().actual_prefill_tokens == 4
+    assert_allocator(cache, allocator, 0)
+    assert allocator.swa_attn_allocator.available_size() == 128
+    assert allocator.full_to_swa_index_mapping[slots].count_nonzero() == 0
