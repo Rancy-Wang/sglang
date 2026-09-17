@@ -172,12 +172,14 @@ def test_bcp_pd_terminal_handoff(pd_servers):
     room = int(time.time_ns() % (1 << 53))
     lock = threading.Lock()
 
-    def call(feature, name, fixed=True):
+    def call(feature, name, fixed=True, *, warm_source=False):
         nonlocal room
         with lock:
             room += 1
             request_room = room
         tokens = reference["runs"][feature]["records"][0]["tokens"]
+        if warm_source:
+            tokens = tokens[:1]
         payload = {
             **request_for(reference["fixture"], feature),
             "model": os.environ["CONTEXT_SERVER_MODEL"],
@@ -191,6 +193,8 @@ def test_bcp_pd_terminal_handoff(pd_servers):
             "bootstrap_port": bootstrap,
             "bootstrap_room": request_room,
         }
+        if warm_source:
+            payload["reposition"] = reference["fixture"]["reposition"][:1]
         if fixed:
             payload["custom_logit_processor"] = processor
 
@@ -222,6 +226,9 @@ def test_bcp_pd_terminal_handoff(pd_servers):
             response["sglext"]["input_ids"]
             == reference["runs"]["none"]["records"][0]["input"]["ids"]
         ), name
+        if warm_source:
+            assert response["sglext"]["output_ids"] == [tokens]
+            return  # Source has one R; only the final two-R request has an oracle.
         if not fixed:
             output = response["sglext"]["output_ids"][0]
             choice = response["choices"][0]
@@ -311,21 +318,36 @@ def test_bcp_pd_terminal_handoff(pd_servers):
                 )
         return
 
-    for feature in ("none", "drop", "drop_repos"):
+    consecutive_only = os.environ.get("CONTEXT_BCP_CONSECUTIVE_ONLY") == "1"
+    for feature in (() if consecutive_only else ("none", "drop", "drop_repos")):
         assert requests.post(p_base + "/flush_cache", timeout=5).status_code == 200
         call(feature, feature + "-actual", fixed=False)
         assert requests.post(p_base + "/flush_cache", timeout=5).status_code == 200
         call(feature, feature)
-    call("drop_repos", "drop_repos-hot")
+    if not consecutive_only:
+        call("drop_repos", "drop_repos-hot")
+        assert requests.post(p_base + "/flush_cache", timeout=5).status_code == 200
+        call("none", "none-retry-source")
+        call("drop_repos", "drop_repos-retry")
     assert requests.post(p_base + "/flush_cache", timeout=5).status_code == 200
-    call("none", "none-retry-source")
-    call("drop_repos", "drop_repos-retry")
-    for name in ("drop", "drop_repos", "drop_repos-hot", "drop_repos-retry"):
+    call("drop_repos", "consecutive-source", warm_source=True)
+    call("drop_repos", "drop_repos-consecutive")
+    usage = comparisons["drop_repos-consecutive"]["context_usage"]
+    assert usage["cached_tokens"] + usage["repos_tokens"] > 0
+    assert usage["actual_prefill_tokens"] < len(reference["runs"]["none"]["records"][0]["input"]["ids"])
+    baseline = (
+        json.loads(Path(os.environ["CONTEXT_BCP_CALIBRATION"]).read_text())["none"]
+        if consecutive_only else comparisons["none"]
+    )
+    names = ("drop_repos-consecutive",) if consecutive_only else (
+        "drop", "drop_repos", "drop_repos-hot", "drop_repos-retry", "drop_repos-consecutive"
+    )
+    for name in names:
         for metric, floor in (
             ("max_abs", 0.125),
             ("mean_abs", 0.02),
             ("p99_abs", 0.0625),
         ):
             assert comparisons[name][metric] <= max(
-                floor, 2 * comparisons["none"][metric]
+                floor, 2 * baseline[metric]
             ), (name, metric, comparisons)
