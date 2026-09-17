@@ -25,7 +25,7 @@ from __future__ import annotations
 import time
 from array import array
 from bisect import bisect_left
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import torch
 
@@ -64,6 +64,48 @@ class ContextLayout:
     @property
     def keys(self) -> torch.Tensor:
         return self.records
+
+
+def append_generated_layout(layout: ContextLayout, token_ids) -> ContextLayout:
+    """Extend a retracted prompt at its final state, without replaying events.
+
+    This runs once per recomputation attempt, never on the decode hot path.
+    Existing transitions and trailing event records keep their identity; output
+    tokens are born at the original prompt's final Reposition stage.
+    """
+    tokens = torch.as_tensor(token_ids, dtype=torch.int64, device="cpu")
+    if tokens.ndim != 1 or bool(torch.any((tokens < 0) | (tokens >= 2**31))):
+        raise ValueError("Generated Context IDs must be an int32 token vector")
+    count = len(tokens)
+    if not count:
+        return layout
+    if layout.next_position + count > 2**31 - 1:
+        raise ValueError("Generated Context positions exceed int32 range")
+    n, record_count = len(layout.positions), len(layout.records)
+    positions = torch.arange(
+        layout.next_position, layout.next_position + count, dtype=torch.int32
+    )
+    stages = torch.full((count,), len(layout.transition_offsets) - 1, dtype=torch.int32)
+    repos = torch.full((count,), layout.current_reposition, dtype=torch.int32)
+    records = torch.stack((torch.zeros_like(repos), tokens.int(), repos, positions), 1)
+    return replace(
+        layout,
+        records=torch.cat((layout.records, records)),
+        virtual_mask=torch.cat(
+            (layout.virtual_mask, torch.zeros(count, dtype=torch.bool))
+        ),
+        key_to_token=torch.cat((layout.key_to_token, torch.arange(n, n + count))),
+        token_to_key=torch.cat(
+            (layout.token_to_key, torch.arange(record_count, record_count + count))
+        ),
+        positions=torch.cat((layout.positions, positions)),
+        repos_info=torch.cat((layout.repos_info, repos)),
+        keep_mask=torch.cat((layout.keep_mask, torch.ones(count, dtype=torch.bool))),
+        materialized_stage=torch.cat((layout.materialized_stage, stages)),
+        birth_positions=torch.cat((layout.birth_positions, positions)),
+        birth_stages=torch.cat((layout.birth_stages, stages)),
+        next_position=layout.next_position + count,
+    )
 
 
 def _load_module():

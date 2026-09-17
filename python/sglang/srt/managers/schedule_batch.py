@@ -1040,6 +1040,7 @@ class Req(ReqDllmMixin):
         # that preserve length would silently corrupt fill_ids.
         self.output_ids = array("q")
         self.context_program = None
+        self.context_recompute_program = None
         self.context_key_data = None
         self.context_source_positions = None
         self.context_exact_prefix_len = 0
@@ -1614,7 +1615,7 @@ class Req(ReqDllmMixin):
         )
         from sglang.srt.context_system.usage import ContextUsage
 
-        program = self.context_program
+        program = self.context_recompute_program or self.context_program
         if program is None:
             return 0
         start = len(self.prefix_indices)
@@ -1627,10 +1628,11 @@ class Req(ReqDllmMixin):
                 positions,
                 exact_prefix_len=self.context_exact_prefix_len,
             )
-            self.context_usage = ContextUsage(
-                self.context_state.canonical_rows >= 0,
-                ~program.layout.keep_mask[:start],
-            )
+            if self.context_usage is None:
+                self.context_usage = ContextUsage(
+                    self.context_state.canonical_rows >= 0,
+                    ~program.layout.keep_mask[:start],
+                )
         if len(self.context_state.canonical_rows) != start:
             raise RuntimeError("Context source ownership disagrees with native prefix")
         window = compile_occurrence_window(
@@ -1658,12 +1660,23 @@ class Req(ReqDllmMixin):
             # may have been evicted; rebuild ownership from this round's match.
             self.context_state = None
             self.context_window_plan = None
-            self.context_usage = None
+            if self.context_usage is not None and not self.context_usage.recomputing:
+                self.context_usage = None
         if self.is_dllm():
             self._init_fill_ids_for_dllm()
             self.determine_dllm_phase()
         else:
             self._refresh_fill_ids()
+
+        if (
+            self.context_program is not None
+            and self.output_ids
+            and self.context_state is None
+            and self.context_recompute_program is None
+        ):
+            self.context_recompute_program = self.context_program.with_generated(
+                self.output_ids
+            )
 
         input_len = len(self.full_untruncated_fill_ids)
 
@@ -2034,6 +2047,9 @@ class Req(ReqDllmMixin):
         self.retraction_count += 1
         self.context_source_positions = None
         self.context_exact_prefix_len = 0
+        self.context_recompute_program = None
+        if self.context_usage is not None:
+            self.context_usage.begin_recompute()
 
         self.prefix_indices = torch.empty((0,), dtype=torch.int64)
         self.routed_experts = None
@@ -3083,7 +3099,8 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             allocated = extra[extra_offset : extra_offset + plan.extra_page_count]
             extra_offset += plan.extra_page_count
             step = req.context_state.advance(
-                window, plan, birth, allocated, req.context_program.visible_until
+                window, plan, birth, allocated,
+                (req.context_recompute_program or req.context_program).visible_until,
             )
             req.context_state = step.state
             req.context_prefill_started = True

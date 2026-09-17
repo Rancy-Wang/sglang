@@ -978,6 +978,7 @@ class UnifiedRadixCache(BasePrefixCache):
             self._release_context_source_lease(req)
             req.context_state = None
             req.context_decode_layout = None
+            req.context_recompute_program = None
             req.context_window_plan = None
             req.context_prefill_started = False
             req.context_cache_published = False
@@ -1132,7 +1133,7 @@ class UnifiedRadixCache(BasePrefixCache):
                 req.prefix_indices, cache_len=req.kv.cache_protected_len
             )
             req.context_cache_published = True
-            if not chunked and len(state.terminal_rows) == len(req.origin_input_ids):
+            if not chunked and len(state.terminal_rows) >= len(req.origin_input_ids):
                 # Final prefill results have passed their native completion event.
                 self._release_context_source_lease(req)
 

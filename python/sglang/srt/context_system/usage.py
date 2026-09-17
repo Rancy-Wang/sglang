@@ -42,11 +42,28 @@ class ContextUsage:
         self.transformed = np.zeros(len(resident), dtype=np.bool_)
         self.prefill_queries = 0
         self.decode_queries = 0
+        self.recomputing = False
+
+    def begin_recompute(self) -> None:
+        """Freeze initial cache provenance; subsequent work still costs tokens."""
+        self.recomputing = True
 
     def record_prefill(
-        self, read_raw: torch.Tensor, transformed_raw: torch.Tensor, query_count: int
+        self,
+        read_raw: torch.Tensor,
+        transformed_raw: torch.Tensor,
+        query_count: int,
+        *,
+        initial_match: bool | None = None,
     ) -> None:
         """Call once after a forward completes, including any recovery queries."""
+        if type(query_count) is not int or query_count < 1:
+            raise ValueError("Completed prefill must contain actual model queries")
+        if initial_match is None:
+            initial_match = not self.recomputing
+        if not initial_match:
+            self.prefill_queries += query_count
+            return
         n = len(self.resident)
         for value in (read_raw, transformed_raw):
             if (
@@ -56,8 +73,6 @@ class ContextUsage:
                 or len(value) < n
             ):
                 raise ValueError("Context read sets must cover the initial match")
-        if type(query_count) is not int or query_count < 1:
-            raise ValueError("Completed prefill must contain actual model queries")
         used = read_raw.numpy()[:n]
         self.read |= used
         # A scheduled transform that no query reads never contributes to repos.

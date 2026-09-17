@@ -324,3 +324,48 @@ def test_req_decode_key_and_native_cache_lifecycle(chat, repos):
     assert allocator.available_size() == 256
     assert len(torch.unique(allocator.get_all_free_pages())) == 256
     cache.sanity_check()
+
+
+def test_retract_rebuilds_generated_occurrences_and_retains_usage(chat):
+    import torch
+    from sglang.srt.context_system.usage import ContextUsage
+    from sglang.srt.managers.schedule_batch import Req
+    from sglang.srt.sampling.sampling_params import SamplingParams
+
+    result = chat._process_messages(
+        request(drop_message={"1": [0]}, reposition=[1]), False
+    )
+    req = Req(
+        "retract",
+        "",
+        array("q", result.prompt_ids),
+        SamplingParams(max_new_tokens=8),
+        context_program=result.context_program,
+    )
+    req.context_usage = ContextUsage(
+        torch.ones(2, dtype=torch.bool), torch.zeros(2, dtype=torch.bool)
+    )
+    req.context_usage.record_prefill(
+        torch.ones(2, dtype=torch.bool), torch.zeros(2, dtype=torch.bool), 5
+    )
+    req.context_usage.record_decode(2)
+    usage, original = req.context_usage, req.context_program
+    req.output_ids.extend((2, 3, 4))
+    req.reset_for_retract()
+    req.init_next_round_input()
+    end = len(req.origin_input_ids) + 3
+    req.plan_context_prefill(end)
+    assert req.context_usage is usage
+    assert req.context_program is original
+    expanded = req.context_recompute_program
+    assert expanded.layout.positions[-3:].tolist() == list(
+        range(original.layout.next_position, original.layout.next_position + 3)
+    )
+    assert (
+        expanded.visible_until[original.layout.keep_mask.tolist() + [True] * 3].min()
+        == torch.iinfo(torch.int32).max
+    )
+    window, plan = req.context_window_plan
+    assert int(window.segment_query_ends[-1]) == end
+    usage.record_prefill(plan.read_cached, plan.repositioned_cached, end)
+    assert usage.snapshot().actual_prefill_tokens == end + 5

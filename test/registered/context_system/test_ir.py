@@ -220,3 +220,32 @@ def test_fixed_mini_compiler_differential(compiler):
                 if isinstance(left, torch.Tensor)
                 else left == right
             )
+
+
+def test_generated_suffix_preserves_final_state_and_trailing_events(compiler):
+    extend = compiler.__globals__["append_generated_layout"]
+    for drops, repos in (({}, []), ({4: [(1, 3)]}, [3]), ({8: [(0, 2)]}, [7])):
+        tokens = list(range(8))
+        layout = compiler(*args(tokens, drops, repos))
+        before = {
+            name: value.clone()
+            for name, value in vars(layout).items()
+            if isinstance(value, torch.Tensor)
+        }
+        suffix = [11, 12, 13]
+        updated = extend(layout, suffix)
+        assert updated.positions[-3:].tolist() == list(
+            range(layout.next_position, layout.next_position + 3)
+        )
+        assert updated.birth_positions[-3:].tolist() == updated.positions[-3:].tolist()
+        assert (
+            updated.birth_stages[-3:].tolist()
+            == [len(layout.transition_offsets) - 1] * 3
+        )
+        assert updated.keep_mask[-3:].all()
+        assert updated.records[updated.token_to_key, 1].tolist() == tokens + suffix
+        for name, value in before.items():
+            torch.testing.assert_close(getattr(layout, name), value)
+        assert extend(layout, []) is layout
+        with pytest.raises(ValueError, match="int32"):
+            extend(layout, [-1])
