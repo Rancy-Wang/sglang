@@ -171,6 +171,21 @@ Harmony parser 兼容修复）：4/4首次 task，150成功/0失败，1520.22515
 相差+0.22%，这只验证普通无功能对照，不能据此判断 Drop+Repos 的5%门槛。
 原始结果在 BUS 实验根的相应 `workload/result.json`；C2 Drop+Repos 仍在执行。
 
+追加真实容量拒绝验证 `0a005af39`（只新增测试，生产代码仍为 `75a1eb49c`）：
+
+- BUS 独立 `sglang-r2-pressure-check` checkout、GPU0、Qwen3-0.6B BF16/Triton、
+  page1、KV110、chunk32、CUDA Graph 与 mixed chunk。执行
+  `CONTEXT_CAPACITY_PRESSURE=1 CONTEXT_KV_CAPACITY=110 CONTEXT_CHUNK_SIZE=32 CONTEXT_MAX_LENGTH=2048 python -m pytest -s -q test/registered/context_system/test_serving_runtime.py -k capacity_rejection`，
+  同时指定 `CONTEXT_SERVER_MODEL`、端口29901、独立日志/cache 与 CUDA 兼容库环境。
+  结果 **1 passed, 2 deselected in 119.32s**（包含模型启动）。
+- raw100、Drop80→[0,40)、R98 在模型实际执行中触发 continuation 容量边界；
+  **2.261432s** 返回 HTTP503，原因是保留108个KV、至少还需3个、总池110。
+  随后 `/flush_cache` 成功，普通90-token输入完成8-token生成，HTTP200，health正常。
+  容量失败前后都实际 replay prefill CUDA Graph。此用例不重复完整数值矩阵。
+- 原始证据：`capacity-http-qwen-v1/{pytest.log,server.log,result.json}`；测试结束后
+  其自有服务进程退出，GPU0回到36MiB。该证据覆盖普通调度真实拒绝与恢复，不自动
+  扩展为PD容量拒绝或所有source lease压力场景已验证。
+
 mini System/main 的75份逐文件 diff 全部完成阅读；这不等于52份会话已全部复核或
 所有迁移功能已通过。补充差异与效率约束：
 
