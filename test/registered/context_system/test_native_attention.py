@@ -85,7 +85,9 @@ def native_attention(tmp_path_factory):
 @pytest.mark.parametrize("page_size", [1, 4, 16, 64])
 @pytest.mark.parametrize("window", [-1, 16])
 @pytest.mark.parametrize("has_sink", [False, True])
-def test_native_position_windows(native_attention, dtype, page_size, window, has_sink):
+def test_native_position_windows(
+    native_attention, dtype, page_size, window, has_sink, record_property
+):
     actual, reference = native_attention
     torch.manual_seed(104)
     device = "cuda"
@@ -104,6 +106,7 @@ def test_native_position_windows(native_attention, dtype, page_size, window, has
             pool.reshape(-1, page_size, kv_heads, dim).permute(0, 2, 1, 3).contiguous()
         )
 
+    flat_pool_k, flat_pool_v = pool_k, pool_v
     pool_k, pool_v = native_view(pool_k), native_view(pool_v)
     indices = torch.randperm(256, device=device)[:nk]
     qo = torch.tensor([0, 131, 148, 149], device=device, dtype=torch.int32)
@@ -166,4 +169,44 @@ def test_native_position_windows(native_attention, dtype, page_size, window, has
         context_kv_positions=k_positions,
     )
     assert torch.isfinite(result).all()
-    assert torch.equal(result, expected)
+    # Different masking specializations can change fp16 rounding, including
+    # upstream causal vs custom-mask kernels. Calibrate against the frozen
+    # upstream kernel's own error to a double-precision per-query oracle.
+    precise_parts = []
+    q_start = kv_start = 0
+    for n_query, n_prefix, visible in zip(q_lens, prefix_lens, masks):
+        q_stop, kv_stop = q_start + n_query, kv_start + n_prefix
+        selected = indices[kv_start:kv_stop]
+        keys = torch.cat((flat_pool_k[selected], k[q_start:q_stop])).double()
+        values = torch.cat((flat_pool_v[selected], v[q_start:q_stop])).double()
+        keys = keys.repeat_interleave(heads // kv_heads, dim=1)
+        values = values.repeat_interleave(heads // kv_heads, dim=1)
+        scores = torch.einsum("qhd,khd->hqk", q[q_start:q_stop].double(), keys)
+        scores *= dim**-0.5
+        scores.masked_fill_(
+            ~visible.reshape(n_query, n_prefix + n_query).to(device)[None],
+            -torch.inf,
+        )
+        if sinks is not None:
+            scores = torch.cat(
+                (scores, sinks.double()[:, None, None].expand(-1, n_query, 1)),
+                dim=-1,
+            )
+            values = torch.cat((values, torch.zeros_like(values[:1])))
+        precise_parts.append(torch.einsum("hqk,khd->qhd", scores.softmax(-1), values))
+        q_start, kv_start = q_stop, kv_stop
+    precise = torch.cat(precise_parts)
+    upstream_error = (expected.double() - precise).abs()
+    context_error = (result.double() - precise).abs()
+    difference = (result.double() - expected.double()).abs()
+    record_property("upstream_max_abs", float(upstream_error.max()))
+    record_property("context_max_abs", float(context_error.max()))
+    record_property("context_vs_upstream_max_abs", float(difference.max()))
+    record_property("context_vs_upstream_rms", float(difference.square().mean().sqrt()))
+    # At most one output-rounding step beyond the measured native error.
+    rounding_step = torch.finfo(dtype).eps * precise.abs().clamp(min=1)
+    assert torch.all(context_error <= upstream_error + rounding_step)
+    assert (
+        float(context_error.max())
+        <= float(upstream_error.max()) + torch.finfo(dtype).eps
+    )
