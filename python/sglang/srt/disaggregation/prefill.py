@@ -1406,12 +1406,14 @@ class SchedulerDisaggregationPrefillMixin:
         context_chunk = None
         if context_plan is not None:
             context_start, context_end, end_idx = context_plan.full_chunk(
-                start_idx, end_idx, last_chunk=last_chunk
+                start_idx, end_idx, last_chunk=last_chunk,
+                terminal_rows=req.context_state.terminal_rows,
+                owned=req.context_state.owned,
             )
             if context_start == context_end and not last_chunk:
                 req.start_send_idx = end_idx
                 return
-            # Chunk publication already put terminal versions in this raw row.
+            # Only materialized, stable terminal versions enter this send.
             # They remain locked by the request through native transfer completion;
             # future queries write birth pages and never mutate these versions.
             context_chunk = context_plan.decode.device_indices[
