@@ -395,6 +395,9 @@ def _fwd_kernel(
     aux0_stride_t=0,
     aux0_stride_h=0,
     aux0_len=0,
+    ContextQPositions=None,
+    ContextKVPositions=None,
+    USE_CONTEXT_POSITIONS: tl.constexpr = False,
 ):
     if USE_COMPACT_TILE_GRID:
         output_tile = tl.program_id(0)
@@ -452,6 +455,16 @@ def _fwd_kernel(
 
     mask_d = offs_d < Lq
     mask_dv = offs_dv < Lv
+
+    if USE_CONTEXT_POSITIONS and SLIDING_WINDOW_SIZE > 0:
+        context_q_pos = tl.load(
+            ContextQPositions
+            + cur_seq_extend_start_idx
+            + cur_block_m * BLOCK_M
+            + offs_m,
+            mask=mask_m,
+            other=0,
+        )
 
     if xai_temperature_len > 0:
         offs_qidx = cur_seq_len_prefix + cur_block_m * BLOCK_M + offs_m
@@ -511,11 +524,20 @@ def _fwd_kernel(
             )
             final_mask &= custom_mask
         if SLIDING_WINDOW_SIZE > 0:
-            # Add mask where q_id <= kv_id + sliding_window_size
-            # q_id = prefix_len + cur_m, kv_id = cur_n
-            window_mask = (
-                cur_seq_len_prefix + cur_block_m * BLOCK_M + offs_m[:, None]
-            ) <= (start_n + offs_n_prefix[None, :] + SLIDING_WINDOW_SIZE)
+            if USE_CONTEXT_POSITIONS:
+                context_k_pos = tl.load(
+                    ContextKVPositions + cur_seq_kv_start_idx + start_n + offs_n_prefix,
+                    mask=mask_n,
+                    other=0,
+                )
+                window_mask = context_q_pos[:, None].to(tl.int64) <= (
+                    context_k_pos[None, :].to(tl.int64) + SLIDING_WINDOW_SIZE
+                )
+            else:
+                # Native contiguous-position window.
+                window_mask = (
+                    cur_seq_len_prefix + cur_block_m * BLOCK_M + offs_m[:, None]
+                ) <= (start_n + offs_n_prefix[None, :] + SLIDING_WINDOW_SIZE)
             final_mask &= window_mask
 
         SKIP_TILE = False
@@ -703,10 +725,19 @@ def _fwd_kernel(
             final_mask &= mask_non_causal
 
         if SLIDING_WINDOW_SIZE > 0:
-            # Add mask where q_id <= kv_id + sliding_window_size
-            window_mask = (cur_block_m * BLOCK_M + offs_m[:, None]) <= (
-                start_n + offs_n[None, :] + SLIDING_WINDOW_SIZE
-            )
+            if USE_CONTEXT_POSITIONS:
+                context_k_pos = tl.load(
+                    ContextQPositions + cur_seq_extend_start_idx + start_n + offs_n,
+                    mask=mask_n,
+                    other=0,
+                )
+                window_mask = context_q_pos[:, None].to(tl.int64) <= (
+                    context_k_pos[None, :].to(tl.int64) + SLIDING_WINDOW_SIZE
+                )
+            else:
+                window_mask = (cur_block_m * BLOCK_M + offs_m[:, None]) <= (
+                    start_n + offs_n[None, :] + SLIDING_WINDOW_SIZE
+                )
             final_mask &= window_mask
 
         SKIP_TILE = False
@@ -876,6 +907,8 @@ def extend_attention_fwd(
     aux_tensors=None,
     extend_seq_lens_cpu=None,
     identity_kv_indices: bool = False,
+    context_q_positions=None,
+    context_kv_positions=None,
 ):
     """
     q_extend, k_extend, v_extend, o_extend: contiguous tensors
@@ -890,7 +923,29 @@ def extend_attention_fwd(
     see triton_ops/score_mod.py for the contract.
     ``identity_kv_indices`` promises that the prefix buffer is densely packed,
     allowing direct addressing instead of loading an index for every token.
+
+    Context segments keep causal query order, but surviving KV positions may
+    contain holes. The optional CPU-planned position vectors align with Q and
+    prefix ``kv_indices`` respectively, and replace rank-based SWA distances.
+    With neither vector supplied the native specialization is unchanged. Both
+    vectors must remain alive until the calling CUDA stream completes.
     """
+    use_context_positions = context_q_positions is not None
+    if use_context_positions != (context_kv_positions is not None):
+        raise ValueError("Context attention requires both query and KV positions")
+    if use_context_positions:
+        for positions, count in (
+            (context_q_positions, q_extend.shape[0]),
+            (context_kv_positions, kv_indices.numel()),
+        ):
+            if (
+                positions.device != q_extend.device
+                or positions.ndim != 1
+                or positions.numel() != count
+                or positions.dtype not in (torch.int32, torch.int64)
+                or not positions.is_contiguous()
+            ):
+                raise ValueError("Context attention positions must align with Q/KV")
     Lq, Lk, Lv = (
         q_extend.shape[-1],
         k_extend.shape[-1],
@@ -1094,6 +1149,9 @@ def extend_attention_fwd(
         aux0_stride_t=aux0_stride_t,
         aux0_stride_h=aux0_stride_h,
         aux0_len=aux0_len,
+        ContextQPositions=context_q_positions,
+        ContextKVPositions=context_kv_positions,
+        USE_CONTEXT_POSITIONS=use_context_positions,
         num_warps=num_warps,
         num_stages=num_stages,
         **extra_kargs,
