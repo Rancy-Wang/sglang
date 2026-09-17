@@ -60,6 +60,7 @@ def server(tmp_path_factory):
         "--context-drop-aware-eviction",
         "--enable-mixed-chunk",
     ]
+    cmd += ["--tp-size", os.environ.get("CONTEXT_TEST_TP", "1")]
     backend = os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND")
     if backend:
         cmd += ["--attention-backend", backend]
