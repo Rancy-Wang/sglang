@@ -92,7 +92,7 @@ class ContextSequence:
 class ContextAttentionPlan:
     # One packed transfer for all segment metadata, prepared once per forward.
     packed: torch.Tensor
-    field_offsets: tuple[int, ...]
+    field_ranges: tuple[tuple[int, int], ...]
     query_lengths: tuple[int, ...]
     occurrence_count: int
 
@@ -116,10 +116,23 @@ class ContextAttentionPlan:
             np.concatenate(q_pos),
             np.concatenate(kv_pos),
         )
-        offsets = (0, *np.cumsum([len(field) for field in fields]).tolist())
+        # Triton specializes pointer alignment. Unpadded variable-length fields
+        # otherwise produce eight alignment combinations for the three dynamic
+        # attention pointers, with repeated JIT stalls during long trajectories.
+        # Keep every int64 field 16-byte aligned within the single transfer;
+        # ranges exclude padding so attention sees exactly the original values.
+        offsets = np.r_[0, np.cumsum([(len(field) + 1) // 2 * 2 for field in fields])]
+        packed = np.empty(int(offsets[-1]), dtype=np.int64)
+        ranges = tuple(
+            (int(start), int(start) + len(field))
+            for start, field in zip(offsets, fields)
+        )
+        for field, (start, end), padded_end in zip(fields, ranges, offsets[1:]):
+            packed[start:end] = field
+            packed[end:padded_end] = 0
         return cls(
-            torch.from_numpy(np.concatenate(fields)),
-            offsets,
+            torch.from_numpy(packed),
+            ranges,
             tuple(q_lengths),
             base,
         )
@@ -140,9 +153,7 @@ class ContextAttentionPlan:
         ):
             raise ValueError("Physical slot binding must cover all batch occurrences")
         packed = self.packed.to(device=occurrence_slots.device, non_blocking=True)
-        fields = [
-            packed[a:b] for a, b in zip(self.field_offsets[:-1], self.field_offsets[1:])
-        ]
+        fields = [packed[a:b] for a, b in self.field_ranges]
         qo, kv, occurrences, q_positions, kv_positions = fields
         return ContextAttentionMetadata(
             qo,

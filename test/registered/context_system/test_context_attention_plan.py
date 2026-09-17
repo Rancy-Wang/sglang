@@ -33,6 +33,14 @@ def test_mixed_segments(compiler, occurrence, attention_plan):
         # raw IDs, active offsets, and physical pool slots.
         slots = torch.randperm(plan.occurrence_count) * 4 + 16
         bound = plan.bind(slots)
+        for tensor in (
+            bound.qo_indptr,
+            bound.kv_indptr,
+            bound.kv_indices,
+            bound.query_positions,
+            bound.kv_positions,
+        ):
+            assert tensor.data_ptr() % 16 == 0
         inverse = {
             slot: occurrence_id for occurrence_id, slot in enumerate(slots.tolist())
         }
