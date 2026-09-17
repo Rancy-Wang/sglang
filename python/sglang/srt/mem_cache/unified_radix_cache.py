@@ -941,6 +941,13 @@ class UnifiedRadixCache(BasePrefixCache):
         receipt its acquire returned, so it never drops a lock it never took."""
         self.dec_lock_ref(req.last_node, req.lock_receipt, skip_swa=skip_swa)
 
+    def configure_context_drop_lock(self, node_id, receipt, required_raw):
+        if self.disable:
+            return receipt
+        if not isinstance(self.tree_core, UnifiedTreeCore):
+            raise ValueError("Context Drop leases require the Python tree core")
+        return self.tree_core.configure_context_drop_lock(node_id, receipt, required_raw)
+
     def dec_swa_lock_only(
         self,
         node_id: NodeId,

@@ -174,6 +174,8 @@ class IncLockRefResult:
     swa_uuid_for_lock: Optional[int] = None
     swa_uuid_for_host_lock: Optional[int] = None
     skipped_lock_components: tuple[ComponentType, ...] = ()
+    # Raw-token intervals whose KV ref was replaced by a tree-path ref.
+    context_skip_ranges: tuple[tuple[int, int], ...] = ()
 
     def to_dec_params(self) -> DecLockRefParams:
         """Convert to the corresponding DecLockRefParams for dec_lock_ref."""
@@ -182,6 +184,7 @@ class IncLockRefResult:
             swa_uuid_for_lock=self.swa_uuid_for_lock,
             swa_uuid_for_host_lock=self.swa_uuid_for_host_lock,
             skipped_lock_components=tuple(self.skipped_lock_components),
+            context_skip_ranges=self.context_skip_ranges,
         )
 
 
@@ -199,6 +202,7 @@ class DecLockRefParams:
     swa_uuid_for_lock: Optional[int] = None
     swa_uuid_for_host_lock: Optional[int] = None
     skipped_lock_components: tuple[ComponentType, ...] = ()
+    context_skip_ranges: tuple[tuple[int, int], ...] = ()
 
 
 @dataclasses.dataclass
@@ -266,6 +270,7 @@ class MatchResult(NamedTuple):
     context_source_positions: torch.Tensor | None = None
     context_exact_prefix_len: int = 0
     context_retry: bool = False
+    context_resident: torch.Tensor | None = None
 
 
 def zero_match_result(

@@ -485,7 +485,7 @@ class OccurrenceState:
     exact_prefix_len: int
 
     @classmethod
-    def from_match(cls, slots, positions, *, exact_prefix_len):
+    def from_match(cls, slots, positions, *, exact_prefix_len, resident=None):
         if (
             slots.ndim != 1
             or slots.dtype not in (torch.int32, torch.int64)
@@ -495,10 +495,19 @@ class OccurrenceState:
             or not 0 <= exact_prefix_len <= len(slots)
         ):
             raise ValueError("Invalid Context match ownership metadata")
+        if resident is not None and (
+            resident.device.type != "cpu"
+            or resident.dtype != torch.bool
+            or resident.shape != slots.shape
+        ):
+            raise ValueError("Context residency must be an aligned CPU bool vector")
+        rows = torch.arange(len(slots), dtype=torch.int64)
+        if resident is not None:
+            rows[~resident] = -1
         return cls(
             slots,
             torch.zeros(len(slots), dtype=torch.bool),
-            torch.arange(len(slots), dtype=torch.int64),
+            rows,
             torch.full((len(slots),), -1, dtype=torch.int64),
             positions.clone(),
             exact_prefix_len,
