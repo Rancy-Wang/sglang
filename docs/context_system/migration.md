@@ -21,6 +21,117 @@
 权重版本、依赖版本、GPU 映射和后端选择。审计时使用过的 `923e4a56d` 与最终冻结点相比，
 本次迁移涉及的 SRT 源码没有变化；kernel 变化仅为 CPU 构建依赖。
 
+## 当前实测状态（2026-09-17）
+
+普通调度的终态发布修复为 `feff22efd`，首轮真实 PD 接线为 `feb289a24`。
+`760592534` 进一步修复了 Context 的原生 host-pool 备份读集、SWA 回收和 PD 双池容量
+估算。`ec321ae8f` 的真实并发 retract 验证已通过；`83cfdf638` 恢复 P 分块传输后，
+同一 BCP 的六条冷/热/Retry 固定路径也通过。以下结果只覆盖 Qwen3-0.6B，不能推断
+AgenticQwen、GPT-OSS 或吞吐验收已经通过。
+
+BCP case 778 使用同一规范化原生工具描述、原始 10482 tokens、终态 active 4878 tokens。
+mini 固定版本默认 mask/page-occurrence、BF16、FA3；SGLang 使用 BF16/Triton，保留
+原生 overlap、CUDA Graph 和 512-token chunk。对齐的是同一模型、权重、输入和固定
+64-token 路径；后端不同引入的误差由无功能运行校准。
+
+| 路径 | 普通 SGLang max / mean / p99 | P/D max / mean / p99 |
+| --- | --- | --- |
+| 无功能 | 1.125 / 0.054271 / 0.21875 | 1.125 / 0.054271 / 0.21875 |
+| Drop | 0.5625 / 0.049975 / 0.1875 | 0.5625 / 0.049975 / 0.1875 |
+| Drop+R 冷 | 1.125 / 0.065057 / 0.3125 | 1.125 / 0.065057 / 0.3125 |
+| Drop+R 热 | 1.046875 / 0.064866 / 0.296875 | 1.125 / 0.065100 / 0.3125 |
+| Drop+R Retry | 0.625 / 0.050695 / 0.1875 | 0.625 / 0.050695 / 0.1875 |
+
+每项门限是 `max(绝对下限, 2 × 同模型无功能误差)`；max/mean/p99 下限分别为
+0.125/0.02/0.0625。这是本次跨后端 BF16 的诊断标准，不是所有模型的通用误差标准。
+R 热命中 cached=4877、repos=0、drop_skipped=5604、实际 prefill=1；Retry 分别为
+1508、4122、2850、2002。两种调度均为 63 次实际 decode 加 P/普通 prefill 的首 token。
+
+普通调度先前存在首 decode 使用旧位置 KV 的真实错误（R cold max=16.6875、Retry
+max=17.9375）。`ScheduleBatch._prepare_context_occurrences`
+（`python/sglang/srt/managers/schedule_batch.py:3232`）在原生 overlap 消费前发布最终
+raw→terminal 映射，保留独立 birth 来源，修复后的结果如上。
+
+P/D 的 P、D 分别位于 BUS 物理 GPU 0、1，独立进程，D Radix 关闭，无 D→P 输出传输。
+`ContextTransferPlan` 对最终 active 行、位置和事件身份做一致性校验；D 只分配实际
+active Full 和必要 SWA 页（`disaggregation/context_transfer.py:124`
+`allocate_context_destination`、`:181` `commit_context_metadata`，路径前缀为
+`python/sglang/srt/`）。`83cfdf638` 的 P 按完成的 raw chunk 发送对应的终态 active
+Full KV（`disaggregation/context_transfer.py:53` `full_chunk`、
+`disaggregation/prefill.py:1325` `_send_kv_chunk`），跨 Drop holes 后保持连续目标次序。
+请求的原生锁保护已发布终态，未来 birth 页独立写入；保留最后一页随最终元数据/SWA
+一同发送，避免传输层凭累计页数提前宣布完成。该版本 BCP 数值为表中 PD 结果，
+`1 passed in 144.06s`，含启动时间，不能用作吞吐或传输重叠收益测量。
+
+原生 host-pool retract 验证为 `1 passed in 158.31s`：两个并发 BCP 中一条实际发生
+4 次回收恢复，64 个固定输出 token 与 mini 一致；该条 max/mean/p99 为
+1.0625/0.068561/0.3125，落在同一无功能基线门限内。实际 decode=67，包含原生 overlap
+被丢弃后重放的 4 次 forward，不能误记成 63。初次实验因网络到达错开未触发 retract，
+后续仅在测试 probe 中等两条传输就绪；第二次暴露 probe 未回退被丢弃采样的问题，
+`ec321ae8f` 令 probe 随原生回收回退到已提交 output 长度，未替换生产 sampler。
+
+BUS 安装的是当前 SGLang Docker 配置对应的 Mooncake CUDA13 0.3.13，实际日志显示
+未发现 HCA，使用 TCP 传输。本次证明真实跨 GPU KV 传输的功能，不能视为 RDMA 性能。
+首轮 PD 测试为 `1 passed in 190.49s`（含启动，不是吞吐）；普通数值测试为
+`1 passed in 85.80s`。结果目录在 BUS 的
+`/mnt/public/wangruoxi/local/sglang-system-20260917/`：
+
+- `bcp778-mini-aligned-qwen.json` 和同名 `.json.pt`：复用的 mini 数值参考。
+- `bcp778-sg-aligned-qwen/`：普通调度固定路径结果；旧实际生成记录注明为复用。
+- `bcp778-sg-pd-qwen/`：P/D 原始响应、分端 logits、comparison.json 和启动日志。
+- `bcp778-sg-pd-retract-qwen/`：首次未触发回收的失败证据，保留。
+- `bcp778-sg-pd-retract-barrier-qwen/`：probe 未回退导致固定路径跳 token 的失败证据。
+- `bcp778-sg-pd-retract-rewind-qwen/`：`ec321ae8f`，4 次真实回收恢复通过。
+- `bcp778-sg-pd-chunked-qwen/`：`83cfdf638`，分块传输后的完整 PD BCP 数值矩阵。
+
+可复现的 PD 测试入口：
+
+```bash
+CONTEXT_PD_BCP_ORACLE="$EXP/bcp778-mini-aligned-qwen.json" \
+CONTEXT_TRACE_DIR="$EXP/bcp778-sg-pd-qwen" \
+CONTEXT_SERVER_MODEL="$MODEL_PATH" CONTEXT_TEST_ATTENTION_BACKEND=triton \
+CONTEXT_P_GPU=0 CONTEXT_D_GPU=1 \
+python -m pytest -s -q test/registered/context_system/test_bcp_pd_numeric.py
+```
+
+这里的 EXP 是上述 BUS 实验目录，MODEL_PATH 是 Qwen3-0.6B 的本地权重路径。
+需使用已记录的隔离 CUDA13 环境及 compat 库路径；不可用同名输出目录覆盖既有结果。
+retract 实验额外设置 `CONTEXT_PD_RETRACT=1` 和指向首轮 comparison.json 的
+`CONTEXT_PD_CALIBRATION`，复用无功能校准，只新增两个并发 BCP 请求的抢占恢复检查。
+P/D 的 cache、临时目录、端口、日志和 GPU 分开。
+
+实际生成尚未验收：此 BCP 下 mini Qwen3-0.6B 默认工具语法首先输出终止符，但
+`ignore_eos` 继续排满 64 tokens；SGLang 的同描述原生结构化语法生成两个 tokens 后
+正常终止。不能为凑齐长度替换 SGLang sampler，也不能把固定路径误差通过当作实际
+Agentic 回答通过。`9a2bfc811` 将实际生成与固定路径验证拆开，支持
+`CONTEXT_BCP_MODE=actual|fixed|all`，自由生成不注入 logit processor，也不读取旧输出
+充作本次结果。该版本对三种功能各做一次新实际生成，均得到相同的两个 tokens；
+`bcp778-sg-native-actual-qwen/` 保存原始响应与 mini 文本/结束原因对照，执行测试为
+`1 passed in 70.77s`，其含义是观察记录完整，不是回答质量或 R2 验收通过。
+源码确认 SGLang `managers/schedule_batch.py:2186` 对已终止 grammar 单独结束请求，
+不受 `ignore_eos` 控制；mini `engine/tool_grammar.py:180` `_accept` 则在终止后保留
+上一份 mask。迁移没有为了凑长度修改这两个原生语法行为。需在必验大模型上完成
+实际生成对照，并据其原生协议记录真实终止原因。
+
+GPT-OSS 窗口边界经端到端源码核对，并不存在“mini 128 对 SGLang 129”的差异：
+两者模型均把配置 window 转为 `window - 1` 的左窗口。
+SGLang `models/gpt_oss.py:129` `get_attention_sliding_window_size` 的结果由
+`model_executor/model_runner_components/load_model_utils.py:139`
+`resolve_sliding_window_size` 优先采用；mini 的 `models/gpt_oss.py:42` 同样减一。
+SGLang 引用前缀为 `python/sglang/srt/`，mini 为 `python/minisgl/`。
+该核对不替代 GPT-OSS 全模型数值测试。
+
+环境限制：GPU 0–3 每张空闲约 6 GB，利用率约 90%；足够当前小 Qwen 功能诊断，
+不足以完成必验大模型与可解释的吞吐实验。sudo 需要交互认证，且宿主 GPU PID 在当前
+命名空间不可见，尚无法核实并停止用户授权的 liuenshu/cdllm 任务。已请求用户处理资源，
+没有停止任何无关任务。后续只对新修改和未覆盖功能运行必要测试，不重复完整旧测试集。
+
+本次分块区间 CPU 测试 `python -m pytest -q
+test/registered/context_system/test_context_transfer.py` 为 1 passed。新增 helper 和
+BCP 测试的 Ruff 通过；完整 `prefill.py` 的 Ruff 在修改前后均有 29 项相同既有
+诊断，无新增项，未为此格式化无关原生代码。全部 52 条会话已建立索引，但逐条完整
+审阅及全部源码差异审计尚未完成；本页风险清单不冒充全量审计通过。
+
 ## 最终设置
 
 1. 第一阶段必验 Qwen3、AgenticQwen、GPT-OSS。保留 SGLang 原生模型、MoE、
@@ -77,7 +188,8 @@ token。D 先分配自己的目标页，接收 KV 和首 token 等元数据，�
 独立，传输协议不能把 P 页号当成 D 页号。
 
 在存在最终位置变化的区间，不能直接复用原生的“按 raw prompt 长度发送全部页”假设。
-先保证最终版本正确，再恢复可证明稳定区间的传输重叠；需测量终态整理与传输等待的代价。
+`83cfdf638` 已恢复完成 chunk 中稳定终态 Full 页的传输，并保留末页至最终元数据
+就绪；仍需在隔离 GPU 上测量终态整理与传输等待的代价。
 连接失败、取消、重复完成通知、重试时复用原生连接状态机制，同时隔离请求尝试的 KV 所有权。
 
 本轮不增加 D Radix 重试矩阵，也不增加 D→P 输出 KV 传输。P Radix 命中和 Context Retry
@@ -142,9 +254,9 @@ response，TR13 后丢 TR1；按当前位置到 96 Ki 后在合法边界 Reposit
 标准 TPOT=(E2E−TTFT)/(输出数−1)，首 decode gap 单列。SSE chunk 间隔不能当作 GPU
 token 间隔；server token timing 也不是 GPU 硬件计时。本轮不测 SLO。
 
-## 下一检查点
+## 历史检查点（以下描述其当时状态）
 
-### 基础编译器检查点（仍未接入运行时）
+### 初始基础编译器检查点
 
 新增 `context_system/ir.py` 与 CPU `kernels/ops/attention/context_plan.py`：保持
 mini 的两遍 native 编译、最终位置 key、Drop→R 顺序、尾部 Drop 后无效 R 的语义。
@@ -193,7 +305,7 @@ key 仍是一项真实 token 对应一项 KV，保留 Drop/R 事件和最终位�
 最终验收。后续只运行 page_size=1 的正向功能测试；大页仅保留拒绝测试及原生能力
 未被改变的回归测试。模型和 PD 验证仍待完成。
 
-## Native chat / IPC 接线（实施中）
+## 历史：Native chat / IPC 初始接线
 
 OpenAI chat 请求现在显式解析 DropRule、legacy Drop 和严格整数 Reposition。
 Context 请求在 native Jinja 规范化之后用一次完整渲染取得 token provenance；
