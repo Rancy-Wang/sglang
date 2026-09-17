@@ -1396,6 +1396,14 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             self._validate_context_insert_residency(params)
         if params.context_swa_resident is not None:
             self._validate_context_swa_insert_residency(params)
+        if params.context_owned is not None and (
+            key.context is None
+            or params.context_owned.device.type != "cpu"
+            or params.context_owned.dtype != torch.bool
+            or params.context_owned.ndim != 1
+            or len(params.context_owned) < len(key)
+        ):
+            raise ValueError("Context insert ownership must cover the CPU raw key")
         key, value = key.maybe_to_bigram_view(self.is_eagle, value)
         key = key.page_aligned(self.page_size)
         if value is not None:
@@ -1602,8 +1610,14 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         prefix_len = node.key.match(key, page_size=self.page_size)
         incoming_present = True
         resident = state.params.context_resident
-        if resident is not None or state.params.context_swa_resident is not None:
-            for component_resident in (resident, state.params.context_swa_resident):
+        if (
+            resident is not None
+            or state.params.context_swa_resident is not None
+            or state.params.context_owned is not None
+        ):
+            for component_resident in (
+                resident, state.params.context_swa_resident, state.params.context_owned
+            ):
                 if component_resident is None:
                     continue
                 import numpy as np
@@ -1650,6 +1664,12 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                     result=state.result,
                     cache_actions=step_actions,
                 )
+        elif state.params.context_owned is not None and not bool(
+            state.params.context_owned[state.total_prefix_length]
+        ):
+            # This exact target page is leased from the tree already. It must
+            # not be treated as a duplicate allocation or an SWA replacement.
+            pass
         else:
             value_slice = state.value[:prefix_len]
             consumed_from = prefix_len
@@ -1666,7 +1686,10 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                 )
                 consumed_from = min(consumed_from, comp_consumed_from)
 
-            dup_start = max(0, state.params.prev_prefix_len - state.total_prefix_length)
+            dup_start = (
+                0 if state.params.context_owned is not None
+                else max(0, state.params.prev_prefix_len - state.total_prefix_length)
+            )
             if dup_start < consumed_from:
                 # The duplicate slice may straddle this request's own eviction
                 # floor; below it only the full side is still ours to release.

@@ -395,7 +395,7 @@ class SWAComponent(TreeComponent):
         result: InsertResult,
         cache_actions: list[CacheAction | ComponentAction],
     ) -> int:
-        if params.prev_prefix_len >= total_prefix_len + prefix_len:
+        if params.context_owned is None and params.prev_prefix_len >= total_prefix_len + prefix_len:
             return prefix_len
         if params.context_swa_resident is not None and not bool(
             params.context_swa_resident[total_prefix_len]
