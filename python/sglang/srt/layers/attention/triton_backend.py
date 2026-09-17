@@ -1541,8 +1541,42 @@ class TritonAttnBackend(AttentionBackend):
         score_mod=None,
         aux_tensors=None,
     ):
+        context = forward_batch.context_attention
+        if context is not None:
+            # Reject unsupported specializations before mutating any layer KV.
+            # Ordinary requests retain every native backend specialization.
+            if (
+                self.use_mla
+                or self.dcp_size > 1
+                or self.enable_deterministic
+                or not save_kv_cache
+                or k is None
+                or v is None
+                or layer.k_scale is not None
+                or layer.v_scale is not None
+                or layer.is_cross_attention
+                or layer.attn_type != AttentionType.DECODER
+                or score_mod is not None
+                or aux_tensors is not None
+                or forward_batch.spec_info is not None
+            ):
+                raise NotImplementedError(
+                    "Context Triton extend requires causal unquantized MHA/GQA"
+                )
+            context_metadata = context.for_layer(layer)
+            context_k_buffer = self.token_to_kv_pool.get_key_buffer(layer.layer_id)
+            context_v_buffer = self.token_to_kv_pool.get_value_buffer(layer.layer_id)
+            if (
+                context_k_buffer.ndim != 3
+                or context_v_buffer.ndim != 3
+                or context_k_buffer.dtype not in (torch.float16, torch.bfloat16)
+                or context_v_buffer.dtype != context_k_buffer.dtype
+                or context_metadata.query_count != q.shape[0]
+            ):
+                raise ValueError("Context Triton requires NHD FP16/BF16 KV and aligned Q")
         if (
-            k is not None
+            context is None
+            and k is not None
             and v is not None
             and sinks is None
             and score_mod is None
@@ -1607,6 +1641,31 @@ class TritonAttnBackend(AttentionBackend):
                     )
 
         logits_soft_cap = logit_capping_mod(layer.logit_capping_method, layer.logit_cap)
+
+        if context is not None:
+            copies = context.layer_copies.get(layer.layer_id)
+            if copies is not None:
+                copies.apply()
+            context_metadata.forward(
+                self.extend_attention_fwd,
+                q.view(-1, layer.tp_q_head_num, layer.qk_head_dim),
+                k.contiguous(),
+                v.contiguous(),
+                o.view(-1, layer.tp_q_head_num, layer.v_head_dim),
+                context_k_buffer,
+                context_v_buffer,
+                sm_scale=layer.scaling,
+                logit_cap=logits_soft_cap,
+                sliding_window_size=(
+                    layer.sliding_window_size
+                    if layer.sliding_window_size is not None
+                    else -1
+                ),
+                sinks=sinks,
+                xai_temperature_len=layer.xai_temperature_len,
+                page_size=self.page_size,
+            )
+            return o
 
         causal = True
         if (
