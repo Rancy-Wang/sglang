@@ -22,10 +22,49 @@
 
 from __future__ import annotations
 
+import heapq
 from dataclasses import dataclass
 
 import numpy as np
 import torch
+
+
+class DropEvictionCandidates:
+    """Persistent leaf-first heaps with bounded lazy invalidation.
+
+    The tree updates a candidate only when its locks, children, residency or
+    recency change. Reclaim never scans the tree or reads device page indices.
+    ``kind=0`` denotes a leaf and ``kind=1`` a proven Drop internal edge.
+    """
+
+    def __init__(self):
+        self.heaps = ([], [])
+        self.entries = {}
+        self.version = 0
+
+    def update(self, node, kind, priority=None):
+        self.entries.pop(node.id, None)
+        if kind is not None:
+            self.version += 1
+            entry = (priority, node.id, self.version, node)
+            self.entries[node.id] = (kind, entry)
+            heapq.heappush(self.heaps[kind], entry)
+        if sum(map(len, self.heaps)) > 2 * len(self.entries) + 64:
+            self.heaps = tuple(
+                [entry for k, entry in self.entries.values() if k == kind]
+                for kind in (0, 1)
+            )
+            for heap in self.heaps:
+                heapq.heapify(heap)
+
+    def pop(self):
+        for kind, heap in enumerate(self.heaps):
+            while heap:
+                entry = heapq.heappop(heap)
+                if self.entries.get(entry[1]) == (kind, entry):
+                    del self.entries[entry[1]]
+                    return kind, entry[-1]
+        return None
 
 
 def mask_ranges(mask: np.ndarray) -> list[tuple[int, int]]:
