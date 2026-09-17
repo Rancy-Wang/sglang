@@ -83,6 +83,8 @@ class InsertParams:
     value: Optional[torch.Tensor] = None
     # CPU raw-token residency; absent pages have no allocation to adopt/free.
     context_resident: torch.Tensor | None = None
+    # Independent SWA validity. False entries must already have no SWA mapping.
+    context_swa_resident: torch.Tensor | None = None
 
     # Mamba specific
     mamba_value: Optional[torch.Tensor] = None
@@ -274,6 +276,8 @@ class MatchResult(NamedTuple):
     context_exact_prefix_len: int = 0
     context_retry: bool = False
     context_resident: torch.Tensor | None = None
+    context_swa_resident: torch.Tensor | None = None
+    context_swa_window: int | None = None
 
 
 def zero_match_result(
@@ -295,6 +299,11 @@ def zero_match_result(
         swa_branching_seqlen=None,
         mamba_host_hit_length=0,
         full_kv_hit_length=0,
+        context_source_positions=None,
+        context_exact_prefix_len=0,
+        context_retry=False,
+        context_resident=None,
+        context_swa_resident=None,
     )
 
 

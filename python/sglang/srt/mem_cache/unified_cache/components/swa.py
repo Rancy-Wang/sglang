@@ -397,6 +397,12 @@ class SWAComponent(TreeComponent):
     ) -> int:
         if params.prev_prefix_len >= total_prefix_len + prefix_len:
             return prefix_len
+        if params.context_swa_resident is not None and not bool(
+            params.context_swa_resident[total_prefix_len]
+        ):
+            # The core split this edge at every validity boundary. An absent
+            # incoming SWA page must never recover a tree tombstone.
+            return prefix_len
 
         is_tombstone = node.component_data[self.component_type].value is None
         if not is_tombstone:
@@ -474,6 +480,10 @@ class SWAComponent(TreeComponent):
         result: InsertResult,
         cache_actions: list[CacheAction | ComponentAction],
     ) -> None:
+        if params.context_swa_resident is not None and not bool(
+            params.context_swa_resident[total_prefix_len]
+        ):
+            return
         # _unevict_node_on_insert already wrote the request's fresh KV slice
         # into the base value. We just need to rebuild SWA from that slice for
         # the in-window portion. There is no old SWA slot to free here.
@@ -523,6 +533,10 @@ class SWAComponent(TreeComponent):
             return
 
         node_start = result.prefix_len
+        if params.context_swa_resident is not None and not bool(
+            params.context_swa_resident[node_start]
+        ):
+            return
         node_end = node_start + len(node.key)
         split_pos = params.swa_evicted_seqlen - node_start
         if split_pos >= len(node.key):

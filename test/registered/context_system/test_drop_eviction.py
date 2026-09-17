@@ -252,3 +252,64 @@ def test_sparse_insert_rejects_unproven_hole_before_mutation(compiler, native_ca
         )
     assert len(cache.tree_core._node_arena) == 1
     assert_allocator(cache, allocator, 0)
+
+
+def test_swa_holes_remain_independent_across_insert_recovery_and_cow(
+    compiler, native_cache
+):
+    from sglang.srt.mem_cache.base_prefix_cache import (
+        EvictParams,
+        InsertParams,
+        MatchPrefixParams,
+        zero_match_result,
+    )
+    from sglang.srt.mem_cache.radix_cache import RadixKey
+
+    cache, allocator = native_cache
+    if not hasattr(allocator, "swa_attn_allocator"):
+        pytest.skip("SWA-specific ownership")
+    key = RadixKey.from_context(compiler(*args(list(range(32)), {}, [])))
+    expected = torch.ones(24, dtype=torch.bool)
+    expected[1:4] = False
+    expected[7:12] = False
+
+    def insert(length, resident):
+        slots = allocator.alloc(length)
+        allocator.free_swa(slots[~resident])
+        cache.insert(
+            InsertParams(key=key[:length], value=slots, context_swa_resident=resident)
+        )
+        assert_allocator(cache, allocator, length)
+        return cache.match_prefix(
+            MatchPrefixParams(key=key[:length], context_retry=True)
+        )
+
+    first = insert(24, expected)
+    assert first.context_resident.all()
+    assert first.context_swa_resident.tolist() == expected.tolist()
+    assert first.context_swa_window == 5
+    lease = cache.inc_lock_ref(first.last_device_node)
+    repair = torch.ones(24, dtype=torch.bool)
+    repair[:2] = False
+    repair[7:10] = False
+    repaired = insert(24, repair)
+    expected |= repair
+    assert repaired.context_swa_resident.tolist() == expected.tolist()
+    # The live reader keeps Full page identities while SWA-only recovery binds
+    # fresh peers; unprovided SWA must not invalidate a resident tree component.
+    assert repaired.device_indices.tolist() == first.device_indices.tolist()
+    appended = torch.zeros(32, dtype=torch.bool)
+    appended[-4:] = True
+    final = insert(32, appended)
+    expected = torch.cat((expected, appended[24:]))
+    assert final.context_swa_resident.tolist() == expected.tolist()
+    assert allocator.swa_attn_allocator.available_size() == 128 - int(expected.sum())
+    forced_miss = zero_match_result(cache, final)
+    assert len(forced_miss.device_indices) == 0
+    assert forced_miss.context_source_positions is None
+    assert forced_miss.context_resident is None
+    assert forced_miss.context_swa_resident is None
+    assert forced_miss.context_exact_prefix_len == 0
+    cache.dec_lock_ref(first.last_device_node, lease.to_dec_params())
+    cache.evict(EvictParams(num_tokens=128))
+    assert_allocator(cache, allocator, 0)
