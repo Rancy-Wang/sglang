@@ -1949,6 +1949,7 @@ class OpenAIServingChat(OpenAIServingBase):
         image_tokens = {}
         audio_tokens = {}
         video_tokens = {}
+        context_usage = {}
         input_ids: Optional[List[int]] = None
         output_ids: Dict[int, List[int]] = {}
 
@@ -1995,6 +1996,8 @@ class OpenAIServingChat(OpenAIServingBase):
                 image_tokens[index] = content["meta_info"].get("image_tokens", 0)
                 audio_tokens[index] = content["meta_info"].get("audio_tokens", 0)
                 video_tokens[index] = content["meta_info"].get("video_tokens", 0)
+                if include_usage and content["meta_info"].get("context_usage") is not None:
+                    context_usage[index] = content["meta_info"]["context_usage"]
 
                 finish_reason = content["meta_info"].get("finish_reason", None)
                 finish_reason_type = finish_reason["type"] if finish_reason else None
@@ -2175,6 +2178,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 spec_tokens_details=sglext_spec_tokens_details,
                 input_ids=sglext_input_ids,
                 output_ids=sglext_output_ids,
+                context_usage=context_usage or None,
             )
             sglext_non_ids, sglext_ids = sglext_full.split_ids()
 
