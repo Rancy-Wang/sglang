@@ -32,7 +32,7 @@ def pd_servers():
     processes, logs = [], []
     bases = []
     template = oracle_chat_template(
-        os.environ["CONTEXT_PD_BCP_ORACLE"],
+        os.environ.get("CONTEXT_PD_BCP_ORACLE"),
         os.environ["CONTEXT_SERVER_MODEL"],
         directory,
     )
