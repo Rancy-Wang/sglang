@@ -169,6 +169,7 @@ class Transport:
             async with self.session.post(url, json=body) as response:
 
                 async def content():
+                    reported_metrics = None
                     async for data in self.method.sse_events(response.content):
                         if data == "[DONE]":
                             if prefill:
@@ -176,6 +177,13 @@ class Transport:
                         else:
                             event = json.loads(data)
                             metrics = compute_metrics(event)
+                            if metrics:
+                                reported_metrics = metrics
+                            if prefill is not None and event.get("usage"):
+                                # Use this request's room, not the shared
+                                # counter, which advances for concurrent turns.
+                                metrics = dict(reported_metrics or {})
+                                metrics["pd_bootstrap_room"] = body["bootstrap_room"]
                             if metrics:
                                 # Core request() defaults generated_tokens from
                                 # final usage when this key is absent.
