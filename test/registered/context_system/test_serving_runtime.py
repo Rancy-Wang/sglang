@@ -62,8 +62,13 @@ def server(tmp_path_factory):
     ]
     cmd += ["--tp-size", os.environ.get("CONTEXT_TEST_TP", "1")]
     if "gpt-oss" in os.environ["CONTEXT_SERVER_MODEL"].lower():
-        cmd += ["--tool-call-parser", "gpt-oss", "--reasoning-parser", "gpt-oss",
-                "--disable-hybrid-swa-memory"]
+        cmd += [
+            "--tool-call-parser",
+            "gpt-oss",
+            "--reasoning-parser",
+            "gpt-oss",
+            "--disable-hybrid-swa-memory",
+        ]
     backend = os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND")
     if backend:
         cmd += ["--attention-backend", backend]

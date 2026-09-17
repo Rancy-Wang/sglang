@@ -94,8 +94,13 @@ def pd_servers():
             ]
             cmd += ["--tp-size", os.environ.get("CONTEXT_TEST_TP", "1")]
             if "gpt-oss" in os.environ["CONTEXT_SERVER_MODEL"].lower():
-                cmd += ["--tool-call-parser", "gpt-oss", "--reasoning-parser", "gpt-oss",
-                        "--disable-hybrid-swa-memory"]
+                cmd += [
+                    "--tool-call-parser",
+                    "gpt-oss",
+                    "--reasoning-parser",
+                    "gpt-oss",
+                    "--disable-hybrid-swa-memory",
+                ]
             backend = os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND")
             if backend:
                 cmd += ["--attention-backend", backend]
@@ -208,20 +213,29 @@ def test_bcp_pd_terminal_handoff(pd_servers):
         if not fixed:
             output = response["sglext"]["output_ids"][0]
             choice = response["choices"][0]
-            assert output and choice["finish_reason"] in ("length", "stop", "tool_calls"), response
+            assert output and choice["finish_reason"] in (
+                "length",
+                "stop",
+                "tool_calls",
+            ), response
             item = {
                 "comparison_kind": "native_generation_observation",
                 "exact_token_match": output == tokens,
                 "matching_tokens": sum(a == b for a, b in zip(output, tokens)),
                 "generated_tokens": len(output),
                 "reference_tokens": len(tokens),
-                "same_input_tokens": response["sglext"]["input_ids"] == reference["runs"]["none"]["records"][0]["input"]["ids"],
+                "same_input_tokens": response["sglext"]["input_ids"]
+                == reference["runs"]["none"]["records"][0]["input"]["ids"],
                 "message": choice["message"],
-                "reference_message": reference["runs"][feature]["responses"][0]["choices"][0]["message"],
+                "reference_message": reference["runs"][feature]["responses"][0][
+                    "choices"
+                ][0]["message"],
                 "finish_reason": choice["finish_reason"],
             }
             comparisons[name] = item
-            (directory / "comparison.json").write_text(json.dumps(comparisons, indent=2))
+            (directory / "comparison.json").write_text(
+                json.dumps(comparisons, indent=2)
+            )
             print("BCP_PD_ACTUAL", name, json.dumps(item), flush=True)
             return
         logits = torch.cat(
