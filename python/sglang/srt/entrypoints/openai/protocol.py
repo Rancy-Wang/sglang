@@ -448,6 +448,9 @@ class SglExt(BaseModel):
     )
     input_ids: Optional[List[int]] = None
     output_ids: Optional[List[List[int]]] = None
+    # Terminal request-lifetime counters, keyed by choice index. Unavailable for
+    # native requests that never entered Context; do not infer physical compute.
+    context_usage: dict[int, dict[str, int]] | None = None
 
     def split_ids(self) -> Tuple[Optional[SglExt], Optional[SglExt]]:
         """Split set fields into (non_ids, ids); a side with no set fields is None."""

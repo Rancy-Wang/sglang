@@ -96,6 +96,48 @@ def test_no_feature_uses_original_render(chat):
     )
 
 
+@pytest.mark.parametrize(
+    "reported", [None, {"actual_prefill_tokens": 11, "actual_decode_tokens": 3}]
+)
+def test_context_stream_reports_terminal_compute(chat, reported):
+    import asyncio
+    import json
+    from unittest.mock import Mock
+
+    async def generate(*args):
+        yield {
+            "text": "answer",
+            "meta_info": {
+                "id": "context-stream",
+                "prompt_tokens": 100,
+                "completion_tokens": 2,
+                "cached_tokens": 70,
+                "finish_reason": {"type": "length", "length": 2},
+                "context_usage": reported,
+            },
+        }
+
+    async def collect():
+        return [
+            chunk
+            async for chunk in chat._generate_chat_stream(
+                Mock(),
+                request(stream=True, stream_options={"include_usage": True}),
+                None,
+            )
+        ]
+
+    chat.tokenizer_manager.generate_request = generate
+    chunks = asyncio.run(collect())
+    events = [json.loads(chunk[6:]) for chunk in chunks if chunk != "data: [DONE]\n\n"]
+    usage = [
+        event["sglext"]["context_usage"]
+        for event in events
+        if (event.get("sglext") or {}).get("context_usage")
+    ]
+    assert usage == ([{"0": reported}] if reported else [])
+
+
 @pytest.mark.parametrize("repos", [None, [1]])
 def test_chat_program_and_native_ipc(chat, repos):
     from sglang.srt.context_system.planner import ContextProgram
