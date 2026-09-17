@@ -77,11 +77,11 @@ def pd_servers():
                     "24576" if i == 0 else "16384",
                 ),
                 "--context-length",
-                "16384",
+                os.environ.get("CONTEXT_MAX_LENGTH", "16384"),
                 "--max-running-requests",
                 "4",
                 "--chunked-prefill-size",
-                "512",
+                os.environ.get("CONTEXT_CHUNK_SIZE", "512"),
                 "--context-drop-aware-eviction",
                 "--cuda-graph-config",
                 json.dumps(
