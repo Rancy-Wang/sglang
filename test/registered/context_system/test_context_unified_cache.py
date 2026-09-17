@@ -216,6 +216,7 @@ def test_large_page_context_rejected_without_changing_native_cache(compiler):
     "mode",
     [
         "cold",
+        "tail_drop",
         "duplicate",
         "retry",
         "disabled",
@@ -252,6 +253,8 @@ def test_context_occurrence_native_publication_and_release(compiler, mode):
     try:
         tokens = list(range(128))
         drops, repos = {24: [(4, 12)], 56: [(16, 36)]}, [23, 55]
+        if mode == "tail_drop":
+            drops[128] = [(80, 96)]
         layout = compiler(*args(tokens, drops, repos))
         program = ContextProgram(layout, expiry_for(len(tokens), drops))
         req = Req(
@@ -383,6 +386,13 @@ def test_context_occurrence_native_publication_and_release(compiler, mode):
             # layer writes/COW and graph replay are covered by model tests.
             allocator.free(advanced.retired_slots)
             cache.cache_unfinished_req(req, chunked=end < 128)
+            if mode in {"cold", "tail_drop"} and end == 17:
+                # Final-position copies are deferred and the future Drop is
+                # absent from this key. The raw cursor must still advance.
+                assert req.kv.cache_protected_len == 4
+                assert len(req.prefix_indices) == end
+            if mode == "tail_drop" and end == 128:
+                assert req.kv.cache_protected_len == 80
             remaining = req.context_state.terminal_rows >= 0
             assert torch.equal(
                 req.context_state.terminal_slots()[remaining],
