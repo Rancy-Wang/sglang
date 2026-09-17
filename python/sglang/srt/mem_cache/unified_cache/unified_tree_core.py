@@ -1351,6 +1351,8 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         value = params.value
         if key.context is not None:
             self._validate_context_key(key)
+        if params.context_resident is not None:
+            self._validate_context_insert_residency(params)
         key, value = key.maybe_to_bigram_view(self.is_eagle, value)
         key = key.page_aligned(self.page_size)
         if value is not None:
@@ -1400,6 +1402,35 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             ),
         )
         return self._advance_insert()
+
+    def _validate_context_insert_residency(self, params):
+        """Reject unproven holes before insert can split or adopt any pages."""
+        import numpy as np
+        from sglang.srt.context_system.recovery import proven_skip_ranges
+
+        key, resident = params.key, params.context_resident
+        if key.context is None or key.context_start != 0:
+            raise ValueError("Context hole insertion requires a full structured key")
+        self._validate_context_key(key)
+        if (
+            resident.device.type != "cpu"
+            or resident.dtype != torch.bool
+            or resident.ndim != 1
+            or len(resident) < len(key)
+        ):
+            raise ValueError("Context insert residency must cover the CPU raw key")
+        if not len(key):
+            return
+        first, last = key.context.record_span(0, len(key))
+        records = torch.from_numpy(
+            np.frombuffer(key.context.records, dtype=np.int32).reshape(-1, 4)[first:last]
+        )
+        proven = np.zeros(len(records), dtype=bool)
+        for start, end in proven_skip_ranges(records, resident[: len(key)]):
+            proven[start:end] = True
+        real = records.numpy()[:, 0] == 0
+        if not np.all(resident[: len(key)].numpy() | proven[real]):
+            raise ValueError("Context insert hole has no Drop proof on the inserted path")
 
     def _rotation_conflict(
         self, key: RadixKey, rotation_base: int
@@ -1506,13 +1537,28 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         node = state.node.children[child_key]
         self._touch_node(node)
         prefix_len = node.key.match(key, page_size=self.page_size)
+        incoming_present = True
+        resident = state.params.context_resident
+        if resident is not None:
+            import numpy as np
+
+            offset = state.total_prefix_length
+            span = resident.numpy()[offset : offset + prefix_len]
+            incoming_present = bool(span[0])
+            changes = np.flatnonzero(span[1:] != span[:-1])
+            if len(changes):
+                prefix_len = int(changes[0]) + 1
         if prefix_len < len(node.key):
             node, action = self._split_node(node.key, node, prefix_len)
             if action is not None:
                 step_actions.append(action)
         node.priority = max(node.priority, state.priority)
 
-        if node.evicted or node.context_hole:
+        if not incoming_present:
+            # No allocation exists for this input span. Keep any resident tree
+            # pages, or retain an existing hole; never send -1 to native frees.
+            pass
+        elif node.evicted or node.context_hole:
             self._unevict_node_on_insert(
                 node,
                 state.value[:prefix_len],
@@ -1576,6 +1622,9 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
 
     def _insert_commit_step(self, state: _InsertWalkState) -> None:
         """Create the tail leaf and run the component commit hooks."""
+        if state.params.context_resident is not None and len(state.key):
+            self._insert_context_tail(state)
+            return
         # Create new leaf for remaining suffix. A leaf survives on its Full
         # value alone; auxiliary components (SWA, Mamba) may legitimately hold
         # only a tombstone for this span (e.g. the whole leaf is outside the SWA
@@ -1612,6 +1661,53 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                 result=state.result,
                 cache_actions=state.pending_actions,
             )
+        state.phase = _InsertPhase.TAIL
+
+    def _insert_context_tail(self, state):
+        """Adopt resident runs and retain proven holes without allocating KV."""
+        import numpy as np
+
+        base = state.total_prefix_length
+        resident = state.params.context_resident.numpy()[base : base + len(state.key)]
+        if self.context_eviction_candidates is None and not np.all(resident):
+            from sglang.srt.context_system.recovery import DropEvictionCandidates
+
+            self.context_eviction_candidates = DropEvictionCandidates()
+            for leaf in self.evictable_device_leaves:
+                self._update_context_candidate(leaf)
+        bounds = [0, *(np.flatnonzero(resident[1:] != resident[:-1]) + 1), len(resident)]
+        node = state.node
+        for start, end in zip(bounds[:-1], bounds[1:]):
+            start, end = int(start), int(end)
+            node = self._add_new_node(
+                node,
+                state.key[start:end],
+                state.value[start:end],
+                priority=state.priority,
+                session_id=state.params.session_id,
+            )
+            if not resident[start]:
+                node.context_hole = True
+                node.context_drop_eligible = True
+                self.component_evictable_size_[BASE_COMPONENT_TYPE] -= end - start
+                self._update_evictable_leaf_sets(node)
+                continue
+            state.result.record_adopted_range(BASE_COMPONENT_TYPE, base + start, base + end)
+            # Native SWA hooks address this new edge using result.prefix_len.
+            # Restore the insertion's original matched prefix after the loop.
+            state.result.prefix_len = base + start
+            for component in self.components:
+                component.commit_insert_component_data(
+                    node=node,
+                    is_new_leaf=True,
+                    params=state.params,
+                    result=state.result,
+                    cache_actions=state.pending_actions,
+                )
+        state.target_node = node
+        state.is_new_leaf = True
+        state.result.prefix_len = base
+        state.result.last_device_node = node.id
         state.phase = _InsertPhase.TAIL
 
     def _needs_incremental_component_backup(self, node: UnifiedTreeNode) -> bool:

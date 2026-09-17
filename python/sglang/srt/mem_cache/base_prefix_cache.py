@@ -81,6 +81,8 @@ class InsertParams:
 
     key: Optional[RadixKey] = None
     value: Optional[torch.Tensor] = None
+    # CPU raw-token residency; absent pages have no allocation to adopt/free.
+    context_resident: torch.Tensor | None = None
 
     # Mamba specific
     mamba_value: Optional[torch.Tensor] = None

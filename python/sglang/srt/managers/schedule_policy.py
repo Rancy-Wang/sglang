@@ -201,6 +201,7 @@ def match_prefix_for_req(
     )
     if req.context_program is not None:
         req.context_source_positions = match_result.context_source_positions
+        req.context_resident = match_result.context_resident
         req.context_exact_prefix_len = match_result.context_exact_prefix_len
     max_len = req._compute_max_prefix_len(len(token_ids))
     req.num_matched_prefix_tokens = min(

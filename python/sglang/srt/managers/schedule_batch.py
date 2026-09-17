@@ -1043,6 +1043,7 @@ class Req(ReqDllmMixin):
         self.context_recompute_program = None
         self.context_key_data = None
         self.context_source_positions = None
+        self.context_resident = None
         self.context_exact_prefix_len = 0
         self.context_state = None
         self.context_decode_layout = None
@@ -1627,6 +1628,7 @@ class Req(ReqDllmMixin):
                 self.prefix_indices,
                 positions,
                 exact_prefix_len=self.context_exact_prefix_len,
+                resident=self.context_resident,
             )
             if self.context_usage is None:
                 self.context_usage = ContextUsage(
@@ -1763,6 +1765,7 @@ class Req(ReqDllmMixin):
             )
             if self.context_program is not None:
                 self.context_source_positions = match_result.context_source_positions
+                self.context_resident = match_result.context_resident
                 self.context_exact_prefix_len = match_result.context_exact_prefix_len
             if match_result.cache_protected_len is not None:
                 self.kv.cache_protected_len = match_result.cache_protected_len
@@ -2047,6 +2050,7 @@ class Req(ReqDllmMixin):
         self.retraction_count += 1
         self.context_source_positions = None
         self.context_exact_prefix_len = 0
+        self.context_resident = None
         self.context_recompute_program = None
         if self.context_usage is not None:
             self.context_usage.begin_recompute()

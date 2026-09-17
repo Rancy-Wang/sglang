@@ -997,7 +997,7 @@ class UnifiedRadixCache(BasePrefixCache):
             return
 
         if self.disable:
-            self.free_kv_row(req.kv, [(0, kv_len_to_handle)])
+            self._free_context_kv_row(req, [(0, kv_len_to_handle)])
             for comp in self._components_tuple:
                 comp.cleanup_after_caching_req(req, is_finished=True)
             return
@@ -1049,6 +1049,9 @@ class UnifiedRadixCache(BasePrefixCache):
 
             insert_params.key = radix_key
             insert_params.value = values
+            insert_params.context_resident = self._context_cache_residency(
+                req, page_aligned_len
+            )
             result = self.insert(insert_params)
 
             # Keep the prompt as an independent radix node. Finished requests
@@ -1104,9 +1107,9 @@ class UnifiedRadixCache(BasePrefixCache):
                     ranges[0] = (free_from, len(kv_indices_full))
                 else:
                     ranges.append((tail_free_start, len(kv_indices_full)))
-            self.free_kv_row(req.kv, ranges)
+            self._free_context_kv_row(req, ranges)
         else:
-            self.free_kv_row(req.kv, [(req.kv.cache_protected_len, kv_len_to_handle)])
+            self._free_context_kv_row(req, [(req.kv.cache_protected_len, kv_len_to_handle)])
 
         # Synthetic profiling requests may own KV without locking a tree node.
         if req.last_node is not None:
@@ -1166,6 +1169,34 @@ class UnifiedRadixCache(BasePrefixCache):
         self.req_to_token_pool.write(
             (req.kv.req_pool_idx, slice(0, len(terminal))), terminal
         )
+
+    @staticmethod
+    def _context_cache_residency(req, length):
+        state = getattr(req, "context_state", None)
+        if state is None:
+            return None
+        rows = state.terminal_rows[:length]
+        if bool(torch.all(rows >= 0)):
+            return None
+        resident = torch.ones(length, dtype=torch.bool)
+        resident[: len(rows)] = rows >= 0
+        return resident
+
+    def _free_context_kv_row(self, req, ranges):
+        """Keep raw SWA floors while excluding holes using CPU ownership data."""
+        if ranges:
+            length = max(end for _, end in ranges)
+            resident = self._context_cache_residency(req, length)
+            if resident is not None:
+                from sglang.srt.context_system.recovery import mask_ranges
+
+                present = resident.numpy()
+                ranges = [
+                    (start + a, start + b)
+                    for start, end in ranges
+                    for a, b in mask_ranges(present[start:end])
+                ]
+        self.free_kv_row(req.kv, ranges)
 
     def _release_context_source_lease(self, req: Req):
         if req.context_source_lease is not None:
@@ -1241,6 +1272,7 @@ class UnifiedRadixCache(BasePrefixCache):
 
         insert_params.key = radix_key
         insert_params.value = values
+        insert_params.context_resident = self._context_cache_residency(req, page_aligned_len)
         result = self.insert(insert_params)
 
         if result.rotation_tail_declined:
@@ -1262,7 +1294,13 @@ class UnifiedRadixCache(BasePrefixCache):
 
         # Match prefix. SWA insertion retains one extra window before the
         # page-aligned boundary, so the normal match remains safe to repoint.
-        match_result = self.match_prefix(MatchPrefixParams(key=radix_key, req=req))
+        match_result = self.match_prefix(
+            MatchPrefixParams(
+                key=radix_key,
+                req=req,
+                context_retry=insert_params.context_resident is not None,
+            )
+        )
         new_indices = match_result.device_indices
         new_last_node = match_result.last_device_node
         new_prefix_len = result.prefix_len

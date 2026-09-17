@@ -212,7 +212,9 @@ def test_large_page_context_rejected_without_changing_native_cache(compiler):
     )
 
 
-@pytest.mark.parametrize("mode", ["cold", "duplicate", "retry", "disabled"])
+@pytest.mark.parametrize(
+    "mode", ["cold", "duplicate", "retry", "disabled", "holes", "holes_abort"]
+)
 def test_context_occurrence_native_publication_and_release(compiler, mode):
     from sglang.srt.context_system.planner import ContextProgram
     from sglang.srt.managers.schedule_batch import Req
@@ -292,7 +294,32 @@ def test_context_occurrence_native_publication_and_release(compiler, mode):
             req.kv.cache_protected_len = 64
             req.last_node = matched.last_device_node
             req.lock_receipt = cache.inc_lock_ref(req.last_node).to_dec_params()
-        for end in [80, 128] if mode == "retry" else [17, 57, 128]:
+        if mode.startswith("holes"):
+            resident = program.visible_until[:64] > 64
+            source = torch.full((64,), -1, dtype=torch.int64)
+            source[resident] = allocator.alloc(int(resident.sum()))
+            cache.insert(
+                InsertParams(
+                    key=RadixKey.from_context(layout)[:64],
+                    value=source,
+                    context_resident=resident,
+                )
+            )
+            matched = cache.match_prefix(
+                MatchPrefixParams(
+                    key=RadixKey.from_context(layout)[:64], context_retry=True
+                )
+            )
+            req.prefix_indices = matched.device_indices
+            req.context_source_positions = matched.context_source_positions
+            req.context_resident = matched.context_resident
+            req.context_exact_prefix_len = matched.context_exact_prefix_len
+            req.kv.cache_protected_len = 64
+            req.last_node = matched.last_device_node
+            req.lock_receipt = cache.inc_lock_ref(req.last_node).to_dec_params()
+        for end in (
+            [80, 128] if mode == "retry" or mode.startswith("holes") else [17, 57, 128]
+        ):
             start = len(req.prefix_indices)
             extra = req.plan_context_prefill(end)
             window, plan = req.context_window_plan
@@ -316,7 +343,9 @@ def test_context_occurrence_native_publication_and_release(compiler, mode):
                 == allocator.available_size()
             )
             cache.sanity_check()
-        cache.cache_finished_req(req, kv_len_to_handle=128)
+        cache.cache_finished_req(
+            req, kv_len_to_handle=128, is_insert=mode != "holes_abort"
+        )
         assert req.context_state is None
         assert req.context_source_lease is None
         pool.free(req)
