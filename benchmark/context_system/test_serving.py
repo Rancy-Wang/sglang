@@ -132,6 +132,16 @@ class Transport:
     async def post(self, url, **kwargs):
         body = copy.deepcopy(kwargs["json"])
         prefill = None
+        owner = asyncio.current_task()
+        interrupted_by_prefill = False
+        active = True
+
+        def prefill_finished(task):
+            nonlocal interrupted_by_prefill
+            if active and not task.cancelled() and task.exception() is not None:
+                interrupted_by_prefill = True
+                owner.cancel()
+
         if self.prefill_url:
             self.room += 1
             body.update(
@@ -150,6 +160,9 @@ class Transport:
                     return value
 
             prefill = asyncio.create_task(send_prefill())
+            # P may fail before D sends headers or a single SSE event. Wake
+            # that blocked request once; add no task/race per decoded token.
+            prefill.add_done_callback(prefill_finished)
         try:
             async with self.session.post(url, json=body) as response:
 
@@ -172,8 +185,15 @@ class Transport:
                 yield SimpleNamespace(
                     status=response.status, content=content(), text=response.text
                 )
+        except asyncio.CancelledError:
+            if interrupted_by_prefill:
+                owner.uncancel()
+                raise prefill.exception()
+            raise
         finally:
+            active = False
             if prefill is not None:
+                prefill.remove_done_callback(prefill_finished)
                 if not prefill.done():
                     prefill.cancel()
                 await asyncio.gather(prefill, return_exceptions=True)

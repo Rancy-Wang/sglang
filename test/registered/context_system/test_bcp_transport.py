@@ -10,6 +10,50 @@ import pytest
 from test_ir import ROOT, load_file
 
 
+@pytest.mark.parametrize("blocked_at", ["headers", "stream"])
+def test_prefill_failure_wakes_blocked_decode(blocked_at):
+    bench = load_file(
+        "context_bcp_bench_failure", ROOT / "benchmark/context_system/test_serving.py"
+    )
+
+    class Session:
+        @asynccontextmanager
+        async def post(self, url, json):
+            if url == "prefill":
+
+                async def fail():
+                    return {"error": "transfer failed"}
+
+                yield SimpleNamespace(status=500, json=fail)
+            else:
+                if blocked_at == "headers":
+                    await asyncio.Event().wait()
+
+                async def content():
+                    await asyncio.Event().wait()
+                    yield b"unreachable"
+
+                yield SimpleNamespace(status=200, content=content(), text=None)
+
+    async def events(content):
+        async for event in content:
+            yield event
+
+    async def run():
+        transport = bench.Transport(
+            Session(), SimpleNamespace(sse_events=events), "prefill", 1
+        )
+        async with transport.post("decode", json={}) as response:
+            async for _ in response.content:
+                pass
+
+    async def bounded():
+        with pytest.raises(RuntimeError, match="P HTTP 500"):
+            await asyncio.wait_for(run(), timeout=1)
+
+    asyncio.run(bounded())
+
+
 @pytest.mark.parametrize("pd_failure", [False, True])
 def test_streaming_counters_through_pinned_method(pd_failure):
     mini = os.environ.get("MINI_SGLANG_REFERENCE")
