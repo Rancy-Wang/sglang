@@ -962,6 +962,43 @@ class UnifiedRadixCache(BasePrefixCache):
             raise ValueError("Context Drop leases require the Python tree core")
         return self.tree_core.configure_context_drop_lock(node_id, receipt, required_raw)
 
+    def context_leased_page_count(self, req):
+        """Count this request's Full leases on the capacity-failure path.
+
+        Distinct tree edges own distinct Full pages. A shared ancestor is counted
+        once across target and Retry source; Drop path-only refs and holes own no
+        leased pages. Node lengths and receipts are CPU metadata, including when
+        the actual KV slot tables reside on CUDA.
+        """
+        if self.disable:
+            return 0
+        leases = [(req.last_node, req.lock_receipt)]
+        if req.context_source_lease is not None:
+            leases.append(req.context_source_lease)
+        seen, count = set(), 0
+        for node_id, receipt in leases:
+            if (
+                receipt.node_id is None
+                or ComponentType.FULL in receipt.skipped_lock_components
+            ):
+                continue
+            path, cursor = [], 0
+            node = self.tree_core.node_by_id(node_id)
+            while node is not self.tree_core.root_node:
+                path.append(node)
+                cursor += len(node.key)
+                node = node.parent
+            for node in path:
+                start = cursor - len(node.key)
+                skipped = any(
+                    a <= start and cursor <= b for a, b in receipt.context_skip_ranges
+                )
+                if not skipped and node.id not in seen:
+                    seen.add(node.id)
+                    count += node.full_page_count
+                cursor = start
+        return count
+
     def configure_context_swa_lock(self, node_id, receipt, required_raw):
         if self.disable:
             return receipt

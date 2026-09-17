@@ -8,7 +8,7 @@ admission and contains page IDs, not extra model KV.
 import torch
 
 
-def handle_prefill_capacity_pressure(req, capacity, needed):
+def handle_prefill_capacity_pressure(req, capacity, needed, tree_cache=None):
     """Distinguish self-pinned requests from transient pool pressure.
 
     Called only after the smallest permitted forward failed, without other
@@ -20,13 +20,25 @@ def handle_prefill_capacity_pressure(req, capacity, needed):
     """
     if req.context_prefill_started:
         state = req.context_state
-        if state is not None and len(state.slots) + needed >= capacity:
+        source_lease = getattr(req, "context_source_lease", None)
+        if state is not None and (
+            len(state.slots) + needed >= capacity or source_lease is not None
+        ):
             # Rows are CPU ownership IDs, not GPU page numbers. Count aliases
             # once and exclude holes in a borrowed recovery gap. This is a
             # lower bound on this request's leases; other requests cannot make
             # these live canonical/terminal owners evictable.
             rows = torch.cat((state.canonical_rows, state.terminal_rows))
             pinned = len(rows[rows >= 0].unique())
+            if source_lease is not None and tree_cache is not None:
+                # A Retry source can keep pages outside the current state alive.
+                # Count branch identities, not CUDA slot values, and only here
+                # after the minimum forward has failed admission.
+                pinned = max(
+                    pinned,
+                    tree_cache.context_leased_page_count(req)
+                    + int(state.owned.count_nonzero()),
+                )
             if pinned + needed >= capacity:
                 req.context_admission_error = (
                     f"Context prefill retains {pinned} KV tokens and needs "

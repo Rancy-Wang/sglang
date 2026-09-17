@@ -100,6 +100,78 @@ def assert_allocator(cache, allocator, used):
     cache.tree_core.sanity_check([], [])
 
 
+@pytest.mark.parametrize("native_cache", ["full"], indirect=True)
+def test_retry_source_capacity_counts_shared_edges_and_drop_receipts(
+    compiler, native_cache
+):
+    from sglang.srt.context_system.request_storage import handle_prefill_capacity_pressure
+    from sglang.srt.mem_cache.base_prefix_cache import (
+        EvictParams,
+        InsertParams,
+        MatchPrefixParams,
+    )
+    from sglang.srt.mem_cache.radix_cache import RadixKey
+
+    cache, allocator = native_cache
+    source = RadixKey.from_context(
+        compiler(*args(list(range(70)), {32: [(0, 16)], 60: [(16, 24)]}, [49, 69]))
+    )
+    target = RadixKey.from_context(
+        compiler(*args(list(range(50)), {32: [(0, 16)]}, [49]))
+    )
+    cache.insert(InsertParams(key=source, value=allocator.alloc(70)))
+    source_hit = cache.match_prefix(MatchPrefixParams(key=source, context_retry=True))
+    source_receipt = cache.inc_lock_ref(source_hit.last_device_node).to_dec_params()
+    cache.insert(InsertParams(key=target, value=allocator.alloc(50)))
+    target_hit = cache.match_prefix(MatchPrefixParams(key=target, context_retry=True))
+    target_receipt = cache.inc_lock_ref(target_hit.last_device_node).to_dec_params()
+    # Both branches share 24 raw owners. Counting their lengths independently
+    # would incorrectly count those pages twice; the state omits source pages.
+    assert allocator.available_size() == 32
+    private = allocator.alloc(30)
+    state = SimpleNamespace(
+        slots=private, owned=torch.ones(30, dtype=torch.bool),
+        canonical_rows=torch.arange(30), terminal_rows=torch.arange(30),
+    )
+    req = SimpleNamespace(
+        context_prefill_started=True, context_state=state,
+        context_source_lease=(source_hit.last_device_node, source_receipt),
+        last_node=target_hit.last_device_node, lock_receipt=target_receipt,
+        context_admission_error=None,
+    )
+    assert cache.context_leased_page_count(req) == 96
+    cache.evict(EvictParams(num_tokens=128))
+    assert allocator.available_size() == 2
+    handle_prefill_capacity_pressure(req, 128, 3, cache)
+    assert "retains 126 KV tokens" in req.context_admission_error
+
+    # Another request can be responsible for the missing free space. Give it
+    # the first 16 pages, then convert this request's two refs to path-only refs.
+    other_hit = cache.match_prefix(MatchPrefixParams(key=source[:16], context_retry=True))
+    other_receipt = cache.inc_lock_ref(other_hit.last_device_node).to_dec_params()
+    for hit, receipt, length in (
+        (source_hit, source_receipt, 70), (target_hit, target_receipt, 50)
+    ):
+        required = torch.ones(length, dtype=torch.bool)
+        required[:16] = False
+        cache.configure_context_drop_lock(hit.last_device_node, receipt, required)
+    assert cache.context_leased_page_count(req) == 80
+    req.context_admission_error = None
+    handle_prefill_capacity_pressure(req, 128, 3, cache)
+    assert req.context_admission_error is None
+    cache.evict(EvictParams(num_tokens=128))
+    assert allocator.available_size() == 2  # external reader can eventually finish
+    cache.dec_lock_ref(other_hit.last_device_node, other_receipt)
+    cache.evict(EvictParams(num_tokens=16))
+    assert allocator.available_size() == 18
+    assert cache.context_leased_page_count(req) == 80  # evicted holes do not count
+    cache.dec_lock_ref(target_hit.last_device_node, target_receipt)
+    cache.dec_lock_ref(source_hit.last_device_node, source_receipt)
+    allocator.free(private)
+    cache.evict(EvictParams(num_tokens=128))
+    assert_allocator(cache, allocator, 0)
+
+
 def test_shared_reader_leaf_first_hole_refill_and_split(compiler, native_cache):
     from sglang.srt.mem_cache.base_prefix_cache import (
         EvictParams,
