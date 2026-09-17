@@ -34,6 +34,54 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
+class ContextDecodeLayout:
+    """Immutable final prompt view; generated KV stays in the native raw row."""
+
+    raw_indices: np.ndarray
+    positions: np.ndarray
+    device_indices: torch.Tensor
+    device_positions: torch.Tensor
+    prompt_length: int
+    next_position: int
+
+    @classmethod
+    def from_layout(cls, layout: ContextLayout, device) -> ContextDecodeLayout:
+        raw = np.flatnonzero(layout.keep_mask.numpy()).astype(np.int32)
+        positions = layout.positions.numpy()[raw].copy()
+        if np.any(np.diff(positions.astype(np.int64)) <= 0):
+            raise ValueError("Active decode positions must be strictly increasing")
+        packed = torch.from_numpy(np.concatenate((raw, positions))).to(
+            device=device, non_blocking=True
+        )
+        # An empty active prompt still needs a non-null registry marker.
+        if packed.numel() == 0:
+            packed = torch.zeros(1, dtype=torch.int32, device=device)
+        return cls(
+            raw,
+            positions,
+            packed[: len(raw)] if len(raw) else packed,
+            packed[len(raw) :] if len(raw) else packed,
+            len(layout.positions),
+            layout.next_position,
+        )
+
+    def swa_raw_floor(self, computed_raw: int, window: int) -> int:
+        """First possibly read raw slot at the last completed query position.
+
+        This conservative floor also protects an overlapped previous decode.
+        Before final prefill, stage-specific occurrences own their own lifetime.
+        """
+        if computed_raw < self.prompt_length:
+            return 0
+        generated = computed_raw - self.prompt_length
+        lower = self.next_position + generated - 1 - window
+        index = int(np.searchsorted(self.positions, lower))
+        if index < len(self.raw_indices):
+            return int(self.raw_indices[index])
+        return self.prompt_length + max(0, lower - self.next_position)
+
+
+@dataclass(frozen=True)
 class OccurrenceWindow:
     """Lazy attention/KV plan for one post-match raw query window.
 

@@ -210,6 +210,7 @@ class TritonAttnBackend(AttentionBackend):
         self.req_to_token_pool = model_runner.req_to_token_pool
         self.token_to_kv_pool = model_runner.token_to_kv_pool
         self.req_to_token = model_runner.req_to_token_pool.req_to_token
+        self.context_decode_registry = None
         self.token_to_kv_pool_allocator = model_runner.token_to_kv_pool_allocator
         self.use_sliding_window_kv_pool = isinstance(self.token_to_kv_pool, SWAKVPool)
         # Lets the Triton wrappers specialize on PAGE_SIZE; page_size=1 is
@@ -495,9 +496,15 @@ class TritonAttnBackend(AttentionBackend):
         seq_lens: torch.Tensor,
         req_pool_indices: torch.Tensor,
         kv_indices: torch.Tensor,
+        context_decode: bool = False,
     ) -> torch.Tensor:
         kv_indptr = self.kv_indptr[: bs + 1]
         kv_indptr[1:] = torch.cumsum(seq_lens, dim=0)
+        if context_decode and self.context_decode_registry is not None:
+            self.context_decode_registry.fill(
+                req_pool_indices[:bs], seq_lens[:bs], kv_indptr, kv_indices
+            )
+            return kv_indptr
         self.kv_index_translator.fill_packed_read_stream(
             req_pool_indices=req_pool_indices[:bs],
             seq_lens=seq_lens[:bs],
@@ -537,12 +544,21 @@ class TritonAttnBackend(AttentionBackend):
             num_kv_splits_lens = dcp_seq_lens.clamp_min(1)
         else:
             kv_indptr = self._fill_kv_indptr_and_indices(
-                bs, seq_lens, req_pool_indices, self.cuda_graph_kv_indices
+                bs, seq_lens, req_pool_indices, self.cuda_graph_kv_indices,
+                context_decode=True,
             )
             num_kv_splits_lens = seq_lens
         window_kv_indptr = self.window_kv_indptr
         window_kv_lens = None
         if self.sliding_window_size is not None and self.sliding_window_size > 0:
+            if self.context_decode_registry is not None:
+                window_kv_indptr, _, window_kv_lens, _ = (
+                    self.context_decode_registry.fill_window(
+                        req_pool_indices, seq_lens, self.window_kv_indptr,
+                        self.sliding_window_size, self.cuda_graph_window_kv_indices,
+                    )
+                )
+                return kv_indptr, window_kv_indptr, window_kv_lens, num_kv_splits_lens
             window_kv_indptr, _, window_kv_lens, _ = update_sliding_window_buffer(
                 self.window_kv_indptr,
                 self.kv_index_translator,
@@ -815,13 +831,26 @@ class TritonAttnBackend(AttentionBackend):
                         forward_batch.seq_lens,
                         forward_batch.req_pool_indices,
                         kv_indices,
+                        context_decode=True,
                     )
                 if (
                     self.sliding_window_size is not None
                     and self.sliding_window_size > 0
                 ):
-                    window_kv_indptr, window_kv_indices, window_kv_lens, _ = (
-                        update_sliding_window_buffer(
+                    if self.context_decode_registry is not None:
+                        window_kv_indices = torch.empty(
+                            bs * (self.sliding_window_size + 1),
+                            dtype=torch.int64, device=self.device,
+                        )
+                        window_kv_indptr, window_kv_indices, window_kv_lens, _ = (
+                            self.context_decode_registry.fill_window(
+                                forward_batch.req_pool_indices, forward_batch.seq_lens,
+                                self.window_kv_indptr, self.sliding_window_size,
+                                window_kv_indices,
+                            )
+                        )
+                    else:
+                        window_kv_indptr, window_kv_indices, window_kv_lens, _ = update_sliding_window_buffer(
                             self.window_kv_indptr,
                             self.kv_index_translator,
                             forward_batch.req_pool_indices,
@@ -831,7 +860,6 @@ class TritonAttnBackend(AttentionBackend):
                             self.device,
                             self.token_to_kv_pool,
                         )
-                    )
                     window_num_kv_splits = torch.empty(
                         (bs,), dtype=torch.int32, device=self.device
                     )
@@ -1128,7 +1156,7 @@ class TritonAttnBackend(AttentionBackend):
         if self.sliding_window_size is not None and self.sliding_window_size > 0:
             if kv_indices_buf is None:
                 self.cuda_graph_window_kv_indices = torch.zeros(
-                    (max_num_tokens * self.sliding_window_size),
+                    (max_num_tokens * (self.sliding_window_size + 1)),
                     dtype=torch.int64,
                     device=self.device,
                 )

@@ -397,3 +397,113 @@ class ContextPrefillInput:
                 )
                 model_runner.context_model_binding = binding
         return binding.bind(self)
+
+
+class ContextDecodeRegistry:
+    """Capture-stable request-slot registry, allocated on first Context decode.
+
+    The raw request table retains native allocation/cache ownership. Only read
+    indices are compacted. Pool translation is fused with that existing gather;
+    no historical KV is copied and no per-layer Context work is added to decode.
+    """
+
+    def __init__(self, translator, pool):
+        if translator.page_size != 1 or translator.defer_read_translate:
+            raise ValueError("Context decode requires page_size=1 without DCP")
+        self.translator = translator
+        self.pool = pool
+        self.rows = torch.zeros(
+            (translator.req_to_token.shape[0], 5),
+            dtype=torch.int64,
+            device=translator.req_to_token.device,
+        )
+
+    def bind_batch(self, reqs, raw_lengths, row_ids):
+        from sglang.srt.context_system.occurrence import ContextDecodeLayout
+
+        entries, lengths, positions, refs = [], [], [], []
+        for req, raw_length in zip(reqs, raw_lengths):
+            raw_length = int(raw_length)
+            if req.context_program is None:
+                entries.append((0, 0, 0, 0, 0))
+                lengths.append(raw_length)
+                positions.append(raw_length - 1)
+                continue
+            layout = req.context_decode_layout
+            if layout is None:
+                layout = ContextDecodeLayout.from_layout(
+                    req.context_program.layout, row_ids.device
+                )
+                req.context_decode_layout = layout
+            generated = raw_length - layout.prompt_length
+            if generated < 1:
+                raise ValueError("Context decode requires a computed output query")
+            count = len(layout.raw_indices)
+            entries.append(
+                (
+                    layout.device_indices.data_ptr(),
+                    layout.device_positions.data_ptr(),
+                    layout.prompt_length,
+                    count,
+                    layout.next_position,
+                )
+            )
+            lengths.append(count + generated)
+            positions.append(layout.next_position + generated - 1)
+            refs.append(layout)
+        packed = torch.tensor(
+            [(*entry, n, p) for entry, n, p in zip(entries, lengths, positions)],
+            dtype=torch.int64,
+        ).to(row_ids.device, non_blocking=True)
+        self.rows[row_ids] = packed[:, :5]
+        return (
+            torch.tensor(lengths, dtype=torch.int64),
+            packed[:, 5].to(torch.int32),
+            packed[:, 6],
+            tuple(refs),
+        )
+
+    def fill(self, row_ids, lengths, indptr, output, *, starts=None, swa=False):
+        from sglang.kernels.ops.attention.context_page_table import (
+            context_decode_indices,
+        )
+
+        translator = self.translator
+        mapping, multiplier = None, 1
+        if translator.is_translating:
+            mapping = translator._swa_v2p_table if swa else translator._full_v2p_table
+            multiplier = (
+                translator._swa_page_multiplier
+                if swa
+                else translator._full_page_multiplier
+            )
+        elif swa:
+            mapping = getattr(self.pool, "full_to_swa_index_mapping", None)
+        context_decode_indices[(len(lengths),)](
+            self.rows,
+            translator.req_to_token,
+            row_ids,
+            lengths,
+            indptr,
+            output,
+            starts,
+            mapping,
+            ROW_STRIDE=translator.req_to_token.stride(0),
+            TRANSLATE=mapping is not None,
+            MULTIPLIER=multiplier,
+            HAS_START=starts is not None,
+        )
+
+    def fill_window(self, row_ids, seq_lens, indptr, window, output):
+        from sglang.kernels.ops.attention.context_page_table import (
+            context_window_lengths,
+        )
+
+        bs = len(seq_lens)
+        lengths = torch.empty_like(seq_lens)
+        context_window_lengths[(bs,)](self.rows, row_ids, seq_lens, lengths, window)
+        indptr = indptr[: bs + 1]
+        indptr[1:] = lengths.cumsum(0)
+        starts = seq_lens - lengths
+        self.fill(row_ids, lengths, indptr, output, starts=starts, swa=True)
+        return indptr, output, lengths, starts

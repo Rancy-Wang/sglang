@@ -1044,6 +1044,7 @@ class Req(ReqDllmMixin):
         self.context_source_positions = None
         self.context_exact_prefix_len = 0
         self.context_state = None
+        self.context_decode_layout = None
         self.context_window_plan = None
         self.context_usage = None
         self.context_cache_published = False
@@ -3996,6 +3997,13 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
 
     def _evict_swa(self, req: Req, pre_len: int):
         assert self.tree_cache.supports_swa(), "prefix cache must support swa"
+        if req.context_program is not None:
+            if req.context_decode_layout is None:
+                # Prefill owns stage-specific occurrences until completion.
+                return
+            pre_len = req.context_decode_layout.swa_raw_floor(
+                pre_len, self.tree_cache.sliding_window_size
+            ) + self.tree_cache.sliding_window_size
         free_swa_out_of_window_slots(
             req,
             pre_len,
