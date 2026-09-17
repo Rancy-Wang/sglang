@@ -66,8 +66,27 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True)
+    parser.add_argument("--native-trace-model")
     args = parser.parse_args()
     fixture = load_fixture()
     fixture["tools"] = [Tool.model_validate(t).model_dump() for t in fixture["tools"]]
     fixture["tool_serialization"] = "SGLang native Tool.model_dump"
+    if args.native_trace_model:
+        import runpy
+
+        benchmark = (
+            Path(__file__).resolve().parents[3]
+            / "benchmark/context_system/test_serving.py"
+        )
+        adapter = runpy.run_path(str(benchmark))["NativeTemplateAdapter"](
+            args.native_trace_model, {}
+        )
+        adapter.render(fixture["messages"], fixture["tools"])
+        trace = adapter.renderer.trace
+        fixture["native_sglang_trace"] = {
+            "model": args.native_trace_model,
+            "input_ids": trace.input_ids,
+            "owners": trace.owners,
+            "generation_start": trace.owners.index(len(fixture["messages"])),
+        }
     Path(args.output).write_text(json.dumps(fixture))

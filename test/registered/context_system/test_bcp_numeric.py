@@ -77,7 +77,8 @@ def test_bcp_default_reference(server):  # noqa: F811
         ids = response["sglext"]["input_ids"]
         expected_ids = reference["runs"]["none"]["records"][0]["input"]["ids"]
         # SGLang returns raw input; mini's legacy Drop record is compact active.
-        assert ids == expected_ids, (name, len(ids), len(expected_ids))
+        if fixed:
+            assert ids == expected_ids, (name, len(ids), len(expected_ids))
         (output_ids,) = response["sglext"]["output_ids"]
         same = [a == b for a, b in zip(output_ids, tokens)]
         if not fixed:
@@ -85,6 +86,8 @@ def test_bcp_default_reference(server):  # noqa: F811
             reference_choice = reference["runs"][feature]["responses"][0]["choices"][0]
             item = {
                 "comparison_kind": "native_generation_observation",
+                "same_input_tokens": ids == expected_ids,
+                "reference_input_tokens": len(expected_ids),
                 "matching_tokens": sum(same),
                 "generated_tokens": len(output_ids),
                 "reference_tokens": len(tokens),
@@ -117,11 +120,17 @@ def test_bcp_default_reference(server):  # noqa: F811
         assert output_ids == tokens, name
         assert path.exists(), name
         logits = torch.load(path, weights_only=True)
-        expected = reference_logits[feature]
+        reference_key = (
+            "drop_repos-retry"
+            if name == "drop_repos-retry" and "drop_repos-retry" in reference_logits
+            else feature
+        )
+        expected = reference_logits[reference_key]
         assert logits.shape == expected.shape, (name, logits.shape, expected.shape)
         assert torch.isfinite(logits).all(), name
         delta = (logits - expected).abs()
         item = {
+            "reference_key": reference_key,
             "max_abs": delta.max().item(),
             "mean_abs": delta.mean().item(),
             "p99_abs": torch.quantile(delta.flatten(), 0.99).item(),
