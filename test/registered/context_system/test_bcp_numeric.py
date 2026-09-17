@@ -32,9 +32,11 @@ def test_bcp_default_reference(server):  # noqa: F811
     directory.mkdir(parents=True, exist_ok=True)
     comparisons = {}
 
-    def call(feature, name, fixed):
+    def call(feature, name, fixed, *, warm_source=False):
         (record,) = reference["runs"][feature]["records"]
         tokens = record["tokens"]
+        if warm_source:
+            tokens = tokens[:1]
         path = directory / (name + ".pt")
         params = {"context_trace_path": str(path), "context_trace_count": len(tokens)}
         if fixed:
@@ -49,6 +51,8 @@ def test_bcp_default_reference(server):  # noqa: F811
             "return_input_ids_in_sglext": True,
             "return_output_ids_in_sglext": True,
         }
+        if warm_source:
+            payload["reposition"] = reference["fixture"]["reposition"][:1]
         if fixed:
             payload.update(
                 custom_logit_processor=serialized_probe(), custom_params=params
@@ -80,6 +84,9 @@ def test_bcp_default_reference(server):  # noqa: F811
         assert ids == expected_ids, (name, len(ids), len(expected_ids))
         (output_ids,) = response["sglext"]["output_ids"]
         same = [a == b for a, b in zip(output_ids, tokens)]
+        if warm_source:
+            assert output_ids == tokens
+            return response  # Cache setup has different events, so no logits oracle.
         if not fixed:
             choice = response["choices"][0]
             reference_choice = reference["runs"][feature]["responses"][0]["choices"][0]
@@ -154,7 +161,8 @@ def test_bcp_default_reference(server):  # noqa: F811
         print("BCP_COMPARE", name, json.dumps(item), flush=True)
         return response
 
-    for feature in ("none", "drop", "drop_repos"):
+    consecutive_only = os.environ.get("CONTEXT_BCP_CONSECUTIVE_ONLY") == "1"
+    for feature in (() if consecutive_only else ("none", "drop", "drop_repos")):
         for fixed in (
             (False,)
             if mode == "actual"
@@ -167,17 +175,29 @@ def test_bcp_default_reference(server):  # noqa: F811
     if mode == "actual":
         return
     # Same real task tests both direct final-version reuse and compatible Retry.
-    call("drop_repos", "drop_repos-hot", True)
+    if not consecutive_only:
+        call("drop_repos", "drop_repos-hot", True)
+        assert requests.post(server + "/flush_cache", timeout=5).status_code == 200
+        call("none", "none-retry-source", True)
+        call("drop_repos", "drop_repos-retry", True)
     assert requests.post(server + "/flush_cache", timeout=5).status_code == 200
-    call("none", "none-retry-source", True)
-    call("drop_repos", "drop_repos-retry", True)
-    baseline = comparisons["none-fixed"]
-    for name in (
+    call("drop_repos", "consecutive-source", True, warm_source=True)
+    call("drop_repos", "drop_repos-consecutive", True)
+    usage = comparisons["drop_repos-consecutive"]["context_usage"]
+    assert usage["cached_tokens"] + usage["repos_tokens"] > 0
+    assert usage["actual_prefill_tokens"] < comparisons["drop_repos-consecutive"]["input_tokens"]
+    baseline = (
+        json.loads(Path(os.environ["CONTEXT_BCP_CALIBRATION"]).read_text())["none-fixed"]
+        if consecutive_only else comparisons["none-fixed"]
+    )
+    names = ("drop_repos-consecutive",) if consecutive_only else (
         "drop-fixed",
         "drop_repos-fixed",
         "drop_repos-hot",
         "drop_repos-retry",
-    ):
+        "drop_repos-consecutive",
+    )
+    for name in names:
         item = comparisons[name]
         # Initial BF16 cross-backend gate, tied to this model's native control.
         for metric, floor in (
