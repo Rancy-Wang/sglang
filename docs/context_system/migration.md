@@ -74,7 +74,31 @@ C2 Drop+Repos。用户随后明确修订：**如果指标劣势主要来自大�
 Mooncake 跳过已取消 chunk 时只减去该 chunk 的计数，不能清掉其他 worker 的在途计数。
 Context PD 此阶段明确限制为 Mooncake、无 staging；其他 transport 不冒充已验证支持。
 数值对照无需因仅异常清理路径的改动重复跑全模型，但必须复测上述 GPU 失败/恢复用例。
-本段记录修复意图，实际结果待后续记录。
+`659611bc8` 在 BUS 的 `capacity-pd-qwen-v3` 完成真实模型复测：
+`CONTEXT_PD_CAPACITY_PRESSURE=1 python -m pytest -s -q test/registered/context_system/test_serving_capacity_pd.py`
+为 **1 passed in 225.89s**。P 在 2.50699s 返回 503，D 在 2.50727s 返回传输失败 500；
+随后清空缓存的 90-token 普通请求两端均为 200，D 在 0.05068s 完成 8-token 输出。
+这证明该容量拒绝路径能结束两端请求并恢复服务，不是所有传输取消竞态的普遍证明。
+同提交的 CPU 定向清理用例 **6 passed, 7 deselected in 16.34s**，包含等待其他 TP rank
+仍在传输时不得通知 D、不得释放页的检查。
+
+## 多请求高压 BCP 续接冲突（2026-09-18）
+
+`75a1eb49c` 的 GPT-OSS-120B C2 Drop+R 完整轨迹
+`minimal-sg120-c2-drop-parser-v2` 在 135 个成功请求后触发
+`Scheduler._get_new_batch_prefill_raw` 的 `assert self.chunked_req is None`；
+最终 135 成功、2 transport error，只有 2/4 task 完成。该运行无效，不计为吞吐达标。
+缓存洞恢复产生短 query 区间，或者容量限制缩短 chunk 后，旧请求仍需要续接，却留下
+可用 prefill 预算；新候选因此可能再次占用 scheduler 唯一的 chunk 续接位置。
+
+`1478d3a05` 在 `PrefillAdder.add_one_req` 的实际 admission 判定之后拒绝第二个
+需要续接的请求；仍允许剩余预算容纳完整 prefill。若旧 chunk 因容量不足未能发起，
+则将控制权交还 decode，避免给没有发起的 chunk 增加 in-flight 计数。
+BUS CPU 验证命令：
+`CUDA_VISIBLE_DEVICES=9 PYTHONPATH=python python -m pytest -q test/registered/context_system/test_context_admission.py -k 'short_repair_interval or parked_chunk'`，
+结果 **4 passed, 13 deselected in 16.34s**。覆盖旧/本轮新 chunk、允许完整短请求，
+以及暂时/不可恢复容量不足。`minimal-sg120-c2-drop-parser-v3` 已按相同完整轨迹、
+GPU2/3 TP2、page1、默认 Triton、KV262144、chunk8192 重跑；尚无最终结果。
 
 ## 当前实测状态（2026-09-17）
 
