@@ -424,8 +424,9 @@ def test_sparse_swa_request_release_and_completion(native_cache):
 
 
 @pytest.mark.parametrize("source_cache", [False, True])
+@pytest.mark.parametrize("drop_aware", [False, True])
 def test_swa_req_recovery_publication_and_pressure(
-    compiler, native_cache, source_cache
+    compiler, native_cache, source_cache, drop_aware
 ):
     from array import array
 
@@ -445,7 +446,12 @@ def test_swa_req_recovery_publication_and_pressure(
     if not hasattr(allocator, "swa_attn_allocator"):
         pytest.skip("SWA-specific ownership")
     reset_context()
-    publish(ServerArgs(model_path="dummy", page_size=1), role="scheduler")
+    publish(
+        ServerArgs(
+            model_path="dummy", page_size=1, context_drop_aware_eviction=drop_aware
+        ),
+        role="scheduler",
+    )
     try:
         tokens = list(range(48))
         drops, repos = {32: [(8, 16)]}, [31, 47]
@@ -511,7 +517,9 @@ def test_swa_req_recovery_publication_and_pressure(
                 cache.cache_unfinished_req(req, chunked=stop < 48)
                 # Every future SWA copy/read remains pinned while cold SWA is
                 # reclaimed between native chunks. Full ownership stays intact.
-                cache.evict(EvictParams(swa_num_tokens=128))
+                cache.evict(
+                    EvictParams(num_tokens=128 if drop_aware else 0, swa_num_tokens=128)
+                )
                 state = req.context_state
                 valid = state.swa_resident
                 mapping = allocator.full_to_swa_index_mapping[state.slots]
@@ -521,6 +529,9 @@ def test_swa_req_recovery_publication_and_pressure(
                     == allocator.swa_attn_allocator.available_size()
                 )
                 cache.sanity_check()
+                if drop_aware and stop >= 32:
+                    assert req.lock_receipt.context_skip_ranges
+                    assert torch.all(state.terminal_rows[8:16] < 0)
         cache.cache_finished_req(req, kv_len_to_handle=48)
         assert req.context_source_lease is None
         pool.free(req)

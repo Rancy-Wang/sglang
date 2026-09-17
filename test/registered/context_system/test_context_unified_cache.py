@@ -245,7 +245,10 @@ def test_context_occurrence_native_publication_and_release(compiler, mode):
     from test_occurrence_ownership import expiry_for
 
     reset_context()
-    publish(ServerArgs(model_path="dummy", page_size=1), role="scheduler")
+    publish(
+        ServerArgs(model_path="dummy", page_size=1, context_drop_aware_eviction=True),
+        role="scheduler",
+    )
     try:
         tokens = list(range(128))
         drops, repos = {24: [(4, 12)], 56: [(16, 36)]}, [23, 55]
@@ -380,7 +383,12 @@ def test_context_occurrence_native_publication_and_release(compiler, mode):
             # layer writes/COW and graph replay are covered by model tests.
             allocator.free(advanced.retired_slots)
             cache.cache_unfinished_req(req, chunked=end < 128)
-            assert torch.equal(req.context_state.terminal_slots(), req.prefix_indices)
+            remaining = req.context_state.terminal_rows >= 0
+            assert torch.equal(
+                req.context_state.terminal_slots()[remaining],
+                req.prefix_indices[remaining],
+            )
+            cache.evict(EvictParams(num_tokens=2048))
             assert (
                 len(torch.unique(allocator.get_all_free_pages()))
                 == allocator.available_size()

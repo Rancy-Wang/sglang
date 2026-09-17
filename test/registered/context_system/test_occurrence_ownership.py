@@ -573,3 +573,38 @@ def test_swa_validity_follows_cow_sources_without_invalid_cache_publication(
         swa_resident=torch.cat((swa, torch.ones(4, dtype=torch.bool))),
     )
     assert gap.swa_resident.tolist() == swa.tolist() + [True] * 4
+
+
+def test_drop_lease_prunes_borrowed_owners_without_freeing_private_versions(occurrence):
+    slots = torch.arange(101, 113)
+    state = occurrence.OccurrenceState.from_match(
+        slots,
+        torch.arange(12, dtype=torch.int32),
+        exact_prefix_len=12,
+        swa_resident=torch.tensor([True, False] * 6),
+    )
+    # Publication gives each matched owner a terminal version; from_match
+    # intentionally starts with canonical sources only.
+    state.terminal_rows.copy_(state.canonical_rows)
+    state.owned[3] = True
+    dropped = torch.zeros(12, dtype=torch.bool)
+    dropped[[2, 3, 5, 7]] = True
+    actual = state.drop_borrowed_raw(dropped)
+    expected = slots.clone()
+    expected[[2, 5, 7]] = -1
+    assert actual.terminal_slots().tolist() == expected.tolist()
+    assert actual.private_slots().tolist() == [104]
+    assert actual.slots.tolist() == [int(s) for s in slots if s not in (103, 106, 108)]
+    assert actual.swa_resident.tolist() == [
+        True,
+        False,
+        False,
+        True,
+        True,
+        True,
+        False,
+        True,
+        False,
+    ]
+    assert actual.drop_borrowed_raw(dropped) is actual
+    assert state.terminal_slots().tolist() == slots.tolist()

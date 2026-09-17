@@ -1176,9 +1176,63 @@ class UnifiedRadixCache(BasePrefixCache):
                 swa_resident=req.context_swa_resident,
             )
             req.context_cache_published = True
+            if get_memory().context_drop_aware_eviction:
+                self._configure_context_drop_eviction(req)
             if not chunked and len(state.terminal_rows) >= len(req.origin_input_ids):
                 # Final prefill results have passed their native completion event.
                 self._release_context_source_lease(req)
+
+    def _configure_context_drop_eviction(self, req):
+        """After completed publication, drop only proven-unused borrowed owners."""
+        state = req.context_state
+        program = req.context_recompute_program or req.context_program
+        length = req.kv.cache_protected_len
+        cursor = len(state.canonical_rows)
+        next_query = (
+            next(
+                (
+                    max(a, cursor)
+                    for a, b in req.context_recovery_plan.intervals
+                    if b > cursor
+                ),
+                None,
+            )
+            if req.context_recovery_plan is not None
+            else cursor
+        )
+        required = torch.ones(length, dtype=torch.bool)
+        count = min(length, len(program.layout.positions))
+        required[:count] = program.layout.keep_mask[:count]
+        if next_query is not None and next_query < len(program.layout.positions):
+            required[:count] |= program.visible_until[:count] > next_query
+        # SWA leases were installed first and protect the same future read set.
+        # Only actual Delta records on this target path authorize Full release.
+        self.configure_context_drop_lock(req.last_node, req.lock_receipt, required)
+        spans = req.lock_receipt.context_skip_ranges
+        if not spans:
+            return
+        dropped = torch.zeros(len(state.terminal_rows), dtype=torch.bool)
+        for start, end in spans:
+            dropped[start:end] = True
+        req.context_state = state.drop_borrowed_raw(dropped)
+        if req.context_source_lease is not None:
+            node, receipt = req.context_source_lease
+            source_length = (
+                req.context_recovery_plan.matched_length
+                if req.context_recovery_plan is not None
+                else len(req.context_usage.resident)
+            )
+            source_required = torch.ones(source_length, dtype=torch.bool)
+            for start, end in spans:
+                source_required[start : min(end, source_length)] = False
+            if req.context_swa_source_required is not None:
+                req.context_swa_source_required = (
+                    req.context_swa_source_required & source_required
+                )
+                self.configure_context_swa_lock(
+                    node, receipt, req.context_swa_source_required
+                )
+            self.configure_context_drop_lock(node, receipt, source_required)
 
     def _prepare_context_cache_row(self, req: Req, *, retain_source: bool):
         state = req.context_state
