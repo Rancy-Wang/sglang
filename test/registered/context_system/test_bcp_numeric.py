@@ -21,7 +21,13 @@ pytestmark = pytest.mark.skipif(
 def test_bcp_default_reference(server):  # noqa: F811
     reference_path = Path(os.environ["CONTEXT_BCP_ORACLE"])
     reference = json.loads(reference_path.read_text())
-    reference_logits = torch.load(str(reference_path) + ".pt", weights_only=True)
+    mode = os.environ.get("CONTEXT_BCP_MODE", "all")
+    assert mode in ("all", "fixed", "actual")
+    reference_logits = (
+        torch.load(str(reference_path) + ".pt", weights_only=True)
+        if mode != "actual"
+        else None
+    )
     directory = Path(os.environ["CONTEXT_TRACE_DIR"])
     directory.mkdir(parents=True, exist_ok=True)
     comparisons = {}
@@ -42,10 +48,14 @@ def test_bcp_default_reference(server):  # noqa: F811
             "return_meta_info": True,
             "return_input_ids_in_sglext": True,
             "return_output_ids_in_sglext": True,
-            "custom_logit_processor": serialized_probe(),
-            "custom_params": params,
         }
-        grammar_model = os.environ.get("CONTEXT_BCP_GRAMMAR_MODEL")
+        if fixed:
+            payload.update(
+                custom_logit_processor=serialized_probe(), custom_params=params
+            )
+        grammar_model = (
+            os.environ.get("CONTEXT_BCP_GRAMMAR_MODEL") if not fixed else None
+        )
         if grammar_model:
             import xgrammar
 
@@ -58,33 +68,58 @@ def test_bcp_default_reference(server):  # noqa: F811
                 reasoning=False,
             ).model_dump()
         response_path = directory / (name + ".json")
-        if (
-            not fixed
-            and os.environ.get("CONTEXT_REUSE_BCP_ACTUAL") == "1"
-            and path.exists()
-            and response_path.exists()
-        ):
-            response = json.loads(response_path.read_text())
-        else:
-            response = requests.post(
-                server + "/v1/chat/completions", json=payload, timeout=300
-            )
-            response_path.write_text(response.text)
-            assert response.status_code == 200, response.text
-            response = response.json()
-        assert path.exists(), name
-        logits = torch.load(path, weights_only=True)
-        expected = reference_logits[feature]
-        assert logits.shape == expected.shape, (name, logits.shape, expected.shape)
-        assert torch.isfinite(logits).all(), name
+        response = requests.post(
+            server + "/v1/chat/completions", json=payload, timeout=300
+        )
+        response_path.write_text(response.text)
+        assert response.status_code == 200, response.text
+        response = response.json()
         ids = response["sglext"]["input_ids"]
         expected_ids = reference["runs"]["none"]["records"][0]["input"]["ids"]
         # SGLang returns raw input; mini's legacy Drop record is compact active.
         assert ids == expected_ids, (name, len(ids), len(expected_ids))
         (output_ids,) = response["sglext"]["output_ids"]
-        same = [a == b for a, b in zip(output_ids, tokens, strict=True)]
-        if fixed:
-            assert all(same), name
+        same = [a == b for a, b in zip(output_ids, tokens)]
+        if not fixed:
+            choice = response["choices"][0]
+            reference_choice = reference["runs"][feature]["responses"][0]["choices"][0]
+            item = {
+                "comparison_kind": "native_generation_observation",
+                "matching_tokens": sum(same),
+                "generated_tokens": len(output_ids),
+                "reference_tokens": len(tokens),
+                "exact_token_match": output_ids == tokens,
+                "first_token_difference": next(
+                    (i for i, equal in enumerate(same) if not equal),
+                    len(same) if len(output_ids) != len(tokens) else None,
+                ),
+                "message": choice["message"],
+                "reference_message": reference_choice["message"],
+                "finish_reason": choice["finish_reason"],
+                "reference_finish_reason": reference_choice["finish_reason"],
+                "context_usage": choice.get("meta_info", {}).get("context_usage"),
+                "grammar_model": grammar_model,
+                "input_tokens": len(ids),
+            }
+            assert output_ids and choice["finish_reason"] in (
+                "length",
+                "stop",
+                "tool_calls",
+            ), response
+            # Free-running contexts diverge after the first differing sample;
+            # their later logits cannot serve as a fixed-token numerical gate.
+            comparisons[name] = item
+            (directory / "comparison.json").write_text(
+                json.dumps(comparisons, indent=2)
+            )
+            print("BCP_ACTUAL_OBSERVATION", name, json.dumps(item), flush=True)
+            return response
+        assert output_ids == tokens, name
+        assert path.exists(), name
+        logits = torch.load(path, weights_only=True)
+        expected = reference_logits[feature]
+        assert logits.shape == expected.shape, (name, logits.shape, expected.shape)
+        assert torch.isfinite(logits).all(), name
         delta = (logits - expected).abs()
         item = {
             "max_abs": delta.max().item(),
@@ -97,9 +132,9 @@ def test_bcp_default_reference(server):  # noqa: F811
             "first_token_difference": next(
                 (i for i, equal in enumerate(same) if not equal), None
             ),
-            "context_usage": response["choices"][0].get("meta_info", {}).get(
-                "context_usage"
-            ),
+            "context_usage": response["choices"][0]
+            .get("meta_info", {})
+            .get("context_usage"),
             "input_tokens": len(ids),
             "grammar_model": grammar_model,
             "raw_argmax_matching_tokens": int(
@@ -112,9 +147,17 @@ def test_bcp_default_reference(server):  # noqa: F811
         return response
 
     for feature in ("none", "drop", "drop_repos"):
-        for fixed in (False, True):
+        for fixed in (
+            (False,)
+            if mode == "actual"
+            else (True,)
+            if mode == "fixed"
+            else (False, True)
+        ):
             assert requests.post(server + "/flush_cache", timeout=5).status_code == 200
             call(feature, f"{feature}-{'fixed' if fixed else 'actual'}", fixed)
+    if mode == "actual":
+        return
     # Same real task tests both direct final-version reuse and compatible Retry.
     call("drop_repos", "drop_repos-hot", True)
     assert requests.post(server + "/flush_cache", timeout=5).status_code == 200
