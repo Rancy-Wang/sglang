@@ -247,6 +247,32 @@ max/mean/p99为`1.375/0.062624/0.371094`，PF2/D63、cached470/repos2913，
 矩阵`result.json`为valid；Agentic普通仍明确使用离线同路径参考的通过记录。
 尚待120B PD和完整小量吞吐矩阵，R2未完成。
 
+### 120B PD 最终数值验收
+
+`d4b598572` 的 `bcp778-sg-pd-gpt120-capacity-lifetime-v1` 在BUS完成
+`test_bcp_pd_numeric.py`：**1 passed in 434.94s**。P=GPU0/1 TP2、D=GPU2/3 TP2，
+默认Triton、BF16、page1、共享Full/SWA池、CUDA Graph，P24576/D16384 KV、
+context16384、chunk512；D Radix关闭，无D输出KV回传。
+相对mini参考`bcp778-mini-gpt120-tp2-store.json`，max/mean/p99依次为：
+
+| 路径 | max | mean | p99 | actual PF / D |
+| --- | ---: | ---: | ---: | ---: |
+| 无功能 | 6.09375 | 0.224397 | 1.339844 | 原生未报告 / 未报告 |
+| Drop | 6.375 | 0.214703 | 1.292969 | 8927 / 63 |
+| Repos冷 | 10.625 | 0.119297 | 0.988281 | 8927 / 63 |
+| Repos热 | 10.625 | 0.121178 | 1.0 | 1 / 63 |
+| Retry | 11.3203125 | 0.135114 | 1.09375 | 1746 / 63 |
+| 连续Repos | 10.125 | 0.119956 | 0.90625 | 2 / 63 |
+
+各项沿用无功能校准门限，未调整生产计算或容差。热命中cached3384；Retry为
+cached432/repos3929/drop_skipped2820；连续R为cached470/repos2913，无retract。
+离线拼接P首步与D后63步，对照普通调度最终运行：无功能、Drop、Repos冷、Retry、
+连续R的logits均逐元素完全相同。热路径max/mean/p99为9.0/0.098700/1.03125，
+raw argmax相同63/64；两端热路径各自均通过mini门限，不声称所有缓存路径逐位相同。
+实际生成三种路径的普通/PD输出均完全一致；相对mini匹配数仍为43/62/64。
+证据为本目录`comparison.json`、`normal-pd-comparison.json`及原始logits/响应。
+至此必验模型普通/PD数值矩阵完成，PD完整轨迹性能配对与等待归因仍待验收。
+
 ### 普通调度 C2 最终完整轨迹
 
 `d4b598572` 的 `minimal-sg120-c2-drop-parser-v5` 在 BUS GPU2/3 TP2完成：
