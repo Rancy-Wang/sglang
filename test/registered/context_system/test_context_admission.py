@@ -87,3 +87,37 @@ def test_no_capacity_does_not_publish_a_plan(factory, compiler):
     assert adder.can_run_list == []
     assert req.context_window_plan is None
     assert adder.memory_budget.current_offset == 0
+
+
+@pytest.mark.parametrize("chunk_limit", [64, None])
+def test_repair_admission_excludes_reused_gap_from_total_and_tile_budget(
+    factory, compiler, chunk_limit
+):
+    import torch
+    from sglang.srt.managers.schedule_policy import AddReqResult
+
+    req = make_req(compiler)
+    req.prefix_indices = torch.arange(1, 101, dtype=torch.int64)
+    req.context_source_positions = req.context_program.layout.positions[:100]
+    req.context_resident = torch.ones(100, dtype=torch.bool)
+    req.context_resident[36:40] = False
+    req.context_exact_prefix_len = 100
+    req.kv.cache_protected_len = 100
+    req.prepare_context_recovery()
+    recovery = req.context_recovery_plan
+    assert recovery.start < 100
+    assert recovery.remaining_queries(recovery.start) < 128 - recovery.start
+    factory.mock_token_allocator.available_size.return_value = 110
+    adder = factory.create_adder(
+        factory.create_running_batch(), rem_chunk_tokens=chunk_limit
+    )
+    verdict = adder.add_one_req(req, has_chunked_req=False, truncation_align_size=None)
+    assert verdict in (AddReqResult.CONTINUE, AddReqResult.OTHER)
+    assert adder.can_run_list == [req]
+    first, end = recovery.intervals[0]
+    assert req.extend_range.start == first
+    assert req.extend_range.end == end
+    assert adder.new_chunked_req is req
+    assert adder.log_input_tokens == end - first
+    assert adder.rem_input_tokens == 10000 - (end - first)
+    factory.mock_token_allocator.alloc.assert_not_called()

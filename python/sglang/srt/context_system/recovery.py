@@ -113,6 +113,11 @@ class RecoveryPlan:
     def start(self) -> int:
         return self.intervals[0][0]
 
+    def remaining_queries(self, cursor: int) -> int:
+        return sum(
+            end - max(start, cursor) for start, end in self.intervals if cursor < end
+        )
+
     def next_interval(self, cursor: int) -> tuple[int, int]:
         for start, end in self.intervals:
             if cursor < end:

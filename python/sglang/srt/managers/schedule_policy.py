@@ -778,7 +778,10 @@ class PrefillAdder:
                 raise RuntimeError("Context recovery gap was not adopted before admission")
             length = min(length, end - start)
         while length > 0:
-            truncated = admission.is_chunked or length < admission.extend_len
+            truncated = (
+                admission.is_chunked
+                or admission.prefix_len + length < len(req.full_untruncated_fill_ids)
+            )
             max_new = 0 if truncated else admission.max_new_tokens
             extra = req.plan_context_prefill(admission.prefix_len + length)
             full = length + extra + max_new + self.page_size
@@ -1006,9 +1009,18 @@ class PrefillAdder:
         if self.dllm_config is not None:
             _rem_tokens = self._get_dllm_remain_tokens()
         else:
-            _rem_tokens = self.memory_budget.available_chunk_tokens(
-                self.rem_chunk_tokens
-            )
+            chunk_limit = self.rem_chunk_tokens
+            if (
+                chunk_limit is None
+                and getattr(req, "context_recovery_plan", None) is not None
+            ):
+                # Sparse repair has several query intervals even when the user
+                # has disabled ordinary chunk splitting.
+                prefix_len = len(req.prefix_indices)
+                chunk_limit = (
+                    req.context_recovery_plan.next_interval(prefix_len)[1] - prefix_len
+                )
+            _rem_tokens = self.memory_budget.available_chunk_tokens(chunk_limit)
             if _rem_tokens is None:
                 return req
 
@@ -1269,6 +1281,9 @@ class PrefillAdder:
         cand_extend_input_len = len(req.full_untruncated_fill_ids) - len(
             req.prefix_indices
         )
+        recovery = getattr(req, "context_recovery_plan", None)
+        if recovery is not None:
+            cand_extend_input_len = recovery.remaining_queries(len(req.prefix_indices))
         total_tokens = cand_extend_input_len + max_new + self.page_size
         # Shared Mamba pool: fold the new mamba state's shared-gap cost into
         # `total_tokens` so both `rem_total_tokens` gates reflect the joint budget.
@@ -1373,6 +1388,14 @@ class PrefillAdder:
         """Select a prefill shape without allocating or publishing cached KV."""
         prefix_len = len(req.prefix_indices) + host_hit_length
         extend_len = len(req.full_untruncated_fill_ids) - prefix_len
+        recovery = getattr(req, "context_recovery_plan", None)
+        recovery_chunk = False
+        if recovery is not None:
+            start, end = recovery.next_interval(prefix_len)
+            if start != prefix_len:
+                raise RuntimeError("Context recovery admission skipped a required query")
+            extend_len = end - start
+            recovery_chunk = end < len(req.full_untruncated_fill_ids)
         input_tokens = self.ceil_paged_tokens(extend_len)
         # Whether the request fits whole. Against the raw length under
         # exact-chunk-fill, so a request whose ceiled length would spill is
@@ -1395,8 +1418,12 @@ class PrefillAdder:
         ):
             return AddReqResult.OTHER
 
-        is_chunked = False
-        max_new_tokens = min(req.sampling_params.max_new_tokens, CLIP_MAX_NEW_TOKENS)
+        is_chunked = recovery_chunk
+        max_new_tokens = (
+            0
+            if recovery_chunk
+            else min(req.sampling_params.max_new_tokens, CLIP_MAX_NEW_TOKENS)
+        )
         tile_tokens = input_tokens
         if self.dllm_config is not None:
             assert truncation_align_size is None, (
