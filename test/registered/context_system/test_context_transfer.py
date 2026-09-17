@@ -1,6 +1,7 @@
 """PD identity, compact ownership and accounting without a model launch."""
 
 import sys
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -17,6 +18,10 @@ def test_pd_final_versions_holes_identity_and_usage(compiler, monkeypatch):
     usage = load_file("pd_usage", ROOT / "python/sglang/srt/context_system/usage.py")
     monkeypatch.setitem(sys.modules, "sglang.srt.context_system.occurrence", occurrence)
     monkeypatch.setitem(sys.modules, "sglang.srt.context_system.usage", usage)
+    recovery = load_file(
+        "pd_recovery", ROOT / "python/sglang/srt/context_system/recovery.py"
+    )
+    monkeypatch.setitem(sys.modules, "sglang.srt.context_system.recovery", recovery)
     transfer = load_file(
         "pd_transfer", ROOT / "python/sglang/srt/disaggregation/context_transfer.py"
     )
@@ -29,7 +34,7 @@ def test_pd_final_versions_holes_identity_and_usage(compiler, monkeypatch):
         context_recompute_program=None,
         kv=SimpleNamespace(req_pool_idx=0),
     )
-    table = torch.full((1, 12), -99, dtype=torch.int64)
+    table = torch.full((1, 15), -99, dtype=torch.int64)
     pool = SimpleNamespace(
         req_to_token=table, write=lambda index, values: table.__setitem__(index, values)
     )
@@ -42,13 +47,46 @@ def test_pd_final_versions_holes_identity_and_usage(compiler, monkeypatch):
     allocator = SimpleNamespace(device="cpu", alloc=alloc)
     slots = transfer.allocate_context_destination(req, allocator, pool)
     assert allocated == [9]
-    assert table.tolist() == [[100, -1, -1, -1, 101, 102, 103, 104, 105, 106, 107, 108]]
+    assert table[0, :12].tolist() == [
+        100,
+        -1,
+        -1,
+        -1,
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108,
+    ]
     assert req.context_decode_layout.positions.tolist() == list(range(9))
     assert req.kv.kv_allocated_len == 12
     assert torch.equal(req.context_state.private_slots(), slots)
     assert req.context_state.nonterminal_private_slots().numel() == 0
     plan = transfer.transfer_plan(req, "cpu")
     assert plan.slots(req, pool, window=3).tolist() == [106, 107, 108]
+    table[0, 12:] = torch.tensor([109, 110, 111])
+    assert transfer.request_active_slots(req, pool, 15).tolist() == list(
+        range(100, 112)
+    )
+    assert transfer.request_active_slots(req, pool, 13, window=3).tolist() == [
+        107,
+        108,
+        109,
+    ]
+    assert transfer.request_active_slots(req, pool, 15, window=3).tolist() == [
+        109,
+        110,
+        111,
+    ]
+    # The final raw map has holes, and D allocated only its three live SWA peers.
+    req.context_state = replace(
+        req.context_state, swa_resident=torch.tensor([False] * 6 + [True] * 3)
+    )
+    assert req.context_state.live_swa_ranges(0, 11) == [(9, 11)]
+    assert req.context_state.live_swa_ranges(11, 14) == [(11, 14)]
     req.context_usage = usage.ContextUsage.from_snapshot(
         usage.ContextUsageSnapshot(2, 3, 4, 5, 0)
     )
