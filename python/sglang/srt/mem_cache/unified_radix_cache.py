@@ -1215,6 +1215,19 @@ class UnifiedRadixCache(BasePrefixCache):
         state = getattr(req, "context_state", None)
         if state is not None:
             self._prepare_context_cache_row(req, retain_source=True)
+            length = len(req.get_fill_ids())
+            if (
+                not self.disable
+                and context_publish_length(req, length) < req.kv.cache_protected_len
+            ):
+                # A borrowed sparse prefix can rely on a later Drop marker.
+                # Until deferred copies reach that marker, keep the original
+                # lease and private ownership; do not rebind to a shorter tree
+                # path or falsely transfer unpublished terminal pages.
+                req.prefix_indices = request_row(
+                    self.req_to_token_pool, req.kv.req_pool_idx
+                )[:length].to(dtype=torch.int64, copy=True)
+                return
         self._cache_unfinished_req_native(req, chunked=chunked, **kwargs)
         if state is not None and not self.disable:
             req.context_state = state.publish(
