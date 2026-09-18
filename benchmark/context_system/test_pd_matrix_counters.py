@@ -9,7 +9,7 @@ import unittest
 
 from launch_pd_counted import batch_work
 from summarize_pd_matrix import join_counts, read_counts, rebuild_summaries
-from run_pd_matrix import overlap_command, predecessor_ready
+from run_pd_matrix import overlap_command, predecessor_ready, case_process_running
 from test_serving import parser as client_parser
 
 
@@ -51,12 +51,25 @@ class Counters(unittest.TestCase):
         graph = json.loads(command[command.index("--cuda-graph-config") + 1])
         self.assertEqual(graph["decode"], {"bs": [1, 2, 4, 8, 16, 32], "max_bs": 32})
 
+    def test_case_identity_handles_exit_zombie_and_pid_reuse(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertFalse(case_process_running(123, "/case", root))
+            proc = root / "123"
+            proc.mkdir()
+            (proc / "stat").write_text("123 (python) S 1")
+            (proc / "cmdline").write_bytes(b"python\0driver.py\0--one\0--output-dir\0/case\0")
+            self.assertTrue(case_process_running(123, "/case", root))
+            self.assertFalse(case_process_running(123, "/other-case", root))
+            (proc / "stat").write_text("123 (python) Z 1")
+            self.assertFalse(case_process_running(123, "/case", root))
+
     def test_handoff_requires_valid_result_and_cleanup(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            with patch("run_pd_matrix.os.kill"):
+            with patch("run_pd_matrix.case_process_running", return_value=True):
                 self.assertFalse(predecessor_ready(root, 123))
-            with patch("run_pd_matrix.os.kill", side_effect=ProcessLookupError):
+            with patch("run_pd_matrix.case_process_running", return_value=False):
                 with self.assertRaisesRegex(RuntimeError, "without a valid outcome"):
                     predecessor_ready(root, 123)
                 (root / "outcome.json").write_text('{"valid":true}')

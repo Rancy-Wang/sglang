@@ -272,6 +272,21 @@ def run_one(args):
             temp.cleanup()
 
 
+def case_process_running(pid, case, proc_root=Path("/proc")):
+    """Identify the Linux case process without relying on signal-zero probes."""
+    try:
+        proc = proc_root / str(pid)
+        state = (proc / "stat").read_text().rsplit(")", 1)[1].split()[0]
+        argv = (proc / "cmdline").read_bytes().decode().split("\0")
+    except FileNotFoundError:
+        return False
+    if state in ("Z", "X"):
+        return False
+    # A reused PID belongs to a different process and cannot keep us waiting.
+    return ("--one" in argv and "--output-dir" in argv
+            and argv[argv.index("--output-dir") + 1] == str(case))
+
+
 def predecessor_ready(case, pid):
     """Require a valid predecessor and its complete GPU cleanup before handoff."""
     case = Path(case)
@@ -281,11 +296,7 @@ def predecessor_ready(case, pid):
     valid = outcome.exists() and json.loads(outcome.read_text()).get("valid") is True
     if outcome.exists() and not valid:
         raise RuntimeError(f"Invalid predecessor outcome: {case}")
-    try:
-        os.kill(pid, 0)
-        running = True
-    except ProcessLookupError:
-        running = False
+    running = case_process_running(pid, case)
     if not running and not valid:
         raise RuntimeError(f"Predecessor exited without a valid outcome: {case}")
     return valid and not running and gpu_free()
