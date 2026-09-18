@@ -1,10 +1,12 @@
 """CPU checks for the physical counting boundary; no model imports."""
 
 from types import SimpleNamespace as NS
+from pathlib import Path
+import tempfile
 import unittest
 
 from launch_pd_counted import batch_work
-from summarize_pd_matrix import join_counts
+from summarize_pd_matrix import join_counts, read_counts
 
 
 def batch(mode, lengths):
@@ -33,6 +35,16 @@ class Counters(unittest.TestCase):
     def test_missing_data_must_not_become_zero(self):
         with self.assertRaisesRegex(ValueError, "Incomplete"):
             join_counts({"turns": [{"success": True, "server_metrics": {"pd_bootstrap_room": 7}}]}, {}, 2)
+
+    def test_reused_health_room_is_excluded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "prefill.log").write_text("\n".join(
+                '[TP0] ReqTimeStats(rid=HEALTH_CHECK_x, bootstrap_room=0): '
+                'pd_matrix_compute={"pf": ' + str(n) + ', "decode": 0}, r2_pd_timing={}'
+                for n in (1, 2)))
+            (root / "decode.log").write_text("")
+            self.assertEqual(read_counts(root, 2), {})
 
 
 if __name__ == "__main__":

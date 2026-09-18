@@ -15,6 +15,8 @@ def read_counts(root, tp):
         for line in (root / f"{mode}.log").read_text(errors="replace").splitlines():
             if "pd_matrix_compute=" not in line:
                 continue
+            if "ReqTimeStats(rid=HEALTH_CHECK_" in line:
+                continue
             room = re.search(r"bootstrap_room=(\d+)", line)
             if room is None:
                 continue
