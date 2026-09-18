@@ -53,7 +53,7 @@ def test_context_prebuilt_preserves_restored_ownership(factory, compiler, has_le
     else:
         assert req.last_node == cache.root
         cache.inc_lock_ref.assert_called_once_with(cache.root)
-        assert req.lock_receipt is cache.inc_lock_ref.return_value.to_dec_params.return_value
+        assert req.lock_receipt == cache.inc_lock_ref.return_value.to_dec_params()
     assert batch is build.return_value
     batch.prepare_for_prebuilt.assert_called_once()
     batch.process_prebuilt.assert_called_once_with(scheduler.future_map)
