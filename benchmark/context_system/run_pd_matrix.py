@@ -36,7 +36,7 @@ def gpu_free():
 
 
 class GPUIsolationGuard:
-    """One TP worker per GPU; retain baseline MPS clients, reject co-location."""
+    """Pin TP clients before warmup; allow their NVLink peer contexts only."""
 
     def __init__(self, root):
         self.uuids = set(subprocess.check_output([
@@ -45,6 +45,7 @@ class GPUIsolationGuard:
         self.root = root
         self.baseline = self.clients()
         self.last_check = 0.0
+        self.worker_pids = None
 
     def clients(self):
         output = subprocess.check_output([
@@ -57,18 +58,30 @@ class GPUIsolationGuard:
                 clients[uuid].add(int(pid))
         return clients
 
-    def check(self, force=False):
+    def check(self, force=False, pin=False):
         now = time.monotonic()
-        if not force and now - self.last_check < 10:
+        if not (force or pin) and now - self.last_check < 10:
             return
         self.last_check = now
         clients = self.clients()
         extra = {uuid: sorted(pids - self.baseline[uuid]) for uuid, pids in clients.items()}
+        observed = set().union(*(set(pids) for pids in extra.values()))
+        invalid = (any(len(pids) > 1 for pids in extra.values())
+                   if self.worker_pids is None else bool(observed - self.worker_pids))
+        if pin:
+            # Before any PD workload, each of the four TP workers has one
+            # primary context. IPC may subsequently expose the same worker
+            # on a peer GPU; it must not admit a new process identity.
+            invalid |= (self.worker_pids is not None or len(observed) != 4
+                        or any(len(pids) != 1 for pids in extra.values()))
+            if not invalid:
+                self.worker_pids = observed
         record = dict(time=time.time(), monotonic=now, new_clients=extra,
+                      pinned_worker_pids=sorted(self.worker_pids or []),
                       baseline={uuid: sorted(pids) for uuid, pids in self.baseline.items()})
         with (self.root / "gpu-isolation.jsonl").open("a") as log:
             log.write(json.dumps(record) + "\n")
-        if any(len(pids) > 1 for pids in extra.values()):
+        if invalid:
             write(self.root / "comparison-invalid.json", dict(
                 performance_comparable=False, reason="Concurrent GPU compute clients", **record))
             raise RuntimeError("GPU co-location detected; performance measurement invalid")
@@ -151,6 +164,7 @@ def run_one(args):
                 except (OSError, TimeoutError):
                     pass
                 time.sleep(1)
+        isolation.check(pin=True)
         model = src[src.index("--model-path") + 1]
         warmup(SimpleNamespace(engine="pd", drop=args.drop, model=model, concurrency=args.concurrency, port=args.port), root)
         isolation.check(force=True)
