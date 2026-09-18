@@ -30,6 +30,33 @@ def install():
     from sglang.srt.managers.scheduler import Scheduler
     from sglang.srt.observability.req_time_stats import SchedulerReqTimeStats
 
+    reserve_free_mib = int(os.environ.get("PD_MATRIX_RESERVE_FREE_MIB", "0"))
+    if reserve_free_mib:
+        import torch
+
+        scheduler_init = Scheduler.__init__
+
+        def init_with_reserved_cache(self, *args, **kwargs):
+            scheduler_init(self, *args, **kwargs)
+            free_before, total = torch.cuda.mem_get_info()
+            reserved_before = torch.cuda.memory_reserved()
+            size = max(0, free_before - reserve_free_mib * 1024**2)
+            if size:
+                # Allocate once, without a memset/kernel. Returning it to the
+                # caching allocator lets inference reuse it as workspace; it
+                # does not enlarge the model's KV pool or retain a live tensor.
+                padding = torch.empty(size, dtype=torch.uint8, device="cuda")
+                del padding
+            free_after, _ = torch.cuda.mem_get_info()
+            print("pd_matrix_memory_reservation=" + json.dumps(dict(
+                pid=os.getpid(), free_before=free_before, free_after=free_after,
+                total=total, requested_bytes=size, reserved_before=reserved_before,
+                reserved_after=torch.cuda.memory_reserved(),
+                runtime_headroom_mib=reserve_free_mib,
+            )), flush=True)
+
+        Scheduler.__init__ = init_with_reserved_cache
+
     profile = os.environ.get("PD_MATRIX_PROFILE") == "1"
     original = Scheduler.run_batch
     duration = SchedulerReqTimeStats.convert_to_duration

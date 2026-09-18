@@ -119,6 +119,7 @@ def run_one(args):
             env = dict(os.environ, PYTHONPATH=str(repo / "python"),
                        CUDA_VISIBLE_DEVICES="0,1" if i == 0 else "2,3", TMPDIR=temp.name,
                        PD_MATRIX_PROFILE="1" if args.profile_session else "0",
+                       PD_MATRIX_RESERVE_FREE_MIB=str(args.reserve_free_mib),
                        TORCHELASTIC_USE_AGENT_STORE="False", SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN="1")
             for key in ("MC_FORCE_TCP", "MC_INTRANODE_NVLINK", "MOONCAKE_PROTOCOL", "SGLANG_MOONCAKE_CUSTOM_MEM_POOL"):
                 env.pop(key, None)
@@ -299,6 +300,8 @@ def parser():
     p.add_argument("--drop", action="store_true", help="Rolling K=12 / 96Ki-token Repos, with Drop-aware eviction")
     p.add_argument("--concurrency", type=int, choices=(1, 2), default=1)
     p.add_argument("--profile-session")
+    p.add_argument("--reserve-free-mib", type=int, default=0,
+                   help="Reserve idle VRAM in each worker's reusable PyTorch cache, leaving this runtime headroom")
     return p
 
 
