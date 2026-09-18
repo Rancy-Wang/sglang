@@ -2938,10 +2938,19 @@ class SchedulerDisaggregationDecodeMixin:
             # we can only add at least `num_not_used_batch` new batch to the running queue
             if i < num_not_used_batch:
                 can_run_list.append(req)
-                # Decode-radix path: new requests already matched in
-                # `pop_preallocated`. Retracted requests reset `last_node`,
-                # so re-match only when that state is missing.
-                if get_disagg().disaggregation_decode_enable_radix_cache:
+                if req.context_program is not None:
+                    # Transfer/preallocation (including host-backup restore)
+                    # already owns the complete active KV layout. Re-matching
+                    # here would replace its ownership and enter P-side repair.
+                    # A restored request has no lease until cache publication.
+                    if req.last_node is None:
+                        req.last_node = self.tree_cache.root
+                        req.lock_receipt = self.tree_cache.inc_lock_ref(
+                            req.last_node
+                        ).to_dec_params()
+                    tree_cache = None
+                elif get_disagg().disaggregation_decode_enable_radix_cache:
+                    # Native new requests already matched in pop_preallocated.
                     tree_cache = self.tree_cache if req.last_node is None else None
                 else:
                     tree_cache = self.tree_cache

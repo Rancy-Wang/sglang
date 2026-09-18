@@ -10,6 +10,55 @@ pytest_plugins = ("test_ir",)
 pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="native SRT runtime")
 
 
+@pytest.mark.parametrize("has_lease", [False, True])
+def test_context_prebuilt_preserves_restored_ownership(factory, compiler, has_lease):
+    from types import SimpleNamespace
+    from unittest.mock import Mock, patch
+
+    from sglang.srt.disaggregation.decode import SchedulerDisaggregationDecodeMixin
+
+    req = make_req(compiler)
+    req.output_ids = array("q", [7, 8])
+    req._refresh_fill_ids()
+    req.kv.kv_committed_len = len(req.full_untruncated_fill_ids) - 1
+    req.context_state = state = object()
+    req.context_decode_layout = layout = object()
+    req.context_cache_published = False
+    req.last_node = 42 if has_lease else None
+    req.lock_receipt = receipt = object()
+    cache = factory.mock_tree_cache
+    cache.match_prefix.side_effect = AssertionError("restored KV must not rematch")
+    scheduler = SimpleNamespace(
+        grammar_manager=SimpleNamespace(has_waiting_grammars=lambda: False),
+        waiting_queue=[req], enable_priority_scheduling=False,
+        req_to_token_pool=SimpleNamespace(size=4), max_running_requests=4,
+        tree_cache=cache, token_to_kv_pool_allocator=Mock(), model_config=Mock(),
+        enable_overlap=False, spec_algorithm=Mock(), future_map=Mock(),
+    )
+    with (
+        patch("sglang.srt.disaggregation.decode.ScheduleBatch.init_new") as build,
+        patch("sglang.srt.disaggregation.decode.set_time_batch"),
+    ):
+        batch = SchedulerDisaggregationDecodeMixin._get_new_prebuilt_batch(
+            scheduler, SimpleNamespace(batch_size=lambda: 0)
+        )
+    assert req.context_state is state and req.context_decode_layout is layout
+    assert req.context_recovery_plan is None and not req.context_cache_published
+    assert req.extend_range.end == req.kv.kv_committed_len
+    assert req.kv.cache_protected_len == 0
+    cache.match_prefix.assert_not_called()
+    if has_lease:
+        assert req.last_node == 42 and req.lock_receipt is receipt
+        cache.inc_lock_ref.assert_not_called()
+    else:
+        assert req.last_node == cache.root
+        cache.inc_lock_ref.assert_called_once_with(cache.root)
+        assert req.lock_receipt is cache.inc_lock_ref.return_value.to_dec_params.return_value
+    assert batch is build.return_value
+    batch.prepare_for_prebuilt.assert_called_once()
+    batch.process_prebuilt.assert_called_once_with(scheduler.future_map)
+
+
 @pytest.mark.parametrize(
     "prefill,transport_error", [(False, False), (True, False), (True, True)]
 )
