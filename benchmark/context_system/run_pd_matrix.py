@@ -35,6 +35,45 @@ def gpu_free():
     return all(int(v) < 256 for v in value.split())
 
 
+class GPUIsolationGuard:
+    """One TP worker per GPU; retain baseline MPS clients, reject co-location."""
+
+    def __init__(self, root):
+        self.uuids = set(subprocess.check_output([
+            "nvidia-smi", "-i", "0,1,2,3", "--query-gpu=uuid",
+            "--format=csv,noheader"], text=True).split())
+        self.root = root
+        self.baseline = self.clients()
+        self.last_check = 0.0
+
+    def clients(self):
+        output = subprocess.check_output([
+            "nvidia-smi", "--query-compute-apps=gpu_uuid,pid",
+            "--format=csv,noheader"], text=True, timeout=15)
+        clients = {uuid: set() for uuid in self.uuids}
+        for line in output.splitlines():
+            uuid, pid = (part.strip() for part in line.split(","))
+            if uuid in clients:
+                clients[uuid].add(int(pid))
+        return clients
+
+    def check(self, force=False):
+        now = time.monotonic()
+        if not force and now - self.last_check < 10:
+            return
+        self.last_check = now
+        clients = self.clients()
+        extra = {uuid: sorted(pids - self.baseline[uuid]) for uuid, pids in clients.items()}
+        record = dict(time=time.time(), monotonic=now, new_clients=extra,
+                      baseline={uuid: sorted(pids) for uuid, pids in self.baseline.items()})
+        with (self.root / "gpu-isolation.jsonl").open("a") as log:
+            log.write(json.dumps(record) + "\n")
+        if any(len(pids) > 1 for pids in extra.values()):
+            write(self.root / "comparison-invalid.json", dict(
+                performance_comparable=False, reason="Concurrent GPU compute clients", **record))
+            raise RuntimeError("GPU co-location detected; performance measurement invalid")
+
+
 def run_one(args):
     root = Path(args.output_dir)
     root.mkdir(parents=True, exist_ok=False)
@@ -48,6 +87,7 @@ def run_one(args):
         raise ValueError("Native baseline is dirty")
     if not gpu_free():
         raise RuntimeError("GPU 0-3 unavailable; no co-located benchmark allowed")
+    isolation = GPUIsolationGuard(root)
     source = json.loads(Path(args.source_launch).read_text())
     source_servers = source["servers"]
     template = root / "retained_history.jinja"
@@ -56,6 +96,7 @@ def run_one(args):
     procs, logs, temps, launch = [], [], [], []
     collecting = False
     cpu_sampler = None
+    client_proc = None
     try:
         for i, mode in enumerate(("prefill", "decode")):
             cmd = list(source_servers[i]["argv"])
@@ -99,6 +140,7 @@ def run_one(args):
         for i, proc in enumerate(procs):
             deadline = time.monotonic() + 900
             while True:
+                isolation.check()
                 if proc.poll() is not None or time.monotonic() > deadline:
                     raise RuntimeError(f"Startup failed: {root}")
                 try:
@@ -110,6 +152,7 @@ def run_one(args):
                 time.sleep(1)
         model = src[src.index("--model-path") + 1]
         warmup(SimpleNamespace(engine="pd", drop=args.drop, model=model, concurrency=args.concurrency, port=args.port), root)
+        isolation.check(force=True)
         if args.profile_session:
             subprocess.run(["nsys", "start", "--session=" + args.profile_session], check=True, timeout=60)
             collecting = True
@@ -127,15 +170,33 @@ def run_one(args):
             client.append("--drop")
         write(root / "client.json", client)
         with (root / "client.log").open("x") as log:
-            subprocess.run(client, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=14400)
+            client_proc = subprocess.Popen(client, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            deadline = time.monotonic() + 14400
+            while client_proc.poll() is None:
+                isolation.check()
+                if time.monotonic() > deadline:
+                    raise subprocess.TimeoutExpired(client, 14400)
+                time.sleep(5)
+            isolation.check(force=True)
+            if client_proc.returncode:
+                raise subprocess.CalledProcessError(client_proc.returncode, client)
         # Completed request records may flush just after the HTTP final event.
         time.sleep(2)
         result = summarize(root, args.mini_root)
+        result["measurement"]["profiler"] = bool(args.profile_session)
+        write(root / "counted-result.json", result)
         write(root / "outcome.json", dict(valid=result["valid"], overall=result["overall"]))
     except Exception as exc:
         write(root / "failure.json", {"error": repr(exc), "time": time.time()})
         raise
     finally:
+        if client_proc is not None and client_proc.poll() is None:
+            os.killpg(client_proc.pid, signal.SIGTERM)
+            try:
+                client_proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                os.killpg(client_proc.pid, signal.SIGKILL)
+                client_proc.wait()
         if collecting:
             # Periodic CUPTI flush plus an explicit stop while all CUDA workers
             # remain alive; never infer idleness from missing GPU tables.
@@ -143,7 +204,7 @@ def run_one(args):
             with (root / "nsys-stop.log").open("w") as log:
                 try:
                     subprocess.run(["nsys", "stop", "--session=" + args.profile_session],
-                                   stdout=log, stderr=subprocess.STDOUT, timeout=180, check=True)
+                                   stdout=log, stderr=subprocess.STDOUT, timeout=900, check=True)
                 except Exception as exc:
                     write(root / "profile-stop-failure.json", {"error": repr(exc)})
             time.sleep(3)
