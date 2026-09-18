@@ -13,6 +13,16 @@ import sqlite3
 from analyze_pd_timing import analyze, union_overlap
 
 
+def log_json_records(text, marker):
+    # TP workers share stdout: complete JSON records can be adjacent without
+    # a newline, or followed by an ordinary logger message. Decode each marker
+    # independently and still fail on damaged/truncated JSON.
+    decoder = json.JSONDecoder()
+    for suffix in text.split(marker)[1:]:
+        record, _ = decoder.raw_decode(suffix.lstrip())
+        yield record
+
+
 def read_cpu_samples(path, origin):
     samples, previous = [], {}
     if not path.exists():
@@ -53,17 +63,15 @@ def extract(root, database):
     timing = analyze(root, 1.0)
     transfers, queues, roles = [], [], {}
     for mode in ("prefill", "decode"):
-        for line in (root / f"{mode}.log").read_text(errors="replace").splitlines():
-            if "pd_matrix_transfer=" in line:
-                row = json.loads(line.split("pd_matrix_transfer=", 1)[1])
-                row["start"] -= origin
-                row["end"] = row["start"] + row["seconds"]
-                transfers.append(row)
-                roles[row["pid"]] = mode
-            if "pd_matrix_queue=" in line:
-                row = json.loads(line.split("pd_matrix_queue=", 1)[1])
-                row["start"], row["end"] = row["enqueued"]-origin, row["dequeued"]-origin
-                queues.append(row)
+        log = (root / f"{mode}.log").read_text(errors="replace")
+        for row in log_json_records(log, "pd_matrix_transfer="):
+            row["start"] -= origin
+            row["end"] = row["start"] + row["seconds"]
+            transfers.append(row)
+            roles[row["pid"]] = mode
+        for row in log_json_records(log, "pd_matrix_queue="):
+            row["start"], row["end"] = row["enqueued"]-origin, row["dequeued"]-origin
+            queues.append(row)
     forwards = []
     if "NVTX_EVENTS" in tables:
         for row in rows("""select (n.globalTid>>24)&16777215 pid,
