@@ -60,6 +60,18 @@ def join_counts(result, counts, tp):
 def rebuild_summaries(result, method):
     """Use the joined physical counts in every window, not only overall."""
     result["overall"] = method.summary(result["turns"], result["start"], result["cutoff"])
+    if "rounds" not in result:
+        # The SGLang adapter retains the mini scheduler's round boundaries,
+        # but leaves materializing the cohort reports to this offline join.
+        result["rounds"] = []
+        previous = result["start"]
+        for index, end in enumerate(result.get("round_ends", [])):
+            tasks = [task for task in result["tasks"] if not task["filler"]
+                     and previous < task.get("end_time", float("inf")) <= end]
+            if not tasks:
+                raise ValueError(f"Empty first-pass cohort for round {index + 1}")
+            result["rounds"].append(dict(round=index + 1, tasks=tasks))
+            previous = end
     previous = result["start"]
     for report in result.get("rounds", []):
         tasks = report["tasks"]
@@ -68,6 +80,8 @@ def rebuild_summaries(result, method):
         report["window"] = method.summary(result["turns"], previous, end)
         report["cumulative"] = method.summary(result["turns"], result["start"], end)
         report["cohort"] = method.summary(own, min(t["start_time"] for t in tasks), end)
+        report["cohort_task_lifetime_s"] = method.stats(
+            [t["end_time"] - t["start_time"] for t in tasks])
         previous = end
     tasks = [task for task in result.get("tasks", [])
              if not task["filler"] and task.get("status") == "all_turns_completed"]
