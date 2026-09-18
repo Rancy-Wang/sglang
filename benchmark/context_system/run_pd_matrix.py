@@ -183,7 +183,12 @@ def matrix(args):
                 cmd += ["--profile-session", session]
                 cmd = ["nsys", "profile", "--session-new=" + session, "--start-later=true",
                        "--trace=cuda,nvtx,osrt", "--sample=none", "--cpuctxsw=none",
-                       "--cuda-trace-all-apis=true", "--cuda-event-trace=false", "--cuda-graph-trace=graph",
+                       # Busy polling and short OSRT stacks can produce hundreds
+                       # of GiB in a full BCP replay. Keep GPU activities, core
+                       # CUDA APIs and the long host waits this audit examines.
+                       "--cuda-trace-all-apis=false", "--osrt-threshold=1000000",
+                       "--osrt-backtrace-threshold=50000000",
+                       "--cuda-event-trace=false", "--cuda-graph-trace=graph",
                        "--cuda-flush-interval=1000", "--output=" + str(root / name), *cmd]
             row.update(state="running", command=cmd, start=time.time())
             write(root / "matrix.json", {"args": vars(args), "cases": rows})
