@@ -1052,6 +1052,7 @@ class UnifiedRadixCache(BasePrefixCache):
             self._release_context_source_lease(req)
             req.context_state = None
             req.context_decode_layout = None
+            req.context_decode_reuse = None
             req.context_transfer_plan = None
             req.context_recompute_program = None
             req.context_recovery_plan = None

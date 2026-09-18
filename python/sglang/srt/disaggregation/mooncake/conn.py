@@ -96,6 +96,7 @@ class TransferInfo:
     is_dummy: bool
     decode_prefix_len: Optional[int] = None
     dst_device_kv_indices: Optional[npt.NDArray[np.int32]] = None
+    context_reuse_mask: Optional[npt.NDArray[np.bool_]] = None
     # Note: always put the optional staging field at the final (it will be set through 'STAGING_RSP' pkg when needed)
     staging: Optional[StagingTransferInfo] = None
 
@@ -111,6 +112,12 @@ class TransferInfo:
             dst_aux_index = int(msg[5].decode("ascii"))
             dst_state_indices = unpack_int_lists(msg[6], "i")
             is_dummy = False
+        reuse_mask = None
+        if len(msg) > 10 and msg[10]:
+            bits = np.frombuffer(msg[10], dtype=np.uint8)
+            if len(bits) != len(dst_kv_indices) or np.any(bits > 1):
+                raise ValueError("Context reuse bitmap must cover destination pages")
+            reuse_mask = bits.view(np.bool_)
         return cls(
             room=int(msg[0].decode("ascii")),
             endpoint=msg[1].decode("ascii"),
@@ -121,6 +128,7 @@ class TransferInfo:
             dst_state_indices=dst_state_indices,
             required_dst_info_num=int(msg[7].decode("ascii")),
             is_dummy=is_dummy,
+            context_reuse_mask=reuse_mask,
             decode_prefix_len=(
                 int(msg[8].decode("ascii")) if len(msg) > 8 and msg[8] != b"" else None
             ),
@@ -2000,8 +2008,18 @@ class MooncakeKVManager(StagingManagerMixin, CommonKVManager):
                         skip_kv, skip_state = self._get_dsa_cache_transfer_skip_flags(
                             target_rank_registration_info
                         )
+                        source_indices = kv_chunk.prefill_kv_indices
+                        if req.context_reuse_mask is not None:
+                            if is_dcp_transfer or self.enable_staging or chunked_dst_device_kv_indice is not None:
+                                raise ValueError("Context sparse transfer requires direct page-1 KV")
+                            from sglang.srt.disaggregation.context_transfer import select_missing_transfer
+
+                            source_indices, chunked_dst_kv_indice = select_missing_transfer(
+                                source_indices, chunked_dst_kv_indice,
+                                req.context_reuse_mask[kv_chunk.index_slice],
+                            )
                         if (
-                            len(kv_chunk.prefill_kv_indices) == 0
+                            len(source_indices) == 0
                             or not self.kv_args.kv_data_ptrs
                             or skip_kv
                         ):
@@ -2041,7 +2059,7 @@ class MooncakeKVManager(StagingManagerMixin, CommonKVManager):
                         ):
                             ret = self.send_kvcache(
                                 req.mooncake_session_id,
-                                kv_chunk.prefill_kv_indices,
+                                source_indices,
                                 target_rank_registration_info.dst_kv_ptrs,
                                 chunked_dst_kv_indice,
                                 executor,
@@ -2075,7 +2093,7 @@ class MooncakeKVManager(StagingManagerMixin, CommonKVManager):
                         else:
                             ret = self.send_kvcache_slice(
                                 req.mooncake_session_id,
-                                kv_chunk.prefill_kv_indices,
+                                source_indices,
                                 target_rank_registration_info.dst_kv_ptrs,
                                 chunked_dst_kv_indice,
                                 target_rank_registration_info.dst_tp_rank,
@@ -2734,6 +2752,7 @@ class MooncakeKVReceiver(MooncakeFailureExceptionMixin, CommonKVReceiver):
         state_indices: Optional[List] = None,
         decode_prefix_len: Optional[int] = None,
         device_kv_indices: Optional[npt.NDArray[np.int32]] = None,
+        context_reuse_mask: Optional[npt.NDArray[np.bool_]] = None,
     ):
         if self.bootstrap_infos is None:
             self.kv_mgr.record_failure(
@@ -2775,6 +2794,11 @@ class MooncakeKVReceiver(MooncakeFailureExceptionMixin, CommonKVReceiver):
                             (
                                 np.asarray(device_kv_indices, dtype=np.int32).tobytes()
                                 if not is_dummy and device_kv_indices is not None
+                                else b""
+                            ),
+                            (
+                                np.asarray(context_reuse_mask, dtype=np.uint8).tobytes()
+                                if not is_dummy and context_reuse_mask is not None
                                 else b""
                             ),
                         ]

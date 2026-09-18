@@ -1360,6 +1360,20 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
                 required_alloc_tokens = self._required_alloc_tokens(
                     fill_len=fill_len, prefix_len=prefix_len
                 )
+                if decode_req.req.context_program is not None:
+                    from sglang.srt.disaggregation.context_transfer import (
+                        ContextDecodeReuse, prepare_decode_transfer_plan,
+                    )
+
+                    plan = prepare_decode_transfer_plan(
+                        decode_req.req, self.token_to_kv_pool_allocator.device, fill_len
+                    )
+                    reuse = ContextDecodeReuse.build(decode_req.req, plan)
+                    decode_req.req.context_decode_reuse = reuse
+                    required_alloc_tokens = reuse.allocation_count
+                    # Context keeps raw/active coordinates separate. Its sparse
+                    # reuse bitmap replaces the ordinary contiguous PD prefix.
+                    prefix_len = total_prefix_len = 0
                 # Matching may lock previously-evictable radix pages, so refresh
                 # the admission budget against the post-lock pool state before we
                 # decide whether this request still fits.
@@ -1482,7 +1496,11 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
                     count_retracted=True,
                     extra_reserved_reqs=len(preallocated_reqs) + 1,
                 )
-            decode_req.req.kv.cache_protected_len = total_prefix_len
+            decode_req.req.kv.cache_protected_len = (
+                decode_req.req.context_exact_prefix_len
+                if getattr(decode_req.req, "context_decode_reuse", None) is not None
+                else total_prefix_len
+            )
 
             page_size = self.token_to_kv_pool_allocator.page_size
             kv_transfer_page_size = page_size
@@ -1657,6 +1675,9 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
                         "the Mooncake backend"
                     )
             metadata_kwargs = {"decode_prefix_len": total_prefix_len}
+            reuse = getattr(decode_req.req, "context_decode_reuse", None)
+            if reuse is not None:
+                metadata_kwargs["context_reuse_mask"] = reuse.reusable
             if device_page_indices is not None:
                 metadata_kwargs["device_kv_indices"] = device_page_indices
             if (
@@ -1947,19 +1968,29 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
         req.kv.kv_committed_len = fill_len
         if req.context_program is not None:
             from sglang.srt.disaggregation.context_transfer import (
-                allocate_context_destination, prepare_decode_transfer_plan,
+                allocate_context_destination, materialize_decode_reuse,
+                prepare_decode_transfer_plan,
             )
 
             if prefix_len or total_prefix_len:
-                raise ValueError("Context PD requires decode Radix disabled")
+                raise ValueError("Context PD uses a sparse reuse map, not a raw prefix")
             prepare_decode_transfer_plan(
                 req, self.token_to_kv_pool_allocator.device, fill_len
             )
+            reuse = getattr(req, "context_decode_reuse", None)
+            required = (
+                reuse.allocation_count if reuse is not None
+                else req.context_transfer_plan.active_count
+            )
+            available = self.token_to_kv_pool_allocator.available_size()
+            if required > available:
+                self.tree_cache.evict_for_alloc(EvictParams(num_tokens=required - available))
             slots = allocate_context_destination(
                 req, self.token_to_kv_pool_allocator, self.req_to_token_pool,
                 window=(self.scheduler.sliding_window_size
                         if self.scheduler.tp_worker.is_hybrid_swa else None),
             )
+            materialize_decode_reuse(req, self.scheduler.tp_worker.model_runner)
             req.full_untruncated_fill_ids = req.origin_input_ids + req.output_ids
             req.prefix_indices = torch.empty((0,), dtype=torch.int64)
             req.set_extend_range(0, fill_len)

@@ -1056,6 +1056,7 @@ class Req(ReqDllmMixin):
         self.context_exact_prefix_len = 0
         self.context_state = None
         self.context_decode_layout = None
+        self.context_decode_reuse = None
         self.context_transfer_plan = None
         self.context_window_plan = None
         self.context_usage = None
@@ -2208,6 +2209,7 @@ class Req(ReqDllmMixin):
         # Increment retraction count before resetting other state. We should not reset this
         # since we are tracking the total number of retractions for each request.
         self.retraction_count += 1
+        self.context_decode_reuse = None
         self.context_source_positions = None
         self.context_exact_prefix_len = 0
         self.context_resident = None

@@ -328,6 +328,40 @@ class ContextModelBinding:
         self.layers = tuple(layers)
         self.translator = translator
         self.has_swa = any(layer.sliding_window for layer in layers)
+        self._existing_copy_groups = None
+
+    def reposition_existing(self, source, destination, positions):
+        """Completed D-cache versions have no per-layer birth dependency.
+
+        Group compatible native pools/RoPE tables once, then copy all their
+        layers together. Shared Full/SWA storage preserves mini's semantics.
+        """
+        from sglang.kernels.ops.attention.context_reposition import reposition_kv_layers
+
+        if self.translator.sliding_window_write_loc_for(source) is not None:
+            raise ValueError("Context decode Radix requires shared Full/SWA KV")
+        if self._existing_copy_groups is None:
+            groups = {}
+            for layer in self.layers:
+                key = (
+                    layer.k_buffer.shape, layer.k_buffer.stride(),
+                    layer.v_buffer.stride(), layer.k_buffer.dtype,
+                    layer.cos_sin_cache.data_ptr(), layer.is_neox_style,
+                )
+                groups.setdefault(key, []).append(layer)
+            self._existing_copy_groups = tuple(
+                (items[0], torch.cat([x.k_ptr for x in items]),
+                 torch.cat([x.v_ptr for x in items]))
+                for items in groups.values()
+            )
+        source = self.translator.translate_full_attn_ids(source).to(torch.int32)
+        destination = self.translator.translate_full_attn_ids(destination).to(torch.int32)
+        for layer, k_ptrs, v_ptrs in self._existing_copy_groups:
+            reposition_kv_layers(
+                k_ptrs, v_ptrs, layer.k_buffer, layer.v_buffer,
+                source, destination, positions, layer.cos_sin_cache,
+                is_neox_style=layer.is_neox_style,
+            )
 
     def bind(self, inputs: ContextPrefillInput) -> ContextForwardMetadata:
         # Translate virtual FULL ids once, then derive SWA ids using the same

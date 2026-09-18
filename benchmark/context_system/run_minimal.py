@@ -166,11 +166,14 @@ def main():
     p.add_argument("--port", type=int, default=29161)
     p.add_argument("--concurrency", type=int, choices=[1, 2], default=1)
     p.add_argument("--drop", action="store_true")
+    p.add_argument("--decode-radix", action="store_true")
     p.add_argument("--native-baseline", action="store_true")
     p.add_argument("--context-length", type=int, default=196608)
     p.add_argument("--capacity", type=int, default=262144)
     p.add_argument("--chunk", type=int, default=8192)
     args = p.parse_args()
+    if args.decode_radix and args.engine != "pd":
+        p.error("--decode-radix requires --engine pd")
     if args.native_baseline and (args.drop or args.engine != "sglang"):
         p.error("Native baseline is a no-Drop SGLang launch")
     root = Path(args.output_dir).resolve()
@@ -269,7 +272,7 @@ def main():
                         }
                     ),
                 ]
-                if args.drop and mode != "decode":
+                if args.drop and (mode != "decode" or args.decode_radix):
                     cmd += ["--context-drop-aware-eviction"]
                 if "gpt-oss" in args.model.lower():
                     cmd += [
@@ -280,6 +283,8 @@ def main():
                         "--disable-hybrid-swa-memory",
                     ]
                 if args.engine == "pd":
+                    if args.decode_radix and mode == "decode":
+                        cmd += ["--disaggregation-decode-enable-radix-cache"]
                     # Identical request-end observation for native and modified
                     # servers, including spawned TP workers. Production code
                     # and per-token execution remain untouched.
