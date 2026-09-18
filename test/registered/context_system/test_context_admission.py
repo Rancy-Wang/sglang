@@ -4,6 +4,7 @@ import sys
 from array import array
 
 import pytest
+from test_drop_eviction import native_cache  # noqa: F401
 from test_ir import ROOT, args, load_file
 
 pytest_plugins = ("test_ir",)
@@ -11,7 +12,7 @@ pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="native SRT runt
 
 
 @pytest.mark.parametrize("has_lease", [False, True])
-def test_context_prebuilt_preserves_restored_ownership(factory, compiler, has_lease):
+def test_context_prebuilt_preserves_restored_ownership(native_cache, compiler, has_lease):
     from types import SimpleNamespace
     from unittest.mock import Mock, patch
 
@@ -24,9 +25,13 @@ def test_context_prebuilt_preserves_restored_ownership(factory, compiler, has_le
     req.context_state = state = object()
     req.context_decode_layout = layout = object()
     req.context_cache_published = False
-    req.last_node = 42 if has_lease else None
-    req.lock_receipt = receipt = object()
-    cache = factory.mock_tree_cache
+    native, allocator = native_cache
+    root = native.root_node_handle(extra_key=req.extra_key)
+    req.last_node = root if has_lease else None
+    req.lock_receipt = receipt = (
+        native.inc_lock_ref(root).to_dec_params() if has_lease else None
+    )
+    cache = Mock(spec_set=native, wraps=native)
     cache.match_prefix.side_effect = AssertionError("restored KV must not rematch")
     scheduler = SimpleNamespace(
         grammar_manager=SimpleNamespace(has_waiting_grammars=lambda: False),
@@ -48,12 +53,14 @@ def test_context_prebuilt_preserves_restored_ownership(factory, compiler, has_le
     assert req.kv.cache_protected_len == 0
     cache.match_prefix.assert_not_called()
     if has_lease:
-        assert req.last_node == 42 and req.lock_receipt is receipt
+        assert req.last_node == root and req.lock_receipt is receipt
         cache.inc_lock_ref.assert_not_called()
     else:
-        assert req.last_node == cache.root
-        cache.inc_lock_ref.assert_called_once_with(cache.root)
-        assert req.lock_receipt == cache.inc_lock_ref.return_value.to_dec_params()
+        assert req.last_node == root and req.lock_receipt.node_id == root
+        cache.root_node_handle.assert_called_once_with(extra_key=req.extra_key)
+        cache.inc_lock_ref.assert_called_once_with(root)
+    native.dec_lock_ref(req.last_node, req.lock_receipt)
+    assert allocator.available_size() == 128
     assert batch is build.return_value
     batch.prepare_for_prebuilt.assert_called_once()
     batch.process_prebuilt.assert_called_once_with(scheduler.future_map)

@@ -2944,7 +2944,9 @@ class SchedulerDisaggregationDecodeMixin:
                     # here would replace its ownership and enter P-side repair.
                     # A restored request has no lease until cache publication.
                     if req.last_node is None:
-                        req.last_node = self.tree_cache.root
+                        req.last_node = self.tree_cache.root_node_handle(
+                            extra_key=req.extra_key
+                        )
                         req.lock_receipt = self.tree_cache.inc_lock_ref(
                             req.last_node
                         ).to_dec_params()
