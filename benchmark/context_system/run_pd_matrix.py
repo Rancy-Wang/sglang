@@ -31,7 +31,7 @@ def write(path, data):
     temp.replace(path)
 
 
-def overlap_command(command, max_running_requests=8):
+def overlap_command(command, max_running_requests=8, prefill_token_budget=None):
     """Apply the approved common settings to either frozen P/D launcher."""
     command = list(command)
     for flag in ("--max-total-tokens", "--mem-fraction-static", "--max-running-requests",
@@ -46,6 +46,12 @@ def overlap_command(command, max_running_requests=8):
                                       if n <= max_running_requests],
                                "max_bs": max_running_requests},
                     "prefill": {"bs": [16, 32, 64], "max_bs": 64}})]
+    if prefill_token_budget is not None:
+        for flag in ("--chunked-prefill-size", "--max-prefill-tokens"):
+            while flag in command:
+                index = command.index(flag)
+                del command[index:index + 2]
+            command += [flag, str(prefill_token_budget)]
     return command
 
 
@@ -135,7 +141,8 @@ def run_one(args):
         for i, mode in enumerate(("prefill", "decode")):
             cmd = list(source_servers[i]["argv"])
             if args.approved_overlap_matrix:
-                cmd = overlap_command(cmd, max(8, args.concurrency))
+                cmd = overlap_command(cmd, args.max_running_requests or max(8, args.concurrency),
+                                      args.prefill_token_budget)
             cmd[0:2] = [sys.executable, str(HERE / "launch_pd_counted.py")]
             for flag, value in (("--port", args.port + i), ("--disaggregation-bootstrap-port", args.port + 10),
                                 ("--nccl-port", args.port + 20 + i), ("--chat-template", template)):
@@ -157,6 +164,9 @@ def run_one(args):
                        PD_MATRIX_PROFILE="1" if args.profile_session else "0",
                        PD_MATRIX_RESERVE_FREE_MIB=str(args.reserve_free_mib),
                        TORCHELASTIC_USE_AGENT_STORE="False", SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN="1")
+            if args.pd_timeout is not None:
+                env.update(SGLANG_DISAGGREGATION_WAITING_TIMEOUT=str(args.pd_timeout),
+                           SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=str(args.pd_timeout))
             for key in ("MC_FORCE_TCP", "MC_INTRANODE_NVLINK", "MOONCAKE_PROTOCOL", "SGLANG_MOONCAKE_CUSTOM_MEM_POOL"):
                 env.pop(key, None)
             if args.transport == "tcp":
@@ -192,7 +202,8 @@ def run_one(args):
             with urllib.request.urlopen(f"http://127.0.0.1:{args.port+i}/server_info", timeout=30) as response:
                 write(root / f"{mode}-server-info.json", json.load(response))
         model = src[src.index("--model-path") + 1]
-        warmup(SimpleNamespace(engine="pd", drop=args.drop, model=model, concurrency=args.concurrency, port=args.port), root)
+        warmup(SimpleNamespace(engine="pd", drop=args.drop, model=model, concurrency=args.concurrency,
+                               port=args.port, warmup_timeout=args.warmup_timeout), root)
         isolation.check(force=True)
         if args.profile_session:
             subprocess.run(["nsys", "start", "--session=" + args.profile_session], check=True, timeout=60)
@@ -206,14 +217,15 @@ def run_one(args):
                   "--num-tasks", str(args.concurrency * args.rounds), "--seed", "42", "--url",
                   f"http://127.0.0.1:{args.port+1}/v1/chat/completions", "--prefill-url",
                   f"http://127.0.0.1:{args.port}/v1/chat/completions", "--bootstrap-port", str(args.port+10),
-                  "--chat-template", str(template), "--template-kwargs", '{"preserve_thinking_history":true}']
+                  "--chat-template", str(template), "--template-kwargs", '{"preserve_thinking_history":true}',
+                  "--timeout", str(args.request_timeout)]
         if args.drop:
             client.append("--drop")
         write(root / "client.json", client)
         with (root / "client.log").open("x") as log:
             client_proc = subprocess.Popen(client, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             # Scale the whole-workload watchdog for the larger task cohort only.
-            # Per-request and KV-transfer deadlines remain unchanged.
+            # Per-request and KV-transfer deadlines are recorded separately.
             workload_timeout = 14400 * max(1, args.concurrency // 8)
             deadline = time.monotonic() + workload_timeout
             while client_proc.poll() is None:
@@ -345,6 +357,11 @@ def overlap_matrix(args):
                    "--mini-root", args.mini_root, "--requests-path", args.requests_path,
                    "--concurrency", str(row["concurrency"]), "--rounds", "3", "--transport", "nvlink",
                    "--decode-radix", "--port", str(args.port + 40 * index)]
+        for option in ("prefill_token_budget", "max_running_requests", "pd_timeout",
+                       "warmup_timeout", "request_timeout"):
+            value = getattr(args, option)
+            if value is not None:
+                command += ["--" + option.replace("_", "-"), str(value)]
         if row["drop"]:
             command.append("--drop")
         row.update(state="running", command=command, start=time.time())
@@ -445,6 +462,13 @@ def parser():
     p.add_argument("--decode-radix", action="store_true")
     p.add_argument("--drop", action="store_true", help="Rolling K=12 / 96Ki-token Repos, with Drop-aware eviction")
     p.add_argument("--concurrency", type=int, choices=(1, 2, 4, 8, 32), default=1)
+    p.add_argument("--prefill-token-budget", type=int,
+                   help="Explicit common chunked-prefill-size and max-prefill-tokens override")
+    p.add_argument("--max-running-requests", type=int, choices=(8, 16, 32),
+                   help="Keep the same server admission/graph configuration across concurrency cases")
+    p.add_argument("--pd-timeout", type=int, help="Explicit PD bootstrap and waiting timeout in seconds")
+    p.add_argument("--warmup-timeout", type=int, default=600)
+    p.add_argument("--request-timeout", type=int, default=7200)
     p.add_argument("--rounds", type=int, choices=range(1, 21), default=2)
     p.add_argument("--approved-overlap-matrix", action="store_true", help=OVERLAP_PLAN)
     p.add_argument("--concurrencies", type=int, nargs="+", choices=(1, 2, 4, 8, 32),
