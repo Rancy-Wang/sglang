@@ -51,7 +51,7 @@ def extract(root, database):
     clock = rows("select * from TARGET_INFO_SESSION_START_TIME")[0]
     origin = clock["systemClockNs"] / 1e9
     timing = analyze(root, 1.0)
-    transfers, roles = [], {}
+    transfers, queues, roles = [], [], {}
     for mode in ("prefill", "decode"):
         for line in (root / f"{mode}.log").read_text(errors="replace").splitlines():
             if "pd_matrix_transfer=" in line:
@@ -60,6 +60,10 @@ def extract(root, database):
                 row["end"] = row["start"] + row["seconds"]
                 transfers.append(row)
                 roles[row["pid"]] = mode
+            if "pd_matrix_queue=" in line:
+                row = json.loads(line.split("pd_matrix_queue=", 1)[1])
+                row["start"], row["end"] = row["enqueued"]-origin, row["dequeued"]-origin
+                queues.append(row)
     forwards = []
     if "NVTX_EVENTS" in tables:
         for row in rows("""select (n.globalTid>>24)&16777215 pid,
@@ -138,12 +142,15 @@ def extract(root, database):
                              window=window,seconds=window[1]-window[0],
                              gpu_execution_seconds_by_pid={pid:union_overlap(window, intervals) for pid,intervals in kernel.items()},
                              transfers=[r for r in transfers if intersect(r)],
+                             request_queue_records=[r for r in queues if r["room"]==req["room"]],
                              runtime=[r for r in runtime if intersect(r)],
                              locks=[r for r in osrt if "rwlock" in r["name"] and intersect(r)]))
     expected = {role:sum(r["role"]==role and r["kernel_count"]>0 for r in coverage) for role in ("prefill","decode")}
     c.close()
     cpu_samples = read_cpu_samples(root / "cpu-sched.jsonl", origin)
+    result = json.loads((root / "workload/result.json").read_text())
     return dict(root=str(root),clock=clock,origin=origin,coverage=coverage,cpu_samples=cpu_samples,
+                measurement_window=[result["start"]-origin,result["cutoff"]-origin],queues=queues,
                 four_worker_gpu_trace=expected == {"prefill":2,"decode":2},
                 roles=roles,kernel_intervals=kernel,forwards=forwards,transfers=transfers,
                 runtime=runtime,osrt=osrt,stacks=stacks,copy_summary=copy_summary,
@@ -200,7 +207,7 @@ if __name__ == "__main__":
     a.output.mkdir(parents=True,exist_ok=False)
     data=extract(a.root,a.sqlite)
     (a.output/"timeline.json").write_text(json.dumps(data,separators=(",",":")))
-    plot(data,a.output/"overview.png")
+    plot(data,a.output/"overview.png",data["measurement_window"])
     for i,tail in enumerate(data["longest_transfer_tails"][:3]):
         start,end=tail["window"]
         plot(data,a.output/f"long-tail-{i+1}.png",[start-1,end+1])
