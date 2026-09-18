@@ -3,6 +3,37 @@
 批准计划：`PLAN-CS-20260917-R2`，实施轮次 1。本文记录已批准的目标、证据和剩余工作，
 不是功能已经实现或性能已经达标的声明。
 
+## 当前暂停点与完整报告（2026-09-18）
+
+用户最新要求先汇报全部修改/验证、原生普通与PD C1/C2吞吐及超时原因，再决定下一步。
+后续吞吐启动器保持暂停，本轮不再修改生产代码或启动新的模型矩阵。
+完整报告为同目录 `r2_status_20260918.md`，包含功能清单、40+20条数值结果、实际生成
+差异、资源与设置限制、失败记录、Nsight证据、未完成门槛及原始结果路径。
+以下历史段落的“下一步”“待运行”不代表当前获准继续启动。
+
+原生普通C1/C2输出吞吐25.628504/31.164463，PD分别25.211158/38.112894 token/s；
+逻辑输入+输出总吞吐分别4888.621791/5396.779545和4816.767934/6674.208423。
+普通2卡、PD4卡；PD C1是D-cache OFF/TCP，C2是ON/NVLink，不能作同设置扩展曲线。
+C2输出增加22.30%、TPOT均值降低44.81%，但TTFT均值增加26.43%、每卡输出降低38.85%。
+原生实际PF/D/All计数缺失。不能只凭系统吞吐提高就判定资源效率或调度全面优于普通。
+
+TCP模型完整Nsight v2捕获I/O线程在 `ClientSession::writeBody → cudaMemcpy →
+libcuda → pthread_rwlock_wrlock` 等待12.797681秒；同期主线程32KiB pageable读回
+API等待12.797724秒，实际GPU拷贝仅3.040微秒；通信64KiB拷贝仅4.832微秒。
+P GPU此间继续计算。这支持计算相关读回/驱动同步干扰通信推进，而非单纯字节量。
+32KiB读回的Python调用点未由Nsight直接证明；不把候选`.cpu().numpy()`认定为唯一根因。
+同70407-token冷请求，TCP overlap开/关的288MiB最大batch时间25.768/25.750秒，
+关闭overlap未解决；原生NVLink最大0.277秒。但三组完整请求均约118秒，P计算仍主导。
+
+直接Mooncake双GPU反事实：同35.6秒计算、72×4MiB传输，仅计算时0.210088秒成功；
+pageable读回时30.302957秒timeout；pinned异步读回也在30.302748秒timeout。
+小64KiB copy探针中的pinned成功不能推广为完整engine修复。晚到payload正确不改变
+timeout失败状态；实际engine后续同步/copy推进机制仍待定位。没有修改默认timeout。
+
+完整GPU轨迹仅TCP v2及小copy因果probe可用；no-overlap和NVLink模型profile缺部分
+GPU表，不能将缺失记录视为空闲。NVLink C2仍有81.301秒P完成至D ready长尾未定位。
+因此新版PD吞吐配对与稳定性仍未验收，R2整体未完成。
+
 ## 基线与完成状态
 
 | 项目 | 固定版本 / 状态 |
@@ -91,8 +122,9 @@ bitmap 不改变原始 chunk 的共享索引；普通无 Context 请求保留原
 长请求诊断：原生 `03c2d9ec8` 的 PD C2 第二次完整尝试为126成功、2失败，整组无效。
 `pd-c2-timeout-replay-v1` 进一步重放 case864 的70407-token 冷前缀，在首个 warm 请求
 就失败，未进入双请求阶段。72区间、301989888字节的 TCP batch 在 P 计算期间
-达到30.303秒超时；另一 TP rank 同规模批次分别耗时25.424/25.898秒，计算结束后约
-0.199–0.203秒。冷请求没有可供 D-cache 复用的历史，故仍需单独解决这一传输问题。
+达到30.303秒超时；另一 TP rank 同规模批次分别耗时25.424/25.898秒，后段积压批次快速完成，约
+0.199–0.203秒。按同一 monotonic 时钟，这些快速批次早于请求级 P 完成约10秒，
+不能称为 P 完全计算结束后。冷请求没有可供 D-cache 复用的历史，故仍需单独解决这一传输问题。
 独立16MiB TCP probe 的 idle/P忙/D忙/双方忙四种情况均字节精确且低于0.031秒，
 不能将失败笼统归因为任意 GPU compute；没有提高30秒默认超时来绕过失败。
 
@@ -153,6 +185,48 @@ GPU 缓冲区，不增加新 attention 后端，不修改默认超时；不外�
 等待，不能宣称所有计算与传输完全重叠；精确 CUDA 阻塞调用尚未定位。该诊断证明
 同机原生 NVLink 可完成这些先前 TCP 失败条件，不代表吞吐或跨主机验收通过。
 下一步三组 C2/N4 使用相同 D Radix/NVLink 设置，不使用逐批计时 hook 测吞吐。
+
+用户随后要求检查超时与调度的关系。源码追踪区分两类等待：
+`prefill.py::process_batch_result_disagg_prefill` 先等待结果 `copy_done`，再按已完成
+chunk 调用 sender；`mooncake/conn.py::add_transfer_request` 入独立 worker 队列。
+本次实际30.303秒超时发生在 worker 已调用 Mooncake 后，因此不能归因为尚未提交
+的 scheduler 排队。BUS 安装 `mooncake-transfer-engine-cuda13==0.3.13`，engine.so
+动态引用普通 `cudaMemcpy`；同版本 `ClientSession::writeBody` / `ServerSession::readBody`
+在 TCP 回调中使用64KiB pageable host 缓冲区与同步 D2H/H2D。CUDA 拷贝若等待，
+会阻塞此 I/O 回调链；`TransferEnginePy::batchTransferSync` 的截止时间仍包含这些
+提交后的等待。该函数释放 GIL，不是整个传输期间持有 Python GIL 阻塞 scheduler。
+
+但不能仅凭同步 memcpy 判定全部 Prefill 被强制串行：SGLang 使用 PyTorch
+`Stream()`；BUS Torch2.13 对应 stream pool 使用 `cudaStreamNonBlocking`，不受
+legacy default stream 对 blocking streams 的同一隐式同步规则约束。具体卡在
+D2H/H2D、CUDA 内部资源、显式依赖还是 CPU I/O 推进，尚待单条70407-token 冷请求
+Nsight 时间线。该诊断与吞吐分开，不改模型、scheduler 源码或30秒默认超时。
+参考：[Mooncake v0.3.13 TCP](https://github.com/kvcache-ai/Mooncake/blob/v0.3.13/mooncake-transfer-engine/src/transport/tcp_transport/tcp_transport_session_impl.h)、
+[CUDA13同步规则](https://docs.nvidia.com/cuda/archive/13.0.0/cuda-runtime-api/api-sync-behavior.html)、
+[CUDA stream规则](https://docs.nvidia.com/cuda/cuda-runtime-api/stream-sync-behavior.html)、
+[Torch2.13 stream创建](https://github.com/pytorch/pytorch/blob/v2.13.0/c10/cuda/CUDAStream.cpp)。
+
+`minimal-native-pd120-c2-none-dcache-nvlink-v1` 完整结束：4/4 tasks，147成功、
+0失败（143首遍、4 filler；另1截止取消 filler 单列），1222.604612秒，输出吞吐
+38.112894 token/s。`pd-native-c2-dcache-nvlink-timing-v1.json` 关联147/147请求，
+D ready 排队 mean/max 为0.000137/0.000300秒；活跃 D 的40-forward日志间隔
+最大约1.300秒，未出现超过1秒的客户端SSE内容间隔。这些观察不等于逐token GPU TBT。
+仍有一个 case228 turn18 从 P 标记完成到 D ready 为81.301秒，其中 P 完成标记至
+发送队列时间戳为13.163秒；不能将全部等待归为链路字节搬运。修改版同设置对照尚未结束。
+
+CUDA诊断 `pd-tcp-cold-cuda-profile-v1` 在发送任何测试请求之前主动中断：Nsight
+提示 device-side event completion tracing 可能增加跨流伪依赖。原生吞吐运行不受影响。
+替代 v2 明确设置 `--cuda-event-trace=false`，保留CUDA API、memcpy/kernel与OSRT
+观察；诊断结果不计吞吐验收，不提高超时阈值。
+
+用户追加询问实际传输内容与碎片：`ContextTransferPlan.full_chunk` 选择最终 active
+raw indices 和已物化、稳定的终态页；被Drop页和只服务历史query的birth/临时occurrence
+不进入D。D复用bitmap再过滤本端已有页，故实际负载是最终active中的缺页。
+`full_chunk` 的 Full 指缓存池，不表示完整raw历史。共享Full/SWA沿相同active行传输。
+物理源/目标地址可能因Drop、COW和稀疏复用变碎；`group_concurrent_contiguous` 仅在
+两端都连续时合并，各层K/V统一批量提交，`_transfer_data` 每批最多1024描述符。
+这是队列容量保护，不保证碎片没有性能成本；当前没有为所有请求强制额外KV打包拷贝。
+原生无Drop冷请求的失败批次只有72区间/288MiB，不能归为Drop碎片导致的队列溢出。
 
 BUS `r2-numeric-evidence-final-audit-v1.json` 离线读取已保存的 comparison JSON，
 没有重新执行模型。Qwen3-0.6B、AgenticQwen-8B、GPT-OSS-20B/120B 的普通与PD共8组，
@@ -1079,7 +1153,8 @@ Drop-skipped=4525、实际 prefill=1、decode=7。后验核验文件为
    兼容 Retry 生成目标位置的新 KV；不原地旋转其他请求可共享的来源 KV。
 6. 普通调度与 P 端支持 drop-aware eviction；先淘汰无引用叶节点，再淘汰符合条件的内部
    Drop 区间。拓扑引用与实际 KV 读引用分开，不能释放仍有 GPU 读者的页面。
-7. PD 使用不同 GPU 上独立 P/D 进程。D 端默认关闭 Radix；不将 D 生成的 KV 回传 P。
+7. PD 使用不同 GPU 上独立 P/D 进程。按后续授权，当前验收启用 D Radix，P/D共用
+   Context结构、匹配与复用算法；此前关闭配置仅作历史证据。不将 D 生成的 KV 回传 P。
    下一轮 prompt 中包含上轮输出时，P 缺少的部分正常重算，并计入实际计算量。
 8. GPT-OSS 使用 SGLang 在实验硬件上自动选择的默认 attention backend，不强制切换 FI/FA。
 9. 无功能请求走原生快速路径；原生 chunking、overlap、mixed batch、retract 保持有效。
