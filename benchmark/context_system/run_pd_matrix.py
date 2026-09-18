@@ -39,8 +39,11 @@ def run_one(args):
     root = Path(args.output_dir)
     root.mkdir(parents=True, exist_ok=False)
     repo = Path(args.server_repo)
-    if subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip() != NATIVE_HEAD:
-        raise ValueError("Native baseline changed")
+    expected_head = args.server_head
+    if args.drop and expected_head == NATIVE_HEAD:
+        raise ValueError("The frozen native baseline does not implement Drop")
+    if subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip() != expected_head:
+        raise ValueError("Pinned server revision changed")
     if subprocess.check_output(["git", "-C", str(repo), "status", "--porcelain"]):
         raise ValueError("Native baseline is dirty")
     if not gpu_free():
@@ -65,6 +68,11 @@ def run_one(args):
                 cmd.remove(radix)
             if i == 1 and args.decode_radix:
                 cmd.append(radix)
+            eviction = "--context-drop-aware-eviction"
+            if eviction in cmd:
+                cmd.remove(eviction)
+            if args.drop and (i == 0 or args.decode_radix):
+                cmd.append(eviction)
             temp = tempfile.TemporaryDirectory(prefix="pd8-")
             temps.append(temp)
             env = dict(os.environ, PYTHONPATH=str(repo / "python"),
@@ -87,7 +95,7 @@ def run_one(args):
             procs.append(proc)
             launch.append(dict(mode=mode, argv=cmd, pid=proc.pid, gpu=env["CUDA_VISIBLE_DEVICES"],
                                environment={k:v for k,v in env.items() if k.startswith(("MC_", "MOONCAKE_", "SGLANG_", "PD_MATRIX_"))}))
-        write(root / "launch.json", dict(args=vars(args), head=NATIVE_HEAD, servers=launch))
+        write(root / "launch.json", dict(args=vars(args), head=expected_head, servers=launch))
         for i, proc in enumerate(procs):
             deadline = time.monotonic() + 900
             while True:
@@ -101,7 +109,7 @@ def run_one(args):
                     pass
                 time.sleep(1)
         model = src[src.index("--model-path") + 1]
-        warmup(SimpleNamespace(engine="pd", drop=False, model=model, concurrency=args.concurrency, port=args.port), root)
+        warmup(SimpleNamespace(engine="pd", drop=args.drop, model=model, concurrency=args.concurrency, port=args.port), root)
         if args.profile_session:
             subprocess.run(["nsys", "start", "--session=" + args.profile_session], check=True, timeout=60)
             collecting = True
@@ -115,6 +123,8 @@ def run_one(args):
                   f"http://127.0.0.1:{args.port+1}/v1/chat/completions", "--prefill-url",
                   f"http://127.0.0.1:{args.port}/v1/chat/completions", "--bootstrap-port", str(args.port+10),
                   "--chat-template", str(template), "--template-kwargs", '{"preserve_thinking_history":true}']
+        if args.drop:
+            client.append("--drop")
         write(root / "client.json", client)
         with (root / "client.log").open("x") as log:
             subprocess.run(client, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=14400)
@@ -156,6 +166,8 @@ def run_one(args):
 
 
 def matrix(args):
+    if args.drop or args.server_head != NATIVE_HEAD:
+        raise ValueError("Modified-server validation requires --one; the old native matrix must not resume")
     root = Path(args.output_dir)
     root.mkdir(parents=True, exist_ok=False)
     rows = []
@@ -215,6 +227,7 @@ def parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--output-dir", required=True)
     p.add_argument("--server-repo", required=True)
+    p.add_argument("--server-head", default=NATIVE_HEAD, help="Exact reviewed server commit")
     p.add_argument("--source-launch", required=True)
     p.add_argument("--mini-root", required=True)
     p.add_argument("--requests-path", required=True)
@@ -222,6 +235,7 @@ def parser():
     p.add_argument("--one", action="store_true")
     p.add_argument("--transport", choices=("tcp", "nvlink"), default="nvlink")
     p.add_argument("--decode-radix", action="store_true")
+    p.add_argument("--drop", action="store_true", help="Rolling K=12 / 96Ki-token Repos, with Drop-aware eviction")
     p.add_argument("--concurrency", type=int, choices=(1, 2), default=1)
     p.add_argument("--profile-session")
     return p
