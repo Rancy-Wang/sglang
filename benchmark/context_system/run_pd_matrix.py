@@ -52,6 +52,7 @@ def run_one(args):
     template.write_text(Path(src[src.index("--chat-template") + 1]).read_text())
     procs, logs, temps, launch = [], [], [], []
     collecting = False
+    cpu_sampler = None
     try:
         for i, mode in enumerate(("prefill", "decode")):
             cmd = list(source_servers[i]["argv"])
@@ -104,6 +105,9 @@ def run_one(args):
         if args.profile_session:
             subprocess.run(["nsys", "start", "--session=" + args.profile_session], check=True, timeout=60)
             collecting = True
+            cpu_sampler = subprocess.Popen([
+                sys.executable, str(HERE / "sample_pd_processes.py"),
+                "--parent", str(os.getpid()), "--output", str(root / "cpu-sched.jsonl")])
         client = [sys.executable, str(HERE / "test_serving.py"), "--mini-root", args.mini_root,
                   "--model", model, "--tokenizer", model, "--requests-path", args.requests_path,
                   "--output-dir", str(root / "workload"), "--concurrency", str(args.concurrency),
@@ -133,6 +137,9 @@ def run_one(args):
                 except Exception as exc:
                     write(root / "profile-stop-failure.json", {"error": repr(exc)})
             time.sleep(3)
+        if cpu_sampler is not None:
+            cpu_sampler.terminate()
+            cpu_sampler.wait(timeout=10)
         for proc in procs:
             if proc.poll() is None:
                 os.killpg(proc.pid, signal.SIGTERM)

@@ -13,6 +13,33 @@ import sqlite3
 from analyze_pd_timing import analyze, union_overlap
 
 
+def read_cpu_samples(path, origin):
+    samples, previous = [], {}
+    if not path.exists():
+        return samples
+    for line in path.read_text().splitlines():
+        row = json.loads(line)
+        current = {}
+        totals = defaultdict(lambda: [0.0, 0.0])
+        for pid, tid, name, run, wait, slices in row["threads"]:
+            key = (pid, tid)
+            current[key] = (row["time"], run, wait)
+            if key not in previous:
+                continue
+            start, old_run, old_wait = previous[key]
+            if run < old_run or wait < old_wait or row["time"] <= start:
+                continue
+            totals[pid][0] += (run - old_run) / 1e9
+            totals[pid][1] += (wait - old_wait) / 1e9
+        if previous:
+            start = next(iter(previous.values()))[0]
+            for pid, (run, wait) in totals.items():
+                samples.append(dict(pid=pid,start=start-origin,end=row["time"]-origin,
+                                    cpu_running_seconds=run,runnable_wait_seconds=wait))
+        previous = current
+    return samples
+
+
 def extract(root, database):
     c = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
     c.row_factory = sqlite3.Row
@@ -115,7 +142,8 @@ def extract(root, database):
                              locks=[r for r in osrt if "rwlock" in r["name"] and intersect(r)]))
     expected = {role:sum(r["role"]==role and r["kernel_count"]>0 for r in coverage) for role in ("prefill","decode")}
     c.close()
-    return dict(root=str(root),clock=clock,origin=origin,coverage=coverage,
+    cpu_samples = read_cpu_samples(root / "cpu-sched.jsonl", origin)
+    return dict(root=str(root),clock=clock,origin=origin,coverage=coverage,cpu_samples=cpu_samples,
                 four_worker_gpu_trace=expected == {"prefill":2,"decode":2},
                 roles=roles,kernel_intervals=kernel,forwards=forwards,transfers=transfers,
                 runtime=runtime,osrt=osrt,stacks=stacks,copy_summary=copy_summary,
@@ -123,7 +151,7 @@ def extract(root, database):
                 limitations=["GPU execution coverage is not SM utilization.",
                     "Kernel intervals include whole CUDA Graph executions when graph-level tracing is used; graph-internal gaps are not resolved.",
                     "CPU API elapsed time is not GPU copy duration or CPU running time.",
-                    "OSRT tracing does not provide CPU scheduling/context-switch samples.",
+                    "CPU run/runnable-wait counters are approximately 1 Hz /proc samples across threads; not a context-switch trace or stack sampler.",
                     "P finish to D ready includes host bookkeeping, polling, transfer queueing and actual copies.",
                     "Concurrent intervals overlap and must not be added as a wall-clock decomposition."])
 
@@ -134,19 +162,28 @@ def plot(data, destination, window=None):
     import matplotlib.pyplot as plt
 
     pids = sorted(data["roles"], key=lambda p:(data["roles"][p],p), reverse=True)
-    fig, axes = plt.subplots(len(pids)*3, 1, figsize=(18, max(5, len(pids)*3)), sharex=True, squeeze=False)
+    if not pids:
+        raise ValueError("No P/D workers in trace; cannot draw an empty GPU timeline")
+    fig, axes = plt.subplots(len(pids)*4, 1, figsize=(18, max(5, len(pids)*4)), sharex=True, squeeze=False)
     for i, pid in enumerate(pids):
         specs = [(data["kernel_intervals"].get(pid, []), "GPU kernels / graphs", "#2a9d8f"),
                  ([(r["start"],r["end"]) for r in data["runtime"] if r["pid"]==pid], "CUDA API >=50 ms", "#e76f51"),
                  ([(r["start"],r["end"]) for r in data["transfers"] if r["pid"]==pid], "KV transfer calls", "#457b9d")]
         for j, (intervals,label,color) in enumerate(specs):
-            ax=axes[i*3+j,0]
+            ax=axes[i*4+j,0]
             visible=[(a,b-a) for a,b in intervals if window is None or (a<window[1] and b>window[0])]
             ax.broken_barh(visible,(0,1),facecolors=color)
             ax.set_yticks([])
             ax.set_ylabel(f"{data['roles'][pid]} PID {pid}\n{label}",rotation=0,ha="right",va="center",fontsize=8)
             ax.grid(axis="x",alpha=.2)
             if window: ax.set_xlim(*window)
+        ax=axes[i*4+3,0]
+        samples=[r for r in data["cpu_samples"] if r["pid"]==pid and (window is None or r["start"]<window[1] and r["end"]>window[0])]
+        for field, color, label in (("cpu_running_seconds","#2a9d8f","Running"),("runnable_wait_seconds","#e9c46a","Runnable wait")):
+            ax.step([r["end"] for r in samples],[r[field]/(r["end"]-r["start"]) for r in samples],where="pre",color=color,label=label)
+        ax.set_ylabel(f"{data['roles'][pid]} PID {pid}\nCPU thread sum (cores)",rotation=0,ha="right",va="center",fontsize=8)
+        ax.legend(loc="upper right",fontsize=7)
+        ax.grid(axis="x",alpha=.2)
     axes[-1,0].set_xlabel("Seconds since Nsight session origin (same-host monotonic clock)")
     fig.suptitle(Path(data["root"]).name + " — GPU execution and CPU elapsed intervals",fontsize=13)
     fig.tight_layout(rect=(.03,0,1,.97))
