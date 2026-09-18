@@ -3,11 +3,13 @@
 from types import SimpleNamespace as NS
 from pathlib import Path
 import tempfile
+import json
+from unittest.mock import patch
 import unittest
 
 from launch_pd_counted import batch_work
 from summarize_pd_matrix import join_counts, read_counts, rebuild_summaries
-from run_pd_matrix import overlap_command
+from run_pd_matrix import overlap_command, predecessor_ready
 from test_serving import parser as client_parser
 
 
@@ -20,7 +22,7 @@ class Counters(unittest.TestCase):
     def test_client_accepts_all_approved_matrix_cases(self):
         common = ["--mini-root", "/mini", "--requests-path", "/tasks.jsonl",
                   "--output-dir", "/results", "--model", "/model", "--tokenizer", "/model"]
-        for c in (1, 2, 4, 8):
+        for c in (1, 2, 4, 8, 32):
             for drop in (False, True):
                 with self.subTest(concurrency=c, drop=drop):
                     args = client_parser().parse_args(common + [
@@ -42,6 +44,29 @@ class Counters(unittest.TestCase):
         self.assertEqual(command[command.index("--max-running-requests") + 1], "8")
         self.assertEqual(command, overlap_command(command))
         self.assertIn("262144", original)
+
+    def test_c32_admits_and_captures_full_batch(self):
+        command = overlap_command(["python", "launch.py"], 32)
+        self.assertEqual(command[command.index("--max-running-requests") + 1], "32")
+        graph = json.loads(command[command.index("--cuda-graph-config") + 1])
+        self.assertEqual(graph["decode"], {"bs": [1, 2, 4, 8, 16, 32], "max_bs": 32})
+
+    def test_handoff_requires_valid_result_and_cleanup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch("run_pd_matrix.os.kill"):
+                self.assertFalse(predecessor_ready(root, 123))
+            with patch("run_pd_matrix.os.kill", side_effect=ProcessLookupError):
+                with self.assertRaisesRegex(RuntimeError, "without a valid outcome"):
+                    predecessor_ready(root, 123)
+                (root / "outcome.json").write_text('{"valid":true}')
+                with patch("run_pd_matrix.gpu_free", return_value=False):
+                    self.assertFalse(predecessor_ready(root, 123))
+                with patch("run_pd_matrix.gpu_free", return_value=True):
+                    self.assertTrue(predecessor_ready(root, 123))
+            (root / "failure.json").write_text('{}')
+            with self.assertRaisesRegex(RuntimeError, "Predecessor failed"):
+                predecessor_ready(root, 123)
 
     def test_rounds_use_joined_counts_and_user_latency_excludes_filler(self):
         calls = []

@@ -31,7 +31,7 @@ def write(path, data):
     temp.replace(path)
 
 
-def overlap_command(command):
+def overlap_command(command, max_running_requests=8):
     """Apply the approved common settings to either frozen P/D launcher."""
     command = list(command)
     for flag in ("--max-total-tokens", "--mem-fraction-static", "--max-running-requests",
@@ -40,9 +40,11 @@ def overlap_command(command):
             index = command.index(flag)
             del command[index:index + 2]
     command = [arg for arg in command if arg != "--disable-overlap-schedule"]
-    command += ["--mem-fraction-static", "0.9", "--max-running-requests", "8",
+    command += ["--mem-fraction-static", "0.9", "--max-running-requests", str(max_running_requests),
                 "--cuda-graph-config", json.dumps({
-                    "decode": {"bs": [1, 2, 4, 8], "max_bs": 8},
+                    "decode": {"bs": [n for n in (1, 2, 4, 8, 16, 32)
+                                      if n <= max_running_requests],
+                               "max_bs": max_running_requests},
                     "prefill": {"bs": [16, 32, 64], "max_bs": 64}})]
     return command
 
@@ -133,7 +135,7 @@ def run_one(args):
         for i, mode in enumerate(("prefill", "decode")):
             cmd = list(source_servers[i]["argv"])
             if args.approved_overlap_matrix:
-                cmd = overlap_command(cmd)
+                cmd = overlap_command(cmd, max(8, args.concurrency))
             cmd[0:2] = [sys.executable, str(HERE / "launch_pd_counted.py")]
             for flag, value in (("--port", args.port + i), ("--disaggregation-bootstrap-port", args.port + 10),
                                 ("--nccl-port", args.port + 20 + i), ("--chat-template", template)):
@@ -210,11 +212,14 @@ def run_one(args):
         write(root / "client.json", client)
         with (root / "client.log").open("x") as log:
             client_proc = subprocess.Popen(client, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
-            deadline = time.monotonic() + 14400
+            # Scale the whole-workload watchdog for the larger task cohort only.
+            # Per-request and KV-transfer deadlines remain unchanged.
+            workload_timeout = 14400 * max(1, args.concurrency // 8)
+            deadline = time.monotonic() + workload_timeout
             while client_proc.poll() is None:
                 isolation.check()
                 if time.monotonic() > deadline:
-                    raise subprocess.TimeoutExpired(client, 14400)
+                    raise subprocess.TimeoutExpired(client, workload_timeout)
                 time.sleep(5)
             isolation.check(force=True)
             if client_proc.returncode:
@@ -267,21 +272,60 @@ def run_one(args):
             temp.cleanup()
 
 
+def predecessor_ready(case, pid):
+    """Require a valid predecessor and its complete GPU cleanup before handoff."""
+    case = Path(case)
+    if (case / "failure.json").exists() or (case / "comparison-invalid.json").exists():
+        raise RuntimeError(f"Predecessor failed: {case}")
+    outcome = case / "outcome.json"
+    valid = outcome.exists() and json.loads(outcome.read_text()).get("valid") is True
+    if outcome.exists() and not valid:
+        raise RuntimeError(f"Invalid predecessor outcome: {case}")
+    try:
+        os.kill(pid, 0)
+        running = True
+    except ProcessLookupError:
+        running = False
+    if not running and not valid:
+        raise RuntimeError(f"Predecessor exited without a valid outcome: {case}")
+    return valid and not running and gpu_free()
+
+
 def overlap_matrix(args):
-    """Run only the eight approved cases, stopping at the first failed case."""
+    """Run the approved ordered pairs, stopping at the first failed case."""
     if (args.rounds != 3 or args.reserve_free_mib or args.profile_session
             or not args.drop_server_repo or not args.drop_server_head
             or args.server_head != NATIVE_HEAD):
         raise ValueError("Approved matrix requires 3 rounds, frozen native/drop repos, no Nsight or VRAM reservation")
+    if len(set(args.concurrencies)) != len(args.concurrencies):
+        raise ValueError("Duplicate concurrency would repeat a case")
+    if bool(args.wait_for_case) != bool(args.wait_for_case_pid):
+        raise ValueError("Predecessor path and PID must be supplied together")
     root = Path(args.output_dir)
     root.mkdir(parents=True, exist_ok=False)
     rows = []
-    for c in (1, 2, 4, 8):
+    for c in args.concurrencies:
         for drop in (False, True):
             rows.append(dict(name=f"nvlink-d1-c{c}-{'drop' if drop else 'no_drop'}",
                              concurrency=c, drop=drop, num_tasks=3*c, state="pending"))
     state = dict(plan_id=OVERLAP_PLAN, args=vars(args), cases=rows, state="running")
     write(root / "matrix.json", state)
+    if args.wait_for_case:
+        state.update(state="waiting_predecessor", predecessor=args.wait_for_case,
+                     predecessor_pid=args.wait_for_case_pid)
+        write(root / "matrix.json", state)
+        try:
+            deadline = time.monotonic() + 43200
+            while not predecessor_ready(args.wait_for_case, args.wait_for_case_pid):
+                if time.monotonic() > deadline:
+                    raise TimeoutError("Predecessor completion/cleanup wait exceeded 12 hours")
+                time.sleep(30)
+        except Exception as exc:
+            state.update(state="blocked_predecessor", error=repr(exc))
+            write(root / "matrix.json", state)
+            raise
+        state.update(state="running", predecessor_completed=time.time())
+        write(root / "matrix.json", state)
     for index, row in enumerate(rows):
         command = [sys.executable, str(Path(__file__).resolve()), "--one", "--approved-overlap-matrix",
                    "--output-dir", str(root / row["name"]), "--source-launch", args.source_launch,
@@ -389,9 +433,13 @@ def parser():
     p.add_argument("--transport", choices=("tcp", "nvlink"), default="nvlink")
     p.add_argument("--decode-radix", action="store_true")
     p.add_argument("--drop", action="store_true", help="Rolling K=12 / 96Ki-token Repos, with Drop-aware eviction")
-    p.add_argument("--concurrency", type=int, choices=(1, 2, 4, 8), default=1)
+    p.add_argument("--concurrency", type=int, choices=(1, 2, 4, 8, 32), default=1)
     p.add_argument("--rounds", type=int, choices=range(1, 21), default=2)
     p.add_argument("--approved-overlap-matrix", action="store_true", help=OVERLAP_PLAN)
+    p.add_argument("--concurrencies", type=int, nargs="+", choices=(1, 2, 4, 8, 32),
+                   default=[1, 2, 4, 8], help="Ordered overlap-matrix concurrency pairs")
+    p.add_argument("--wait-for-case", help="Finish this existing case before starting the new matrix")
+    p.add_argument("--wait-for-case-pid", type=int)
     p.add_argument("--drop-server-repo")
     p.add_argument("--drop-server-head")
     p.add_argument("--profile-session")
