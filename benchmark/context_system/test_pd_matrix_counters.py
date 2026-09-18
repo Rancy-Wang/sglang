@@ -42,7 +42,7 @@ class Counters(unittest.TestCase):
         rows = [dict(instance=i, end_time=end, server_metrics={"prefill_compute_tokens": n})
                 for i, end, n in [(0, 5, 10), (1, 9, 20), (2, 8, 30)]]
         result = dict(start=0, cutoff=9, turns=rows, tasks=tasks,
-                      rounds=[dict(tasks=[tasks[0]]), dict(tasks=[tasks[1]])])
+                      round_ends=[5, 9])
         rebuild_summaries(result, NS(summary=summary, stats=lambda x: x))
         self.assertEqual(result["overall"]["tokens"], 60)
         self.assertEqual(result["rounds"][1]["window"]["tokens"], 50)
