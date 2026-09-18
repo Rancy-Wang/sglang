@@ -8,6 +8,7 @@ import unittest
 from launch_pd_counted import batch_work
 from summarize_pd_matrix import join_counts, read_counts, rebuild_summaries
 from run_pd_matrix import overlap_command
+from test_serving import parser as client_parser
 
 
 def batch(mode, lengths):
@@ -16,6 +17,19 @@ def batch(mode, lengths):
 
 
 class Counters(unittest.TestCase):
+    def test_client_accepts_all_approved_matrix_cases(self):
+        common = ["--mini-root", "/mini", "--requests-path", "/tasks.jsonl",
+                  "--output-dir", "/results", "--model", "/model", "--tokenizer", "/model"]
+        for c in (1, 2, 4, 8):
+            for drop in (False, True):
+                with self.subTest(concurrency=c, drop=drop):
+                    args = client_parser().parse_args(common + [
+                        "--concurrency", str(c), "--num-tasks", str(3*c),
+                        "--prefill-url", "http://127.0.0.1:32041/v1/chat/completions",
+                        "--url", "http://127.0.0.1:32042/v1/chat/completions",
+                    ] + (["--drop"] if drop else []))
+                    self.assertEqual((args.concurrency, args.num_tasks, args.drop), (c, 3*c, drop))
+
     def test_overlap_plan_removes_capacity_cap_and_allows_c8(self):
         original = ["python", "launch.py", "--max-total-tokens", "262144",
                     "--mem-fraction-static", "0.84", "--max-running-requests", "4",
