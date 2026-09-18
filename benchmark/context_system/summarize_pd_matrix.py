@@ -57,10 +57,33 @@ def join_counts(result, counts, tp):
     return result
 
 
+def rebuild_summaries(result, method):
+    """Use the joined physical counts in every window, not only overall."""
+    result["overall"] = method.summary(result["turns"], result["start"], result["cutoff"])
+    previous = result["start"]
+    for report in result.get("rounds", []):
+        tasks = report["tasks"]
+        end = max(task["end_time"] for task in tasks)
+        own = [row for row in result["turns"] if row["instance"] in {t["instance"] for t in tasks}]
+        report["window"] = method.summary(result["turns"], previous, end)
+        report["cumulative"] = method.summary(result["turns"], result["start"], end)
+        report["cohort"] = method.summary(own, min(t["start_time"] for t in tasks), end)
+        previous = end
+    tasks = [task for task in result.get("tasks", [])
+             if not task["filler"] and task.get("status") == "all_turns_completed"]
+    result["user_latency"] = dict(
+        definition="Completed non-filler BCP task end_time-start_time; excludes waiting for a client slot",
+        seconds=method.stats([task["end_time"] - task["start_time"] for task in tasks]),
+        tasks=[dict(instance=t["instance"], case_id=t["case_id"],
+                    seconds=t["end_time"] - t["start_time"]) for t in tasks],
+    )
+    return result
+
+
 def summarize(root, mini_root, tp=2):
     method = load_method(mini_root)
     result = join_counts(json.loads((root / "workload/result.json").read_text()), read_counts(root, tp), tp)
-    result["overall"] = method.summary(result["turns"], result["start"], result["cutoff"])
+    rebuild_summaries(result, method)
     result["measurement"] = {
         "physical_count_source": "CPU ScheduleBatch lengths at successful run_batch dispatch, both P/D",
         "tp_policy": "native TP0 logs count once; any additional visible ranks must agree",
@@ -68,6 +91,8 @@ def summarize(root, mini_root, tp=2):
         "profiler": (root / "profile-command.json").exists(),
         "original_result_preserved": "workload/result.json",
         "failed_and_cutoff_work": "not in successful numerator; elapsed time remains in denominator",
+        "window_assignment": "Complete successful turns assigned by client completion time, including filler; not a GPU-time integral",
+        "tbt": "Only scheduler-observed token gaps if returned; SSE chunk gaps are separate, never substituted",
     }
     target = root / "counted-result.json"
     target.write_text(json.dumps(result, ensure_ascii=False, indent=2))
