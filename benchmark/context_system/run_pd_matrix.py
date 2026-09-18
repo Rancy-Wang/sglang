@@ -21,11 +21,30 @@ from run_minimal import warmup
 from summarize_pd_matrix import summarize
 
 NATIVE_HEAD = "03c2d9ec8a1ea0ef4e9151de2a65eb3c23c9dfab"
+OVERLAP_PLAN = "PLAN-CS-20260918-PD-OVERLAP-C1-8-R1"
 HERE = Path(__file__).resolve().parent
 
 
 def write(path, data):
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+    temp = path.with_name(path.name + ".tmp")
+    temp.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+    temp.replace(path)
+
+
+def overlap_command(command):
+    """Apply the approved common settings to either frozen P/D launcher."""
+    command = list(command)
+    for flag in ("--max-total-tokens", "--mem-fraction-static", "--max-running-requests",
+                 "--cuda-graph-config"):
+        while flag in command:
+            index = command.index(flag)
+            del command[index:index + 2]
+    command = [arg for arg in command if arg != "--disable-overlap-schedule"]
+    command += ["--mem-fraction-static", "0.9", "--max-running-requests", "8",
+                "--cuda-graph-config", json.dumps({
+                    "decode": {"bs": [1, 2, 4, 8], "max_bs": 8},
+                    "prefill": {"bs": [16, 32, 64], "max_bs": 64}})]
+    return command
 
 
 def gpu_free():
@@ -113,6 +132,8 @@ def run_one(args):
     try:
         for i, mode in enumerate(("prefill", "decode")):
             cmd = list(source_servers[i]["argv"])
+            if args.approved_overlap_matrix:
+                cmd = overlap_command(cmd)
             cmd[0:2] = [sys.executable, str(HERE / "launch_pd_counted.py")]
             for flag, value in (("--port", args.port + i), ("--disaggregation-bootstrap-port", args.port + 10),
                                 ("--nccl-port", args.port + 20 + i), ("--chat-template", template)):
@@ -165,6 +186,9 @@ def run_one(args):
                     pass
                 time.sleep(1)
         isolation.check(pin=True)
+        for i, mode in enumerate(("prefill", "decode")):
+            with urllib.request.urlopen(f"http://127.0.0.1:{args.port+i}/server_info", timeout=30) as response:
+                write(root / f"{mode}-server-info.json", json.load(response))
         model = src[src.index("--model-path") + 1]
         warmup(SimpleNamespace(engine="pd", drop=args.drop, model=model, concurrency=args.concurrency, port=args.port), root)
         isolation.check(force=True)
@@ -177,7 +201,7 @@ def run_one(args):
         client = [sys.executable, str(HERE / "test_serving.py"), "--mini-root", args.mini_root,
                   "--model", model, "--tokenizer", model, "--requests-path", args.requests_path,
                   "--output-dir", str(root / "workload"), "--concurrency", str(args.concurrency),
-                  "--num-tasks", str(args.concurrency * 2), "--seed", "42", "--url",
+                  "--num-tasks", str(args.concurrency * args.rounds), "--seed", "42", "--url",
                   f"http://127.0.0.1:{args.port+1}/v1/chat/completions", "--prefill-url",
                   f"http://127.0.0.1:{args.port}/v1/chat/completions", "--bootstrap-port", str(args.port+10),
                   "--chat-template", str(template), "--template-kwargs", '{"preserve_thinking_history":true}']
@@ -201,6 +225,8 @@ def run_one(args):
         result["measurement"]["profiler"] = bool(args.profile_session)
         write(root / "counted-result.json", result)
         write(root / "outcome.json", dict(valid=result["valid"], overall=result["overall"]))
+        if not result["valid"]:
+            raise RuntimeError("Incomplete first-pass tasks; do not continue matrix")
     except Exception as exc:
         write(root / "failure.json", {"error": repr(exc), "time": time.time()})
         raise
@@ -239,6 +265,57 @@ def run_one(args):
             log.close()
         for temp in temps:
             temp.cleanup()
+
+
+def overlap_matrix(args):
+    """Run only the eight approved cases, stopping at the first failed case."""
+    if (args.rounds != 3 or args.reserve_free_mib or args.profile_session
+            or not args.drop_server_repo or not args.drop_server_head
+            or args.server_head != NATIVE_HEAD):
+        raise ValueError("Approved matrix requires 3 rounds, frozen native/drop repos, no Nsight or VRAM reservation")
+    root = Path(args.output_dir)
+    root.mkdir(parents=True, exist_ok=False)
+    rows = []
+    for c in (1, 2, 4, 8):
+        for drop in (False, True):
+            rows.append(dict(name=f"nvlink-d1-c{c}-{'drop' if drop else 'no_drop'}",
+                             concurrency=c, drop=drop, num_tasks=3*c, state="pending"))
+    state = dict(plan_id=OVERLAP_PLAN, args=vars(args), cases=rows, state="running")
+    write(root / "matrix.json", state)
+    for index, row in enumerate(rows):
+        command = [sys.executable, str(Path(__file__).resolve()), "--one", "--approved-overlap-matrix",
+                   "--output-dir", str(root / row["name"]), "--source-launch", args.source_launch,
+                   "--server-repo", args.drop_server_repo if row["drop"] else args.server_repo,
+                   "--server-head", args.drop_server_head if row["drop"] else args.server_head,
+                   "--mini-root", args.mini_root, "--requests-path", args.requests_path,
+                   "--concurrency", str(row["concurrency"]), "--rounds", "3", "--transport", "nvlink",
+                   "--decode-radix", "--port", str(args.port + 40 * index)]
+        if row["drop"]:
+            command.append("--drop")
+        row.update(state="running", command=command, start=time.time())
+        write(root / "matrix.json", state)
+        with (root / (row["name"] + "-driver.log")).open("x") as log:
+            proc = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+            row["pid"] = proc.pid
+            write(root / "matrix.json", state)
+            code = proc.wait()
+        row.update(state="completed" if code == 0 else "failed", returncode=code, end=time.time())
+        if code:
+            state["state"] = "failed"
+            write(root / "matrix.json", state)
+            raise RuntimeError(f"Stopped on failed case: {row['name']}")
+        write(root / "matrix.json", state)
+        print(json.dumps(row), flush=True)
+        # The child has joined its launchers; allow driver-level GPU teardown.
+        deadline = time.monotonic() + 120
+        while not gpu_free():
+            if time.monotonic() > deadline:
+                state.update(state="blocked_gpu_cleanup", blocked_after=row["name"])
+                write(root / "matrix.json", state)
+                raise RuntimeError("GPU 0-3 not released after completed case")
+            time.sleep(5)
+    state.update(state="completed", end=time.time())
+    write(root / "matrix.json", state)
 
 
 def matrix(args):
@@ -312,7 +389,11 @@ def parser():
     p.add_argument("--transport", choices=("tcp", "nvlink"), default="nvlink")
     p.add_argument("--decode-radix", action="store_true")
     p.add_argument("--drop", action="store_true", help="Rolling K=12 / 96Ki-token Repos, with Drop-aware eviction")
-    p.add_argument("--concurrency", type=int, choices=(1, 2), default=1)
+    p.add_argument("--concurrency", type=int, choices=(1, 2, 4, 8), default=1)
+    p.add_argument("--rounds", type=int, choices=range(1, 21), default=2)
+    p.add_argument("--approved-overlap-matrix", action="store_true", help=OVERLAP_PLAN)
+    p.add_argument("--drop-server-repo")
+    p.add_argument("--drop-server-head")
     p.add_argument("--profile-session")
     p.add_argument("--reserve-free-mib", type=int, default=0,
                    help="Reserve idle VRAM in each worker's reusable PyTorch cache, leaving this runtime headroom")
@@ -321,4 +402,4 @@ def parser():
 
 if __name__ == "__main__":
     args = parser().parse_args()
-    (run_one if args.one else matrix)(args)
+    (run_one if args.one else overlap_matrix if args.approved_overlap_matrix else matrix)(args)

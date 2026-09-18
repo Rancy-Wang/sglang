@@ -6,7 +6,8 @@ import tempfile
 import unittest
 
 from launch_pd_counted import batch_work
-from summarize_pd_matrix import join_counts, read_counts
+from summarize_pd_matrix import join_counts, read_counts, rebuild_summaries
+from run_pd_matrix import overlap_command
 
 
 def batch(mode, lengths):
@@ -15,6 +16,40 @@ def batch(mode, lengths):
 
 
 class Counters(unittest.TestCase):
+    def test_overlap_plan_removes_capacity_cap_and_allows_c8(self):
+        original = ["python", "launch.py", "--max-total-tokens", "262144",
+                    "--mem-fraction-static", "0.84", "--max-running-requests", "4",
+                    "--disable-overlap-schedule", "--page-size", "1",
+                    "--cuda-graph-config", "old"]
+        command = overlap_command(original)
+        self.assertNotIn("--max-total-tokens", command)
+        self.assertNotIn("--disable-overlap-schedule", command)
+        self.assertEqual(command[command.index("--mem-fraction-static") + 1], "0.9")
+        self.assertEqual(command[command.index("--max-running-requests") + 1], "8")
+        self.assertEqual(command, overlap_command(command))
+        self.assertIn("262144", original)
+
+    def test_rounds_use_joined_counts_and_user_latency_excludes_filler(self):
+        calls = []
+        def summary(rows, start, end):
+            tokens = sum(r["server_metrics"]["prefill_compute_tokens"] for r in rows
+                         if start < r["end_time"] <= end)
+            calls.append((start, end, tokens))
+            return {"tokens": tokens}
+        tasks = [dict(instance=i, case_id=i, start_time=start, end_time=end,
+                      filler=filler, status="all_turns_completed")
+                 for i, start, end, filler in [(0, 0, 5, False), (1, 4, 9, False), (2, 5, 8, True)]]
+        rows = [dict(instance=i, end_time=end, server_metrics={"prefill_compute_tokens": n})
+                for i, end, n in [(0, 5, 10), (1, 9, 20), (2, 8, 30)]]
+        result = dict(start=0, cutoff=9, turns=rows, tasks=tasks,
+                      rounds=[dict(tasks=[tasks[0]]), dict(tasks=[tasks[1]])])
+        rebuild_summaries(result, NS(summary=summary, stats=lambda x: x))
+        self.assertEqual(result["overall"]["tokens"], 60)
+        self.assertEqual(result["rounds"][1]["window"]["tokens"], 50)
+        self.assertEqual(result["rounds"][1]["cohort"]["tokens"], 20)
+        self.assertEqual(result["user_latency"]["seconds"], [5, 5])
+        self.assertEqual(len(result["user_latency"]["tasks"]), 2)
+
     def test_real_work_excludes_prebuilt(self):
         self.assertEqual(batch_work(batch("prebuilt", [70000])), [])
         self.assertEqual([x[1:] for x in batch_work(batch("extend", [8192, 731]))], [(8192, 0), (731, 0)])
