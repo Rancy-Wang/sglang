@@ -31,7 +31,8 @@ def write(path, data):
     temp.replace(path)
 
 
-def overlap_command(command, max_running_requests=8, prefill_token_budget=None):
+def overlap_command(command, max_running_requests=8, prefill_token_budget=None,
+                    mem_fraction_static=0.9, kv_pages=None):
     """Apply the approved common settings to either frozen P/D launcher."""
     command = list(command)
     for flag in ("--max-total-tokens", "--mem-fraction-static", "--max-running-requests",
@@ -40,7 +41,7 @@ def overlap_command(command, max_running_requests=8, prefill_token_budget=None):
             index = command.index(flag)
             del command[index:index + 2]
     command = [arg for arg in command if arg != "--disable-overlap-schedule"]
-    command += ["--mem-fraction-static", "0.9", "--max-running-requests", str(max_running_requests),
+    command += ["--mem-fraction-static", str(mem_fraction_static), "--max-running-requests", str(max_running_requests),
                 "--cuda-graph-config", json.dumps({
                     "decode": {"bs": [n for n in (1, 2, 4, 8, 16, 32)
                                       if n <= max_running_requests],
@@ -52,7 +53,19 @@ def overlap_command(command, max_running_requests=8, prefill_token_budget=None):
                 index = command.index(flag)
                 del command[index:index + 2]
             command += [flag, str(prefill_token_budget)]
+    if kv_pages is not None:
+        if "--page-size" not in command or command[command.index("--page-size") + 1] != "1":
+            raise ValueError("Exact KV page capacity requires page_size=1")
+        command += ["--max-total-tokens", str(kv_pages)]
     return command
+
+
+def verify_capacity(info, expected):
+    capacities = [item.get("memory_usage", {}).get("token_capacity")
+                  for item in info.get("internal_states", [])]
+    if info.get("page_size") != 1 or not capacities or any(n != expected for n in capacities):
+        raise ValueError(f"Expected {expected} KV pages, observed {capacities}")
+    return capacities
 
 
 def gpu_free():
@@ -142,7 +155,7 @@ def run_one(args):
             cmd = list(source_servers[i]["argv"])
             if args.approved_overlap_matrix:
                 cmd = overlap_command(cmd, args.max_running_requests or max(8, args.concurrency),
-                                      args.prefill_token_budget)
+                                      args.prefill_token_budget, args.mem_fraction_static, args.kv_pages)
             cmd[0:2] = [sys.executable, str(HERE / "launch_pd_counted.py")]
             for flag, value in (("--port", args.port + i), ("--disaggregation-bootstrap-port", args.port + 10),
                                 ("--nccl-port", args.port + 20 + i), ("--chat-template", template)):
@@ -167,6 +180,8 @@ def run_one(args):
             if args.pd_timeout is not None:
                 env.update(SGLANG_DISAGGREGATION_WAITING_TIMEOUT=str(args.pd_timeout),
                            SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=str(args.pd_timeout))
+            if args.http_keepalive_timeout is not None:
+                env["SGLANG_TIMEOUT_KEEP_ALIVE"] = str(args.http_keepalive_timeout)
             for key in ("MC_FORCE_TCP", "MC_INTRANODE_NVLINK", "MOONCAKE_PROTOCOL", "SGLANG_MOONCAKE_CUSTOM_MEM_POOL"):
                 env.pop(key, None)
             if args.transport == "tcp":
@@ -198,9 +213,15 @@ def run_one(args):
                     pass
                 time.sleep(1)
         isolation.check(pin=True)
+        capacities = {}
         for i, mode in enumerate(("prefill", "decode")):
             with urllib.request.urlopen(f"http://127.0.0.1:{args.port+i}/server_info", timeout=30) as response:
-                write(root / f"{mode}-server-info.json", json.load(response))
+                info = json.load(response)
+                write(root / f"{mode}-server-info.json", info)
+                if args.kv_pages is not None:
+                    capacities[mode] = verify_capacity(info, args.kv_pages)
+        if capacities:
+            write(root / "capacity-check.json", dict(expected=args.kv_pages, actual=capacities))
         model = src[src.index("--model-path") + 1]
         warmup(SimpleNamespace(engine="pd", drop=args.drop, model=model, concurrency=args.concurrency,
                                port=args.port, warmup_timeout=args.warmup_timeout), root)
@@ -226,7 +247,7 @@ def run_one(args):
             client_proc = subprocess.Popen(client, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             # Scale the whole-workload watchdog for the larger task cohort only.
             # Per-request and KV-transfer deadlines are recorded separately.
-            workload_timeout = 14400 * max(1, args.concurrency // 8)
+            workload_timeout = args.workload_timeout or 14400 * max(1, args.concurrency // 8)
             deadline = time.monotonic() + workload_timeout
             while client_proc.poll() is None:
                 isolation.check()
@@ -315,7 +336,7 @@ def predecessor_ready(case, pid):
 
 
 def overlap_matrix(args):
-    """Run the approved ordered pairs, stopping at the first failed case."""
+    """Run ordered pairs; failed cases remain invalid even when continuing."""
     if (args.rounds != 3 or args.reserve_free_mib or args.profile_session
             or not args.drop_server_repo or not args.drop_server_head
             or args.server_head != NATIVE_HEAD):
@@ -358,7 +379,8 @@ def overlap_matrix(args):
                    "--concurrency", str(row["concurrency"]), "--rounds", "3", "--transport", "nvlink",
                    "--decode-radix", "--port", str(args.port + 40 * index)]
         for option in ("prefill_token_budget", "max_running_requests", "pd_timeout",
-                       "warmup_timeout", "request_timeout"):
+                       "warmup_timeout", "request_timeout", "mem_fraction_static",
+                       "kv_pages", "workload_timeout", "http_keepalive_timeout"):
             value = getattr(args, option)
             if value is not None:
                 command += ["--" + option.replace("_", "-"), str(value)]
@@ -372,7 +394,7 @@ def overlap_matrix(args):
             write(root / "matrix.json", state)
             code = proc.wait()
         row.update(state="completed" if code == 0 else "failed", returncode=code, end=time.time())
-        if code:
+        if code and not args.continue_on_failure:
             state["state"] = "failed"
             write(root / "matrix.json", state)
             raise RuntimeError(f"Stopped on failed case: {row['name']}")
@@ -386,7 +408,8 @@ def overlap_matrix(args):
                 write(root / "matrix.json", state)
                 raise RuntimeError("GPU 0-3 not released after completed case")
             time.sleep(5)
-    state.update(state="completed", end=time.time())
+    state.update(state="completed_with_failures" if any(row["returncode"] for row in rows)
+                 else "completed", end=time.time())
     write(root / "matrix.json", state)
 
 
@@ -469,6 +492,12 @@ def parser():
     p.add_argument("--pd-timeout", type=int, help="Explicit PD bootstrap and waiting timeout in seconds")
     p.add_argument("--warmup-timeout", type=int, default=600)
     p.add_argument("--request-timeout", type=int, default=7200)
+    p.add_argument("--workload-timeout", type=int, help="Whole measured case timeout in seconds")
+    p.add_argument("--http-keepalive-timeout", type=int, help="Server HTTP idle connection timeout")
+    p.add_argument("--mem-fraction-static", type=float, default=0.9)
+    p.add_argument("--kv-pages", type=int, help="Exact page_size=1 capacity, verified before warmup")
+    p.add_argument("--continue-on-failure", action="store_true",
+                   help="Preserve failed cases and continue after GPU cleanup; never count them as valid")
     p.add_argument("--rounds", type=int, choices=range(1, 21), default=2)
     p.add_argument("--approved-overlap-matrix", action="store_true", help=OVERLAP_PLAN)
     p.add_argument("--concurrencies", type=int, nargs="+", choices=(1, 2, 4, 8, 32),
