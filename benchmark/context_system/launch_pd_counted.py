@@ -68,14 +68,40 @@ def install():
     SchedulerReqTimeStats.convert_to_duration = observed
 
     if profile:
+        import threading
+        from sglang.srt.disaggregation.mooncake import conn
         from sglang.srt.distributed.device_communicators.mooncake_transfer_engine import MooncakeTransferEngine
 
+        context = threading.local()
+        base_queue = conn.FastQueue
+
+        class ObservedQueue(base_queue):
+            def put(self, item):
+                item._pd_matrix_enqueued = time.monotonic()
+                return super().put(item)
+
+            def get(self):
+                item = super().get()
+                now = time.monotonic()
+                context.chunk = {
+                    "room": str(item.room), "pid": os.getpid(),
+                    "tid": threading.get_native_id(), "pages": len(item.prefill_kv_indices),
+                    "slice_start": item.index_slice.start, "slice_stop": item.index_slice.stop,
+                    "last": item.is_last_chunk, "enqueued": item._pd_matrix_enqueued,
+                    "dequeued": now, "queue_seconds": now - item._pd_matrix_enqueued,
+                }
+                print("pd_matrix_queue=" + json.dumps(context.chunk), flush=True)
+                torch.cuda.nvtx.mark("pd_dequeue:" + json.dumps(context.chunk))
+                return item
+
+        conn.FastQueue = ObservedQueue
         transfer = MooncakeTransferEngine.batch_transfer_sync
 
         def timed(engine, peer, src, dst, lengths):
             start = time.monotonic()
             data = {"pid": os.getpid(), "peer": peer, "start": start,
-                    "blocks": len(lengths), "bytes": sum(lengths)}
+                    "tid": threading.get_native_id(), "blocks": len(lengths),
+                    "bytes": sum(lengths), "chunk": getattr(context, "chunk", None)}
             torch.cuda.nvtx.range_push("pd_transfer:" + json.dumps(data))
             try:
                 ret = transfer(engine, peer, src, dst, lengths)
