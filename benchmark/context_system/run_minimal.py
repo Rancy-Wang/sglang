@@ -93,7 +93,7 @@ def warmup(args, root):
             data=json.dumps(body).encode(),
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(request, timeout=600) as response:
+        with urllib.request.urlopen(request, timeout=getattr(args, "warmup_timeout", 600)) as response:
             value = json.load(response)
         if not value.get("choices"):
             raise RuntimeError(f"Warmup did not produce a completion: {value}")
