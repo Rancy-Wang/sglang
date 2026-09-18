@@ -63,11 +63,11 @@ C2 Drop+Repos。用户随后明确修订：**如果指标劣势主要来自大�
 
 ## 必验模型数值证据汇总（2026-09-18）
 
-### 用户授权的 D 端 Radix 修订（实施中）
+### 用户授权的 D 端 Radix 修订（数值与抢占恢复通过，性能验证中）
 
 用户明确要求：存在长 Prefill 问题时开启 D 端 Radix，结构、匹配、复用逻辑与 P 端相同。
 这替代此前 D Radix 关闭的默认验收设置；仍不把 D 生成 KV 回传给 P。
-`PLAN-CS-20260917-R2` 实施轮次 1 的本次修订范围如下；以下为待验证实现，不能算验收通过。
+`PLAN-CS-20260917-R2` 实施轮次 1 的本次修订范围如下；分项结果见下文，整体仍待验收。
 
 - `context_transfer.py` 的 `ContextDecodeReuse` / destination allocation：采用共用
   `match_prefix_for_req` 的 Retry 结果，投影到最终 active KV；保留缺页后的有效匹配。
@@ -95,6 +95,64 @@ bitmap 不改变原始 chunk 的共享索引；普通无 Context 请求保留原
 0.199–0.203秒。冷请求没有可供 D-cache 复用的历史，故仍需单独解决这一传输问题。
 独立16MiB TCP probe 的 idle/P忙/D忙/双方忙四种情况均字节精确且低于0.031秒，
 不能将失败笼统归因为任意 GPU compute；没有提高30秒默认超时来绕过失败。
+
+#### D-cache 数值与恢复增量证据
+
+`88cfaff95` 在 BUS 完成 `bcp-dcache-numeric-v1`：Qwen3-0.6B、AgenticQwen-8B、
+GPT-OSS-20B、GPT-OSS-120B 各5条冷 Drop、冷 Repos、热 Repos、Retry、连续 Repos 路径，
+共20条均通过此前冻结的误差门限。BF16/page1；Qwen/Agentic 使用 Triton，GPT-OSS
+使用原生解析出的默认 Triton 与共享 Full/SWA；P/D 独立进程和 GPU，传输为 TCP。
+120B P=GPU0/1、D=GPU2/3 TP2，其余 P=GPU0、D=GPU1 TP1。
+
+离线汇总 `r2-dcache-numeric-evidence-v1.json` 保留所有路径的误差、引用参考和复用数量。
+12组实际生成的结构化消息均与此前对应的 D-cache-off PD 结果相同，输入 tokens 相同。
+这不表示与 mini 自由生成逐 token 相同；原生语法约束与采样差异仍按独立生成证据报告。
+Qwen/Agentic 的热 Repos 复用4878/4878 active KV，缺页0；Retry 复用2876、
+其中1368页独立复制/旋转、1508页借用，传输2002缺页。连续 Repos 复用4875、
+其中3237页独立复制/旋转，仅传输3缺页。P/D 共用匹配和发布算法，不要求两端驻留内容相同。
+
+`bcp-dcache-nvlink-retract-v1` 的首次冷请求通过，但热命中请求在真实 retraction 后失败。
+`decode.py::_get_new_prebuilt_batch` 对刚从 host backup 恢复的 Context 请求重新匹配
+Radix，使其误入 `Req.prepare_context_recovery` 的 P 端缺页规划，触发
+“Recovery metadata must leave an uncached query suffix”。这是恢复入口错误，与传输
+超时不同；该次 P/D NVLink 初始化和首次传输已成功，不能把整次测试算通过。
+
+`3909597d9` 保留已预分配/恢复的 Context KV 所有权，不再在 PREBUILT 入口重匹配；
+无租约的恢复请求先取得根租约，再由正常 `cache_unfinished_req` 插入、去重和换租约。
+原生无 Context 分支与 recovery 的后缀校验不变。`beb536b07` 修正测试对原生租约对象
+的比较方式；BUS `pytest -q test/registered/context_system/test_context_admission.py
+-k context_prebuilt` 为2 passed。macOS 对这两项为 skipped，不计通过。
+`bcp-dcache-nvlink-retract-v2` 随后暴露修复中的接口错误：UnifiedRadixCache 无 `root`
+属性。`e93d9528a` 在 `python/sglang/srt/disaggregation/decode.py:2941-2959`
+改用原生 `root_node_handle(extra_key=...)`，保留命名空间；
+`test/registered/context_system/test_context_admission.py:14-69` 直接包装真实 native
+cache，覆盖 Full / Full+SWA 和有/无租约，检查释放后容量完整。同一 pytest 命令在 BUS
+为4 passed、23 deselected。
+
+BUS `bcp-dcache-nvlink-retract-v3/result.json` 在 `e93d9528a` 上为 passed。
+`test_bcp_pd_numeric.py` 使用真实 native host-backup retraction：prime 冷请求后，
+两个热命中请求并发 decode，其中一个实际恢复4次；两者均 HTTP200。无抢占同伴的
+max/mean/p99 为1.078125/0.066594/0.3125；4次抢占请求为
+1.0625/0.065274/0.304688，均低于冻结Qwen门限2.25/0.108541/0.4375。
+保留 v1/v2 失败日志，不将其计作通过。同设置完整吞吐仍待完成。
+
+同机传输试验使用原生 `MC_INTRANODE_NVLINK=1`、`MOONCAKE_PROTOCOL=nvlink_intra`、
+`SGLANG_MOONCAKE_CUSTOM_MEM_POOL=INTRA_NODE_NVLINK`，移除 `MC_FORCE_TCP`，
+日志必须确认 Intra-Node NVLink。该设置让 KV 与辅助 metadata 使用可跨进程访问的
+GPU 缓冲区，不增加新 attention 后端，不修改默认超时；不外推为跨主机传输通过。
+注意 `mooncake/conn.py::send` 的 `_record_transfer_indices` 在 worker 按复用 bitmap
+过滤之前累计逻辑页数。D-cache Context 的 `transfer_total` 因而不是实际传输字节，
+不能据它计算有效带宽；原始阶段等待仍可用于区分 P 计算等待与 D ready 排队。
+
+`pd-c2-nvlink-replay-v1` 在原生+传输兼容修复 `03c2d9ec8` 完成与旧 TCP 失败
+请求历史哈希一致的定向重放：70407/51000-token 冷前缀先后完成，随后并发
+123675/53322-token 请求，两端全部 HTTP200。请求耗时分别116.870/82.526/
+108.843/101.918秒，包含 P 计算，不是纯搬运时间。`transfer-audit-v1.json` 审计
+56个实际 transfer batch，返回码均为0；其中40个288MiB批次 min/median/max
+为0.002274/0.023316/12.320850秒。仅一个批次超过1秒，仍存在初始化、资源或同步
+等待，不能宣称所有计算与传输完全重叠；精确 CUDA 阻塞调用尚未定位。该诊断证明
+同机原生 NVLink 可完成这些先前 TCP 失败条件，不代表吞吐或跨主机验收通过。
+下一步三组 C2/N4 使用相同 D Radix/NVLink 设置，不使用逐批计时 hook 测吞吐。
 
 BUS `r2-numeric-evidence-final-audit-v1.json` 离线读取已保存的 comparison JSON，
 没有重新执行模型。Qwen3-0.6B、AgenticQwen-8B、GPT-OSS-20B/120B 的普通与PD共8组，
@@ -1067,8 +1125,9 @@ token。D 先分配自己的目标页，接收 KV 和首 token 等元数据，�
 就绪；仍需在隔离 GPU 上测量终态整理与传输等待的代价。
 连接失败、取消、重复完成通知、重试时复用原生连接状态机制，同时隔离请求尝试的 KV 所有权。
 
-本轮不增加 D Radix 重试矩阵，也不增加 D→P 输出 KV 传输。P Radix 命中和 Context Retry
-仍须验证；这与网络传输 retry 是不同的机制。
+原设置不增加 D Radix 重试矩阵；已由上文用户修订替代，现须验证 D 端冷/热/Retry/
+连续 Repos 与 retraction。仍不增加 D→P 输出 KV 传输。Context Retry 与网络传输
+retry 是不同的机制。
 
 ## 必须重点防止的效率回退
 
@@ -1111,13 +1170,13 @@ KV 不增加 repos。SWA 自身窗口淘汰不当作 Drop-skipped。
 | 生命周期 | chunk/mixed/overlap/abort/retract、叶/内部 evict、hole recovery | 无悬空/重复释放/泄漏；恢复后输出与无洞参考在允许误差内 |
 | 数值 | 三个必验模型，固定 token teacher forcing 与实际生成 | 按模型/dtype/backend 校准 logits 误差；定位首次分歧，报告原始数据 |
 | GPU 内核 | 同位置 copy、多次 R、SWA/sinks、page_size=1 的非连续物理 slot | 对照实际 mini staged/occurrence 路径；不使用简化 dense 模型冒充 oracle |
-| PD | 普通 SGLang↔PD↔mini，首 token/终态/取消/传输重试 | D Radix 关闭，无输出回传；元数据和 active KV 对齐，无多算首 token |
+| PD | 普通 SGLang↔PD↔mini，首 token/终态/取消/传输重试 | 按追加授权启用 D Radix，无输出回传；元数据和 active KV 对齐，无多算首 token |
 | 压力 | raw>128K 但 position 合法、低 KV、多请求长期运行 | 原生调度可推进，drop-aware 无 -1 进入 attention，池容量可回收 |
 | 性能 | 原生无功能↔带功能；mini 作为参考；PD 小矩阵 | 相对原生输出吞吐下降不超过 5%；实际计算量、TTFT/TPOT/E2E 和比较限制单列，统计不足不得宣称达标 |
 
 最小吞吐矩阵：GPT-OSS-120B；普通 mini/SGLang TP2；PD P=TP2 GPU0/1、D=TP2
 GPU2/3。所有对照固定 page_size=1；每种系统做 C1/N2、C2/N4，各含 no_drop+普通 eviction、Drop+drop-aware
-（PD 仅 P 开启）。同一固定 seed 的任务子集，完整轨迹与源输出长度，不截断 turn 或 output。
+（D Radix 启用后 PD 的 P/D 均开启）。同一固定 seed 的任务子集，完整轨迹与源输出长度，不截断 turn 或 output。
 
 测速沿 `01a0ab12-b9ee-7751-bee0-6a78dcac9c1f` 的 `test_serving.py`：同一 task 串行
 推进，把上轮实际生成重建的消息加入下轮；持续维持 C 个不同 task；长尾填充成功请求计入
