@@ -99,6 +99,8 @@ def pd_servers():
                 "--enable-custom-logit-processor",
             ]
             cmd += ["--tp-size", os.environ.get("CONTEXT_TEST_TP", "1")]
+            if mode == "decode" and os.environ.get("CONTEXT_PD_RADIX") == "1":
+                cmd += ["--disaggregation-decode-enable-radix-cache"]
             if template:
                 cmd += ["--chat-template", template]
             if "gpt-oss" in os.environ["CONTEXT_SERVER_MODEL"].lower():
@@ -171,6 +173,10 @@ def test_bcp_pd_terminal_handoff(pd_servers):
     comparisons = {}
     room = int(time.time_ns() % (1 << 53))
     lock = threading.Lock()
+
+    def flush():
+        for base in (p_base, d_base) if os.environ.get("CONTEXT_PD_RADIX") == "1" else (p_base,):
+            assert requests.post(base + "/flush_cache", timeout=5).status_code == 200
 
     def call(feature, name, fixed=True, *, warm_source=False):
         nonlocal room
@@ -321,16 +327,16 @@ def test_bcp_pd_terminal_handoff(pd_servers):
 
     consecutive_only = os.environ.get("CONTEXT_BCP_CONSECUTIVE_ONLY") == "1"
     for feature in (() if consecutive_only else ("none", "drop", "drop_repos")):
-        assert requests.post(p_base + "/flush_cache", timeout=5).status_code == 200
+        flush()
         call(feature, feature + "-actual", fixed=False)
-        assert requests.post(p_base + "/flush_cache", timeout=5).status_code == 200
+        flush()
         call(feature, feature)
     if not consecutive_only:
         call("drop_repos", "drop_repos-hot")
-        assert requests.post(p_base + "/flush_cache", timeout=5).status_code == 200
+        flush()
         call("none", "none-retry-source")
         call("drop_repos", "drop_repos-retry")
-    assert requests.post(p_base + "/flush_cache", timeout=5).status_code == 200
+    flush()
     call("drop_repos", "consecutive-source", warm_source=True)
     call("drop_repos", "drop_repos-consecutive")
     usage = comparisons["drop_repos-consecutive"]["context_usage"]
@@ -338,7 +344,7 @@ def test_bcp_pd_terminal_handoff(pd_servers):
     assert usage["actual_prefill_tokens"] < len(reference["runs"]["none"]["records"][0]["input"]["ids"])
     baseline = (
         json.loads(Path(os.environ["CONTEXT_BCP_CALIBRATION"]).read_text())["none"]
-        if consecutive_only else comparisons["none"]
+        if os.environ.get("CONTEXT_BCP_CALIBRATION") else comparisons["none"]
     )
     names = ("drop_repos-consecutive",) if consecutive_only else (
         "drop", "drop_repos", "drop_repos-hot", "drop_repos-retry", "drop_repos-consecutive"
@@ -352,3 +358,13 @@ def test_bcp_pd_terminal_handoff(pd_servers):
             assert comparisons[name][metric] <= max(
                 floor, 2 * baseline[metric]
             ), (name, metric, comparisons)
+    if os.environ.get("CONTEXT_PD_RADIX") == "1" and not consecutive_only:
+        reused = {
+            name: json.loads((directory / f"{name}-decode.pt.reuse.json").read_text())
+            for name in ("drop", "drop_repos", "drop_repos-hot", "drop_repos-retry", "drop_repos-consecutive")
+        }
+        assert reused["drop"]["reused"] == reused["drop_repos"]["reused"] == 0
+        assert reused["drop_repos-hot"]["reused"] > 0
+        assert reused["drop_repos-hot"]["missing"] < reused["drop_repos-hot"]["active"]
+        assert reused["drop_repos-retry"]["copied"] > 0
+        assert reused["drop_repos-consecutive"]["copied"] > 0

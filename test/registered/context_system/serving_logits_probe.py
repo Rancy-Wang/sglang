@@ -95,6 +95,20 @@ def serialized_probe():
                 if req.extend_range.end < len(req.origin_input_ids):
                     continue
                 key = params["context_trace_path"]
+                reuse = getattr(req, "context_decode_reuse", None)
+                if reuse is not None and not params.get("_context_reuse_recorded"):
+                    import json
+                    from pathlib import Path
+
+                    if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
+                        Path(key + ".reuse.json").write_text(json.dumps({
+                            "active": len(reuse.reusable),
+                            "reused": int(reuse.reusable.sum()),
+                            "borrowed": int(reuse.borrowed.sum()),
+                            "copied": len(reuse.copy_indices),
+                            "missing": int((~reuse.reusable).sum()),
+                        }))
+                    params["_context_reuse_recorded"] = True
                 rows = params.setdefault("_context_probe_rows", [])
                 self.rows[key] = rows
                 step = len(rows)

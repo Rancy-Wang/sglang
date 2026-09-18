@@ -36,7 +36,6 @@ def validate_context_request(args, model_config, request):
         if args.disaggregation_transfer_backend != "mooncake":
             raise ValueError("Context PD currently requires Mooncake transfer")
         for name in (
-            "disaggregation_decode_enable_radix_cache",
             "disaggregation_decode_enable_offload_kvcache",
             "disaggregation_enable_kv_checksum",
         ):
@@ -44,6 +43,12 @@ def validate_context_request(args, model_config, request):
                 raise ValueError(f"Context PD is not yet supported with {name}")
         if envs.SGLANG_DISAGG_STAGING_BUFFER.get():
             raise ValueError("Context PD staging transfer is not yet supported")
+        if (
+            getattr(args, "disaggregation_decode_enable_radix_cache", False)
+            and "GptOssForCausalLM" in architectures
+            and not args.disable_hybrid_swa_memory
+        ):
+            raise ValueError("Context decode Radix requires shared Full/SWA KV")
     if args.pp_size != 1 or args.attn_cp_size != 1 or args.dcp_size != 1:
         raise ValueError("Context currently supports TP without PP/CP/DCP")
     if args.speculative_algorithm or args.dllm_algorithm:

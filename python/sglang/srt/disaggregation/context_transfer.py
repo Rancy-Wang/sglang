@@ -138,12 +138,71 @@ def request_active_lengths(req, raw_end, window):
     return full, len(view.raw_indices) - start + min(generated, window)
 
 
+def select_missing_transfer(source, destination, reusable):
+    """Filter one peer's chunk without mutating shared source chunk offsets."""
+    if source.shape != destination.shape or reusable.shape != source.shape:
+        raise ValueError("Context transfer bitmap and page coordinates disagree")
+    if reusable.dtype != np.bool_:
+        raise ValueError("Context transfer reuse bitmap must be boolean")
+    missing = ~reusable
+    return source[missing], destination[missing]
+
+
+@dataclass(frozen=True)
+class ContextDecodeReuse:
+    """Same Radix Retry match as P, projected onto final active versions.
+
+    Missing active pages are fetched from P independently of later resident
+    pages. A changed key suffix always gets private pages, even at unchanged
+    positions, so two Radix branches never acquire the same physical owner.
+    """
+
+    source_slots: torch.Tensor
+    reusable: np.ndarray
+    borrowed: np.ndarray
+    copy_indices: np.ndarray
+    position_pairs: torch.Tensor
+
+    @classmethod
+    def build(cls, req, plan):
+        raw = plan.decode.raw_indices
+        matched = len(req.prefix_indices)
+        reusable = raw < matched
+        resident = req.context_resident
+        if resident is not None:
+            reusable[reusable] &= resident.numpy()[raw[reusable]]
+        source = req.context_source_positions
+        if source is None:
+            source = torch.arange(matched, dtype=torch.int32)
+        borrowed = reusable.copy()
+        indices = np.flatnonzero(reusable)
+        old = source.numpy()[raw[indices]]
+        new = plan.decode.positions[indices]
+        copy = (old != new) | (raw[indices] >= req.context_exact_prefix_len)
+        borrowed[indices[copy]] = False
+        return cls(
+            req.prefix_indices,
+            reusable,
+            borrowed,
+            indices[copy],
+            torch.from_numpy(np.stack((old[copy], new[copy]), axis=1).astype(np.int32)),
+        )
+
+    @property
+    def allocation_count(self):
+        return len(self.borrowed) - int(self.borrowed.sum())
+
+
 def allocate_context_destination(req, allocator, pool, *, window=None):
     """Allocate compact Full/SWA owners, then scatter once into the raw table."""
     plan = transfer_plan(req, allocator.device)
     count = plan.active_count
+    reuse = getattr(req, "context_decode_reuse", None)
+    if reuse is not None and window is not None:
+        raise ValueError("Context decode Radix requires shared Full/SWA KV")
     if window is None:
-        slots = allocator.alloc(count)
+        allocated = allocator.alloc(count if reuse is None else reuse.allocation_count)
+        slots = allocated
         swa = None
     else:
         start = plan.swa_start(window)
@@ -153,6 +212,14 @@ def allocate_context_destination(req, allocator, pool, *, window=None):
         raise RuntimeError(
             "Context PD destination allocation exceeds admitted capacity"
         )
+    owned = torch.ones(count, dtype=torch.bool)
+    if reuse is not None:
+        owned = torch.from_numpy(~reuse.borrowed)
+        slots = torch.empty(count, dtype=torch.int64, device=allocator.device)
+        slots[owned.to(device=allocator.device)] = allocated
+        borrowed = torch.from_numpy(np.flatnonzero(reuse.borrowed)).to(allocator.device)
+        raw = plan.decode.device_indices[borrowed].to(torch.int64)
+        slots[borrowed] = reuse.source_slots[raw]
     rows = torch.full((plan.decode.prompt_length,), -1, dtype=torch.int64)
     rows[torch.from_numpy(plan.decode.raw_indices.astype(np.int64))] = torch.arange(
         count
@@ -160,20 +227,44 @@ def allocate_context_destination(req, allocator, pool, *, window=None):
     program = req.context_recompute_program or req.context_program
     req.context_state = OccurrenceState(
         slots,
-        torch.ones(count, dtype=torch.bool),
+        owned,
         rows,
         rows.clone(),
         program.layout.positions,
-        0,
+        min(req.context_exact_prefix_len, plan.decode.prompt_length) if reuse is not None else 0,
         swa,
     )
     req.context_decode_layout = plan.decode
     req.context_prefill_started = True
-    req.context_cache_published = True
+    req.context_cache_published = reuse is None
     terminal = req.context_state.terminal_slots()
     pool.write((req.kv.req_pool_idx, slice(0, len(terminal))), terminal)
     req.kv.kv_allocated_len = len(terminal)
     return slots
+
+
+def materialize_decode_reuse(req, model_runner):
+    """COW uses the existing all-layer RoPE kernel, before metadata publication."""
+    reuse = getattr(req, "context_decode_reuse", None)
+    if reuse is None or not len(reuse.copy_indices):
+        return
+    from sglang.srt.layers.attention.context_backend import ContextModelBinding
+
+    binding = getattr(model_runner, "context_model_binding", None)
+    if binding is None:
+        binding = ContextModelBinding(
+            model_runner.model, model_runner.token_to_kv_pool,
+            model_runner.kv_index_translator, page_size=1,
+        )
+        model_runner.context_model_binding = binding
+    device = req.context_state.slots.device
+    indices = torch.from_numpy(reuse.copy_indices).to(device)
+    raw = req.context_decode_layout.device_indices[indices].to(torch.int64)
+    binding.reposition_existing(
+        reuse.source_slots[raw].to(torch.int32),
+        req.context_state.slots[indices].to(torch.int32),
+        reuse.position_pairs.to(device),
+    )
 
 
 def write_context_metadata(req, row):

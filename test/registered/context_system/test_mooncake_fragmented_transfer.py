@@ -12,6 +12,20 @@ import pytest
 pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="native SRT runtime")
 
 
+def test_sparse_reuse_wire_is_optional_and_validates_destination_coordinates():
+    import numpy as np
+    from sglang.srt.disaggregation.mooncake.conn import TransferInfo
+
+    msg = [b"1", b"127.0.0.1", b"1234", b"peer", np.arange(4, dtype=np.int32).tobytes(),
+           b"0", b"", b"1", b"0", b""]
+    assert TransferInfo.from_zmq(msg).context_reuse_mask is None
+    parsed = TransferInfo.from_zmq(msg + [bytes([1, 0, 1, 0])])
+    assert parsed.context_reuse_mask.tolist() == [True, False, True, False]
+    for invalid in (bytes([1, 0]), bytes([0, 1, 2, 0])):
+        with pytest.raises(ValueError, match="destination pages"):
+            TransferInfo.from_zmq(msg + [invalid])
+
+
 def manager(engine):
     from sglang.srt.disaggregation.mooncake.conn import MooncakeKVManager
 

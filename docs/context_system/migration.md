@@ -63,6 +63,39 @@ C2 Drop+Repos。用户随后明确修订：**如果指标劣势主要来自大�
 
 ## 必验模型数值证据汇总（2026-09-18）
 
+### 用户授权的 D 端 Radix 修订（实施中）
+
+用户明确要求：存在长 Prefill 问题时开启 D 端 Radix，结构、匹配、复用逻辑与 P 端相同。
+这替代此前 D Radix 关闭的默认验收设置；仍不把 D 生成 KV 回传给 P。
+`PLAN-CS-20260917-R2` 实施轮次 1 的本次修订范围如下；以下为待验证实现，不能算验收通过。
+
+- `context_transfer.py` 的 `ContextDecodeReuse` / destination allocation：采用共用
+  `match_prefix_for_req` 的 Retry 结果，投影到最终 active KV；保留缺页后的有效匹配。
+- `decode.py` 的匹配、预分配和 metadata：原生 source lease 保护命中页；位置变化或
+  非 exact 分支的页独立分配，`context_backend.py` 复用现有全层 RoPE 内核完成 COW。
+- `mooncake/conn.py` 的 metadata / transfer worker：按 active 坐标的复用 bitmap 只传缺页；
+  chunk 累计坐标与最终身份 metadata 保留完整逻辑长度，全命中仍完成协议。
+- `capabilities.py`、`schedule_batch.py`、`unified_radix_cache.py`：支持边界和清理；
+  page1、共享 Full/SWA，保留 P/D 同一 Context Radix key、Retry、发布和释放代码。
+- `test_context_transfer.py`、`test_mooncake_fragmented_transfer.py`、
+  `test_bcp_pd_numeric.py`、`serving_logits_probe.py`：验证稀疏缺页、COW、释放所有权、
+  wire 兼容、各必验模型冷/热/Retry/连续 Repos 数值与实际输出。
+- `run_minimal.py`：增加显式 `--decode-radix`；原生与修改版同设置重新做小量吞吐对照。
+
+不变量：源缓存不原地旋转；borrowed 页不作为私有页释放；未到就绪点不能发布；
+bitmap 不改变原始 chunk 的共享索引；普通无 Context 请求保留原生调度路径。
+回滚使用追加 revert commit，不覆盖已有工作。GPU 验证仅在 BUS，P/D 使用不同 GPU
+与进程；本地先运行 focused CPU / syntax 检查。新增 D-cache GPU 路径须满足原冻结
+模型误差门限，吞吐仍须达到同设置原生 95%，不把旧 D-cache-off 结果直接充作新通过。
+
+长请求诊断：原生 `03c2d9ec8` 的 PD C2 第二次完整尝试为126成功、2失败，整组无效。
+`pd-c2-timeout-replay-v1` 进一步重放 case864 的70407-token 冷前缀，在首个 warm 请求
+就失败，未进入双请求阶段。72区间、301989888字节的 TCP batch 在 P 计算期间
+达到30.303秒超时；另一 TP rank 同规模批次分别耗时25.424/25.898秒，计算结束后约
+0.199–0.203秒。冷请求没有可供 D-cache 复用的历史，故仍需单独解决这一传输问题。
+独立16MiB TCP probe 的 idle/P忙/D忙/双方忙四种情况均字节精确且低于0.031秒，
+不能将失败笼统归因为任意 GPU compute；没有提高30秒默认超时来绕过失败。
+
 BUS `r2-numeric-evidence-final-audit-v1.json` 离线读取已保存的 comparison JSON，
 没有重新执行模型。Qwen3-0.6B、AgenticQwen-8B、GPT-OSS-20B/120B 的普通与PD共8组，
 每组Drop冷算、Repos冷算、Repos热命中、Retry、连续Repos共5条路径，40条均满足
