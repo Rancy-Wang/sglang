@@ -27,6 +27,9 @@ def batch_work(batch):
 
 def install():
     install_timestamps()
+    if os.environ.get("PD_MATRIX_FORWARD_LOG"):
+        from observe_forward import install as install_forward
+        install_forward()
     from sglang.srt.managers.scheduler import Scheduler
     from sglang.srt.observability.req_time_stats import SchedulerReqTimeStats
 

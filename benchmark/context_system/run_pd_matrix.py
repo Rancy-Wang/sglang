@@ -119,13 +119,15 @@ def verify_capacity(info, expected):
 
 def gpu_ids(value):
     ids = value.split(",")
-    if len(ids) != 4 or any(not x.isdigit() for x in ids) or len(set(map(int, ids))) != 4:
-        raise argparse.ArgumentTypeError("Expected four distinct physical GPU indices, P pair then D pair")
+    if len(ids) not in (4, 8) or any(not x.isdigit() for x in ids) or len(set(map(int, ids))) != len(ids):
+        raise argparse.ArgumentTypeError("Expected four or eight distinct physical GPU indices, P then D")
     return ",".join(str(int(x)) for x in ids)
 
 
 def stage_gpus(devices, stage):
-    return ",".join(devices.split(",")[2*stage:2*stage+2])
+    ids = devices.split(",")
+    width = len(ids) // 2
+    return ",".join(ids[width*stage:width*(stage+1)])
 
 
 def gpu_free(devices="0,1,2,3"):
@@ -172,7 +174,7 @@ class GPUIsolationGuard:
             # Before any PD workload, each of the four TP workers has one
             # primary context. IPC may subsequently expose the same worker
             # on a peer GPU; it must not admit a new process identity.
-            invalid |= (self.worker_pids is not None or len(observed) != 4
+            invalid |= (self.worker_pids is not None or len(observed) != len(self.baseline)
                         or any(len(pids) != 1 for pids in extra.values()))
             if not invalid:
                 self.worker_pids = observed
@@ -213,6 +215,7 @@ def run_one(args):
     try:
         for i, mode in enumerate(("prefill", "decode")):
             cmd = list(source_servers[i]["argv"])
+            cmd[cmd.index("--tp-size") + 1] = str(len(args.gpu_ids.split(",")) // 2)
             if args.approved_overlap_matrix:
                 cmd = overlap_command(cmd, args.max_running_requests or max(8, args.concurrency),
                                       args.prefill_token_budget, args.mem_fraction_static, args.kv_pages)
@@ -243,6 +246,8 @@ def run_one(args):
                        PD_MATRIX_PROFILE="1" if args.profile_session else "0",
                        PD_MATRIX_RESERVE_FREE_MIB=str(args.reserve_free_mib),
                        TORCHELASTIC_USE_AGENT_STORE="False", SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN="1")
+            if os.environ.get("PD_MATRIX_FORWARD_TIMING") == "1":
+                env["PD_MATRIX_FORWARD_LOG"] = str(root / f"{mode}-forward.jsonl")
             if args.model_context_limit is not None:
                 env.pop("SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN", None)
             if args.pd_timeout is not None:
