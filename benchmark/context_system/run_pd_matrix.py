@@ -31,6 +31,55 @@ def write(path, data):
     temp.replace(path)
 
 
+def bounded_warmup(args, root, model):
+    """Cap warmup submission, then abort and drain this isolated P/D pair."""
+    seconds = args.warmup_wall_seconds
+    if seconds <= 0:
+        raise ValueError("warmup-wall-seconds must be positive")
+    payload = dict(engine="pd", drop=args.drop, model=model,
+                   concurrency=args.concurrency, port=args.port,
+                   warmup_timeout=args.warmup_timeout)
+    code = ("import json,sys; from pathlib import Path; from types import SimpleNamespace; "
+            "from run_minimal import warmup; "
+            "warmup(SimpleNamespace(**json.loads(sys.argv[1])), Path(sys.argv[2]))")
+    started = time.monotonic()
+    with (root / "bounded-warmup.log").open("x") as log:
+        proc = subprocess.Popen([sys.executable, "-u", "-c", code,
+                                 json.dumps(payload), str(root)], cwd=HERE,
+                                stdout=log, stderr=subprocess.STDOUT,
+                                start_new_session=True)
+        timed_out = False
+        try:
+            try:
+                status = proc.wait(timeout=seconds)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                os.killpg(proc.pid, signal.SIGTERM)
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    proc.wait()
+            else:
+                if status:
+                    raise subprocess.CalledProcessError(status, proc.args)
+        finally:
+            if proc.poll() is None:
+                os.killpg(proc.pid, signal.SIGKILL)
+                proc.wait()
+    write(root / "warmup-budget.json", dict(limit_seconds=seconds,
+          timed_out=timed_out, client_elapsed_seconds=time.monotonic() - started))
+    if timed_out:
+        # No measured requests exist yet; abort only this case's isolated ports.
+        for offset in (0, 1):
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{args.port + offset}/abort_request",
+                data=b'{"abort_all":true}', headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(request, timeout=30) as response:
+                if response.status != 200:
+                    raise RuntimeError("Warmup abort failed")
+
+
 def overlap_command(command, max_running_requests=8, prefill_token_budget=None,
                     mem_fraction_static=0.9, kv_pages=None):
     """Apply the approved common settings to either frozen P/D launcher."""
@@ -242,16 +291,19 @@ def run_one(args):
         if capacities:
             write(root / "capacity-check.json", dict(expected=args.kv_pages, actual=capacities))
         model = src[src.index("--model-path") + 1]
-        warmup(SimpleNamespace(engine="pd", drop=args.drop, model=model, concurrency=args.concurrency,
-                               port=args.port, warmup_timeout=args.warmup_timeout), root)
+        if args.warmup_wall_seconds is not None:
+            bounded_warmup(args, root, model)
+        else:
+            warmup(SimpleNamespace(engine="pd", drop=args.drop, model=model, concurrency=args.concurrency,
+                                   port=args.port, warmup_timeout=args.warmup_timeout), root)
         isolation.check(force=True)
-        if not args.filler:
+        if not args.filler or args.warmup_wall_seconds is not None:
             # Finite SWE cohorts start without synthetic warmup cache residency.
             for offset in (0, 1):
                 request = urllib.request.Request(
-                    f"http://127.0.0.1:{args.port + offset}/flush_cache", data=b"", method="POST"
+                    f"http://127.0.0.1:{args.port + offset}/flush_cache?timeout=120", data=b"", method="POST"
                 )
-                with urllib.request.urlopen(request, timeout=30) as response:
+                with urllib.request.urlopen(request, timeout=130) as response:
                     if response.status != 200:
                         raise RuntimeError("Warmup cache flush failed")
             write(root / "warmup-cache-flushed.json", dict(prefill=True, decode=True))
@@ -537,6 +589,8 @@ def parser():
                    help="Keep the same server admission/graph configuration across concurrency cases")
     p.add_argument("--pd-timeout", type=int, help="Explicit PD bootstrap and waiting timeout in seconds")
     p.add_argument("--warmup-timeout", type=int, default=600)
+    p.add_argument("--warmup-wall-seconds", type=float,
+                   help="Stop warmup client at this wall time, abort P/D requests and flush before measurement")
     p.add_argument("--request-timeout", type=int, default=7200)
     p.add_argument("--workload-timeout", type=int, help="Whole measured case timeout in seconds")
     p.add_argument("--http-keepalive-timeout", type=int, help="Server HTTP idle connection timeout")
