@@ -349,7 +349,7 @@ def run_one(args):
                 raise subprocess.CalledProcessError(client_proc.returncode, client)
         # Completed request records may flush just after the HTTP final event.
         time.sleep(2)
-        result = summarize(root, args.mini_root)
+        result = summarize(root, args.mini_root, tp=len(args.gpu_ids.split(",")) // 2)
         result["measurement"]["profiler"] = bool(args.profile_session)
         write(root / "counted-result.json", result)
         write(root / "outcome.json", dict(valid=result["valid"], overall=result["overall"]))
