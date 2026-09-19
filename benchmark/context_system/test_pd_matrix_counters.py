@@ -9,7 +9,7 @@ import unittest
 
 from launch_pd_counted import batch_work
 from summarize_pd_matrix import join_counts, read_counts, rebuild_summaries
-from run_pd_matrix import overlap_command, predecessor_ready, case_process_running, overlap_matrix, parser as matrix_parser
+from run_pd_matrix import gpu_ids, stage_gpus, gpu_free, GPUIsolationGuard, overlap_command, predecessor_ready, case_process_running, overlap_matrix, parser as matrix_parser
 from test_serving import parser as client_parser, check_context_budget
 
 
@@ -57,6 +57,44 @@ class Counters(unittest.TestCase):
                 self.assertEqual(command[command.index("--model-context-limit") + 1], "131072")
                 self.assertEqual(command[command.index("--kv-pages") + 1], "200000")
                 self.assertEqual(command[command.index("--rounds") + 1], "3")
+
+    def test_split_gpu_queue_and_isolation(self):
+        import argparse
+        for bad in ("4,5,6", "4,5,6,6", "4,5,6,-1", "4,5,6,x"):
+            with self.assertRaises(argparse.ArgumentTypeError):
+                gpu_ids(bad)
+        self.assertEqual([stage_gpus(gpu_ids("4,5,6,7"), i) for i in (0, 1)], ["4,5", "6,7"])
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("run_pd_matrix.subprocess.check_output", return_value="0\n0\n0\n0\n") as check:
+                self.assertTrue(gpu_free("4,5,6,7"))
+                self.assertIn("4,5,6,7", check.call_args.args[0])
+            with patch("run_pd_matrix.subprocess.check_output", side_effect=[
+                "GPU4\nGPU5\nGPU6\nGPU7\n", "GPU0, 10\nGPU4, 20\n"
+            ]) as check:
+                guard = GPUIsolationGuard(Path(tmp), "4,5,6,7")
+                self.assertEqual(guard.baseline, {"GPU4": {20}, "GPU5": set(), "GPU6": set(), "GPU7": set()})
+                self.assertIn("4,5,6,7", check.call_args_list[0].args[0])
+            for strategy in ("no_drop", "drop"):
+                args = matrix_parser().parse_args([
+                    "--output-dir", str(Path(tmp) / strategy), "--server-repo", "/native",
+                    "--drop-server-repo", "/drop", "--drop-server-head", "reviewed",
+                    "--source-launch", "/launch", "--mini-root", "/mini", "--requests-path", "/tasks",
+                    "--rounds", "3", "--concurrencies", "8", "1", "2", "4",
+                    "--strategies", strategy, "--gpu-ids", "4,5,6,7",
+                ])
+                with patch("run_pd_matrix.gpu_free", return_value=True) as free, patch(
+                    "run_pd_matrix.subprocess.Popen"
+                ) as popen, patch("builtins.print"):
+                    popen.return_value.pid = 123
+                    popen.return_value.wait.return_value = 0
+                    overlap_matrix(args)
+                commands = [c.args[0] for c in popen.call_args_list]
+                self.assertEqual(len(commands), 4)
+                self.assertEqual([c[c.index("--concurrency")+1] for c in commands], ["8", "1", "2", "4"])
+                for c in commands:
+                    self.assertEqual("--drop" in c, strategy == "drop")
+                    self.assertEqual(c[c.index("--gpu-ids")+1], "4,5,6,7")
+                self.assertTrue(all(c.args == ("4,5,6,7",) for c in free.call_args_list))
 
     def test_finite_swe_cohort_and_model_length_boundary(self):
         args = client_parser().parse_args([
