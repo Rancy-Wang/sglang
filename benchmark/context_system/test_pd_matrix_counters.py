@@ -64,6 +64,8 @@ class Counters(unittest.TestCase):
             with self.assertRaises(argparse.ArgumentTypeError):
                 gpu_ids(bad)
         self.assertEqual([stage_gpus(gpu_ids("4,5,6,7"), i) for i in (0, 1)], ["4,5", "6,7"])
+        self.assertEqual([stage_gpus(gpu_ids("0,1,2,3,4,5,6,7"), i) for i in (0, 1)],
+                         ["0,1,2,3", "4,5,6,7"])
         with tempfile.TemporaryDirectory() as tmp:
             with patch("run_pd_matrix.subprocess.check_output", return_value="0\n0\n0\n0\n") as check:
                 self.assertTrue(gpu_free("4,5,6,7"))
