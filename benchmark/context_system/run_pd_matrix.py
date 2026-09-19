@@ -234,6 +234,16 @@ def run_one(args):
         warmup(SimpleNamespace(engine="pd", drop=args.drop, model=model, concurrency=args.concurrency,
                                port=args.port, warmup_timeout=args.warmup_timeout), root)
         isolation.check(force=True)
+        if not args.filler:
+            # Finite SWE cohorts start without synthetic warmup cache residency.
+            for offset in (0, 1):
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{args.port + offset}/flush_cache", data=b"", method="POST"
+                )
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    if response.status != 200:
+                        raise RuntimeError("Warmup cache flush failed")
+            write(root / "warmup-cache-flushed.json", dict(prefill=True, decode=True))
         if args.profile_session:
             subprocess.run(["nsys", "start", "--session=" + args.profile_session], check=True, timeout=60)
             collecting = True
