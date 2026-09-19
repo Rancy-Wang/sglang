@@ -31,6 +31,16 @@ def write(path, data):
     temp.replace(path)
 
 
+def continuous_warmup(args, root):
+    """Keep submitting disjoint warmup passes until the parent ends its budget."""
+    index = 0
+    while True:
+        target = root / f"warmup-pass-{index:04d}"
+        target.mkdir()
+        warmup(args, target)
+        index += 1
+
+
 def bounded_warmup(args, root, model):
     """Cap warmup submission, then abort and drain this isolated P/D pair."""
     seconds = args.warmup_wall_seconds
@@ -39,9 +49,10 @@ def bounded_warmup(args, root, model):
     payload = dict(engine="pd", drop=args.drop, model=model,
                    concurrency=args.concurrency, port=args.port,
                    warmup_timeout=args.warmup_timeout)
+    continuous = getattr(args, "unique_cohort", False)
+    entry = "from run_pd_matrix import continuous_warmup as warmup; " if continuous else "from run_minimal import warmup; "
     code = ("import json,sys; from pathlib import Path; from types import SimpleNamespace; "
-            "from run_minimal import warmup; "
-            "warmup(SimpleNamespace(**json.loads(sys.argv[1])), Path(sys.argv[2]))")
+            + entry + "warmup(SimpleNamespace(**json.loads(sys.argv[1])), Path(sys.argv[2]))")
     started = time.monotonic()
     with (root / "bounded-warmup.log").open("x") as log:
         proc = subprocess.Popen([sys.executable, "-u", "-c", code,
@@ -68,7 +79,8 @@ def bounded_warmup(args, root, model):
                 os.killpg(proc.pid, signal.SIGKILL)
                 proc.wait()
     write(root / "warmup-budget.json", dict(limit_seconds=seconds,
-          timed_out=timed_out, client_elapsed_seconds=time.monotonic() - started))
+          continuous_submission=continuous, timed_out=timed_out,
+          client_elapsed_seconds=time.monotonic() - started))
     if timed_out:
         # No measured requests exist yet; abort only this case's isolated ports.
         for offset in (0, 1):
