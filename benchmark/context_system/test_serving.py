@@ -14,9 +14,10 @@ import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 from pathlib import Path
 from types import SimpleNamespace
+from serving_cohort import COMPLETED, Journal, UniqueCohort, context_stop
 
 MINI_HEAD = "fb248835b908da925d14f607748536483e5fac54"
 
@@ -125,18 +126,25 @@ def compute_metrics(event):
 class Transport:
     """Adapt final SSE counters; optional native paired P/D requests."""
 
-    def __init__(self, session, method, prefill_url=None, bootstrap_port=None):
+    def __init__(self, session, method, prefill_url=None, bootstrap_port=None, emit=None):
         self.session, self.method = session, method
+        self.emit = emit
         self.prefill_url, self.bootstrap_port = prefill_url, bootstrap_port
         self.room = time.time_ns() % (1 << 52)
 
-    async def request(self, url, payload):
+    async def request(self, url, payload, identity=None):
         # Per-request state: concurrent turns must never share a DONE timestamp.
-        timing = {}
+        timing = {"identity": identity or {}}
         adapter = SimpleNamespace(
             post=lambda url, **kwargs: self.post(url, _timing=timing, **kwargs)
         )
         row = await self.method.request(adapter, url, payload)
+        row["pd_bootstrap_room"] = timing.get("room")
+        row["server_metrics"] = dict(row.get("server_metrics") or {})
+        if timing.get("room") is not None:
+            row["server_metrics"]["pd_bootstrap_room"] = timing["room"]
+        row["last_received_usage"] = timing.get("usage")
+        row["usage_received_perf"] = timing.get("usage_perf")
         row["lifecycle_latency_s"] = row["latency"]
         row["raw_done_time"] = timing.get("raw_done_time")
         row["latency"] = (
@@ -159,6 +167,10 @@ class Transport:
     @asynccontextmanager
     async def post(self, url, _timing=None, **kwargs):
         body = copy.deepcopy(kwargs["json"])
+        def record(kind, **values):
+            if self.emit:
+                self.emit(dict(kind=kind, **((_timing or {}).get("identity") or {}),
+                               received_perf=time.perf_counter(), received_wall=time.time(), **values))
         prefill = None
         owner = asyncio.current_task()
         interrupted_by_prefill = False
@@ -178,11 +190,16 @@ class Transport:
                 bootstrap_room=self.room,
             )
 
+            if _timing is not None:
+                _timing["room"] = body["bootstrap_room"]
+
             async def send_prefill():
+                record("prefill_request_start", room=body["bootstrap_room"])
                 async with self.session.post(
                     self.prefill_url, json={**body, "stream": False}
                 ) as response:
                     value = await response.json()
+                    record("prefill_response", room=body["bootstrap_room"], http_status=response.status, response=value)
                     if response.status != 200:
                         raise RuntimeError(f"P HTTP {response.status}: {value}")
                     return value
@@ -192,11 +209,15 @@ class Transport:
             # that blocked request once; add no task/race per decoded token.
             prefill.add_done_callback(prefill_finished)
         try:
+            record("request_payload", url=url, payload=body)
             async with self.session.post(url, json=body) as response:
 
                 async def content():
                     reported_metrics = None
+                    sequence = 0
                     async for data in self.method.sse_events(response.content):
+                        sequence += 1
+                        record("raw_sse", sequence=sequence, room=body.get("bootstrap_room"), data=data)
                         if data == "[DONE]":
                             if _timing is not None:
                                 _timing.setdefault("raw_done_time", time.perf_counter())
@@ -204,6 +225,9 @@ class Transport:
                                 await prefill
                         else:
                             event = json.loads(data)
+                            if _timing is not None and event.get("usage") is not None:
+                                _timing["usage"] = copy.deepcopy(event["usage"])
+                                _timing["usage_perf"] = time.perf_counter()
                             metrics = compute_metrics(event)
                             if metrics:
                                 reported_metrics = metrics
@@ -249,18 +273,23 @@ async def run(args):
 
     method = load_method(args.mini_root)
     cases, manifest = method.load_cases(
-        args.requests_path, args.num_tasks, args.seed, args.case_id
+        args.requests_path, args.source_tasks or args.num_tasks, args.seed, args.case_id
     )
     renderer = NativeTemplateAdapter(
         args.tokenizer, json.loads(args.template_kwargs), args.chat_template
     )
     root = Path(args.output_dir)
     root.mkdir(parents=True, exist_ok=False)
+    if args.unique_cohort:
+        method.write_json(root / "selection.json", dict(seed=args.seed, primary_count=args.num_tasks,
+                          source_order=[case["case_id"] for case in cases]))
     rows = []
     writes = []
+    raw_journal = Journal(root) if args.raw_sse else None
     loop = asyncio.get_running_loop()
     with (
-        (root / "events.jsonl").open("w") as journal,
+        (raw_journal if raw_journal else nullcontext()),
+        (root / ("journal-unused.log" if raw_journal else "events.jsonl")).open("w") as journal,
         ThreadPoolExecutor(max_workers=1) as rendering,
         ThreadPoolExecutor(max_workers=1) as writer,
     ):
@@ -268,6 +297,9 @@ async def run(args):
         def emit(event):
             # Match mini's FIFO writer: snapshot in the event loop, serialize
             # and flush outside timed scheduling/network work.
+            if raw_journal is not None:
+                raw_journal.emit(event)
+                return
             frozen = copy.deepcopy(event)
 
             def save():
@@ -283,7 +315,7 @@ async def run(args):
             ),
         ) as session:
             transport = Transport(
-                session, method, args.prefill_url, args.bootstrap_port
+                session, method, args.prefill_url, args.bootstrap_port, emit=emit if args.raw_sse else None
             )
 
             async def execute(case, instance):
@@ -293,8 +325,15 @@ async def run(args):
                     full, owners = await loop.run_in_executor(
                         rendering, renderer.render, history, manifest["tools"]
                     )
-                    check_context_budget(full, turn["max_new_tokens"], args.model_context_limit)
                     state = rolling.extend(history, owners, full) if args.drop else {}
+                    if args.unique_cohort:
+                        reason = context_stop(full, turn["max_new_tokens"], state, args.model_context_limit)
+                        if reason:
+                            emit(dict(kind="context_limit", case_id=case["case_id"], instance=instance["instance"],
+                                      turn=turn["turn"], reason=reason, full_tokens=full, **state))
+                            return reason
+                    else:
+                        check_context_budget(full, turn["max_new_tokens"], args.model_context_limit)
                     payload = {
                         "model": args.model,
                         "messages": history,
@@ -311,7 +350,11 @@ async def run(args):
                             drop_message=state["drop_message"],
                             reposition=state["reposition"],
                         )
-                    row = await transport.request(args.url, payload)
+                    identity = dict(case_id=case["case_id"], instance=instance["instance"], turn=turn["turn"], filler=instance["filler"])
+                    emit(dict(kind="turn_start", **identity, time=time.perf_counter(), full_tokens=full,
+                              active_tokens=state.get("active_tokens", full), position_tokens=state.get("position_tokens", full),
+                              max_new_tokens=turn["max_new_tokens"]))
+                    row = await transport.request(args.url, payload, identity)
                     if row["success"] and row["prompt_len"] != full:
                         row.update(
                             success=False,
@@ -336,16 +379,18 @@ async def run(args):
                     history.append(copy.deepcopy(row["assistant"]))
                 return "all_turns_completed"
 
-            scheduler = method.Scheduler(cases, args.concurrency, execute, emit, filler=args.filler)
+            scheduler = (UniqueCohort(cases, args.concurrency, args.num_tasks, execute, emit)
+                         if args.unique_cohort else method.Scheduler(cases, args.concurrency, execute, emit, filler=args.filler))
             await scheduler.run()
     for future in writes:
         future.result()
     count = sum(
-        item["instance"]["status"] == "all_turns_completed"
+        item["instance"]["status"] in COMPLETED
         for item in scheduler.completed
     )
     result = {
-        "valid": count == len(cases),
+        "valid": count == args.num_tasks,
+        "cohort_failure": getattr(scheduler, "failure", None),
         "successful_tasks": count,
         "args": vars(args),
         "mini_method_head": MINI_HEAD,
@@ -363,7 +408,7 @@ async def run(args):
             "No SLO. No logits instrumentation.",
             "Actual compute is null when any completed request lacks physical counters.",
             "Native generated assistant history; original tool responses are replayed.",
-            "Completed-request accounting; cancelled filler compute is not counted.",
+            "Legacy overall uses completed turns; counted-result accounting also reports known partial usage and forward work.",
             "User E2E/TPOT end at raw D DONE receipt; cleanup is reported separately.",
             "Throughput and task lifetimes retain real wall time, including P confirmation.",
         ],
@@ -388,9 +433,12 @@ def parser():
     p.add_argument("--bootstrap-port", type=int, default=28971)
     p.add_argument("--template-kwargs", default="{}")
     p.add_argument("--chat-template")
-    p.add_argument("--concurrency", type=int, choices=[1, 2, 4, 8, 10, 12, 32], default=1)
+    p.add_argument("--concurrency", type=int, choices=[1, 2, 4, 6, 8, 10, 12, 14, 32], default=1)
     p.add_argument("--num-tasks", type=int, choices=range(1, 161), default=2)
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--source-tasks", type=int)
+    p.add_argument("--unique-cohort", action="store_true")
+    p.add_argument("--raw-sse", action="store_true")
     p.add_argument("--case-id", action="append")
     p.add_argument("--drop", action="store_true")
     p.add_argument("--filler", action=argparse.BooleanOptionalAction, default=True)
