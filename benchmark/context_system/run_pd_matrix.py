@@ -68,9 +68,20 @@ def verify_capacity(info, expected):
     return capacities
 
 
-def gpu_free():
+def gpu_ids(value):
+    ids = value.split(",")
+    if len(ids) != 4 or any(not x.isdigit() for x in ids) or len(set(map(int, ids))) != 4:
+        raise argparse.ArgumentTypeError("Expected four distinct physical GPU indices, P pair then D pair")
+    return ",".join(str(int(x)) for x in ids)
+
+
+def stage_gpus(devices, stage):
+    return ",".join(devices.split(",")[2*stage:2*stage+2])
+
+
+def gpu_free(devices="0,1,2,3"):
     value = subprocess.check_output(
-        ["nvidia-smi", "-i", "0,1,2,3", "--query-gpu=memory.used", "--format=csv,noheader,nounits"], text=True
+        ["nvidia-smi", "-i", devices, "--query-gpu=memory.used", "--format=csv,noheader,nounits"], text=True
     )
     return all(int(v) < 256 for v in value.split())
 
@@ -78,9 +89,9 @@ def gpu_free():
 class GPUIsolationGuard:
     """Pin TP clients before warmup; allow their NVLink peer contexts only."""
 
-    def __init__(self, root):
+    def __init__(self, root, devices="0,1,2,3"):
         self.uuids = set(subprocess.check_output([
-            "nvidia-smi", "-i", "0,1,2,3", "--query-gpu=uuid",
+            "nvidia-smi", "-i", devices, "--query-gpu=uuid",
             "--format=csv,noheader"], text=True).split())
         self.root = root
         self.baseline = self.clients()
@@ -138,9 +149,9 @@ def run_one(args):
         raise ValueError("Pinned server revision changed")
     if subprocess.check_output(["git", "-C", str(repo), "status", "--porcelain"]):
         raise ValueError("Native baseline is dirty")
-    if not gpu_free():
-        raise RuntimeError("GPU 0-3 unavailable; no co-located benchmark allowed")
-    isolation = GPUIsolationGuard(root)
+    if not gpu_free(args.gpu_ids):
+        raise RuntimeError(f"GPU {args.gpu_ids} unavailable; no co-located benchmark allowed")
+    isolation = GPUIsolationGuard(root, args.gpu_ids)
     source = json.loads(Path(args.source_launch).read_text())
     source_servers = source["servers"]
     template = root / "retained_history.jinja"
@@ -179,7 +190,7 @@ def run_one(args):
             temp = tempfile.TemporaryDirectory(prefix="pd8-")
             temps.append(temp)
             env = dict(os.environ, PYTHONPATH=str(repo / "python"),
-                       CUDA_VISIBLE_DEVICES="0,1" if i == 0 else "2,3", TMPDIR=temp.name,
+                       CUDA_VISIBLE_DEVICES=stage_gpus(args.gpu_ids, i), TMPDIR=temp.name,
                        PD_MATRIX_PROFILE="1" if args.profile_session else "0",
                        PD_MATRIX_RESERVE_FREE_MIB=str(args.reserve_free_mib),
                        TORCHELASTIC_USE_AGENT_STORE="False", SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN="1")
@@ -342,7 +353,7 @@ def case_process_running(pid, case, proc_root=Path("/proc")):
             and argv[argv.index("--output-dir") + 1] == str(case))
 
 
-def predecessor_ready(case, pid):
+def predecessor_ready(case, pid, devices="0,1,2,3"):
     """Require a valid predecessor and its complete GPU cleanup before handoff."""
     case = Path(case)
     if (case / "failure.json").exists() or (case / "comparison-invalid.json").exists():
@@ -354,7 +365,7 @@ def predecessor_ready(case, pid):
     running = case_process_running(pid, case)
     if not running and not valid:
         raise RuntimeError(f"Predecessor exited without a valid outcome: {case}")
-    return valid and not running and gpu_free()
+    return valid and not running and gpu_free(devices)
 
 
 def overlap_matrix(args):
@@ -363,6 +374,8 @@ def overlap_matrix(args):
             or not args.drop_server_repo or not args.drop_server_head
             or args.server_head != NATIVE_HEAD):
         raise ValueError("Approved matrix requires 3 rounds, frozen native/drop repos, no Nsight or VRAM reservation")
+    if len(set(args.strategies)) != len(args.strategies):
+        raise ValueError("Duplicate strategy would repeat a case")
     if len(set(args.concurrencies)) != len(args.concurrencies):
         raise ValueError("Duplicate concurrency would repeat a case")
     if bool(args.wait_for_case) != bool(args.wait_for_case_pid):
@@ -371,7 +384,8 @@ def overlap_matrix(args):
     root.mkdir(parents=True, exist_ok=False)
     rows = []
     for c in args.concurrencies:
-        for drop in (False, True):
+        for strategy in args.strategies:
+            drop = strategy == "drop"
             rows.append(dict(name=f"nvlink-d1-c{c}-{'drop' if drop else 'no_drop'}",
                              concurrency=c, drop=drop, num_tasks=3*c, state="pending"))
     state = dict(plan_id=args.plan_id, args=vars(args), cases=rows, state="running")
@@ -382,7 +396,7 @@ def overlap_matrix(args):
         write(root / "matrix.json", state)
         try:
             deadline = time.monotonic() + 43200
-            while not predecessor_ready(args.wait_for_case, args.wait_for_case_pid):
+            while not predecessor_ready(args.wait_for_case, args.wait_for_case_pid, args.gpu_ids):
                 if time.monotonic() > deadline:
                     raise TimeoutError("Predecessor completion/cleanup wait exceeded 12 hours")
                 time.sleep(30)
@@ -399,7 +413,7 @@ def overlap_matrix(args):
                    "--server-head", args.drop_server_head if row["drop"] else args.server_head,
                    "--mini-root", args.mini_root, "--requests-path", args.requests_path,
                    "--concurrency", str(row["concurrency"]), "--rounds", "3", "--transport", "nvlink",
-                   "--decode-radix", "--port", str(args.port + 40 * index)]
+                   "--decode-radix", "--port", str(args.port + 40 * index), "--gpu-ids", args.gpu_ids]
         for option in ("prefill_token_budget", "max_running_requests", "pd_timeout",
                        "warmup_timeout", "request_timeout", "mem_fraction_static",
                        "kv_pages", "workload_timeout", "http_keepalive_timeout", "model_context_limit"):
@@ -427,11 +441,11 @@ def overlap_matrix(args):
         print(json.dumps(row), flush=True)
         # The child has joined its launchers; allow driver-level GPU teardown.
         deadline = time.monotonic() + 120
-        while not gpu_free():
+        while not gpu_free(args.gpu_ids):
             if time.monotonic() > deadline:
                 state.update(state="blocked_gpu_cleanup", blocked_after=row["name"])
                 write(root / "matrix.json", state)
-                raise RuntimeError("GPU 0-3 not released after completed case")
+                raise RuntimeError(f"GPU {args.gpu_ids} not released after completed case")
             time.sleep(5)
     state.update(state="completed_with_failures" if any(row["returncode"] for row in rows)
                  else "completed", end=time.time())
@@ -453,14 +467,15 @@ def matrix(args):
             rows.append(row)
             write(root / "matrix.json", {"args": vars(args), "cases": rows})
             deadline = time.monotonic() + 43200
-            while not gpu_free():
+            while not gpu_free(args.gpu_ids):
                 if time.monotonic() > deadline:
                     raise RuntimeError("GPU wait exceeded 12 hours")
                 time.sleep(30)
             cmd = [sys.executable, str(Path(__file__).resolve()), "--one", "--output-dir", str(target),
                    "--server-repo", args.server_repo, "--source-launch", args.source_launch,
                    "--mini-root", args.mini_root, "--requests-path", args.requests_path,
-                   "--transport", transport, "--concurrency", str(c), "--port", str(args.port + index * 40)]
+                   "--transport", transport, "--concurrency", str(c), "--port", str(args.port + index * 40),
+                   "--gpu-ids", args.gpu_ids]
             if radix:
                 cmd.append("--decode-radix")
             if profile:
@@ -508,6 +523,9 @@ def parser():
     p.add_argument("--model-context-limit", type=int)
     p.add_argument("--plan-id", default=OVERLAP_PLAN)
     p.add_argument("--port", type=int, default=30041)
+    p.add_argument("--gpu-ids", type=gpu_ids, default="0,1,2,3", help="Physical P0,P1,D0,D1 GPU indices")
+    p.add_argument("--strategies", nargs="+", choices=("no_drop", "drop"), default=["no_drop", "drop"],
+                   help="Ordered strategies within each overlap-matrix concurrency")
     p.add_argument("--one", action="store_true")
     p.add_argument("--transport", choices=("tcp", "nvlink"), default="nvlink")
     p.add_argument("--decode-radix", action="store_true")
