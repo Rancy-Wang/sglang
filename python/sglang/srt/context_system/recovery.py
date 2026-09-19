@@ -31,11 +31,12 @@ import torch
 
 
 class DropEvictionCandidates:
-    """Persistent leaf-first heaps with bounded lazy invalidation.
+    """Persistent Drop-first heaps with bounded lazy invalidation.
 
     The tree updates a candidate only when its locks, children, residency or
     recency change. Reclaim never scans the tree or reads device page indices.
-    ``kind=0`` denotes a leaf and ``kind=1`` a proven Drop internal edge.
+    ``kind=0`` denotes an ordinary leaf and ``kind=1`` a proven Drop edge,
+    including a Drop edge that has become a leaf.
     """
 
     def __init__(self):
@@ -59,7 +60,8 @@ class DropEvictionCandidates:
                 heapq.heapify(heap)
 
     def pop(self):
-        for kind, heap in enumerate(self.heaps):
+        for kind in (1, 0):
+            heap = self.heaps[kind]
             while heap:
                 entry = heapq.heappop(heap)
                 if self.entries.get(entry[1]) == (kind, entry):

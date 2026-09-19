@@ -11,18 +11,18 @@ from test_ir import ROOT, args, load_file
 pytest_plugins = ("test_ir",)
 
 
-def test_candidate_leaf_priority_and_bounded_stale_entries():
+def test_candidate_drop_priority_and_bounded_stale_entries():
     module = load_file(
         "context_drop_eviction", ROOT / "python/sglang/srt/context_system/recovery.py"
     )
     candidates = module.DropEvictionCandidates()
     leaf, internal = SimpleNamespace(id=1), SimpleNamespace(id=2)
-    candidates.update(internal, 1, -1000)
+    candidates.update(internal, 1, 10000)
     for time in range(1000):
         candidates.update(leaf, 0, time)
     assert sum(map(len, candidates.heaps)) <= 2 * len(candidates.entries) + 64
-    assert candidates.pop() == (0, leaf)
     assert candidates.pop() == (1, internal)
+    assert candidates.pop() == (0, leaf)
     assert candidates.pop() is None
     candidates.update(leaf, 0, 0)
     candidates.update(leaf, None)
@@ -172,7 +172,7 @@ def test_retry_source_capacity_counts_shared_edges_and_drop_receipts(
     assert_allocator(cache, allocator, 0)
 
 
-def test_shared_reader_leaf_first_hole_refill_and_split(compiler, native_cache):
+def test_shared_reader_drop_first_hole_refill_and_split(compiler, native_cache):
     from sglang.srt.mem_cache.base_prefix_cache import (
         EvictParams,
         InsertParams,
@@ -197,21 +197,21 @@ def test_shared_reader_leaf_first_hole_refill_and_split(compiler, native_cache):
     cache.evict(EvictParams(num_tokens=128))
     assert_allocator(cache, allocator, 12)
     cache.dec_lock_ref(ordinary.last_device_node, reader.to_dec_params())
-    # A newer ordinary leaf must be reclaimed before an older Drop internal edge.
+    # Drop pages must be reclaimed while the ordinary leaf is still resident.
     cache.insert(
         InsertParams(key=RadixKey(array("q", [90, 91, 92])), value=allocator.alloc(3))
     )
     cache.evict(EvictParams(num_tokens=3))
     assert_allocator(cache, allocator, 12)
-    assert cache.match_prefix(
-        MatchPrefixParams(key=key, context_retry=True)
-    ).context_resident.all()
-    cache.evict(EvictParams(num_tokens=3))
-    assert_allocator(cache, allocator, 9)
     holed = cache.match_prefix(MatchPrefixParams(key=key, context_retry=True))
     assert holed.context_resident.tolist() == required.tolist()
     assert holed.device_indices[1:4].tolist() == [-1, -1, -1]
     assert torch.equal(holed.device_indices[4:], slots[4:])
+    assert len(cache.match_prefix(
+        MatchPrefixParams(key=RadixKey(array("q", [90, 91, 92])))
+    ).device_indices) == 3
+    cache.evict(EvictParams(num_tokens=3))
+    assert_allocator(cache, allocator, 9)
     assert (
         len(
             cache.match_prefix(
@@ -267,6 +267,106 @@ def test_unmatched_future_delta_cannot_release_pages(compiler, native_cache):
     cache.dec_lock_ref(matched.last_device_node, lease.to_dec_params())
     cache.evict(EvictParams(num_tokens=128))
     assert_allocator(cache, allocator, 0)
+
+
+def test_exhausted_pool_reclaims_all_drop_pages_before_any_leaf(
+    compiler, native_cache, monkeypatch
+):
+    from sglang.srt.mem_cache.base_prefix_cache import (
+        EvictParams, InsertParams, MatchPrefixParams,
+    )
+    from sglang.srt.mem_cache.radix_cache import RadixKey
+
+    cache, allocator = native_cache
+    leases, dropped, protected = [], set(), set()
+    required = torch.ones(12, dtype=torch.bool)
+    required[1:4] = False
+    for offset in (0, 100):
+        key = RadixKey.from_context(
+            compiler(*args(list(range(offset, offset + 12)), {6: [(1, 4)]}, []))
+        )
+        slots = allocator.alloc(12)
+        cache.insert(InsertParams(key=key, value=slots))
+        hit = cache.match_prefix(MatchPrefixParams(key=key, context_retry=True))
+        lease = cache.inc_lock_ref(hit.last_device_node)
+        cache.configure_context_drop_lock(hit.last_device_node, lease, required)
+        leases.append((key, hit.last_device_node, lease, slots.clone()))
+        dropped.update(slots[~required].tolist())
+        protected.update(slots[required].tolist())
+    cold = RadixKey(array("q", range(1000, 1104)))
+    cold_slots = allocator.alloc(104)
+    cache.insert(InsertParams(key=cold, value=cold_slots))
+    assert_allocator(cache, allocator, 128)
+    assert allocator.alloc(1) is None
+
+    tree = cache.tree_core
+    events = []
+    evict_drop, evict_leaf = tree.evict_context_pages, tree.evict_device_leaf
+
+    def observe_drop(node, *arguments):
+        events.append(("drop", node.full_page_count))
+        return evict_drop(node, *arguments)
+
+    def observe_leaf(*arguments, **kwargs):
+        # An independent physical-count check at the ordinary-leaf boundary.
+        assert sum(n for kind, n in events if kind == "drop") == 6
+        events.append(("leaf", 104))
+        return evict_leaf(*arguments, **kwargs)
+
+    monkeypatch.setattr(tree, "evict_context_pages", observe_drop)
+    monkeypatch.setattr(tree, "evict_device_leaf", observe_leaf)
+    cache.evict(EvictParams(num_tokens=110))
+    assert [kind for kind, _ in events] == ["drop", "drop", "leaf"]
+    assert_allocator(cache, allocator, 18)
+    reused = allocator.alloc(110)
+    assert reused is not None and len(torch.unique(reused)) == 110
+    assert bool((reused > 0).all())
+    assert set(reused.tolist()) == dropped | set(cold_slots.tolist())
+    assert not set(reused.tolist()) & protected
+    for key, node_id, lease, slots in leases:
+        hit = cache.match_prefix(MatchPrefixParams(key=key, context_retry=True))
+        assert hit.context_resident.tolist() == required.tolist()
+        assert hit.device_indices[~required].tolist() == [-1, -1, -1]
+        assert torch.equal(hit.device_indices[required], slots[required])
+        assert bool((hit.device_indices[required] > 0).all())
+        cache.dec_lock_ref(node_id, lease.to_dec_params())
+    monkeypatch.setattr(tree, "evict_device_leaf", evict_leaf)
+    allocator.free(reused)
+    cache.evict(EvictParams(num_tokens=128))
+    assert_allocator(cache, allocator, 0)
+    assert len(tree._node_arena) == 1
+
+
+def test_drop_leaf_priority_and_empty_path_pruning(native_cache):
+    from sglang.srt.context_system.recovery import DropEvictionCandidates
+    from sglang.srt.mem_cache.base_prefix_cache import (
+        EvictParams, InsertParams, MatchPrefixParams,
+    )
+    from sglang.srt.mem_cache.radix_cache import RadixKey
+
+    cache, allocator = native_cache
+    cold = RadixKey(array("q", [90]))
+    cache.insert(InsertParams(key=cold, value=allocator.alloc(1)))
+    key = RadixKey(array("q", [10, 11]))
+    cache.insert(InsertParams(key=key, value=allocator.alloc(2)))
+    # Split a parent so removing the Drop leaf must expose it for later eviction.
+    cache.match_prefix(MatchPrefixParams(key=key[:1]))
+    leaf_id = cache.match_prefix(MatchPrefixParams(key=key)).last_device_node
+    tree = cache.tree_core
+    tree.context_eviction_candidates = DropEvictionCandidates()
+    # Unit-test selection/lifecycle after an already-proven edge becomes a leaf.
+    leaf = tree.node_by_id(leaf_id)
+    leaf.context_drop_eligible = True
+    for node in tuple(tree.evictable_device_leaves):
+        tree._update_context_candidate(node)
+    cache.evict(EvictParams(num_tokens=1))
+    assert leaf_id not in tree._node_arena
+    assert len(cache.match_prefix(MatchPrefixParams(key=cold)).device_indices) == 1
+    assert len(cache.match_prefix(MatchPrefixParams(key=key)).device_indices) == 1
+    assert_allocator(cache, allocator, 2)
+    cache.evict(EvictParams(num_tokens=128))
+    assert_allocator(cache, allocator, 0)
+    assert len(tree._node_arena) == 1
 
 
 @pytest.mark.parametrize("existing", [False, True])

@@ -798,9 +798,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         if candidates is None:
             return
         kind = None
-        if node in self.evictable_device_leaves:
-            kind = 0
-        elif (
+        if (
             node is not self.root_node
             and node.context_drop_eligible
             and node.full_page_count
@@ -808,6 +806,8 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             and not any(cd.lock_ref or cd.host_lock_ref for cd in node.component_data)
         ):
             kind = 1
+        elif node in self.evictable_device_leaves:
+            kind = 0
         full = self.components_by_type[BASE_COMPONENT_TYPE]
         full._ensure_eviction_strategy()
         candidates.update(
@@ -834,6 +834,9 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         node.context_hole = True
         node.component_data[BASE_COMPONENT_TYPE].value = torch.full_like(value, -1)
         self._update_evictable_leaf_sets(node)
+        # Drop candidates can also be leaves. Do not strand an unleased hole
+        # that would prevent its parent from becoming an evictable leaf.
+        self._prune_context_holes(node)
 
     def _prune_context_holes(self, node):
         while (
