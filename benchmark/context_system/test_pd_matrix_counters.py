@@ -10,7 +10,7 @@ import unittest
 from launch_pd_counted import batch_work
 from summarize_pd_matrix import join_counts, read_counts, rebuild_summaries
 from run_pd_matrix import overlap_command, predecessor_ready, case_process_running
-from test_serving import parser as client_parser
+from test_serving import parser as client_parser, check_context_budget
 
 
 def batch(mode, lengths):
@@ -31,6 +31,22 @@ class Counters(unittest.TestCase):
                         "--url", "http://127.0.0.1:32042/v1/chat/completions",
                     ] + (["--drop"] if drop else []))
                     self.assertEqual((args.concurrency, args.num_tasks, args.drop), (c, 3*c, drop))
+
+    def test_finite_swe_cohort_and_model_length_boundary(self):
+        args = client_parser().parse_args([
+            "--mini-root", "/mini", "--requests-path", "/tasks", "--output-dir", "/out",
+            "--model", "/model", "--tokenizer", "/model", "--num-tasks", "24",
+            "--concurrency", "8", "--no-filler", "--model-context-limit", "131072",
+        ])
+        self.assertFalse(args.filler)
+        check_context_budget(130000, 1072, args.model_context_limit)
+        with self.assertRaisesRegex(ValueError, "model_context_limit"):
+            check_context_budget(130000, 1073, args.model_context_limit)
+        command = overlap_command(["python", "--page-size", "1"],
+                                  prefill_token_budget=8192, mem_fraction_static=.54, kv_pages=200000)
+        for flag, expected in [("--max-total-tokens", "200000"),
+                               ("--chunked-prefill-size", "8192"), ("--max-prefill-tokens", "8192")]:
+            self.assertEqual(command[command.index(flag) + 1], expected)
 
     def test_overlap_plan_removes_capacity_cap_and_allows_c8(self):
         original = ["python", "launch.py", "--max-total-tokens", "262144",

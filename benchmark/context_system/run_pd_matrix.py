@@ -156,6 +156,12 @@ def run_one(args):
             if args.approved_overlap_matrix:
                 cmd = overlap_command(cmd, args.max_running_requests or max(8, args.concurrency),
                                       args.prefill_token_budget, args.mem_fraction_static, args.kv_pages)
+            if args.model_context_limit is not None:
+                flag = "--context-length"
+                if flag in cmd:
+                    cmd[cmd.index(flag) + 1] = str(args.model_context_limit)
+                else:
+                    cmd += [flag, str(args.model_context_limit)]
             cmd[0:2] = [sys.executable, str(HERE / "launch_pd_counted.py")]
             for flag, value in (("--port", args.port + i), ("--disaggregation-bootstrap-port", args.port + 10),
                                 ("--nccl-port", args.port + 20 + i), ("--chat-template", template)):
@@ -177,6 +183,8 @@ def run_one(args):
                        PD_MATRIX_PROFILE="1" if args.profile_session else "0",
                        PD_MATRIX_RESERVE_FREE_MIB=str(args.reserve_free_mib),
                        TORCHELASTIC_USE_AGENT_STORE="False", SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN="1")
+            if args.model_context_limit is not None:
+                env.pop("SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN", None)
             if args.pd_timeout is not None:
                 env.update(SGLANG_DISAGGREGATION_WAITING_TIMEOUT=str(args.pd_timeout),
                            SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=str(args.pd_timeout))
@@ -240,6 +248,10 @@ def run_one(args):
                   f"http://127.0.0.1:{args.port}/v1/chat/completions", "--bootstrap-port", str(args.port+10),
                   "--chat-template", str(template), "--template-kwargs", '{"preserve_thinking_history":true}',
                   "--timeout", str(args.request_timeout)]
+        if not args.filler:
+            client.append("--no-filler")
+        if args.model_context_limit is not None:
+            client += ["--model-context-limit", str(args.model_context_limit)]
         if args.drop:
             client.append("--drop")
         write(root / "client.json", client)
@@ -352,7 +364,7 @@ def overlap_matrix(args):
         for drop in (False, True):
             rows.append(dict(name=f"nvlink-d1-c{c}-{'drop' if drop else 'no_drop'}",
                              concurrency=c, drop=drop, num_tasks=3*c, state="pending"))
-    state = dict(plan_id=OVERLAP_PLAN, args=vars(args), cases=rows, state="running")
+    state = dict(plan_id=args.plan_id, args=vars(args), cases=rows, state="running")
     write(root / "matrix.json", state)
     if args.wait_for_case:
         state.update(state="waiting_predecessor", predecessor=args.wait_for_case,
@@ -380,10 +392,13 @@ def overlap_matrix(args):
                    "--decode-radix", "--port", str(args.port + 40 * index)]
         for option in ("prefill_token_budget", "max_running_requests", "pd_timeout",
                        "warmup_timeout", "request_timeout", "mem_fraction_static",
-                       "kv_pages", "workload_timeout", "http_keepalive_timeout"):
+                       "kv_pages", "workload_timeout", "http_keepalive_timeout", "model_context_limit"):
             value = getattr(args, option)
             if value is not None:
                 command += ["--" + option.replace("_", "-"), str(value)]
+        if not args.filler:
+            command.append("--no-filler")
+        command += ["--plan-id", args.plan_id]
         if row["drop"]:
             command.append("--drop")
         row.update(state="running", command=command, start=time.time())
@@ -479,6 +494,9 @@ def parser():
     p.add_argument("--source-launch", required=True)
     p.add_argument("--mini-root", required=True)
     p.add_argument("--requests-path", required=True)
+    p.add_argument("--filler", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--model-context-limit", type=int)
+    p.add_argument("--plan-id", default=OVERLAP_PLAN)
     p.add_argument("--port", type=int, default=30041)
     p.add_argument("--one", action="store_true")
     p.add_argument("--transport", choices=("tcp", "nvlink"), default="nvlink")
