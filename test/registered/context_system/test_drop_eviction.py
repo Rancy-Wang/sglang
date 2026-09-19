@@ -307,16 +307,19 @@ def test_exhausted_pool_reclaims_all_drop_pages_before_any_leaf(
         events.append(("drop", node.full_page_count))
         return evict_drop(node, *arguments)
 
-    def observe_leaf(*arguments, **kwargs):
+    def observe_leaf(node_id, *arguments, **kwargs):
         # An independent physical-count check at the ordinary-leaf boundary.
         assert sum(n for kind, n in events if kind == "drop") == 6
-        events.append(("leaf", 104))
-        return evict_leaf(*arguments, **kwargs)
+        events.append(("leaf", tree.node_by_id(node_id).full_page_count))
+        return evict_leaf(node_id, *arguments, **kwargs)
 
     monkeypatch.setattr(tree, "evict_context_pages", observe_drop)
     monkeypatch.setattr(tree, "evict_device_leaf", observe_leaf)
     cache.evict(EvictParams(num_tokens=110))
-    assert [kind for kind, _ in events] == ["drop", "drop", "leaf"]
+    assert [kind for kind, _ in events[:2]] == ["drop", "drop"]
+    # SWA may split the cold path at its window boundary.
+    assert events[2:] and all(kind == "leaf" for kind, _ in events[2:])
+    assert sum(n for kind, n in events if kind == "leaf") == 104
     assert_allocator(cache, allocator, 18)
     reused = allocator.alloc(110)
     assert reused is not None and len(torch.unique(reused)) == 110
