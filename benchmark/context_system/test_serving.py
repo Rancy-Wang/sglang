@@ -388,7 +388,7 @@ def parser():
     p.add_argument("--bootstrap-port", type=int, default=28971)
     p.add_argument("--template-kwargs", default="{}")
     p.add_argument("--chat-template")
-    p.add_argument("--concurrency", type=int, choices=[1, 2, 4, 8, 32], default=1)
+    p.add_argument("--concurrency", type=int, choices=[1, 2, 4, 8, 10, 12, 32], default=1)
     p.add_argument("--num-tasks", type=int, choices=range(1, 161), default=2)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--case-id", action="append")
