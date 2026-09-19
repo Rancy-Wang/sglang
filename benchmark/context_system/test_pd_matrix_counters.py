@@ -9,7 +9,7 @@ import unittest
 
 from launch_pd_counted import batch_work
 from summarize_pd_matrix import join_counts, read_counts, rebuild_summaries
-from run_pd_matrix import overlap_command, predecessor_ready, case_process_running
+from run_pd_matrix import overlap_command, predecessor_ready, case_process_running, overlap_matrix, parser as matrix_parser
 from test_serving import parser as client_parser, check_context_budget
 
 
@@ -31,6 +31,32 @@ class Counters(unittest.TestCase):
                         "--url", "http://127.0.0.1:32042/v1/chat/completions",
                     ] + (["--drop"] if drop else []))
                     self.assertEqual((args.concurrency, args.num_tasks, args.drop), (c, 3*c, drop))
+
+    def test_finite_matrix_propagates_cohort_order_and_context_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = matrix_parser().parse_args([
+                "--output-dir", str(Path(tmp) / "matrix"), "--server-repo", "/native",
+                "--drop-server-repo", "/drop", "--drop-server-head", "reviewed",
+                "--source-launch", "/launch", "--mini-root", "/mini", "--requests-path", "/tasks",
+                "--rounds", "3", "--concurrencies", "8", "1", "2", "4",
+                "--no-filler", "--model-context-limit", "131072", "--kv-pages", "200000",
+            ])
+            with patch("run_pd_matrix.gpu_free", return_value=True), patch(
+                "run_pd_matrix.subprocess.Popen"
+            ) as popen, patch("builtins.print"):
+                popen.return_value.pid = 123
+                popen.return_value.wait.return_value = 0
+                overlap_matrix(args)
+            commands = [call.args[0] for call in popen.call_args_list]
+            self.assertEqual(len(commands), 8)
+            self.assertEqual([c[c.index("--concurrency") + 1] for c in commands],
+                             ["8", "8", "1", "1", "2", "2", "4", "4"])
+            self.assertEqual(["--drop" in c for c in commands], [False, True] * 4)
+            for command in commands:
+                self.assertIn("--no-filler", command)
+                self.assertEqual(command[command.index("--model-context-limit") + 1], "131072")
+                self.assertEqual(command[command.index("--kv-pages") + 1], "200000")
+                self.assertEqual(command[command.index("--rounds") + 1], "3")
 
     def test_finite_swe_cohort_and_model_length_boundary(self):
         args = client_parser().parse_args([
