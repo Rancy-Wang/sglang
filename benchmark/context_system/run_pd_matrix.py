@@ -225,6 +225,8 @@ def run_one(args):
                     cmd[cmd.index(flag) + 1] = str(args.model_context_limit)
                 else:
                     cmd += [flag, str(args.model_context_limit)]
+            if args.unique_cohort:
+                cmd += ["--enable-metrics", "--random-seed", str(args.seed), "--watchdog-timeout", "1800"]
             cmd[0:2] = [sys.executable, str(HERE / "launch_pd_counted.py")]
             for flag, value in (("--port", args.port + i), ("--disaggregation-bootstrap-port", args.port + 10),
                                 ("--nccl-port", args.port + 20 + i), ("--chat-template", template)):
@@ -291,6 +293,8 @@ def run_one(args):
             with urllib.request.urlopen(f"http://127.0.0.1:{args.port+i}/server_info", timeout=30) as response:
                 info = json.load(response)
                 write(root / f"{mode}-server-info.json", info)
+                if args.unique_cohort:
+                    capacities[mode] = [x["memory_usage"]["token_capacity"] for x in info["internal_states"]]
                 if args.kv_pages is not None:
                     capacities[mode] = verify_capacity(info, args.kv_pages)
         if capacities:
@@ -321,11 +325,13 @@ def run_one(args):
         client = [sys.executable, str(HERE / "test_serving.py"), "--mini-root", args.mini_root,
                   "--model", model, "--tokenizer", model, "--requests-path", args.requests_path,
                   "--output-dir", str(root / "workload"), "--concurrency", str(args.concurrency),
-                  "--num-tasks", str(args.concurrency * args.rounds), "--seed", "42", "--url",
+                  "--num-tasks", str(args.concurrency * args.rounds), "--seed", str(args.seed), "--url",
                   f"http://127.0.0.1:{args.port+1}/v1/chat/completions", "--prefill-url",
                   f"http://127.0.0.1:{args.port}/v1/chat/completions", "--bootstrap-port", str(args.port+10),
                   "--chat-template", str(template), "--template-kwargs", '{"preserve_thinking_history":true}',
                   "--timeout", str(args.request_timeout)]
+        if args.unique_cohort:
+            client += ["--unique-cohort", "--source-tasks", "80", "--raw-sse"]
         if not args.filler:
             client.append("--no-filler")
         if args.model_context_limit is not None:
@@ -333,6 +339,10 @@ def run_one(args):
         if args.drop:
             client.append("--drop")
         write(root / "client.json", client)
+        if args.unique_cohort:
+            # Restart history is never pooled into the current attempt.
+            write(root / "measurement-ready.json", dict(time=time.time(), seed=args.seed,
+                  primary_tasks=3 * args.concurrency, source_tasks=80))
         with (root / "client.log").open("x") as log:
             client_proc = subprocess.Popen(client, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             # Scale the whole-workload watchdog for the larger task cohort only.
@@ -341,6 +351,8 @@ def run_one(args):
             deadline = time.monotonic() + workload_timeout
             while client_proc.poll() is None:
                 isolation.check()
+                if any(proc.poll() is not None for proc in procs):
+                    raise RuntimeError("P/D process exited during measured workload")
                 if time.monotonic() > deadline:
                     raise subprocess.TimeoutExpired(client, workload_timeout)
                 time.sleep(5)
@@ -577,6 +589,8 @@ def parser():
     p.add_argument("--mini-root", required=True)
     p.add_argument("--requests-path", required=True)
     p.add_argument("--filler", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--unique-cohort", action="store_true")
     p.add_argument("--model-context-limit", type=int)
     p.add_argument("--plan-id", default=OVERLAP_PLAN)
     p.add_argument("--port", type=int, default=30041)
@@ -587,7 +601,7 @@ def parser():
     p.add_argument("--transport", choices=("tcp", "nvlink"), default="nvlink")
     p.add_argument("--decode-radix", action="store_true")
     p.add_argument("--drop", action="store_true", help="Rolling K=12 / 96Ki-token Repos, with Drop-aware eviction")
-    p.add_argument("--concurrency", type=int, choices=(1, 2, 4, 8, 10, 12, 32), default=1)
+    p.add_argument("--concurrency", type=int, choices=(1, 2, 4, 6, 8, 10, 12, 14, 32), default=1)
     p.add_argument("--prefill-token-budget", type=int,
                    help="Explicit common chunked-prefill-size and max-prefill-tokens override")
     p.add_argument("--max-running-requests", type=int, choices=(8, 16, 32),
@@ -605,7 +619,7 @@ def parser():
                    help="Preserve failed cases and continue after GPU cleanup; never count them as valid")
     p.add_argument("--rounds", type=int, choices=range(1, 21), default=2)
     p.add_argument("--approved-overlap-matrix", action="store_true", help=OVERLAP_PLAN)
-    p.add_argument("--concurrencies", type=int, nargs="+", choices=(1, 2, 4, 8, 10, 12, 32),
+    p.add_argument("--concurrencies", type=int, nargs="+", choices=(1, 2, 4, 6, 8, 10, 12, 14, 32),
                    default=[1, 2, 4, 8], help="Ordered overlap-matrix concurrency pairs")
     p.add_argument("--wait-for-case", help="Finish this existing case before starting the new matrix")
     p.add_argument("--wait-for-case-pid", type=int)
