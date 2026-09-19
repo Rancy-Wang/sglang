@@ -25,6 +25,7 @@ def install():
             begin, end, row = pending.popleft()
             row["gpu_ms"] = begin.elapsed_time(end)
             row["observed_perf"] = time.perf_counter()
+            row["record"] = "gpu_completed"
             log.write(json.dumps(row) + "\n")
         mode = forward_batch.forward_mode
         if not (mode.is_extend() or mode.is_decode()):
@@ -41,6 +42,10 @@ def install():
         end.record()
         row["end_perf"] = time.perf_counter()
         row["cpu_ms"] = 1000 * (row["end_perf"] - row["start_perf"])
+        row["record"] = "dispatched"
+        # Preserve the final dispatch even if the server becomes idle or the
+        # fixed measurement window stops before a subsequent event query.
+        log.write(json.dumps(row) + "\n")
         pending.append((begin, end, row))
         return result
 
