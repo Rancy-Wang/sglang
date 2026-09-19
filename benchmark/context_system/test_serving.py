@@ -18,7 +18,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
-MINI_HEAD = "2966eb49a522041f9c42bce7dca07119ef6929de"
+MINI_HEAD = "fb248835b908da925d14f607748536483e5fac54"
 
 
 def load_method(root):
@@ -209,6 +209,13 @@ class Transport:
                 await asyncio.gather(prefill, return_exceptions=True)
 
 
+def check_context_budget(prompt_tokens, output_tokens, limit):
+    if limit is not None and prompt_tokens + output_tokens > limit:
+        raise ValueError(
+            f"model_context_limit: prompt={prompt_tokens} output={output_tokens} limit={limit}"
+        )
+
+
 async def run(args):
     import aiohttp
 
@@ -258,6 +265,7 @@ async def run(args):
                     full, owners = await loop.run_in_executor(
                         rendering, renderer.render, history, manifest["tools"]
                     )
+                    check_context_budget(full, turn["max_new_tokens"], args.model_context_limit)
                     state = rolling.extend(history, owners, full) if args.drop else {}
                     payload = {
                         "model": args.model,
@@ -300,7 +308,7 @@ async def run(args):
                     history.append(copy.deepcopy(row["assistant"]))
                 return "all_turns_completed"
 
-            scheduler = method.Scheduler(cases, args.concurrency, execute, emit)
+            scheduler = method.Scheduler(cases, args.concurrency, execute, emit, filler=args.filler)
             await scheduler.run()
     for future in writes:
         future.result()
@@ -352,6 +360,8 @@ def parser():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--case-id", action="append")
     p.add_argument("--drop", action="store_true")
+    p.add_argument("--filler", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--model-context-limit", type=int)
     p.add_argument("--timeout", type=float, default=7200)
     return p
 
