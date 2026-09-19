@@ -130,8 +130,34 @@ class Transport:
         self.prefill_url, self.bootstrap_port = prefill_url, bootstrap_port
         self.room = time.time_ns() % (1 << 52)
 
+    async def request(self, url, payload):
+        # Per-request state: concurrent turns must never share a DONE timestamp.
+        timing = {}
+        adapter = SimpleNamespace(
+            post=lambda url, **kwargs: self.post(url, _timing=timing, **kwargs)
+        )
+        row = await self.method.request(adapter, url, payload)
+        row["lifecycle_latency_s"] = row["latency"]
+        row["raw_done_time"] = timing.get("raw_done_time")
+        row["latency"] = (
+            row["raw_done_time"] - row["start_time"]
+            if row["raw_done_time"] is not None else None
+        )
+        row["cleanup_time_s"] = (
+            row["end_time"] - row["raw_done_time"]
+            if row["raw_done_time"] is not None else None
+        )
+        row["tpot_s"] = (
+            (row["latency"] - row["ttft"]) / (row["output_len"] - 1)
+            if row["success"] and row["latency"] is not None
+            and row["ttft"] is not None and row["output_len"] > 1 else None
+        )
+        # end_time remains the lifecycle boundary for real throughput windows.
+        row["latency_boundary"] = "client_received_decode_done"
+        return row
+
     @asynccontextmanager
-    async def post(self, url, **kwargs):
+    async def post(self, url, _timing=None, **kwargs):
         body = copy.deepcopy(kwargs["json"])
         prefill = None
         owner = asyncio.current_task()
@@ -172,6 +198,8 @@ class Transport:
                     reported_metrics = None
                     async for data in self.method.sse_events(response.content):
                         if data == "[DONE]":
+                            if _timing is not None:
+                                _timing.setdefault("raw_done_time", time.perf_counter())
                             if prefill:
                                 await prefill
                         else:
@@ -283,7 +311,7 @@ async def run(args):
                             drop_message=state["drop_message"],
                             reposition=state["reposition"],
                         )
-                    row = await method.request(transport, args.url, payload)
+                    row = await transport.request(args.url, payload)
                     if row["success"] and row["prompt_len"] != full:
                         row.update(
                             success=False,
@@ -322,6 +350,9 @@ async def run(args):
         "args": vars(args),
         "mini_method_head": MINI_HEAD,
         "overall": method.summary(rows, scheduler.start, scheduler.cutoff),
+        "user_e2e_latency_s": method.stats([r["latency"] for r in rows if r["success"]]),
+        "cleanup_time_s": method.stats([r["cleanup_time_s"] for r in rows if r["success"]]),
+        "client_tpot_s": method.stats([r["tpot_s"] for r in rows if r["tpot_s"] is not None]),
         "turns": rows,
         "tasks": scheduler.instances,
         "round_ends": scheduler.round_ends,
@@ -333,6 +364,8 @@ async def run(args):
             "Actual compute is null when any completed request lacks physical counters.",
             "Native generated assistant history; original tool responses are replayed.",
             "Completed-request accounting; cancelled filler compute is not counted.",
+            "User E2E/TPOT end at raw D DONE receipt; cleanup is reported separately.",
+            "Throughput and task lifetimes retain real wall time, including P confirmation.",
         ],
     }
     method.write_json(root / "result.json", result)
