@@ -4,10 +4,12 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from serving_cohort import Journal, UniqueCohort, context_stop
 from summarize_pd_matrix import detailed_accounting
 from run_swe_top80 import CASES, command
+from run_pd_matrix import continuous_warmup
 
 
 class Cohort(unittest.IsolatedAsyncioTestCase):
@@ -45,6 +47,19 @@ class Cohort(unittest.IsolatedAsyncioTestCase):
 
 
 class Boundaries(unittest.TestCase):
+    def test_early_warmup_completion_starts_new_pass_without_overwriting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            def warmup(args, target):
+                self.assertTrue(target.is_dir())
+                (target / "usage.json").write_text("{}")
+                if target.name.endswith("0002"):
+                    raise RuntimeError("parent budget expired")
+            with patch("run_pd_matrix.warmup", side_effect=warmup):
+                with self.assertRaisesRegex(RuntimeError, "parent budget expired"):
+                    continuous_warmup(None, root)
+            self.assertEqual(len(list(root.glob("warmup-pass-*/usage.json"))), 3)
+
     def test_context_uses_active_and_absolute_position_not_full_history(self):
         self.assertIsNone(context_stop(180000, 100, dict(active_tokens=80000, position_tokens=90000), 131072))
         self.assertEqual(context_stop(180000, 100, dict(active_tokens=131073, position_tokens=100000), 131072), "active_context_limit_reached")
