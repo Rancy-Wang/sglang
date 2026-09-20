@@ -9,7 +9,7 @@ from unittest.mock import patch
 from serving_cohort import Journal, UniqueCohort, context_stop
 from summarize_pd_matrix import detailed_accounting
 from run_swe_top80 import CASES, command
-from run_pd_matrix import continuous_warmup
+from run_pd_matrix import continuous_warmup, replay_template
 
 
 class Cohort(unittest.IsolatedAsyncioTestCase):
@@ -47,6 +47,33 @@ class Cohort(unittest.IsolatedAsyncioTestCase):
 
 
 class Boundaries(unittest.TestCase):
+    def test_generated_channel_tags_are_preserved_without_changing_valid_rendering(self):
+        from jinja2 import Environment
+
+        template = '{# SGLANG_CONTEXT_THINKING_HISTORY_V1:gpt-oss #}'
+        for field in ('content', 'thinking'):
+            template += ("{%- if '<|channel|>' in " + field + " -%}"
+                         '{{- raise_exception("You have passed a message containing <|channel|> tags in the '
+                         + field + ' field. Use structured fields.") }}{%- endif -%}'
+                         '{{- ' + field + ' }}')
+        template += "{%- if invalid_tool -%}{{- raise_exception('invalid tool') }}{%- endif -%}"
+        env = Environment()
+        def reject(message):
+            raise ValueError(message)
+        env.globals['raise_exception'] = reject
+        old, new = env.from_string(template), env.from_string(replay_template(template))
+        normal = dict(content='answer', thinking='reason', invalid_tool=False)
+        self.assertEqual(old.render(**normal), new.render(**normal))
+        generated = dict(normal, thinking='text<|channel|>final<|message|>suffix')
+        with self.assertRaisesRegex(ValueError, 'thinking field'):
+            old.render(**generated)
+        self.assertEqual(new.render(**generated), generated['content'] + generated['thinking'])
+        with self.assertRaisesRegex(ValueError, 'invalid tool'):
+            new.render(**dict(normal, invalid_tool=True))
+        self.assertEqual(replay_template('another model'), 'another model')
+        with self.assertRaisesRegex(ValueError, 'Expected two'):
+            replay_template('{# SGLANG_CONTEXT_THINKING_HISTORY_V1:gpt-oss #}')
+
     def test_early_warmup_completion_starts_new_pass_without_overwriting(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
