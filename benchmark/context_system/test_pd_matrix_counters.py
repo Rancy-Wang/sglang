@@ -22,7 +22,7 @@ class Counters(unittest.TestCase):
     def test_client_accepts_all_approved_matrix_cases(self):
         common = ["--mini-root", "/mini", "--requests-path", "/tasks.jsonl",
                   "--output-dir", "/results", "--model", "/model", "--tokenizer", "/model"]
-        for c in (1, 2, 4, 8, 32):
+        for c in (1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 32):
             for drop in (False, True):
                 with self.subTest(concurrency=c, drop=drop):
                     args = client_parser().parse_args(common + [
@@ -31,6 +31,28 @@ class Counters(unittest.TestCase):
                         "--url", "http://127.0.0.1:32042/v1/chat/completions",
                     ] + (["--drop"] if drop else []))
                     self.assertEqual((args.concurrency, args.num_tasks, args.drop), (c, 3*c, drop))
+
+    def test_top80_high_concurrency_commands_parse(self):
+        from run_swe_top80 import command
+
+        config = NS(server_repo="/server", source_launch="/launch", mini_root="/mini",
+                    requests_path="/tasks", seed=42, port=41101)
+        for c, admission in ((14, 16), (16, 16), (18, 32)):
+            with self.subTest(concurrency=c):
+                argv = command(config, "reviewed", "/output", c, True)
+                args = matrix_parser().parse_args(argv[2:])
+                self.assertEqual((args.concurrency, args.max_running_requests), (c, admission))
+                self.assertEqual((args.rounds, args.prefill_token_budget, args.mem_fraction_static),
+                                 (3, 8192, .85))
+                self.assertEqual(matrix_parser().parse_args(
+                    argv[2:] + ["--concurrencies", str(c)]).concurrencies, [c])
+                client = client_parser().parse_args([
+                    "--mini-root", args.mini_root, "--requests-path", args.requests_path,
+                    "--output-dir", "/client", "--model", "/model", "--tokenizer", "/model",
+                    "--concurrency", str(args.concurrency),
+                    "--num-tasks", str(args.concurrency * args.rounds), "--drop",
+                ])
+                self.assertEqual((client.concurrency, client.num_tasks, client.drop), (c, 3*c, True))
 
     def test_finite_matrix_propagates_cohort_order_and_context_limit(self):
         with tempfile.TemporaryDirectory() as tmp:
