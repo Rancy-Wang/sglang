@@ -40,7 +40,67 @@ def load_method(root):
     spec = importlib.util.spec_from_file_location("mini_bcp_method", root / paths[0])
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    original_metrics = module.calculate_metrics
+    module.calculate_metrics = lambda rows, duration: optional_ttft_metrics(
+        original_metrics, rows, duration
+    )
     return module
+
+
+def optional_ttft_metrics(original, rows, duration):
+    """Count completed invisible output without inventing a text arrival time."""
+    missing = [r for r in rows if r["success"] and r["ttft"] is None]
+    if not missing:
+        return original(rows, duration)
+    import numpy as np
+
+    # The pinned metric implementation requires TTFT for every successful row.
+    # Keep its visible-token timing statistics, then include all completed work.
+    visible = [dict(r, success=False) if r["success"] and r["ttft"] is None else r for r in rows]
+    metrics, _ = original(visible, duration)
+    good = [r for r in rows if r["success"]]
+    lengths = [r["output_len"] if r["success"] else 0 for r in rows]
+    prompt = sum(r["prompt_len"] for r in good)
+    output = sum(lengths)
+    retokenized = sum(r["retokenized_len"] for r in good)
+    metrics.update(completed=len(good), total_input=prompt, total_input_text=prompt,
+        total_output=output, total_output_retokenized=retokenized,
+        request_throughput=len(good) / duration, input_throughput=prompt / duration,
+        output_throughput=output / duration, output_throughput_retokenized=retokenized / duration,
+        total_throughput=(prompt + output) / duration,
+        total_throughput_retokenized=(prompt + retokenized) / duration,
+        concurrency=sum(r["latency"] for r in good) / duration,
+        missing_ttft_requests=len(missing),
+        max_output_tokens_per_s=None, max_concurrent_requests=None)
+    values = [r["latency"] for r in good]
+    funcs = {"mean": np.mean, "median": np.median, "std": np.std,
+             **{f"p{p}": lambda v, p=p: np.percentile(v, p) for p in (90, 95, 99)}}
+    for stat, function in funcs.items():
+        metrics[f"{stat}_e2e_latency_ms"] = float(function(values) * 1000)
+    if len(missing) == len(good):
+        for key in metrics:
+            if key.endswith(("_ttft_ms", "_tpot_ms")):
+                metrics[key] = None
+    return metrics, lengths
+
+
+def accept_complete_invisible_output(row, payload):
+    """Only relax the pinned client's visible-text requirement, never completion."""
+    usage = row.get("usage") or {}
+    assistant = row.get("assistant") or {}
+    budget = payload.get("max_tokens")
+    if (row.get("status") == "incomplete" and not row.get("success")
+            and row.get("error") == "Missing DONE, usage, content or normal finish"
+            and row.get("http_status") == 200 and row.get("done")
+            and row.get("raw_done_time") is not None
+            and row.get("finish_reason") == "length" and row.get("ttft") is None
+            and type(budget) is int and budget > 0
+            and type(usage.get("prompt_tokens")) is int and usage["prompt_tokens"] > 0
+            and usage.get("completion_tokens") == row.get("output_len") == row.get("generated_tokens") == budget
+            and row.get("last_received_usage") == usage
+            and not any(assistant.get(k) for k in ("content", "reasoning", "reasoning_content", "tool_calls"))):
+        row.update(success=True, status="success", error=None,
+                   completion_without_visible_delta=True)
 
 
 class NativeTemplateAdapter:
@@ -147,6 +207,7 @@ class Transport:
         row["usage_received_perf"] = timing.get("usage_perf")
         row["lifecycle_latency_s"] = row["latency"]
         row["raw_done_time"] = timing.get("raw_done_time")
+        accept_complete_invisible_output(row, payload)
         row["latency"] = (
             row["raw_done_time"] - row["start_time"]
             if row["raw_done_time"] is not None else None
