@@ -15,6 +15,24 @@ CASES = [(4, False), (6, True), (6, False), (8, True), (8, False),
          (14, False), (16, True)]
 
 
+def case_sequence(value):
+    try:
+        cases = []
+        for item in value.split(","):
+            concurrency, policy = item.split(":")
+            concurrency = int(concurrency)
+            if not 1 <= concurrency <= 32 or policy not in ("drop", "no_drop"):
+                raise ValueError
+            cases.append((concurrency, policy == "drop"))
+        if len(set(cases)) != len(cases):
+            raise ValueError
+        return cases
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "Expected distinct C:drop or C:no_drop entries, C in 1..32"
+        ) from exc
+
+
 def save(path, value):
     temp = path.with_suffix(".tmp")
     temp.write_text(json.dumps(value, ensure_ascii=False, indent=2))
@@ -28,7 +46,8 @@ def command(args, head, root, concurrency, drop):
         "requests-path": args.requests_path, "plan-id": PLAN, "seed": args.seed,
         "gpu-ids": "0,1,2,3,4,5,6,7", "port": args.port, "concurrency": concurrency,
         "transport": "nvlink", "mem-fraction-static": .85, "prefill-token-budget": 8192,
-        "max-running-requests": 16, "rounds": 3, "model-context-limit": 131072,
+        "max-running-requests": 16 if concurrency <= 16 else 32,
+        "rounds": 3, "model-context-limit": 131072,
         "warmup-wall-seconds": 60, "pd-timeout": 7200, "request-timeout": 21600,
         "workload-timeout": 172800, "http-keepalive-timeout": 60,
     }
@@ -63,18 +82,25 @@ def run(args):
     root = Path(args.output_dir)
     root.mkdir(parents=True, exist_ok=args.resume)
     head = subprocess.check_output(["git", "-C", args.server_repo, "rev-parse", "HEAD"], text=True).strip()
-    configuration = dict(args=vars(args), head=head, cases=CASES, plan=PLAN)
+    selected = getattr(args, "cases", None)
+    cases = selected or CASES
+    stored_args = dict(vars(args))
+    if selected is None:
+        stored_args.pop("cases", None)
+    elif "cases" in stored_args:
+        stored_args["cases"] = [list(case) for case in selected]
+    configuration = dict(args=stored_args, head=head, cases=cases, plan=PLAN)
     config_path = root / "configuration.json"
     if config_path.exists():
         old = json.loads(config_path.read_text())
         # A repair can change HEAD, but never silently change the workload.
         previous = {k: v for k, v in old["args"].items() if k != "resume"}
-        current = {k: v for k, v in vars(args).items() if k != "resume"}
+        current = {k: v for k, v in stored_args.items() if k != "resume"}
         if previous != current:
             raise ValueError("Resume configuration differs from original workload")
     else:
         save(config_path, configuration)
-    for number, (concurrency, drop) in enumerate(CASES, 1):
+    for number, (concurrency, drop) in enumerate(cases, 1):
         case = root / f"{number:02d}-c{concurrency}-{'drop' if drop else 'no_drop'}"
         case.mkdir(exist_ok=True)
         attempts = sorted(case.glob("attempt-*"))
@@ -116,4 +142,6 @@ if __name__ == "__main__":
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--port", type=int, default=41101)
     p.add_argument("--resume", action="store_true")
+    p.add_argument("--cases", type=case_sequence,
+                   help="Explicit sequence, e.g. 14:drop,16:drop,18:drop; use a new output directory")
     run(p.parse_args())
