@@ -8,6 +8,7 @@ import argparse
 import itertools
 import json
 import os
+import re
 from pathlib import Path
 import signal
 import subprocess
@@ -29,6 +30,22 @@ def write(path, data):
     temp = path.with_name(path.name + ".tmp")
     temp.write_text(json.dumps(data, ensure_ascii=False, indent=2))
     temp.replace(path)
+
+
+def replay_template(template):
+    """Accept literal channel tags generated under ignore_eos, without editing text.
+
+    Only the two GPT-OSS input-validation raises are disabled. All rendering,
+    tool validation, and original assistant content remain unchanged.
+    """
+    if "SGLANG_CONTEXT_THINKING_HISTORY_V1:gpt-oss" not in template:
+        return template
+    pattern = (r'\{\{-\s*raise_exception\("You have passed a message containing '
+               r'<\|channel\|> tags in the (?:content|thinking) field\.[^\n]*?"\)\s*\}\}')
+    rendered, count = re.subn(pattern, "{{- '' }}", template)
+    if count != 2:
+        raise ValueError(f"Expected two GPT-OSS channel validation guards, found {count}")
+    return rendered
 
 
 def continuous_warmup(args, root):
@@ -219,7 +236,11 @@ def run_one(args):
     source_servers = source["servers"]
     template = root / "retained_history.jinja"
     src = source_servers[0]["argv"]
-    template.write_text(Path(src[src.index("--chat-template") + 1]).read_text())
+    source_template = Path(src[src.index("--chat-template") + 1]).read_text()
+    template.write_text(replay_template(source_template) if args.unique_cohort else source_template)
+    write(root / "template-replay-policy.json", dict(
+        allow_generated_channel_tags=template.read_text() != source_template,
+        output_text_modified=False, client_and_servers_share_template=True))
     procs, logs, temps, launch = [], [], [], []
     collecting = False
     cpu_sampler = None
