@@ -11,7 +11,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 PLAN = "PLAN-CS-20260920-SWE-TOP80-BF16-PD-R1"
 CASES = [(4, False), (6, True), (6, False), (8, True), (8, False),
-         (10, True), (10, False), (12, True), (12, False), (14, True)]
+         (10, True), (10, False), (12, True), (12, False), (14, True),
+         (14, False), (16, True)]
 
 
 def save(path, value):
