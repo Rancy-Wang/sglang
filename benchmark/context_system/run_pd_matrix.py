@@ -634,7 +634,7 @@ def parser():
     p.add_argument("--transport", choices=("tcp", "nvlink"), default="nvlink")
     p.add_argument("--decode-radix", action="store_true")
     p.add_argument("--drop", action="store_true", help="Rolling K=12 / 96Ki-token Repos, with Drop-aware eviction")
-    p.add_argument("--concurrency", type=int, choices=(1, 2, 4, 6, 8, 10, 12, 14, 32), default=1)
+    p.add_argument("--concurrency", type=int, choices=(1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 32), default=1)
     p.add_argument("--prefill-token-budget", type=int,
                    help="Explicit common chunked-prefill-size and max-prefill-tokens override")
     p.add_argument("--max-running-requests", type=int, choices=(8, 16, 32),
@@ -652,7 +652,7 @@ def parser():
                    help="Preserve failed cases and continue after GPU cleanup; never count them as valid")
     p.add_argument("--rounds", type=int, choices=range(1, 21), default=2)
     p.add_argument("--approved-overlap-matrix", action="store_true", help=OVERLAP_PLAN)
-    p.add_argument("--concurrencies", type=int, nargs="+", choices=(1, 2, 4, 6, 8, 10, 12, 14, 32),
+    p.add_argument("--concurrencies", type=int, nargs="+", choices=(1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 32),
                    default=[1, 2, 4, 8], help="Ordered overlap-matrix concurrency pairs")
     p.add_argument("--wait-for-case", help="Finish this existing case before starting the new matrix")
     p.add_argument("--wait-for-case-pid", type=int)
