@@ -70,6 +70,7 @@ from sglang.srt.utils.common import ceil_align, is_pin_memory_available
 
 if TYPE_CHECKING:
     from sglang.srt.configs.model_config import ModelConfig
+    from sglang.srt.layers.attention.context_backend import ContextForwardMetadata
     from sglang.srt.layers.cp.base import BaseContextParallelMetadata
     from sglang.srt.layers.dcp.metadata import DecodeContextParallelMetadata
     from sglang.srt.layers.logits_processor import LogitsProcessorOutput
@@ -490,6 +491,10 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
     # "Borrowed" into a dedicated "Forward-resolved snapshot" group.
     # The original sequence length without being chunked. Qwen-1M related.
     orig_seq_lens: Optional[torch.Tensor] = None
+
+    # Physical occurrence mappings, owned until this forward's stream completes.
+    # None preserves the native no-feature path, including graph replay.
+    context_attention: ContextForwardMetadata | None = None
 
     # The write loc before `rebind_write_loc` replaced it with kernel-facing
     # ids; a backend re-derives from it into its capture-stable buffer.
@@ -935,6 +940,45 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
             sampling_info=batch.sampling_info,
             spec_info=batch.spec_info,
         )
+
+        if batch.context_prefill_input is not None:
+            if not ret.forward_mode.is_extend() or ret.spec_info is not None:
+                raise ValueError("Context prefill metadata requires ordinary extend")
+            ret.context_attention = batch.context_prefill_input.bind(model_runner)
+            ret.positions = ret.context_attention.full.query_positions
+
+        if ret.forward_mode.is_decode() and (
+            getattr(model_runner, "context_decode_registry", None) is not None
+            or any(getattr(req, "context_program", None) is not None for req in batch.reqs)
+        ):
+            from sglang.srt.layers.attention.context_backend import ContextDecodeRegistry
+
+            if ret.spec_info is not None or seq_lens_cpu is None:
+                raise ValueError("Context decode needs native non-spec CPU length metadata")
+            registry = getattr(model_runner, "context_decode_registry", None)
+            if registry is None:
+                if model_runner.decode_attention_backend_str != "triton":
+                    raise ValueError("Context decode currently requires native Triton")
+                registry = ContextDecodeRegistry(
+                    model_runner.kv_index_translator, model_runner.token_to_kv_pool,
+                    model_runner.req_to_token_pool,
+                )
+                model_runner.context_decode_registry = registry
+                backends = [model_runner.attn_backend, model_runner.decode_attn_backend]
+                backends.extend(model_runner.decode_attn_backend_group or [])
+                for backend in backends:
+                    if backend is not None:
+                        backend.context_decode_registry = registry
+                # Metadata glue may have captured the old raw gather. Rebuild
+                # only that prep graph once; model decode graphs stay captured.
+                graph = model_runner.decode_cuda_graph_runner
+                glue = getattr(graph, "_metadata_glue", None)
+                if glue is not None:
+                    glue.reset()
+            (
+                ret.seq_lens_cpu, ret.seq_lens, ret.positions, ret.context_decode_refs,
+            ) = registry.bind_batch(batch.reqs, seq_lens_cpu, ret.req_pool_indices)
+            ret.seq_lens_sum = int(ret.seq_lens_cpu.sum())
 
         ret._maybe_init_non_generation_fields(batch)
 

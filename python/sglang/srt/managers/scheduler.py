@@ -2524,6 +2524,12 @@ class Scheduler(
 
     def init_req_max_new_tokens(self, req):
         input_len = len(req.origin_input_ids)
+        position_limit = self.max_req_len - input_len - 1
+        if req.context_program is not None:
+            position_limit = (
+                self.model_config.context_len - req.context_program.layout.next_position
+            )
+            input_len = int(req.context_program.layout.keep_mask.count_nonzero())
         max_new_tokens = (
             req.sampling_params.max_new_tokens
             if req.sampling_params.max_new_tokens is not None
@@ -2543,7 +2549,7 @@ class Scheduler(
             0,
             min(
                 max_new_tokens,
-                self.max_req_len - input_len - 1,
+                position_limit,
             ),
         )
         max_new_tokens = self.token_to_kv_pool_allocator.max_new_tokens_for_memory(
@@ -2814,6 +2820,7 @@ class Scheduler(
                 routing_key=recv_req.routing_key,
                 extra_key=recv_req.extra_key,
                 cache_salt=recv_req.cache_salt,
+                context_program=recv_req.context_program,
                 http_worker_ipc=recv_req.http_worker_ipc,
                 dllm_config=self.dllm_config,
                 time_stats=recv_req.time_stats,
@@ -3020,6 +3027,7 @@ class Scheduler(
             req,
             self.max_req_input_len,
             get_serving().allow_auto_truncate,
+            context_position_limit=self.model_config.context_len,
         )
         if error_msg:
             req.set_finish_with_abort(error_msg)
@@ -3308,6 +3316,28 @@ class Scheduler(
         """Drop the cache-side state an aborted request left behind."""
         self.tree_cache.finish(req.cache_request_handle, CacheRequestOutcome.ABORT)
 
+    def _reject_context_prefill_capacity(self, req: Req, message: str) -> None:
+        """Reject one matched, unadmitted request without a dummy forward."""
+        self._release_aborted_request(req)
+        self.beam_coordinator.retire_group(req)
+        if self.disaggregation_mode == DisaggregationMode.PREFILL:
+            sender = req.disagg_kv_sender
+            if sender is not None:
+                try:
+                    # Unadmitted requests have no transfer chunks in flight.
+                    assert self.drain_context_capacity_abort(req, message)
+                except Exception:
+                    logger.exception(
+                        "Failed to notify KV sender of abort for %s", req.rid
+                    )
+            maybe_release_metadata_buffer(
+                req, self.req_to_metadata_buffer_idx_allocator
+            )
+            req.pending_bootstrap = False
+        req.time_stats.trace_ctx.abort(abort_info={"reason": message})
+        prepare_abort(req, message, status_code=HTTPStatus.SERVICE_UNAVAILABLE)
+        self.output_streamer.stream_output([req], req.return_logprob)
+
     def _abort_on_queued_limit(self, recv_req: Req) -> bool:
         """Abort an incoming or existing request if the waiting queue is full. Returns True if the incoming request is aborted."""
         if (
@@ -3484,6 +3514,7 @@ class Scheduler(
             req,
             self.max_req_input_len,
             get_serving().allow_auto_truncate,
+            context_position_limit=self.model_config.context_len,
         )
         if error_msg:
             self._add_request_to_queue(req)
@@ -3538,12 +3569,20 @@ class Scheduler(
             self.abort_request(AbortReq(rid=req.rid))
             return
 
-        prepare_abort(req, "Aborted")
-        req.time_stats.trace_ctx.abort(abort_info={"reason": "Aborted"})
+        capacity_error = getattr(req, "context_admission_error", None)
+        if capacity_error and self.disaggregation_mode == DisaggregationMode.PREFILL:
+            if not self.drain_context_capacity_abort(req, capacity_error):
+                return
+        if capacity_error:
+            prepare_abort(req, capacity_error, status_code=HTTPStatus.SERVICE_UNAVAILABLE)
+        else:
+            prepare_abort(req, "Aborted")
+        req.time_stats.trace_ctx.abort(abort_info={"reason": capacity_error or "Aborted"})
         req.to_finish = None
         if self.disaggregation_mode == DisaggregationMode.PREFILL:
             self.clear_pending_chunk_send(req)
-            req.disagg_kv_sender.abort()
+            if not capacity_error:
+                req.disagg_kv_sender.abort()
             maybe_release_metadata_buffer(
                 req, self.req_to_metadata_buffer_idx_allocator
             )
@@ -3553,7 +3592,13 @@ class Scheduler(
 
         self.chunked_req = None
         self._pending_chunked_abort_req = None
-        self.ipc_channels.send_to_tokenizer.send_output(_make_abort_req(req), req)
+        self.ipc_channels.send_to_tokenizer.send_output(
+            _make_abort_req(
+                req,
+                finished_reason=req.finished_reason.to_json() if capacity_error else None,
+            ),
+            req,
+        )
         logger.debug(f"Abort chunked prefill request. {req.rid=}")
 
     def _build_hisparse_decode_batch(self, reqs):
@@ -3905,6 +3950,15 @@ class Scheduler(
         if self.chunked_req is not None:
             self.chunked_req.init_next_round_input()
             self.chunked_req = adder.add_chunked_req(self.chunked_req)
+            if self.chunked_req is not None and self.chunked_req.context_admission_error:
+                # The native deferred-abort path drains the preceding chunk
+                # before releasing its pages and PD transfer resources.
+                self._pending_chunked_abort_req = self.chunked_req
+            if self.chunked_req is not None and not adder.can_run_list:
+                # The retained chunk did not launch. Let decode free capacity;
+                # admitting other requests here would also incorrectly count
+                # an in-flight chunk for this parked request.
+                return None, running_batch
 
         if self.enable_lora:
             running_loras = {
@@ -3923,6 +3977,7 @@ class Scheduler(
         if mamba_allocator is not None:
             mamba_allocator.alloc_group_begin(len(self.waiting_queue))
         buffer_pipeline = self.tree_cache.buffer_pipeline
+        capacity_rejected = set()
         # Get requests from the waiting queue to a new prefill batch
         for req in self.waiting_queue:
             if self.enable_lora and not self.can_schedule_lora_req(req, running_loras):
@@ -3970,6 +4025,21 @@ class Scheduler(
                     req.host_hit_is_storage = False
 
             req.init_next_round_input(self.tree_cache)
+            if (
+                req.context_program is not None
+                and self.disaggregation_mode != DisaggregationMode.DECODE
+            ):
+                from sglang.srt.context_system.request_storage import (
+                    prefill_capacity_error,
+                )
+
+                capacity_error = prefill_capacity_error(
+                    req, self.token_to_kv_pool_allocator.size_full
+                )
+                if capacity_error is not None:
+                    self._reject_context_prefill_capacity(req, capacity_error)
+                    capacity_rejected.add(req)
+                    continue
             if self.enable_hicache_storage and (
                 self._prefetch_after_device_hit_loss(req)
             ):
@@ -3986,6 +4056,11 @@ class Scheduler(
                 truncation_align_size=self.truncation_align_size,
             )
 
+            if req.context_program is not None and req.context_admission_error:
+                self._reject_context_prefill_capacity(req, req.context_admission_error)
+                capacity_rejected.add(req)
+                continue
+
             if self.enable_lora:
                 running_loras.add(req.lora_id)
 
@@ -3994,8 +4069,11 @@ class Scheduler(
                     if (
                         self.enable_hierarchical_cache
                         or self.enable_unified_cache_external_linker
+                        or req.context_program is not None
                     ):
-                        # Set batch_is_full after making sure there are requests that can be served
+                        # Context may reject a self-pinned match and request a
+                        # cold retry. An idle batch has no decode completion to
+                        # clear this flag, so it must retry admission next pass.
                         running_batch.batch_is_full = len(adder.can_run_list) > 0 or (
                             not running_batch.is_empty()
                         )
@@ -4022,6 +4100,10 @@ class Scheduler(
             mamba_allocator.alloc_group_end()
 
         # Update waiting queue
+        if capacity_rejected:
+            self.waiting_queue = [
+                req for req in self.waiting_queue if req not in capacity_rejected
+            ]
         can_run_list: List[Req] = adder.can_run_list
         if len(can_run_list) == 0:
             return None, running_batch

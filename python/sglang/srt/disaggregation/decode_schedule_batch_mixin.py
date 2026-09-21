@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, List
 
 import torch
 
+from sglang.srt.context_system.request_storage import request_row
+
 from sglang.srt.managers.overlap_utils import RelayPayload
 from sglang.srt.mem_cache.common import maybe_cache_unfinished_req
 from sglang.srt.model_executor.forward_batch_info import ForwardMode
@@ -45,7 +47,7 @@ class ScheduleBatchDisaggregationDecodeMixin:
             req_pool_indices.append(req.kv.req_pool_idx)
             pre_len = len(req.prefix_indices)
 
-            chunk = self.req_to_token_pool.req_to_token[req.kv.req_pool_idx][
+            chunk = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[
                 pre_len : pre_len + req.extend_range.length
             ]
             assert offset + req.extend_range.length <= total_size, (

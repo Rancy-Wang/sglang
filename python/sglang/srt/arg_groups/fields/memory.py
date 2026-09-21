@@ -69,6 +69,12 @@ class Memory(msgspec.Struct):
             resolvable=True,
         ),
     ] = False
+    context_drop_aware_eviction: A[
+        bool,
+        "Allow page_size=1 Context requests to release proven-unread dropped "
+        "Radix KV while retaining path references. Reclaim leaves before "
+        "eligible dropped internal pages. Disabled for ordinary eviction baselines.",
+    ] = False
     enable_page_major_kv_layout: A[
         bool,
         "Enable the page-major KV layout: lay out the Mamba state and full/SWA "

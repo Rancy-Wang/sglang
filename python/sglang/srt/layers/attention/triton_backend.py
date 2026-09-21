@@ -66,6 +66,7 @@ if _is_cuda:
     from sgl_kernel.utils import is_arch_support_pdl
 
 if TYPE_CHECKING:
+    from sglang.srt.layers.attention.context_backend import ContextForwardMetadata
     from sglang.srt.layers.radix_attention import RadixAttention
     from sglang.srt.model_executor.model_runner import ModelRunner
     from sglang.srt.speculative.spec_info import SpecInput
@@ -127,6 +128,9 @@ class ForwardMetadata:
     window_kv_offsets: torch.Tensor
     # Separate attn_logits for SWA layers when v_head_dim differs
     swa_attn_logits: Optional[torch.Tensor] = None
+    # Replay rebuilds ForwardBatch without extension fields. Keep the immutable
+    # Context snapshot with the live backend metadata initialized before replay.
+    context_attention: Optional[ContextForwardMetadata] = None
     # full->SWA translated out_cache_loc (SWA KV-store write target)
     swa_out_cache_loc: Optional[torch.Tensor] = None
     # PHYSICAL full-attn write target for the unified pool (eager: translated tensor;
@@ -206,6 +210,7 @@ class TritonAttnBackend(AttentionBackend):
         self.req_to_token_pool = model_runner.req_to_token_pool
         self.token_to_kv_pool = model_runner.token_to_kv_pool
         self.req_to_token = model_runner.req_to_token_pool.req_to_token
+        self.context_decode_registry = None
         self.token_to_kv_pool_allocator = model_runner.token_to_kv_pool_allocator
         self.use_sliding_window_kv_pool = isinstance(self.token_to_kv_pool, SWAKVPool)
         # Lets the Triton wrappers specialize on PAGE_SIZE; page_size=1 is
@@ -491,9 +496,15 @@ class TritonAttnBackend(AttentionBackend):
         seq_lens: torch.Tensor,
         req_pool_indices: torch.Tensor,
         kv_indices: torch.Tensor,
+        context_decode: bool = False,
     ) -> torch.Tensor:
         kv_indptr = self.kv_indptr[: bs + 1]
         kv_indptr[1:] = torch.cumsum(seq_lens, dim=0)
+        if context_decode and self.context_decode_registry is not None:
+            self.context_decode_registry.fill(
+                req_pool_indices[:bs], seq_lens[:bs], kv_indptr, kv_indices
+            )
+            return kv_indptr
         self.kv_index_translator.fill_packed_read_stream(
             req_pool_indices=req_pool_indices[:bs],
             seq_lens=seq_lens[:bs],
@@ -533,12 +544,21 @@ class TritonAttnBackend(AttentionBackend):
             num_kv_splits_lens = dcp_seq_lens.clamp_min(1)
         else:
             kv_indptr = self._fill_kv_indptr_and_indices(
-                bs, seq_lens, req_pool_indices, self.cuda_graph_kv_indices
+                bs, seq_lens, req_pool_indices, self.cuda_graph_kv_indices,
+                context_decode=True,
             )
             num_kv_splits_lens = seq_lens
         window_kv_indptr = self.window_kv_indptr
         window_kv_lens = None
         if self.sliding_window_size is not None and self.sliding_window_size > 0:
+            if self.context_decode_registry is not None:
+                window_kv_indptr, _, window_kv_lens, _ = (
+                    self.context_decode_registry.fill_window(
+                        req_pool_indices, seq_lens, self.window_kv_indptr,
+                        self.sliding_window_size, self.cuda_graph_window_kv_indices,
+                    )
+                )
+                return kv_indptr, window_kv_indptr, window_kv_lens, num_kv_splits_lens
             window_kv_indptr, _, window_kv_lens, _ = update_sliding_window_buffer(
                 self.window_kv_indptr,
                 self.kv_index_translator,
@@ -776,6 +796,35 @@ class TritonAttnBackend(AttentionBackend):
         """Init auxiliary variables for triton attention backend."""
 
         self._dense_one_shot_kv_indptr = None
+        if forward_batch.context_attention is not None:
+            swa_loc = None
+            if self.use_sliding_window_kv_pool:
+                swa_loc = self.kv_index_translator.sliding_window_write_loc_for(
+                    forward_batch.out_cache_loc
+                )
+            self.forward_metadata = ForwardMetadata(
+                attn_logits=None,
+                attn_lse=None,
+                max_extend_len=None,
+                num_kv_splits=None,
+                kv_indptr=None,
+                kv_indices=None,
+                qo_indptr=None,
+                custom_mask=None,
+                mask_indptr=None,
+                window_kv_indptr=None,
+                window_kv_indices=None,
+                window_num_kv_splits=None,
+                window_kv_offsets=None,
+                context_attention=forward_batch.context_attention,
+                swa_out_cache_loc=swa_loc,
+                out_cache_loc_full_physical=(
+                    forward_batch.out_cache_loc
+                    if self.kv_index_translator.is_translating
+                    else None
+                ),
+            )
+            return
         bs = forward_batch.batch_size
         window_kv_indptr = self.window_kv_indptr
         window_kv_indices = None
@@ -811,13 +860,26 @@ class TritonAttnBackend(AttentionBackend):
                         forward_batch.seq_lens,
                         forward_batch.req_pool_indices,
                         kv_indices,
+                        context_decode=True,
                     )
                 if (
                     self.sliding_window_size is not None
                     and self.sliding_window_size > 0
                 ):
-                    window_kv_indptr, window_kv_indices, window_kv_lens, _ = (
-                        update_sliding_window_buffer(
+                    if self.context_decode_registry is not None:
+                        window_kv_indices = torch.empty(
+                            bs * (self.sliding_window_size + 1),
+                            dtype=torch.int64, device=self.device,
+                        )
+                        window_kv_indptr, window_kv_indices, window_kv_lens, _ = (
+                            self.context_decode_registry.fill_window(
+                                forward_batch.req_pool_indices, forward_batch.seq_lens,
+                                self.window_kv_indptr, self.sliding_window_size,
+                                window_kv_indices,
+                            )
+                        )
+                    else:
+                        window_kv_indptr, window_kv_indices, window_kv_lens, _ = update_sliding_window_buffer(
                             self.window_kv_indptr,
                             self.kv_index_translator,
                             forward_batch.req_pool_indices,
@@ -827,7 +889,6 @@ class TritonAttnBackend(AttentionBackend):
                             self.device,
                             self.token_to_kv_pool,
                         )
-                    )
                     window_num_kv_splits = torch.empty(
                         (bs,), dtype=torch.int32, device=self.device
                     )
@@ -1035,6 +1096,7 @@ class TritonAttnBackend(AttentionBackend):
             lean_Lp=lean_Lp,
             lean_Op=lean_Op,
             lean_locks=lean_locks,
+            context_attention=forward_batch.context_attention,
         )
 
     def init_cuda_graph_state(
@@ -1123,7 +1185,7 @@ class TritonAttnBackend(AttentionBackend):
         if self.sliding_window_size is not None and self.sliding_window_size > 0:
             if kv_indices_buf is None:
                 self.cuda_graph_window_kv_indices = torch.zeros(
-                    (max_num_tokens * self.sliding_window_size),
+                    (max_num_tokens * (self.sliding_window_size + 1)),
                     dtype=torch.int64,
                     device=self.device,
                 )
@@ -1541,8 +1603,43 @@ class TritonAttnBackend(AttentionBackend):
         score_mod=None,
         aux_tensors=None,
     ):
+        context = self.forward_metadata.context_attention
+        if context is not None:
+            if self.page_size != 1:
+                raise ValueError("Context attention requires page_size=1")
+            # Reject unsupported specializations before mutating any layer KV.
+            # Ordinary requests retain every native backend specialization.
+            if (
+                self.use_mla
+                or self.dcp_size > 1
+                or self.enable_deterministic
+                or k is None
+                or v is None
+                or layer.k_scale is not None
+                or layer.v_scale is not None
+                or layer.is_cross_attention
+                or layer.attn_type != AttentionType.DECODER
+                or score_mod is not None
+                or aux_tensors is not None
+                or forward_batch.spec_info is not None
+            ):
+                raise NotImplementedError(
+                    "Context Triton extend requires causal unquantized MHA/GQA"
+                )
+            context_metadata = context.for_layer(layer)
+            context_k_buffer = self.token_to_kv_pool.get_key_buffer(layer.layer_id)
+            context_v_buffer = self.token_to_kv_pool.get_value_buffer(layer.layer_id)
+            if (
+                context_k_buffer.ndim != 3
+                or context_v_buffer.ndim != 3
+                or context_k_buffer.dtype not in (torch.float16, torch.bfloat16)
+                or context_v_buffer.dtype != context_k_buffer.dtype
+                or context_metadata.query_count > q.shape[0]
+            ):
+                raise ValueError("Context Triton requires NHD FP16/BF16 KV and aligned Q")
         if (
-            k is not None
+            context is None
+            and k is not None
             and v is not None
             and sinks is None
             and score_mod is None
@@ -1607,6 +1704,38 @@ class TritonAttnBackend(AttentionBackend):
                     )
 
         logits_soft_cap = logit_capping_mod(layer.logit_capping_method, layer.logit_cap)
+
+        if context is not None:
+            # Native fused RoPE may already have stored the current K/V
+            # (save_kv_cache=False), while leaving rotated K available above.
+            # Apply COW copies after either write path and before prefix reads.
+            copies = context.layer_copies.get(layer.layer_id)
+            if copies is not None:
+                copies.apply()
+            # Native piecewise graphs pad Q/K/V to a capture bucket. Only real
+            # queries belong to the Context program; padded rows are not reads
+            # or computed tokens and the native output trimming discards them.
+            count = context_metadata.query_count
+            context_metadata.forward(
+                self.extend_attention_fwd,
+                q[:count].view(-1, layer.tp_q_head_num, layer.qk_head_dim),
+                k[:count].contiguous(),
+                v[:count].contiguous(),
+                o[:count].view(-1, layer.tp_q_head_num, layer.v_head_dim),
+                context_k_buffer,
+                context_v_buffer,
+                sm_scale=layer.scaling,
+                logit_cap=logits_soft_cap,
+                sliding_window_size=(
+                    layer.sliding_window_size
+                    if layer.sliding_window_size is not None
+                    else -1
+                ),
+                sinks=sinks,
+                xai_temperature_len=layer.xai_temperature_len,
+                page_size=self.page_size,
+            )
+            return o
 
         causal = True
         if (

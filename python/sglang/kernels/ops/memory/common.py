@@ -15,11 +15,15 @@ def write_req_to_token_pool_triton(
     extend_lens,
     out_cache_loc,
     req_to_token_ptr_stride: tl.constexpr,
+    RowPointers=None,
 ):
     BLOCK_SIZE: tl.constexpr = 512
     pid = tl.program_id(0)
 
     req_pool_index = tl.load(req_pool_indices + pid)
+    row_ptr = req_to_token_ptr + req_pool_index * req_to_token_ptr_stride
+    if RowPointers is not None:
+        row_ptr = tl.load(RowPointers + req_pool_index).to(tl.pointer_type(tl.int32))
     pre_len = tl.load(pre_lens + pid)
     seq_len = tl.load(seq_lens + pid)
     prefix_tensor = tl.load(prefix_tensors + pid).to(tl.pointer_type(tl.int64))
@@ -31,7 +35,7 @@ def write_req_to_token_pool_triton(
         mask = offset < pre_len
         value = tl.load(prefix_tensor + offset, mask=mask)
         tl.store(
-            req_to_token_ptr + req_pool_index * req_to_token_ptr_stride + offset,
+            row_ptr + offset,
             value,
             mask=mask,
         )
@@ -47,10 +51,7 @@ def write_req_to_token_pool_triton(
         mask = offset < (seq_len - pre_len)
         value = tl.load(out_cache_loc + cumsum_start + offset, mask=mask)
         tl.store(
-            req_to_token_ptr
-            + req_pool_index * req_to_token_ptr_stride
-            + offset
-            + pre_len,
+            row_ptr + offset + pre_len,
             value,
             mask=mask,
         )

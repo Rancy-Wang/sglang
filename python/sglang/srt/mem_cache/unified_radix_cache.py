@@ -10,6 +10,12 @@ from typing import TYPE_CHECKING, Iterator, NamedTuple, Optional, Sequence, Type
 
 import torch
 
+from sglang.srt.context_system.request_storage import (
+    context_publish_length,
+    needs_context_source_lease,
+    request_row,
+)
+
 from sglang.srt.distributed.communication_tags import P2PTag
 from sglang.srt.environ import envs
 from sglang.srt.managers.cache_controller import CacheOperation
@@ -553,11 +559,13 @@ class UnifiedRadixCache(BasePrefixCache):
         same_results=["result.full_kv_hit_length", "result.swa_host_hit_length"],
     )
     def match_prefix(self, params: MatchPrefixParams) -> MatchResult:
+        if params.key.context is not None and self._tree_core_backend != "python":
+            raise ValueError("Context Radix currently requires the native Python tree core")
         result = self.session.try_match_prefix(params)
         if result is not None:
             return result
         if self.disable:
-            return self.tree_core.empty_match_result
+            return self._context_match_metadata(params, self.tree_core.empty_match_result)
         result = self.tree_core.match_prefix(params)
         # Apply the walk's actions (e.g. a pending write-through relocation on
         # a split) before the finalizers, which can evict or raise.
@@ -568,6 +576,18 @@ class UnifiedRadixCache(BasePrefixCache):
         assert not result.cache_actions
         if self.linker is not None and params.req is not None:
             result = self.linker.match(params.key, params.req, result)
+        return self._context_match_metadata(params, result)
+
+    def _context_match_metadata(self, params, result):
+        if params.context_retry and ComponentType.SWA in self.components:
+            if result.context_swa_window is None:
+                swa = self.components[ComponentType.SWA]
+                result = result._replace(
+                    context_swa_resident=torch.ones(
+                        len(result.device_indices), dtype=torch.bool
+                    ),
+                    context_swa_window=swa.sliding_window_size + 1,
+                )
         return result
 
     def supports_fast_match_prefix(self) -> bool:
@@ -581,6 +601,12 @@ class UnifiedRadixCache(BasePrefixCache):
         same_results=["result.prefix_len"],
     )
     def insert(self, params: InsertParams) -> InsertResult:
+        if (
+            params.key is not None
+            and params.key.context is not None
+            and self._tree_core_backend != "python"
+        ):
+            raise ValueError("Context Radix currently requires the native Python tree core")
         if self.disable:
             return InsertResult(prefix_len=0)
         # Fail fast on re-entrancy without touching the in-flight walk.
@@ -933,6 +959,57 @@ class UnifiedRadixCache(BasePrefixCache):
         receipt its acquire returned, so it never drops a lock it never took."""
         self.dec_lock_ref(req.last_node, req.lock_receipt, skip_swa=skip_swa)
 
+    def configure_context_drop_lock(self, node_id, receipt, required_raw):
+        if self.disable:
+            return receipt
+        if not isinstance(self.tree_core, UnifiedTreeCore):
+            raise ValueError("Context Drop leases require the Python tree core")
+        return self.tree_core.configure_context_drop_lock(node_id, receipt, required_raw)
+
+    def context_leased_page_count(self, req):
+        """Count this request's Full leases on the capacity-failure path.
+
+        Distinct tree edges own distinct Full pages. A shared ancestor is counted
+        once across target and Retry source; Drop path-only refs and holes own no
+        leased pages. Node lengths and receipts are CPU metadata, including when
+        the actual KV slot tables reside on CUDA.
+        """
+        if self.disable:
+            return 0
+        leases = [(req.last_node, req.lock_receipt)]
+        if req.context_source_lease is not None:
+            leases.append(req.context_source_lease)
+        seen, count = set(), 0
+        for node_id, receipt in leases:
+            if (
+                receipt.node_id is None
+                or ComponentType.FULL in receipt.skipped_lock_components
+            ):
+                continue
+            path, cursor = [], 0
+            node = self.tree_core.node_by_id(node_id)
+            while node is not self.tree_core.root_node:
+                path.append(node)
+                cursor += len(node.key)
+                node = node.parent
+            for node in path:
+                start = cursor - len(node.key)
+                skipped = any(
+                    a <= start and cursor <= b for a, b in receipt.context_skip_ranges
+                )
+                if not skipped and node.id not in seen:
+                    seen.add(node.id)
+                    count += node.full_page_count
+                cursor = start
+        return count
+
+    def configure_context_swa_lock(self, node_id, receipt, required_raw):
+        if self.disable:
+            return receipt
+        if not isinstance(self.tree_core, UnifiedTreeCore):
+            raise ValueError("Context SWA leases require the Python tree core")
+        return self.tree_core.configure_context_swa_lock(node_id, receipt, required_raw)
+
     def dec_swa_lock_only(
         self,
         node_id: NodeId,
@@ -959,19 +1036,46 @@ class UnifiedRadixCache(BasePrefixCache):
     def cache_finished_req(
         self, req: Req, is_insert: bool = True, *, kv_len_to_handle: int, **kwargs
     ) -> None:
+        state = getattr(req, "context_state", None)
+        if state is not None:
+            self._prepare_context_cache_row(req, retain_source=False)
+        self._cache_finished_req_native(
+            req, is_insert=is_insert, kv_len_to_handle=kv_len_to_handle, **kwargs
+        )
+        if state is not None:
+            from sglang.srt.context_system.occurrence import free_context_slots
+
+            free_context_slots(
+                self.token_to_kv_pool_allocator, state.nonterminal_private_slots(),
+                state.nonterminal_private_residency(),
+            )
+            self._release_context_source_lease(req)
+            req.context_state = None
+            req.context_decode_layout = None
+            req.context_decode_reuse = None
+            req.context_transfer_plan = None
+            req.context_recompute_program = None
+            req.context_recovery_plan = None
+            req.context_recovery_source = None
+            req.context_gap_prefix = None
+            req.context_window_plan = None
+            req.context_prefill_started = False
+            req.context_cache_published = False
+
+    def _cache_finished_req_native(
+        self, req: Req, is_insert: bool = True, *, kv_len_to_handle: int, **kwargs
+    ) -> None:
         if self.session.try_cache_finished_req(req, is_insert=is_insert, **kwargs):
             return
 
         if self.disable:
-            self.free_kv_row(req.kv, [(0, kv_len_to_handle)])
+            self._free_context_kv_row(req, [(0, kv_len_to_handle)])
             for comp in self._components_tuple:
                 comp.cleanup_after_caching_req(req, is_finished=True)
             return
 
         token_ids = (req.origin_input_ids + req.output_ids)[:kv_len_to_handle]
-        kv_indices = self.req_to_token_pool.req_to_token[
-            req.kv.req_pool_idx, :kv_len_to_handle
-        ]
+        kv_indices = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[:kv_len_to_handle]
 
         result = None
         insert_params = None
@@ -998,26 +1102,33 @@ class UnifiedRadixCache(BasePrefixCache):
             for comp in self._components_tuple:
                 effective_cache_len = comp.floor_cache_len(effective_cache_len)
 
+            effective_cache_len = context_publish_length(req, effective_cache_len)
+
             # Truncate if needed; the tail free is deferred and batched with
             # the unaligned tail below so a shared boundary page is emitted once.
             kv_indices_full = kv_indices
             tail_free_start = None
             if effective_cache_len < len(token_ids):
-                tail_free_start = max(effective_cache_len, req.kv.cache_protected_len)
+                tail_free_start = (
+                    effective_cache_len if getattr(req, "context_state", None) is not None
+                    else max(effective_cache_len, req.kv.cache_protected_len)
+                )
                 token_ids = token_ids[:effective_cache_len]
                 kv_indices = kv_indices[:effective_cache_len]
 
-            radix_key = RadixKey(
-                token_ids,
-                req.extra_key,
-                is_bigram=self.tree_core.is_eagle,
-                cache_salt=req.cache_salt,
+            radix_key = req.make_prefix_key(
+                token_ids, is_bigram=self.tree_core.is_eagle
             ).page_aligned(self.page_size)
             page_aligned_len = len(radix_key)
             values = kv_indices[:page_aligned_len].to(dtype=torch.int64, copy=True)
 
             insert_params.key = radix_key
             insert_params.value = values
+            insert_params.context_resident = self._context_cache_residency(
+                req, page_aligned_len
+            )
+            insert_params.context_swa_resident = self._context_cache_swa_residency(req, page_aligned_len)
+            insert_params.context_owned = self._context_cache_ownership(req, page_aligned_len)
             result = self.insert(insert_params)
 
             # Keep the prompt as an independent radix node. Finished requests
@@ -1029,11 +1140,10 @@ class UnifiedRadixCache(BasePrefixCache):
             # tail releases everything past the protected prefix below, so the
             # split is skipped there rather than handing the tree rows that
             # are about to be freed.
-            prompt_key = RadixKey(
+            prompt_key = req.make_prefix_key(
                 req.origin_input_ids,
-                req.extra_key,
+                limit=context_publish_length(req, len(req.origin_input_ids)),
                 is_bigram=self.tree_core.is_eagle,
-                cache_salt=req.cache_salt,
             ).page_aligned(self.page_size)
             if (
                 not result.rotation_tail_declined
@@ -1047,6 +1157,7 @@ class UnifiedRadixCache(BasePrefixCache):
                         key=prompt_key,
                         value=values[: len(prompt_key)],
                         prev_prefix_len=len(prompt_key),
+                        context_owned=None,
                         priority=insert_params.priority + 1,
                         # Topology-only re-insert: the request itself created
                         # these nodes moments ago, so counting it as a hit is
@@ -1076,9 +1187,10 @@ class UnifiedRadixCache(BasePrefixCache):
                     ranges[0] = (free_from, len(kv_indices_full))
                 else:
                     ranges.append((tail_free_start, len(kv_indices_full)))
-            self.free_kv_row(req.kv, ranges)
+            self._free_context_kv_row(req, ranges)
         else:
-            self.free_kv_row(req.kv, [(req.kv.cache_protected_len, kv_len_to_handle)])
+            start = 0 if getattr(req, "context_state", None) is not None else req.kv.cache_protected_len
+            self._free_context_kv_row(req, [(start, kv_len_to_handle)])
 
         # Synthetic profiling requests may own KV without locking a tree node.
         if req.last_node is not None:
@@ -1103,21 +1215,229 @@ class UnifiedRadixCache(BasePrefixCache):
 
     @rank_consensus(same_params=["req.rid", "chunked"])
     def cache_unfinished_req(self, req: Req, chunked: bool = False, **kwargs) -> None:
+        if getattr(req, "context_gap_prefix", None) is not None:
+            # The preceding repair chunk is already published. Gap adoption
+            # alone has neither computed nor materialized target-version KV.
+            return
+        state = getattr(req, "context_state", None)
+        if state is not None:
+            self._prepare_context_cache_row(req, retain_source=True)
+            length = len(req.get_fill_ids())
+            if (
+                not self.disable
+                and context_publish_length(req, length) < req.kv.cache_protected_len
+            ):
+                # A borrowed sparse prefix can rely on a later Drop marker.
+                # Until deferred copies reach that marker, keep the original
+                # lease and private ownership; do not rebind to a shorter tree
+                # path or falsely transfer unpublished terminal pages.
+                req.prefix_indices = request_row(
+                    self.req_to_token_pool, req.kv.req_pool_idx
+                )[:length].to(dtype=torch.int64, copy=True)
+                return
+        self._cache_unfinished_req_native(req, chunked=chunked, **kwargs)
+        if state is not None and not self.disable:
+            req.context_state = state.publish(
+                req.prefix_indices, cache_len=req.kv.cache_protected_len,
+                swa_resident=req.context_swa_resident,
+            )
+            req.context_cache_published = True
+            if get_memory().context_drop_aware_eviction:
+                self._configure_context_drop_eviction(req)
+            if not needs_context_source_lease(req):
+                # This chunk has completed and the target lease is installed.
+                # Recomputed sources need no old branch; same-position COW
+                # reads have already moved to their target owners.
+                self._release_context_source_lease(req)
+
+    def _configure_context_drop_eviction(self, req):
+        """After completed publication, drop only proven-unused borrowed owners."""
+        state = req.context_state
+        program = req.context_recompute_program or req.context_program
+        length = req.kv.cache_protected_len
+        cursor = len(state.canonical_rows)
+        next_query = (
+            next(
+                (
+                    max(a, cursor)
+                    for a, b in req.context_recovery_plan.intervals
+                    if b > cursor
+                ),
+                None,
+            )
+            if req.context_recovery_plan is not None
+            else cursor
+        )
+        required = torch.ones(length, dtype=torch.bool)
+        count = min(length, len(program.layout.positions))
+        required[:count] = program.layout.keep_mask[:count]
+        if next_query is not None and next_query < len(program.layout.positions):
+            required[:count] |= program.visible_until[:count] > next_query
+        # SWA leases were installed first and protect the same future read set.
+        # Only actual Delta records on this target path authorize Full release.
+        self.configure_context_drop_lock(req.last_node, req.lock_receipt, required)
+        spans = req.lock_receipt.context_skip_ranges
+        if not spans:
+            return
+        dropped = torch.zeros(len(state.terminal_rows), dtype=torch.bool)
+        for start, end in spans:
+            dropped[start:end] = True
+        req.context_state = state.drop_borrowed_raw(dropped)
+        if req.context_source_lease is not None:
+            node, receipt = req.context_source_lease
+            source_length = (
+                req.context_recovery_plan.matched_length
+                if req.context_recovery_plan is not None
+                else len(req.context_usage.resident)
+            )
+            source_required = torch.ones(source_length, dtype=torch.bool)
+            for start, end in spans:
+                source_required[start : min(end, source_length)] = False
+            if req.context_swa_source_required is not None:
+                req.context_swa_source_required = (
+                    req.context_swa_source_required & source_required
+                )
+                self.configure_context_swa_lock(
+                    node, receipt, req.context_swa_source_required
+                )
+            self.configure_context_drop_lock(node, receipt, source_required)
+
+    def _prepare_context_cache_row(self, req: Req, *, retain_source: bool):
+        state = req.context_state
+        if req.session is not None or req.kv_rotation_base is not None:
+            raise ValueError("Context cache does not support session/ring KV layouts")
+        if not req.context_cache_published and not self.disable:
+            if (
+                retain_source
+                and req.context_source_lease is None
+                and req.last_node is not None
+                and needs_context_source_lease(req)
+                and (
+                    req.context_exact_prefix_len < req.kv.cache_protected_len
+                    or req.context_recovery_source is not None
+                )
+            ):
+                # The native request lease moves to the target branch below.
+                # Keep the Retry source branch alive for remaining birth reads.
+                receipt = self.inc_lock_ref(req.last_node).to_dec_params()
+                if req.context_swa_source_required is not None:
+                    self.configure_context_swa_lock(
+                        req.last_node, receipt, req.context_swa_source_required
+                    )
+                req.context_source_lease = (req.last_node, receipt)
+            req.kv.cache_protected_len = min(
+                req.kv.cache_protected_len, req.context_exact_prefix_len
+            )
+        terminal = state.terminal_slots()
+        self.req_to_token_pool.write(
+            (req.kv.req_pool_idx, slice(0, len(terminal))), terminal
+        )
+
+    @staticmethod
+    def _context_cache_residency(req, length):
+        state = getattr(req, "context_state", None)
+        if state is None:
+            return None
+        rows = state.terminal_rows[:length]
+        if bool(torch.all(rows >= 0)):
+            return None
+        resident = torch.ones(length, dtype=torch.bool)
+        resident[: len(rows)] = rows >= 0
+        return resident
+
+    @staticmethod
+    def _context_cache_ownership(req, length):
+        state = getattr(req, "context_state", None)
+        if state is None:
+            return None
+        result = torch.arange(length) >= req.kv.cache_protected_len
+        rows = state.terminal_rows[:length]
+        present = rows >= 0
+        result[:len(rows)] = False
+        result[:len(rows)][present] = state.owned[rows[present]]
+        return result
+
+    @staticmethod
+    def _context_cache_swa_residency(req, length):
+        state = getattr(req, "context_state", None)
+        swa = state.terminal_swa_residency() if state is not None else None
+        if swa is None:
+            return None
+        result = torch.ones(length, dtype=torch.bool)
+        count = min(length, len(swa))
+        result[:count] = swa[:count]
+        result[: min(length, req.kv.swa_evicted_seqlen)] = False
+        return result
+
+    def _free_context_kv_row(self, req, ranges):
+        """Exclude Full holes and absent SWA peers using CPU ownership data."""
+        if not ranges:
+            return
+        length = max(end for _, end in ranges)
+        resident = self._context_cache_residency(req, length)
+        state = getattr(req, "context_state", None)
+        swa = state.terminal_swa_residency() if state is not None else None
+        owned = self._context_cache_ownership(req, length)
+        if resident is None and swa is None and owned is None:
+            self.free_kv_row(req.kv, ranges)
+            return
+        from sglang.srt.context_system.recovery import mask_ranges
+        from sglang.srt.mem_cache.common import coalesce_ranges
+
+        present = (
+            resident if resident is not None else torch.ones(length, dtype=torch.bool)
+        )
+        if owned is not None:
+            present &= owned
+        if swa is None:
+            ranges = [
+                (start + a, start + b)
+                for start, end in coalesce_ranges(ranges)
+                for a, b in mask_ranges(present[start:end].numpy())
+            ]
+            self.free_kv_row(req.kv, ranges)
+            return
+        # Generated tokens beyond the prefill state have native fresh SWA peers;
+        # the native eviction floor remains authoritative for those positions.
+        alive = torch.ones(length, dtype=torch.bool)
+        count = min(length, len(swa))
+        alive[:count] = swa[:count]
+        alive[: min(length, req.kv.swa_evicted_seqlen)] = False
+        row = request_row(self.req_to_token_pool, req.kv.req_pool_idx)
+        live_segments, dead_segments = [], []
+        for start, end in coalesce_ranges(ranges):
+            for selected, output in (
+                (present[start:end] & alive[start:end], live_segments),
+                (present[start:end] & ~alive[start:end], dead_segments),
+            ):
+                output.extend(
+                    (row[start + a : start + b], start + a)
+                    for a, b in mask_ranges(selected.numpy())
+                )
+        allocator = self.token_to_kv_pool_allocator
+        if live_segments:
+            allocator.free_segments(live_segments)
+        if dead_segments:
+            allocator.free_full_segments(dead_segments)
+
+    def _release_context_source_lease(self, req: Req):
+        if req.context_source_lease is not None:
+            node, receipt = req.context_source_lease
+            self.dec_lock_ref(node, receipt)
+            req.context_source_lease = None
+
+    def _cache_unfinished_req_native(self, req: Req, chunked: bool = False, **kwargs) -> None:
         if self.session.try_cache_unfinished_req(req, chunked=chunked, **kwargs):
             return
 
         token_ids = req.get_fill_ids()
 
         if self.disable:
-            kv_indices = self.req_to_token_pool.req_to_token[
-                req.kv.req_pool_idx, : len(token_ids)
-            ]
+            kv_indices = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[: len(token_ids)]
             req.prefix_indices = kv_indices.to(dtype=torch.int64, copy=True)
             return
 
-        kv_indices_orig = self.req_to_token_pool.req_to_token[
-            req.kv.req_pool_idx, : len(token_ids)
-        ]
+        kv_indices_orig = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[: len(token_ids)]
 
         # components prepare insert data + return effective cache_len
         insert_params = InsertParams(
@@ -1141,11 +1461,10 @@ class UnifiedRadixCache(BasePrefixCache):
         for comp in self._components_tuple:
             effective_cache_len = comp.floor_cache_len(effective_cache_len)
 
-        radix_key = RadixKey(
-            token_ids[:effective_cache_len],
-            req.extra_key,
-            is_bigram=self.tree_core.is_eagle,
-            cache_salt=req.cache_salt,
+        effective_cache_len = context_publish_length(req, effective_cache_len)
+
+        radix_key = req.make_prefix_key(
+            token_ids[:effective_cache_len], is_bigram=self.tree_core.is_eagle
         )
 
         if envs.SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS.get():
@@ -1173,6 +1492,9 @@ class UnifiedRadixCache(BasePrefixCache):
 
         insert_params.key = radix_key
         insert_params.value = values
+        insert_params.context_resident = self._context_cache_residency(req, page_aligned_len)
+        insert_params.context_swa_resident = self._context_cache_swa_residency(req, page_aligned_len)
+        insert_params.context_owned = self._context_cache_ownership(req, page_aligned_len)
         result = self.insert(insert_params)
 
         if result.rotation_tail_declined:
@@ -1194,7 +1516,14 @@ class UnifiedRadixCache(BasePrefixCache):
 
         # Match prefix. SWA insertion retains one extra window before the
         # page-aligned boundary, so the normal match remains safe to repoint.
-        match_result = self.match_prefix(MatchPrefixParams(key=radix_key, req=req))
+        match_result = self.match_prefix(
+            MatchPrefixParams(
+                key=radix_key,
+                req=req,
+                context_retry=req.context_program is not None,
+                context_cache_publication=req.context_program is not None,
+            )
+        )
         new_indices = match_result.device_indices
         new_last_node = match_result.last_device_node
         new_prefix_len = result.prefix_len
@@ -1224,6 +1553,17 @@ class UnifiedRadixCache(BasePrefixCache):
                 else ()
             ),
         )
+
+        if getattr(req, "context_swa_query_starts", None) is not None:
+            demand = req.context_swa_read_demand(
+                len(new_indices), len(req.context_state.canonical_rows)
+            )
+            demand &= match_result.context_swa_resident
+            self.configure_context_swa_lock(new_last_node, lock_result, demand)
+            req.context_swa_resident = torch.cat((
+                demand,
+                self._context_cache_swa_residency(req, len(kv_indices_orig))[len(new_indices):],
+            ))
 
         # Update req fields
         if len(new_indices) < len(kv_indices_orig):
@@ -1381,9 +1721,13 @@ class UnifiedRadixCache(BasePrefixCache):
         self, req: Req
     ) -> tuple[torch.Tensor, list[PoolTransfer]]:
         num_tokens = req.seqlen - 1
-        full_indices = self.req_to_token_pool.req_to_token[
-            req.kv.req_pool_idx, :num_tokens
-        ].to(torch.int64)
+        full_indices = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[:num_tokens].to(torch.int64)
+        if req.context_program is not None:
+            from sglang.srt.disaggregation.context_transfer import request_active_slots
+
+            full_indices = request_active_slots(
+                req, self.req_to_token_pool, num_tokens
+            ).to(torch.int64)
         full_indices = self._pad_retraction_indices(full_indices, self.page_size)
 
         component_transfers: dict[ComponentType, list[PoolTransfer]] = {}
@@ -1395,6 +1739,11 @@ class UnifiedRadixCache(BasePrefixCache):
             window_indices = self.req_to_token_pool.req_to_token[
                 req.kv.req_pool_idx, window_start:num_tokens
             ].to(torch.int64)
+            if req.context_program is not None:
+                window_indices = request_active_slots(
+                    req, self.req_to_token_pool, num_tokens,
+                    window=self.sliding_window_size,
+                ).to(torch.int64)
             swa_indices = kv_cache.translate_loc_from_full_to_swa(window_indices)
             assert bool((swa_indices > 0).all()), (
                 f"unmapped SWA window positions for request {req.rid}"

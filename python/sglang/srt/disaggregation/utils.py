@@ -517,6 +517,9 @@ class MetadataBuffers:
         self.cached_tokens[req.metadata_buffer_index][4] = image_t
         self.cached_tokens[req.metadata_buffer_index][5] = audio_t
         self.cached_tokens[req.metadata_buffer_index][6] = video_t
+        from sglang.srt.disaggregation.context_transfer import write_context_metadata
+
+        write_context_metadata(req, self.cached_tokens[req.metadata_buffer_index])
         if req.return_logprob:
             if req.logprob.output_token_logprobs_val:  # not none or empty list
                 self.output_token_logprobs_val[req.metadata_buffer_index][0] = (

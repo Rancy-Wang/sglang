@@ -1182,6 +1182,7 @@ class OpenAIServingChat(OpenAIServingBase):
         )
         adapted_request = GenerateReqInput(
             **prompt_kwargs,
+            context_program=processed_messages.context_program,
             image_data=processed_messages.image_data,
             video_data=processed_messages.video_data,
             audio_data=processed_messages.audio_data,
@@ -1235,6 +1236,46 @@ class OpenAIServingChat(OpenAIServingBase):
         self, request: ChatCompletionRequest, is_multimodal: bool
     ) -> MessageProcessingResult:
         """Process chat messages and apply chat template"""
+        context_rule = None
+        has_context = (
+            request.drop_message is not None
+            or request.drop_rule is not None
+            or bool(request.reposition)
+        )
+        if has_context:
+            from sglang.srt.context_system.rules import (
+                KeepTextDropRule,
+                parse_drop_rule,
+            )
+
+            if self.tokenizer_manager.config_value("page_size") != 1:
+                raise ValueError("Drop/Reposition requires page_size=1")
+            if is_multimodal or request.input_ids is not None:
+                raise ValueError(
+                    "Drop/Reposition requires text messages with template provenance"
+                )
+            if (
+                self.chat_encoding_spec is not None
+                or self.template_manager.chat_template_name is not None
+            ):
+                raise ValueError(
+                    "Drop/Reposition requires the model's native Jinja template"
+                )
+            context_rule = parse_drop_rule(
+                request.drop_rule,
+                [message.model_dump() for message in request.messages],
+                legacy_drop_message=request.drop_message,
+            )
+            if isinstance(context_rule, KeepTextDropRule):
+                # Apply the same native validation and template processing to the
+                # full history; the public kept projection is only a selection.
+                full = ChatCompletionRequest.model_validate(
+                    {"messages": list(context_rule.full_messages)}
+                ).messages
+                request = request.model_copy(update={"messages": full})
+                if context_rule.use_visible_as_full:
+                    context_rule = None
+                    has_context = bool(request.reposition)
         if self.default_chat_template_kwargs:
             ctk = dict(request.chat_template_kwargs or {})
             for k, v in self.default_chat_template_kwargs.items():
@@ -1338,7 +1379,13 @@ class OpenAIServingChat(OpenAIServingBase):
                 stop=request.stop or [],
             )
         elif self.template_manager.chat_template_name is None:
-            result = self._apply_jinja_template(request, tools, is_multimodal)
+            result = self._apply_jinja_template(
+                request,
+                tools,
+                is_multimodal,
+                context_rule=context_rule,
+                has_context=has_context,
+            )
         else:
             result = self._apply_conversation_template(request, is_multimodal)
 
@@ -1387,6 +1434,9 @@ class OpenAIServingChat(OpenAIServingBase):
         request: ChatCompletionRequest,
         tools: Optional[List[Dict]],
         is_multimodal: bool,
+        *,
+        context_rule=None,
+        has_context: bool = False,
     ) -> MessageProcessingResult:
         """Apply Jinja chat template"""
         prompt = ""
@@ -1408,6 +1458,8 @@ class OpenAIServingChat(OpenAIServingBase):
             ThinkingMode.THINKING if thinking_requested else ThinkingMode.CHAT
         )
         messages = [msg.model_dump() for msg in request.messages]
+        context_messages = messages if has_context else None
+        context_trace = [] if has_context else None
         for message in messages:
             normalize_assistant_tool_call_arguments(
                 message, strict=self.chat_encoding_spec != "kimi_k3"
@@ -1580,6 +1632,9 @@ class OpenAIServingChat(OpenAIServingBase):
             if request.chat_template_kwargs:
                 extra_template_kwargs.update(request.chat_template_kwargs)
 
+            if getattr(context_rule, "type", None) == "thinking_drop":
+                extra_template_kwargs["preserve_thinking_history"] = True
+
             rc = self.template_manager.reasoning_config
             if rc is not None and rc.effort_kwarg is not None:
                 if request.reasoning_effort == "low":
@@ -1610,6 +1665,7 @@ class OpenAIServingChat(OpenAIServingBase):
                         template_kwargs=extra_template_kwargs,
                         encode_kwargs=encode_kwargs,
                         use_cache=is_multimodal,
+                        context_trace=context_trace,
                     )
                 )
             except Exception:
@@ -1628,6 +1684,7 @@ class OpenAIServingChat(OpenAIServingBase):
                             template_kwargs=extra_template_kwargs,
                             encode_kwargs=encode_kwargs,
                             use_cache=is_multimodal,
+                            context_trace=context_trace,
                         )
                     )
                 except _CHAT_TEMPLATE_CLIENT_ERRORS as template_error:
@@ -1638,9 +1695,22 @@ class OpenAIServingChat(OpenAIServingBase):
 
             # Append assistant prefix if continue_final_message is enabled
             if assistant_prefix:
-                prompt_ids = self._append_assistant_prefix_to_prompt_ids(
-                    prompt_ids, assistant_prefix
-                )
+                if context_trace is not None:
+                    from sglang.srt.context_system.provenance import (
+                        append_assistant_prefix,
+                    )
+
+                    context_trace[0] = append_assistant_prefix(
+                        context_trace[0],
+                        self.tokenizer_manager.tokenizer,
+                        assistant_prefix,
+                        owner=len(context_messages) - 1,
+                    )
+                    prompt_ids = context_trace[0].input_ids
+                else:
+                    prompt_ids = self._append_assistant_prefix_to_prompt_ids(
+                        prompt_ids, assistant_prefix
+                    )
                 # The cached decode corresponds to prompt_ids before the prefix.
                 decoded_prompt = None
 
@@ -1656,6 +1726,17 @@ class OpenAIServingChat(OpenAIServingBase):
         audio_data = audio_data if audio_data else None
         video_data = video_data if video_data else None
         modalities = modalities if modalities else []
+        context_program = None
+        if context_trace is not None:
+            from sglang.srt.context_system.planner import compile_chat_program
+
+            if len(context_trace) != 1:
+                raise ValueError(
+                    "Context request has no unique canonical template trace"
+                )
+            context_program = compile_chat_program(
+                context_messages, context_trace[0], context_rule, request.reposition
+            ).to_wire()
         return MessageProcessingResult(
             prompt=prompt,
             prompt_ids=prompt_ids,
@@ -1664,6 +1745,7 @@ class OpenAIServingChat(OpenAIServingBase):
             audio_data=audio_data,
             modalities=modalities,
             stop=stop,
+            context_program=context_program,
         )
 
     def _render_and_encode_chat_template(
@@ -1674,8 +1756,30 @@ class OpenAIServingChat(OpenAIServingBase):
         template_kwargs: Dict[str, Any],
         encode_kwargs: Dict[str, Any],
         use_cache: bool,
+        context_trace: Optional[List] = None,
     ) -> tuple[str, List[int], Optional[str]]:
+        if context_trace is not None:
+            from sglang.srt.context_system.provenance import (
+                build_template_token_provenance,
+            )
+
+            trace = build_template_token_provenance(
+                self.tokenizer_manager.tokenizer,
+                messages,
+                tools=tools,
+                add_generation_prompt=True,
+                enable_thinking=None,
+                template_kwargs=template_kwargs,
+            )
+            context_trace[:] = [trace]
+            return trace.rendered_text, trace.input_ids, None
         cache_key = None
+        if template_kwargs.get("preserve_thinking_history", False):
+            from sglang.srt.context_system.thinking_template import prepare_thinking_history
+
+            messages, template_kwargs = prepare_thinking_history(
+                self.tokenizer_manager.tokenizer, messages, tools, template_kwargs
+            )
         if use_cache:
             try:
                 cache_key = orjson.dumps(
@@ -1854,6 +1958,7 @@ class OpenAIServingChat(OpenAIServingBase):
         image_tokens = {}
         audio_tokens = {}
         video_tokens = {}
+        context_usage = {}
         input_ids: Optional[List[int]] = None
         output_ids: Dict[int, List[int]] = {}
 
@@ -1900,6 +2005,8 @@ class OpenAIServingChat(OpenAIServingBase):
                 image_tokens[index] = content["meta_info"].get("image_tokens", 0)
                 audio_tokens[index] = content["meta_info"].get("audio_tokens", 0)
                 video_tokens[index] = content["meta_info"].get("video_tokens", 0)
+                if include_usage and content["meta_info"].get("context_usage") is not None:
+                    context_usage[index] = content["meta_info"]["context_usage"]
 
                 finish_reason = content["meta_info"].get("finish_reason", None)
                 finish_reason_type = finish_reason["type"] if finish_reason else None
@@ -2080,6 +2187,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 spec_tokens_details=sglext_spec_tokens_details,
                 input_ids=sglext_input_ids,
                 output_ids=sglext_output_ids,
+                context_usage=context_usage or None,
             )
             sglext_non_ids, sglext_ids = sglext_full.split_ids()
 

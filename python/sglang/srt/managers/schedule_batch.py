@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from sglang.srt.context_system.request_storage import request_row
+
 from sglang.srt.dllm.config import DllmConfig
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch
 from sglang.srt.runtime_context import (
@@ -1023,6 +1025,7 @@ class Req(ReqDllmMixin):
         multi_item_delimiter_indices: Optional[List[int]] = None,
         session_id: Optional[str] = None,
         cache_salt: Optional[str] = None,
+        context_program: Optional[dict] = None,
     ):
         # Input and output info
         self.rid = rid
@@ -1038,6 +1041,40 @@ class Req(ReqDllmMixin):
         # full_untruncated_fill_ids from lengths alone, so in-place rewrites
         # that preserve length would silently corrupt fill_ids.
         self.output_ids = array("q")
+        self.context_program = None
+        self.context_recompute_program = None
+        self.context_key_data = None
+        self.context_source_positions = None
+        self.context_resident = None
+        self.context_swa_resident = None
+        self.context_swa_window = None
+        self.context_swa_query_starts = None
+        self.context_swa_source_required = None
+        self.context_recovery_plan = None
+        self.context_recovery_source = None
+        self.context_gap_prefix = None
+        self.context_exact_prefix_len = 0
+        self.context_state = None
+        self.context_decode_layout = None
+        self.context_decode_reuse = None
+        self.context_transfer_plan = None
+        self.context_window_plan = None
+        self.context_usage = None
+        self.context_cache_published = False
+        self.context_prefill_started = False
+        self.context_force_miss = False
+        self.context_admission_error = None
+        self.context_source_lease = None
+        if context_program is not None:
+            from sglang.srt.context_system.ir import ContextKeyData
+            from sglang.srt.context_system.planner import ContextProgram
+
+            self.context_program = ContextProgram.from_wire(
+                context_program, origin_input_ids
+            )
+            self.context_key_data = ContextKeyData.from_layout(
+                self.context_program.layout
+            )
         # Full untruncated sequence: origin + output (+ DLLM mask block).
         # Kept in sync by _refresh_fill_ids; admission only updates
         # extend_range, never mutates this array's length.
@@ -1553,16 +1590,246 @@ class Req(ReqDllmMixin):
         else:
             self.full_untruncated_fill_ids = self.origin_input_ids + self.output_ids
 
+    def make_prefix_key(
+        self, token_ids: array, *, limit: Optional[int] = None, is_bigram: bool = False
+    ) -> RadixKey:
+        """One identity for scheduler lookup and computed-KV cache insertion."""
+        data = self.context_key_data
+        if data is not None:
+            if is_bigram:
+                raise ValueError("Context Radix does not support speculative bigrams")
+            # Output IDs are append-only. A cache insertion may cover less than
+            # the full output (the last sampled token has not been forwarded).
+            # Never extend the key beyond the caller's computed-token boundary.
+            required = len(token_ids) if limit is None else min(limit, len(token_ids))
+            existing = len(data.token_to_record)
+            if required > existing:
+                layout = self.context_program.layout
+                data.append_tokens(
+                    token_ids[existing:required],
+                    next_position=layout.next_position + existing - len(layout.positions),
+                    current_reposition=layout.current_reposition,
+                )
+            # Freeze this key's length even if the backing request ID array grows.
+            limit = required
+        return RadixKey(
+            token_ids,
+            extra_key=self.extra_key,
+            limit=limit,
+            is_bigram=is_bigram,
+            cache_salt=self.cache_salt,
+            context=data,
+        )
+
+    def prepare_context_recovery(self):
+        """Choose repair intervals while the match is still admission-only."""
+        from sglang.srt.context_system.recovery import plan_recovery, sliding_window_starts
+        from sglang.srt.context_system.usage import ContextUsage
+
+        program = self.context_recompute_program or self.context_program
+        if program is None:
+            return
+        matched = len(self.prefix_indices)
+        positions = self.context_source_positions
+        if positions is None:
+            positions = program.layout.positions[:matched]
+        resident = self.context_resident
+        if resident is None:
+            resident = torch.ones(matched, dtype=torch.bool)
+        rewind = resident & (positions != program.layout.birth_positions[:matched])
+        swa = self.context_swa_resident
+        terminal = None
+        if self.context_swa_window is not None:
+            if swa is None:
+                swa = torch.ones(matched, dtype=torch.bool)
+            self.context_swa_query_starts = sliding_window_starts(
+                program.layout, program.visible_until, self.context_swa_window
+            )
+            terminal = program.layout.keep_mask[:matched] & (
+                program.layout.positions[:matched]
+                >= program.layout.next_position - (self.context_swa_window - 1)
+            )
+        recovery = plan_recovery(
+            resident,
+            program.visible_until,
+            len(program.layout.positions),
+            rewind,
+            swa_resident=swa,
+            swa_query_starts=self.context_swa_query_starts,
+            swa_terminal_required=terminal,
+        )
+        if recovery.start < matched:
+            # Like mini, restore source versions only for historical repair.
+            # A later Reposition alone can rotate a fully reusable prefix;
+            # treating its old final positions as missing would recompute it.
+            # Once holes require earlier queries, avoid inverse-rotating their
+            # low-precision K sources and propagating error into repaired KV.
+            recovery = plan_recovery(
+                resident,
+                program.visible_until,
+                len(program.layout.positions),
+                rewind,
+                positions != program.layout.positions[:matched],
+                swa_resident=swa,
+                swa_query_starts=self.context_swa_query_starts,
+                swa_terminal_required=terminal,
+            )
+        self.context_recovery_plan = recovery
+        self.context_recovery_source = None
+        self.context_gap_prefix = None
+        if self.context_usage is None:
+            self.context_usage = ContextUsage(
+                recovery.reusable_prefix,
+                ~program.layout.keep_mask[:matched],
+            )
+        if swa is not None:
+            required = self.context_swa_read_demand(matched, recovery.start)
+            required &= swa & recovery.reusable_prefix
+            self.context_swa_source_required = required
+            # The cache may reclaim cold peers after admission. Never advertise
+            # those peers as valid copy sources merely because they existed at match.
+            swa = swa & required
+            self.context_swa_resident = swa
+        if recovery.start < matched:
+            self.context_recovery_source = (
+                self.prefix_indices,
+                positions,
+                resident,
+                self.context_exact_prefix_len,
+                swa,
+            )
+            self.prefix_indices = self.prefix_indices[: recovery.start]
+            self.context_source_positions = positions[: recovery.start]
+            self.context_resident = resident[: recovery.start]
+            self.context_swa_resident = swa[: recovery.start] if swa is not None else None
+            self.kv.cache_protected_len = min(self.kv.cache_protected_len, recovery.start)
+
+    def context_swa_read_demand(self, length, cursor):
+        from sglang.srt.context_system.recovery import sliding_window_read_mask
+
+        if self.context_swa_query_starts is None:
+            return None
+        program = self.context_recompute_program or self.context_program
+        n = len(program.layout.positions)
+        required = sliding_window_read_mask(
+            self.context_swa_query_starts,
+            program.visible_until,
+            tuple(
+                (max(a, cursor), b)
+                for a, b in self.context_recovery_plan.intervals
+                if b > cursor
+            ),
+            min(length, n),
+        )
+        required |= program.layout.keep_mask[: len(required)] & (
+            program.layout.positions[: len(required)]
+            >= program.layout.next_position - (self.context_swa_window - 1)
+        )
+        if length > n:
+            required = torch.cat((required, torch.ones(length - n, dtype=torch.bool)))
+        return required
+
+    def advance_context_recovery_gap(self):
+        recovery = self.context_recovery_plan
+        source = self.context_recovery_source
+        if recovery is None or source is None or self.context_state is None:
+            return
+        cursor = len(self.context_state.canonical_rows)
+        start, _ = recovery.next_interval(cursor)
+        if start > cursor:
+            slots, positions, resident, exact, swa = source
+            self.context_state = self.context_state.reuse_match_gap(
+                slots,
+                positions,
+                resident,
+                start,
+                exact_prefix_len=exact,
+                swa_resident=swa,
+            )
+            self.prefix_indices = torch.cat(
+                (self.prefix_indices[:cursor], slots[cursor:start])
+            )
+            # Commit this borrowed gap's ownership only when the next forward
+            # is dispatched. An admission retry/abort still owns the old range.
+            self.context_gap_prefix = min(start, exact)
+
+    def commit_context_recovery_gap(self):
+        if self.context_gap_prefix is not None:
+            self.kv.cache_protected_len = max(
+                self.kv.cache_protected_len,
+                self.context_gap_prefix,
+            )
+            self.context_gap_prefix = None
+
+    def plan_context_prefill(self, query_end: int) -> int:
+        """Plan CPU ownership before admission charges occurrence allocations."""
+        from sglang.srt.context_system.occurrence import (
+            OccurrenceState,
+            compile_occurrence_window,
+        )
+        from sglang.srt.context_system.usage import ContextUsage
+
+        program = self.context_recompute_program or self.context_program
+        if program is None:
+            return 0
+        start = len(self.prefix_indices)
+        if self.context_state is None:
+            positions = self.context_source_positions
+            if positions is None:
+                positions = program.layout.positions[:start]
+            self.context_state = OccurrenceState.from_match(
+                self.prefix_indices,
+                positions,
+                exact_prefix_len=min(start, self.context_exact_prefix_len),
+                resident=self.context_resident,
+                swa_resident=self.context_swa_resident,
+            )
+            if self.context_usage is None:
+                self.context_usage = ContextUsage(
+                    self.context_state.canonical_rows >= 0,
+                    ~program.layout.keep_mask[:start],
+                )
+        if len(self.context_state.canonical_rows) != start:
+            raise RuntimeError("Context source ownership disagrees with native prefix")
+        window = compile_occurrence_window(
+            program.layout,
+            program.visible_until,
+            program.layout.positions,
+            query_start=start,
+            query_end=query_end,
+        )
+        keep = self.context_state.prefill_terminal_keep(program.layout, query_end)
+        plan = self.context_state.plan(window, keep)
+        self.context_window_plan = (window, plan)
+        return plan.extra_page_count
+
     def init_next_round_input(
         self,
         tree_cache: Optional[BasePrefixCache] = None,
         cow_mamba: Optional[bool] = None,
     ):
+        if tree_cache is not None and not self.context_prefill_started:
+            # A deferred admission owns no physical pages. Its previous match
+            # may have been evicted; rebuild ownership from this round's match.
+            self.context_state = None
+            self.context_window_plan = None
+            if self.context_usage is not None and not self.context_usage.recomputing:
+                self.context_usage = None
         if self.is_dllm():
             self._init_fill_ids_for_dllm()
             self.determine_dllm_phase()
         else:
             self._refresh_fill_ids()
+
+        if (
+            self.context_program is not None
+            and self.output_ids
+            and self.context_state is None
+            and self.context_recompute_program is None
+        ):
+            self.context_recompute_program = self.context_program.with_generated(
+                self.output_ids
+            )
 
         input_len = len(self.full_untruncated_fill_ids)
 
@@ -1586,6 +1853,8 @@ class Req(ReqDllmMixin):
         # avoiding an O(context) copy per prefill-batch build.
         token_ids_to_match = self.full_untruncated_fill_ids
         key_limit: Optional[int] = self._compute_max_prefix_len(input_len)
+        if self.context_force_miss:
+            key_limit = 0
 
         # SWA lives in a per-request ring that's not content-stable and is never
         # stored in the radix tree, so a reused prefix carries stale SWA. Cap the
@@ -1616,14 +1885,10 @@ class Req(ReqDllmMixin):
                 key_limit = capped if key_limit is None else min(key_limit, capped)
             match_result = tree_cache.match_prefix(
                 MatchPrefixParams(
-                    key=RadixKey(
-                        token_ids=token_ids_to_match,
-                        extra_key=self.extra_key,
-                        limit=key_limit,
-                        cache_salt=self.cache_salt,
-                    ),
+                    key=self.make_prefix_key(token_ids_to_match, limit=key_limit),
                     req=self,
                     cow_mamba=cow_mamba,
+                    context_retry=self.context_program is not None,
                 )
             )
             if envs.SGLANG_RADIX_FORCE_MISS.get():
@@ -1651,13 +1916,25 @@ class Req(ReqDllmMixin):
                 match_result.mamba_host_hit_length,
                 match_result.mamba_branching_seqlen,
             )
+            if self.context_program is not None:
+                self.context_source_positions = match_result.context_source_positions
+                self.context_resident = match_result.context_resident
+                self.context_swa_resident = match_result.context_swa_resident
+                self.context_swa_window = match_result.context_swa_window
+                self.context_exact_prefix_len = match_result.context_exact_prefix_len
             if match_result.cache_protected_len is not None:
                 self.kv.cache_protected_len = match_result.cache_protected_len
             else:
                 self.kv.cache_protected_len = len(self.prefix_indices)
 
+            if self.context_program is not None:
+                self.prepare_context_recovery()
+
             if self.is_dllm():
                 self._update_block_offset_for_dllm()
+
+        if tree_cache is None:
+            self.advance_context_recovery_gap()
 
         if (
             self.is_retracted
@@ -1932,6 +2209,22 @@ class Req(ReqDllmMixin):
         # Increment retraction count before resetting other state. We should not reset this
         # since we are tracking the total number of retractions for each request.
         self.retraction_count += 1
+        self.context_decode_reuse = None
+        self.context_source_positions = None
+        self.context_exact_prefix_len = 0
+        self.context_resident = None
+        self.context_swa_resident = None
+        self.context_swa_window = None
+        self.context_swa_query_starts = None
+        self.context_swa_source_required = None
+        self.context_recovery_plan = None
+        self.context_recovery_source = None
+        self.context_gap_prefix = None
+        self.context_recompute_program = None
+        self.context_force_miss = False
+        self.context_admission_error = None
+        if self.context_usage is not None:
+            self.context_usage.begin_recompute()
 
         self.prefix_indices = torch.empty((0,), dtype=torch.int64)
         self.routed_experts = None
@@ -1986,9 +2279,11 @@ class Req(ReqDllmMixin):
         return req_to_token_pool.mamba_pool
 
     def offload_kv_cache(self, req_to_token_pool, token_to_kv_pool_allocator):
-        token_indices = req_to_token_pool.req_to_token[
-            self.kv.req_pool_idx, : self.seqlen - 1
-        ]
+        token_indices = request_row(req_to_token_pool, self.kv.req_pool_idx)[: self.seqlen - 1]
+        if self.context_program is not None:
+            from sglang.srt.disaggregation.context_transfer import request_active_slots
+
+            token_indices = request_active_slots(self, req_to_token_pool, self.seqlen - 1)
         # Copies over both the kv cache and mamba state if available
         mamba_pool = self._mamba_pool_needing_backup(
             req_to_token_pool, token_to_kv_pool_allocator
@@ -2008,9 +2303,11 @@ class Req(ReqDllmMixin):
 
     def load_kv_cache(self, req_to_token_pool, token_to_kv_pool_allocator):
         assert self.kv.retraction_backup is not None
-        token_indices = req_to_token_pool.req_to_token[
-            self.kv.req_pool_idx, : self.seqlen - 1
-        ]
+        token_indices = request_row(req_to_token_pool, self.kv.req_pool_idx)[: self.seqlen - 1]
+        if self.context_program is not None:
+            from sglang.srt.disaggregation.context_transfer import request_active_slots
+
+            token_indices = request_active_slots(self, req_to_token_pool, self.seqlen - 1)
         # Loads both the kv cache and mamba state if exists
         mamba_cpu = self.kv.retraction_backup.mamba_cpu
         if mamba_cpu is not None and self.kv.holds_mamba:
@@ -2073,6 +2370,12 @@ class Req(ReqDllmMixin):
             "routing_key": self.routing_key,
             "routed_dp_rank": self.disagg_prefill_dp_rank,
             "disagg_prefill_dp_rank": self.disagg_prefill_dp_rank,
+            **(
+                {"context_program": self.context_program.with_generated(
+                    self.output_ids
+                ).to_json_wire()}
+                if self.context_program is not None else {}
+            ),
         }
 
     def log_time_stats(self):
@@ -2322,6 +2625,10 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
 
     # HiSparse (engine-level coordinator ref, same across batches)
     hisparse_coordinator: Optional[HiSparseCoordinator] = None
+
+    # Immutable occurrence snapshot, retained with the forward/result batch.
+    context_prefill_input: object = None
+    context_completions: tuple = ()
 
     # === Batch-variant scheduler state (per-batch; not read by ForwardBatch) ===
     # Tell whether the current running batch is full so that we can skip
@@ -2936,6 +3243,83 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             self.model_config.vocab_size,
         )
 
+        if any(req.context_program is not None for req in reqs):
+            self._prepare_context_occurrences()
+
+    def _prepare_context_occurrences(self):
+        from sglang.srt.context_system.occurrence import ContextPrefillCompletion
+        from sglang.srt.layers.attention.context_backend import (
+            ContextAttentionPlan,
+            ContextPrefillInput,
+            ContextSequence,
+        )
+        from sglang.srt.mem_cache.allocation import alloc_token_slots
+
+        if self.tree_cache.page_size != 1:
+            raise ValueError("Context prefill requires page_size=1")
+        total = 0
+        for req in self.reqs:
+            if req.context_program is None:
+                continue
+            if req.context_window_plan is None:
+                raise RuntimeError("Context occurrence pages were not planned at admission")
+            window, plan = req.context_window_plan
+            if (
+                int(window.segment_query_starts[0]) != req.extend_range.start
+                or int(window.segment_query_ends[-1]) != req.extend_range.end
+            ):
+                raise RuntimeError("Context admitted window changed before allocation")
+            total += plan.extra_page_count
+        extra = alloc_token_slots(self.tree_cache, total) if total else self.out_cache_loc[:0]
+        sequences, slots, sources, destinations, positions, completions = [], [], [], [], [], []
+        q_offset = extra_offset = 0
+        for req, length in zip(self.reqs, self.extend_lens):
+            birth = self.out_cache_loc[q_offset : q_offset + length]
+            q_offset += length
+            if req.context_program is None:
+                sequences.append(ContextSequence.ordinary(len(req.prefix_indices), length))
+                slots.append(torch.cat((req.prefix_indices, birth)))
+                continue
+            req.commit_context_recovery_gap()
+            window, plan = req.context_window_plan
+            allocated = extra[extra_offset : extra_offset + plan.extra_page_count]
+            extra_offset += plan.extra_page_count
+            step = req.context_state.advance(
+                window, plan, birth, allocated,
+                (req.context_recompute_program or req.context_program).visible_until,
+            )
+            if step.unused_swa_slots is not None:
+                self.token_to_kv_pool_allocator.free_swa(step.unused_swa_slots)
+            req.context_state = step.state
+            program = req.context_recompute_program or req.context_program
+            if req.extend_range.end == len(program.layout.positions):
+                # Overlap can launch decode before prefill result processing
+                # inserts the terminal versions into Radix. Publish its page
+                # table now; this prefill reads its immutable occurrence slots
+                # and writes birth slots independently. Ownership and freeing
+                # still wait for the native completion/lease barriers.
+                terminal = step.state.terminal_slots()
+                self.req_to_token_pool.write(
+                    (req.kv.req_pool_idx, slice(0, len(terminal))), terminal
+                )
+            req.context_prefill_started = True
+            req.context_window_plan = None
+            sequences.append(ContextSequence.from_window(window))
+            slots.append(step.occurrence_slots)
+            sources.append(step.copy_source_slots)
+            destinations.append(step.copy_destination_slots)
+            positions.append(step.copy_position_pairs)
+            completions.append(ContextPrefillCompletion(
+                step.retired_slots, req.context_usage, plan.read_cached,
+                plan.repositioned_cached, length,
+                retired_swa_resident=step.retired_swa_resident,
+            ))
+        self.context_prefill_input = ContextPrefillInput(
+            ContextAttentionPlan.merge(sequences), torch.cat(slots),
+            torch.cat(sources), torch.cat(destinations), torch.cat(positions), None,
+        )
+        self.context_completions = tuple(completions)
+
     def _mamba_radix_cache_v2_req_prepare_for_extend(
         self,
         req: Req,
@@ -3111,6 +3495,17 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             merged_seq_lens_cpu = None
         out_cache_loc = torch.cat([self.out_cache_loc, running_out_cache_loc])
 
+        if self.context_prefill_input is not None or any(
+            req.context_program is not None for req in running_batch.reqs
+        ):
+            from sglang.srt.layers.attention.context_backend import ContextPrefillInput
+
+            prefill_input = self.context_prefill_input
+            if prefill_input is None:
+                prefill_input = ContextPrefillInput.from_prepared_batch(self, decode=False)
+            decode_input = ContextPrefillInput.from_prepared_batch(running_batch, decode=True)
+            self.context_prefill_input = ContextPrefillInput.concatenate((prefill_input, decode_input))
+            self.context_completions += running_batch.context_completions
         self.merge_batch(running_batch)
         self.out_cache_loc = out_cache_loc
         if merged_seq_lens_cpu is not None:
@@ -3162,6 +3557,10 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
         self.extend_logprob_start_lens = [0] * bs
         self.decoding_reqs = self.reqs
         self.is_prefill_only = False
+        if any(req.context_program is not None for req in self.reqs):
+            from sglang.srt.layers.attention.context_backend import ContextPrefillInput
+
+            self.context_prefill_input = ContextPrefillInput.from_prepared_batch(self, decode=True)
 
     def new_tokens_required_next_decode(
         self, selected_indices: Optional[List[int]] = None
@@ -3469,6 +3868,8 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
 
     def prepare_for_decode(self):
         self.forward_mode = ForwardMode.DECODE
+        self.context_prefill_input = None
+        self.context_completions = ()
         # Decode embeds the last output token via embed_tokens; clear the stale
         # prefill-time tensor so it doesn't leak into ForwardBatch.
         self.input_embeds = None
@@ -3520,6 +3921,13 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
         # Sum is recomputed lazily by ForwardBatch.init_new.
         self.seq_lens_sum = None
 
+        if any(req.context_program is not None for req in self.reqs):
+            from sglang.srt.context_system.occurrence import ContextDecodeCompletion
+
+            self.context_completions = tuple(
+                ContextDecodeCompletion(req.context_usage)
+                for req in self.reqs if req.context_program is not None
+            )
         if self.hisparse_coordinator is not None:
             self.hisparse_coordinator.map_last_loc_to_buffer(
                 self.seq_lens,
@@ -3724,6 +4132,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
         # original.
         return ScheduleBatch(
             reqs=self.reqs[:],
+            context_completions=self.context_completions,
             extend_lens=self.extend_lens,
             prefix_lens=self.prefix_lens,
             req_to_token_pool=self.req_to_token_pool,
@@ -3827,6 +4236,25 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
 
     def _evict_swa(self, req: Req, pre_len: int):
         assert self.tree_cache.supports_swa(), "prefix cache must support swa"
+        if req.context_program is not None:
+            if req.context_decode_layout is None or not req.kv.holds_kv:
+                # Prefill owns stage-specific occurrences until completion.
+                return
+            start = max(req.kv.swa_evicted_seqlen, req.kv.swa_dead_lo(1))
+            end = req.context_decode_layout.swa_raw_floor(
+                pre_len, self.tree_cache.sliding_window_size
+            )
+            retain_floor = self.tree_cache.swa_retain_floor(req)
+            if retain_floor is not None:
+                end = min(end, retain_floor)
+            end = max(start, end)
+            row = request_row(self.req_to_token_pool, req.kv.req_pool_idx)
+            for left, right in req.context_state.live_swa_ranges(start, end):
+                self.token_to_kv_pool_allocator.free_swa_segment(
+                    row[left:right], start_pos=left
+                )
+            req.kv.swa_evicted_seqlen = end
+            return
         free_swa_out_of_window_slots(
             req,
             pre_len,

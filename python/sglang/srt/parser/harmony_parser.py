@@ -423,14 +423,14 @@ class TextStrategy:
         self.buffer_context = ""
         self.patterns = {
             "analysis_then_final": re.compile(
-                r"^\s*(?:assistant)?\s*(analysis|commentary)(.*?)\s*assistantfinal\s*(.*)\s*$",
+                r"^\s*(?:assistant\s*)?(analysis|commentary)(.*?)\s*assistantfinal\s*(.*)\s*$",
                 re.IGNORECASE | re.DOTALL,
             ),
             "final_only": re.compile(
                 r"^\s*assistantfinal\s*(.*)\s*$", re.IGNORECASE | re.DOTALL
             ),
             "analysis_only": re.compile(
-                r"^\s*(?:assistant)?\s*(analysis|commentary)(.*)\s*$",
+                r"^\s*(?:assistant\s*)?(analysis|commentary)(.*)\s*$",
                 re.IGNORECASE | re.DOTALL,
             ),
         }
@@ -441,7 +441,13 @@ class TextStrategy:
     def parse(self, text: str) -> Tuple[List[Event], str]:
         events = []
 
-        m = self.patterns["analysis_then_final"].match(text)
+        # Streaming chunks commonly have no final header yet. Avoid trying
+        # every split of a long whitespace body before discovering that fact.
+        m = (
+            self.patterns["analysis_then_final"].match(text)
+            if re.search("assistantfinal", text, re.IGNORECASE)
+            else None
+        )
         if m:
             channel, reasoning, final = m.groups()
             if channel.lower() == "analysis" and reasoning.strip():
@@ -454,7 +460,7 @@ class TextStrategy:
 
         # If assistantfinal appears to be incomplete (e.g., 'assistantfin'), hold entire buffer
         if re.search(
-            r"(?:^|\s)(?:assistant)?\s*(analysis|commentary)", text, re.IGNORECASE
+            r"(?<!\S)(?:assistant\s*)?(analysis|commentary)", text, re.IGNORECASE
         ):
             low = text.lower()
             if "assistantfin" in low and "assistantfinal" not in low:
@@ -518,7 +524,9 @@ class HarmonyParser:
             if "<|channel|>" in self._buffer or "<|start|>" in self._buffer:
                 self.strategy = CanonicalStrategy()
             elif re.search(
-                r"(?:^|\s)(?:assistant)?\s*(analysis|commentary|assistantfinal)",
+                # Start at the header itself rather than retrying a greedy
+                # whitespace prefix at every character of a whitespace run.
+                r"(?<!\S)(?:assistant\s*)?(analysis|commentary|assistantfinal)",
                 self._buffer,
                 re.IGNORECASE,
             ):

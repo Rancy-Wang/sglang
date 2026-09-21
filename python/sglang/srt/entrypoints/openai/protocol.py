@@ -448,6 +448,9 @@ class SglExt(BaseModel):
     )
     input_ids: Optional[List[int]] = None
     output_ids: Optional[List[List[int]]] = None
+    # Terminal request-lifetime counters, keyed by choice index. Unavailable for
+    # native requests that never entered Context; do not infer physical compute.
+    context_usage: dict[int, dict[str, int]] | None = None
 
     def split_ids(self) -> Tuple[Optional[SglExt], Optional[SglExt]]:
         """Split set fields into (non_ids, ids); a side with no set fields is None."""
@@ -850,6 +853,10 @@ class ChatCompletionRequest(BaseModel):
     # Ordered by official OpenAI API documentation
     # https://platform.openai.com/docs/api-reference/chat/create
     messages: List[ChatCompletionMessageParam]
+    # Public message IDs retain their meaning through native template processing.
+    drop_message: Optional[Dict[str, Any]] = None
+    drop_rule: Optional[Dict[str, Any]] = None
+    reposition: Optional[List[Annotated[int, Field(strict=True, ge=0)]]] = None
     model: str = Field(
         default=DEFAULT_MODEL_NAME,
         description="Model name. Supports LoRA adapters via 'base-model:adapter-name' syntax.",
@@ -2111,6 +2118,7 @@ class MessageProcessingResult:
     skip_special_tokens: bool = True
     require_reasoning: bool = False
     reasoning_end_token_ids: Optional[List[int]] = None
+    context_program: Optional[Dict[str, Any]] = None
 
 
 class ToolCallProcessingResult(NamedTuple):

@@ -29,6 +29,8 @@ from typing import TYPE_CHECKING, List, Optional
 import numpy as np
 import torch
 
+from sglang.srt.context_system.request_storage import request_row
+
 from sglang.srt.disaggregation.base import KVPoll
 from sglang.srt.disaggregation.base.conn import StateType
 from sglang.srt.disaggregation.checksum import (
@@ -402,6 +404,14 @@ class PrefillBootstrapQueue:
         req.time_stats.set_bootstrap_done_time()
         decode_prefix_len = req.disagg_kv_sender.pop_decode_prefix_len()
         num_kv_indices = len(req.origin_input_ids)
+        if req.context_program is not None:
+            from sglang.srt.disaggregation.context_transfer import transfer_plan
+
+            if decode_prefix_len:
+                raise ValueError("Context PD requires decode Radix disabled")
+            num_kv_indices = transfer_plan(
+                req, self.scheduler.token_to_kv_pool_allocator.device
+            ).active_count
         req.start_send_idx = decode_prefix_len
         # Base of the staging chunk grid (suffix-relative send coordinates).
         req.disagg_decode_prefix_len = decode_prefix_len
@@ -617,6 +627,10 @@ class SchedulerDisaggregationPrefillMixin:
         last_batch: Optional[ScheduleBatch],
     ) -> NextBatchPlan:
         self.process_pending_chunked_abort()
+        if self._pending_chunked_abort_req is not None:
+            # Retain both peers' KV until the aborted transport drains. The
+            # overlap loop still resolves its preceding GPU result below.
+            return NextBatchPlan(batch_to_run=None, running_batch=running_batch)
         self._process_hicache_events()
 
         # HACK (byronhsu): reset the batch_is_full flag because we never enter update_running_batch which resets it
@@ -752,6 +766,8 @@ class SchedulerDisaggregationPrefillMixin:
 
         if copy_done is not None:
             copy_done.synchronize()
+        for completion in batch.context_completions:
+            completion.complete(self.token_to_kv_pool_allocator)
         auxiliary_output_starts = (
             self.batch_result_processor.snapshot_auxiliary_output_starts(batch, result)
         )
@@ -1109,6 +1125,36 @@ class SchedulerDisaggregationPrefillMixin:
             self.metrics_collector.increment_transfer_failed_reqs()
         return exc
 
+    def drain_context_capacity_abort(self: Scheduler, req: Req, message: str) -> bool:
+        """Notify D only after every P rank stopped reading/writing this room.
+
+        This is only called for a rejected Context request. Successful requests
+        do not allocate a CPU tensor or acquire an additional collective.
+        """
+        sender = req.disagg_kv_sender
+        manager, room = sender.kv_mgr, sender.bootstrap_room
+        if not hasattr(req, "_context_abort_targets"):
+            # Keep endpoints before a worker's final-chunk cleanup removes them.
+            req._context_abort_targets = manager._room_notify_targets(room)
+            sender.abort()  # Failed prevents queued/new chunks from writing.
+        busy = torch.tensor(
+            [manager._staging_outstanding.get(room, 0) > 0], dtype=torch.uint8
+        )
+        torch.distributed.all_reduce(
+            busy, op=torch.distributed.ReduceOp.MAX, group=self.attn_tp_cpu_group
+        )
+        if busy.item():
+            return False
+        manager.conclude_failure(
+            bootstrap_room=room,
+            failure_reason=message,
+            targets=req._context_abort_targets,
+        )
+        sender.clear()
+        with manager.failure_lock:
+            manager.failure_records.pop(room, None)
+        return True
+
     def clear_pending_chunk_send(self: Scheduler, req: Req) -> None:
         """Drop `req` from the sent-but-unconcluded chunk set.
 
@@ -1251,6 +1297,10 @@ class SchedulerDisaggregationPrefillMixin:
                 running_batch.batch_is_full = False
 
     def maybe_send_cached_prefix_chunk(self: Scheduler, req: Req) -> None:
+        if req.context_program is not None:
+            # Context transport publishes final versions after their completion
+            # fence; birth-position cached prefixes are not valid D input.
+            return
         if not envs.SGLANG_DISAGG_PREFILL_EARLY_SEND_CACHED_PREFIX.get():
             return
 
@@ -1319,6 +1369,11 @@ class SchedulerDisaggregationPrefillMixin:
         """
         page_size = self.token_to_kv_pool_allocator.page_size
         start_idx = req.start_send_idx
+        context_plan = None
+        if req.context_program is not None:
+            from sglang.srt.disaggregation.context_transfer import transfer_plan
+
+            context_plan = transfer_plan(req, self.token_to_kv_pool_allocator.device)
         transfer_input_len = len(req.origin_input_ids)
         end_idx = (
             end_idx
@@ -1347,6 +1402,23 @@ class SchedulerDisaggregationPrefillMixin:
                 end_idx,
             )
             return
+
+        context_chunk = None
+        if context_plan is not None:
+            context_start, context_end, end_idx = context_plan.full_chunk(
+                start_idx, end_idx, last_chunk=last_chunk,
+                terminal_rows=req.context_state.terminal_rows,
+                owned=req.context_state.owned,
+            )
+            if context_start == context_end and not last_chunk:
+                req.start_send_idx = end_idx
+                return
+            # Only materialized, stable terminal versions enter this send.
+            # They remain locked by the request through native transfer completion;
+            # future queries write birth pages and never mutate these versions.
+            context_chunk = context_plan.decode.device_indices[
+                context_start:context_end
+            ]
 
         state_indices: Optional[List] = None
         if last_chunk:
@@ -1377,6 +1449,10 @@ class SchedulerDisaggregationPrefillMixin:
                 window_kv_indices_full = self.req_to_token_pool.req_to_token[
                     req.kv.req_pool_idx, window_start:seq_len
                 ]
+                if context_plan is not None:
+                    window_kv_indices_full = context_plan.slots(
+                        req, self.req_to_token_pool, window=window_size
+                    )
                 window_kv_indices_swa = (
                     self.token_to_kv_pool_allocator.translate_swa_indices_for_transfer(
                         window_kv_indices_full
@@ -1483,9 +1559,9 @@ class SchedulerDisaggregationPrefillMixin:
 
         for seg_start, seg_end in segments:
             is_final_segment = seg_end == end_idx
-            kv_indices = self.req_to_token_pool.req_to_token[
-                req.kv.req_pool_idx, seg_start:seg_end
-            ]
+            kv_indices = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[seg_start:seg_end]
+            if context_plan is not None:
+                kv_indices = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[context_chunk]
             # Unified memory: req_to_token holds VIRTUAL ids; the transfer needs
             # physical ones. Per segment, since each is its own gather.
             kv_indices = (
@@ -1502,7 +1578,11 @@ class SchedulerDisaggregationPrefillMixin:
             req.disagg_kv_sender.send(
                 page_indices,
                 state_indices if segment_is_last else None,
-                num_kv_tokens=seg_end - seg_start,
+                num_kv_tokens=(
+                    len(context_chunk)
+                    if context_plan is not None
+                    else seg_end - seg_start
+                ),
             )
         req.start_send_idx = end_idx
         # A last chunk needs no entry: every `last_chunk=True` call site has

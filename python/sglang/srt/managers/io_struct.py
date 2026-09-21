@@ -178,6 +178,9 @@ class GenerateReqInput:
     # Stable identity shared by requests in the same session. Unlike
     # session_params, this does not alter or reconstruct the prompt.
     session_id: Optional[str] = field(default=None, kw_only=True)
+    # Internal compiled chat program. Native tensor-buffer IPC keeps this out of
+    # per-token Python object serialization. Shared read-only by parallel samples.
+    context_program: Optional[Dict[str, Any]] = field(default=None, kw_only=True)
     # The input prompt. It can be a single prompt or a batch of prompts.
     text: Optional[Union[List[str], str]] = None
     # The token ids for text.
@@ -402,6 +405,8 @@ class GenerateReqInput:
 
         self._validate_inputs()
         self._determine_batch_size()
+        if self.context_program is not None and not self.is_single:
+            raise ValueError("A Context program must describe a single input prompt")
         if self.session_id is not None and self.session_params is not None:
             raise ValueError("session_id and session_params cannot both be set.")
         self._handle_parallel_sampling()
@@ -892,6 +897,7 @@ class GenerateReqInput:
         sub = GenerateReqInput(
             rid=self.rid[i],
             session_id=self.session_id,
+            context_program=self.context_program,
             text=self.text[i] if self.text is not None else None,
             input_ids=self.input_ids[i] if self.input_ids is not None else None,
             input_embeds=(
@@ -980,6 +986,7 @@ class GenerateReqInput:
 
 
 class TokenizedGenerateReqInput(BaseReq, kw_only=True):
+    context_program: Optional[Dict[str, Any]] = None
     input_text: Optional[Union[str, List[Union[str, List[str]]]]]
     # The input token ids
     input_ids: Optional[array]  # Optional[array[int]]
