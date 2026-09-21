@@ -165,3 +165,51 @@ def test_output_validation_rejects_corruption_and_malformed_calls():
             ]
         }
     )
+
+
+def test_container_file_capture_waits_for_actual_exit(monkeypatch, tmp_path):
+    import subprocess
+    import minimax_context_fixture as fixture
+
+    calls, polls = [], []
+    command = "printf '%s' '$(not-a-host-command)'; exit 17"
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        if argv[1] == "exec":
+            assert argv[-2] == command
+            assert not kwargs.get("shell")
+            return subprocess.CompletedProcess(argv, 0)
+        if argv[2].endswith(".rc"):
+            polls.append(1)
+            if len(polls) == 1:
+                return subprocess.CompletedProcess(argv, 1)
+            Path(argv[3]).write_text("17")
+        else:
+            Path(argv[3]).write_bytes(b"actual tool output")
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(fixture.subprocess, "run", run)
+    monkeypatch.setattr(fixture.time, "sleep", lambda seconds: None)
+    assert fixture.execute_container_command(
+        "owned-container", command, tmp_path, capture="files"
+    ) == (17, b"actual tool output")
+    assert len(polls) == 2
+
+
+def test_container_file_capture_missing_marker_is_not_success(monkeypatch, tmp_path):
+    import subprocess
+    import minimax_context_fixture as fixture
+
+    clock = iter([0, 0, 211])
+    monkeypatch.setattr(fixture.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(fixture.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(
+        fixture.subprocess,
+        "run",
+        lambda argv, **kwargs: subprocess.CompletedProcess(argv, int(argv[1] == "cp")),
+    )
+    with pytest.raises(TimeoutError, match="completion marker"):
+        fixture.execute_container_command(
+            "owned-container", "true", tmp_path, capture="files"
+        )

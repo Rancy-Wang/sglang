@@ -297,6 +297,82 @@ class RollingDrop96K:
         )
 
 
+def execute_container_command(container, command, output, *, capture="stdio"):
+    """Keep commands inside Docker, including daemons with early exec returns."""
+    if capture not in ("stdio", "files"):
+        raise ValueError("MINIMAX_DOCKER_CAPTURE must be stdio or files")
+    if capture == "stdio":
+        result = subprocess.run(
+            [
+                "docker",
+                "exec",
+                "-w",
+                "/testbed",
+                container,
+                "timeout",
+                "180",
+                "bash",
+                "-lc",
+                command,
+            ],
+            capture_output=True,
+            timeout=195,
+        )
+        return result.returncode, result.stdout + result.stderr
+
+    destination = Path(output) / ("tool-" + uuid.uuid4().hex)
+    destination.mkdir(parents=True)
+    stem = "/tmp/minimax-" + uuid.uuid4().hex
+    # Positional arguments keep arbitrary tool text out of the wrapper's syntax.
+    wrapper = (
+        'timeout 180 bash -lc "$1" > "$2.out" 2>&1; status=$?; '
+        'printf "%s" "$status" > "$2.tmp"; mv "$2.tmp" "$2.rc"'
+    )
+    deadline = time.monotonic() + 210
+    subprocess.run(
+        [
+            "docker",
+            "exec",
+            "-w",
+            "/testbed",
+            container,
+            "/bin/sh",
+            "-c",
+            wrapper,
+            "minimax-command",
+            command,
+            stem,
+        ],
+        capture_output=True,
+        timeout=195,
+        check=True,
+    )
+    while time.monotonic() < deadline:
+        result = subprocess.run(
+            ["docker", "cp", container + ":" + stem + ".rc", str(destination / "rc")],
+            capture_output=True,
+            timeout=20,
+        )
+        if result.returncode == 0:
+            code = int((destination / "rc").read_text())
+            if not 0 <= code <= 255:
+                raise ValueError("Invalid container command exit status")
+            subprocess.run(
+                [
+                    "docker",
+                    "cp",
+                    container + ":" + stem + ".out",
+                    str(destination / "output"),
+                ],
+                capture_output=True,
+                timeout=20,
+                check=True,
+            )
+            return code, (destination / "output").read_bytes()
+        time.sleep(1)
+    raise TimeoutError("Docker exec returned but no command completion marker arrived")
+
+
 def run_swe_task(endpoint, task_path, image, *, max_turns=250):
     """Execute fresh model tool calls only inside a new isolated SWE container.
 
@@ -341,31 +417,23 @@ def run_swe_task(endpoint, task_path, image, *, max_turns=250):
         completed=False,
     )
     report_path = endpoint.output / (container + "-swe.json")
+    capture = os.environ.get("MINIMAX_DOCKER_CAPTURE", "stdio")
+    limits = os.environ.get("MINIMAX_DOCKER_CGROUP_LIMITS", "1")
+    assert capture in ("stdio", "files") and limits in ("0", "1")
+    report["docker_capture"] = capture
+    report["docker_cgroup_limits"] = limits == "1"
 
     def execute(command):
         # The command is an argument to bash inside the container, never the host.
-        result = subprocess.run(
-            [
-                "docker",
-                "exec",
-                "-w",
-                "/testbed",
-                container,
-                "timeout",
-                "180",
-                "bash",
-                "-lc",
-                command,
-            ],
-            capture_output=True,
-            timeout=195,
+        code, data = execute_container_command(
+            container, command, endpoint.output / "tools", capture=capture
         )
-        text = (result.stdout + result.stderr).decode("utf-8", errors="replace")
+        text = data.decode("utf-8", errors="replace")
         if len(text) > 100_000:
             text = text[:50_000] + "\n[output truncated]\n" + text[-50_000:]
-        return result.returncode, text
+        return code, text
 
-    subprocess.run(
+    start = subprocess.run(
         [
             "docker",
             "run",
@@ -374,22 +442,34 @@ def run_swe_task(endpoint, task_path, image, *, max_turns=250):
             container,
             "--network",
             "none",
-            "--cpus",
-            "4",
-            "--memory",
-            "8g",
-            "--pids-limit",
-            "256",
+            *(
+                ["--cpus", "4", "--memory", "8g", "--pids-limit", "256"]
+                if limits == "1"
+                else []
+            ),
             image,
             "sleep",
             "infinity",
         ],
-        check=True,
         capture_output=True,
     )
+    if start.returncode:
+        subprocess.run(["docker", "rm", "-f", container], capture_output=True)
+        raise RuntimeError(start.stderr.decode("utf-8", errors="replace"))
     try:
         code, head = execute("git rev-parse HEAD")
-        assert code == 0 and head.strip() == task["base_commit"], head
+        assert code == 0 and re.fullmatch(r"[0-9a-f]{40}", head.strip()), head
+        assert re.fullmatch(r"[0-9a-f]{40}", task["base_commit"])
+        # SWE images may add a metadata-only commit with an identical file tree.
+        code, trees = execute(
+            "git rev-parse HEAD^{tree} " + task["base_commit"] + "^{tree}"
+        )
+        tree_ids = trees.splitlines()
+        assert code == 0 and len(tree_ids) == 2 and tree_ids[0] == tree_ids[1], trees
+        code, dirty = execute("git status --porcelain --untracked-files=all")
+        assert code == 0 and not dirty.strip(), dirty
+        report["repository_head"] = head.strip()
+        report["repository_tree"] = tree_ids[0]
         report["image_id"] = subprocess.check_output(
             ["docker", "inspect", "--format", "{{.Image}}", container], text=True
         ).strip()
