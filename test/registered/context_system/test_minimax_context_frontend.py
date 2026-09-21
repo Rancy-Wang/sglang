@@ -250,3 +250,72 @@ def test_container_file_capture_missing_marker_is_not_success(monkeypatch, tmp_p
         fixture.execute_container_command(
             "owned-container", "true", tmp_path, capture="files"
         )
+
+
+def test_independent_numeric_timeline_preserves_birth_and_drop_positions():
+    from minimax_context_fixture import numeric_timeline
+
+    drops = {4: [(1, 3)], 7: [(3, 5)]}
+    plain, live, positions = numeric_timeline(9, drops, [])
+    assert plain[4] == ([0, 3], [0, 3], 4)
+    assert live == [0, 5, 6, 7, 8]
+    assert positions == [0, 5, 6, 7, 8]
+    repositioned, live, positions = numeric_timeline(9, drops, [3, 6])
+    assert repositioned[4] == ([0, 3], [0, 1], 2)
+    assert repositioned[7] == ([0, 5, 6], [0, 1, 2], 3)
+    assert live == [0, 5, 6, 7, 8]
+    assert positions == [0, 1, 2, 3, 4]
+    assert plain[3] == repositioned[3]  # Historical birth KV precedes events.
+
+
+@pytest.mark.parametrize("neox", [False, True])
+@pytest.mark.parametrize("dtype_name", ["float16", "bfloat16"])
+def test_staged_oracle_inverse_rotation_keeps_tail_values_and_other_pages(
+    neox, dtype_name
+):
+    from types import SimpleNamespace
+
+    torch = pytest.importorskip("torch")
+    from minimax_context_fixture import _native_rotate
+
+    torch.manual_seed(8317)
+    dtype = getattr(torch, dtype_name)
+    raw = torch.randn(5, 2, 128, dtype=torch.float32)
+    phases = (
+        torch.arange(12, dtype=torch.float32)[:, None]
+        * torch.linspace(0.01, 0.8, 32)[None, :]
+    )
+    cache = torch.cat((phases.cos(), phases.sin()), -1) * 1.2
+    pages = torch.tensor([0, 2, 4])
+    old_pos, new_pos = torch.tensor([1, 6, 10]), torch.tensor([1, 2, 3])
+
+    def rotate(x, positions):
+        value = x.clone()
+        c, s = cache[positions].chunk(2, -1)
+        c, s = c[:, None, :], s[:, None, :]
+        a, b = x[..., :32], x[..., 32:64]
+        if not neox:
+            a, b = x[..., :64:2], x[..., 1:64:2]
+        first, second = a * c - b * s, a * s + b * c
+        value[..., :64] = (
+            torch.cat((first, second), -1)
+            if neox
+            else torch.stack((first, second), -1).flatten(-2)
+        )
+        return value.to(dtype)
+
+    k = raw.to(dtype)
+    k[pages] = rotate(raw[pages], old_pos)
+    v = torch.randn_like(k)
+    before_k, before_v = k.clone(), v.clone()
+    layer = SimpleNamespace(
+        k_buffer=k, v_buffer=v, rotary_dim=64, is_neox_style=neox, cos_sin_cache=cache
+    )
+    _native_rotate(layer, pages, old_pos, new_pos)
+    torch.testing.assert_close(
+        k[pages], rotate(raw[pages], new_pos), atol=0.04, rtol=0.02
+    )
+    assert torch.equal(k[0], before_k[0])
+    assert torch.equal(k[[1, 3]], before_k[[1, 3]])
+    assert torch.equal(k[..., 64:], before_k[..., 64:])
+    assert torch.equal(v, before_v)
