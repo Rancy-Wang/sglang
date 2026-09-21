@@ -33,6 +33,38 @@ from jinja2.visitor import NodeTransformer
 from transformers.utils.chat_template_utils import _compile_jinja_template
 
 
+# This pure formatting macro returns text that MiniMax subsequently splits at
+# </think>. Markers inside that temporary string would be split too. Validate
+# its AST before leaving it uninstrumented; the enclosing message Output still
+# assigns ownership to the final rendered text. Other macros keep tracing.
+_MINIMAX_VISIBLE_TEXT = """
+{% macro visible_text(content) %}
+{% if content is string %}{{ content }}
+{% elif content is iterable and content is not mapping %}
+{% for item in content %}
+{% if item is mapping and item.type == 'text' %}{{ item.text }}
+{% elif item is string %}{{ item }}{% endif %}
+{% endfor %}
+{% else %}{{ content }}{% endif %}
+{% endmacro %}
+"""
+
+
+def _macro_structure(node):
+    """Ignore formatting-only whitespace, never expressions or literal content."""
+    class StripWhitespace(NodeTransformer):
+        def visit_TemplateData(self, item, *args, **kwargs):
+            return None if not item.data.strip() else item
+
+        def visit_Output(self, item, *args, **kwargs):
+            item = self.generic_visit(item, *args, **kwargs)
+            return item if item.nodes else None
+
+    import copy
+
+    return StripWhitespace().visit(copy.deepcopy(node)).dump()
+
+
 @dataclass(frozen=True)
 class TemplateTokenProvenance:
     input_ids: list[int]
@@ -46,8 +78,19 @@ class TemplateTokenProvenance:
 class _TraceTemplateOutputs(NodeTransformer):
     """Wrap template output nodes with markers carrying active loop variables."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, minimax: bool = False) -> None:
         self._loop_vars: list[str] = []
+        self._minimax = minimax
+
+    def visit_Macro(self, node: nodes.Macro, *args, **kwargs):
+        if self._minimax and node.name == "visible_text":
+            from jinja2 import Environment
+
+            expected = next(Environment().parse(_MINIMAX_VISIBLE_TEXT).find_all(nodes.Macro))
+            if _macro_structure(node) != _macro_structure(expected):
+                raise ValueError("Unrecognized MiniMax visible_text macro")
+            return node
+        return self.generic_visit(node, *args, **kwargs)
 
     @staticmethod
     def _target_names(target: nodes.Node) -> list[str]:
@@ -125,7 +168,8 @@ class _TraceTemplateOutputs(NodeTransformer):
 def _compile_traced_template(chat_template: str):
     compiled = _compile_jinja_template(chat_template)
     environment = compiled.environment
-    traced_ast = _TraceTemplateOutputs().visit(environment.parse(chat_template))
+    minimax = "ns.last_user_index" in chat_template and "<minimax:tool_call>" in chat_template
+    traced_ast = _TraceTemplateOutputs(minimax=minimax).visit(environment.parse(chat_template))
     code = environment.compile(traced_ast)
     return environment.template_class.from_code(
         environment,

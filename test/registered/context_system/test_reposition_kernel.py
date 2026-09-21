@@ -145,3 +145,58 @@ def test_swa_missing_copy_sources_and_destinations_survive_graph_replay(kernels)
         expected_v[19:21] = original_v[3:5]
         assert torch.equal(k, expected_k)
         assert torch.equal(v, expected_v)
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+@pytest.mark.parametrize("neox_style", [True, False])
+@pytest.mark.parametrize("heads", [1, 2, 8])
+def test_partial_rope_preserves_tail_values_sources_and_graph(dtype, neox_style, heads):
+    """Independent FP32 inverse/forward reference, including scaled native cache."""
+    actual = load_file("partial_context_rope", ROOT / "python/sglang/kernels/ops/attention/context_reposition.py").reposition_kv_layers
+    torch.manual_seed(29)
+    device = "cuda"
+    k = torch.randn((3, 32, heads, 128), device=device, dtype=dtype)
+    v = torch.randn_like(k)
+    source = torch.tensor([1, 3, 5, 7], device=device, dtype=torch.int32)
+    destination = torch.tensor([17, 19, 21, 23], device=device, dtype=torch.int32)
+    positions = torch.tensor([[3, 3], [1023, 1], [100, 0], [200, 22]], device=device, dtype=torch.int32)
+    theta = torch.arange(1024, device=device, dtype=torch.float32)[:, None] / (5000000 ** (torch.arange(0, 64, 2, device=device).float() / 64))
+    rope = (torch.cat((theta.cos(), theta.sin()), -1) * 1.37).to(dtype)
+    before_k, before_v = k.clone(), v.clone()
+    pointers_k = torch.tensor([x.data_ptr() for x in k], device=device, dtype=torch.uint64)
+    pointers_v = torch.tensor([x.data_ptr() for x in v], device=device, dtype=torch.uint64)
+    x = k[:, source.long(), :, :64].float()
+    a, b = (x[..., :32], x[..., 32:]) if neox_style else (x[..., ::2], x[..., 1::2])
+    old_cos, old_sin = rope[positions[:, 0].long()].float().chunk(2, -1)
+    new_cos, new_sin = rope[positions[:, 1].long()].float().chunk(2, -1)
+    oc, os_ = old_cos[None, :, None], old_sin[None, :, None]
+    nc, ns = new_cos[None, :, None], new_sin[None, :, None]
+    unrotated_a, unrotated_b = (a * oc + b * os_) / (oc.square() + os_.square()), (b * oc - a * os_) / (oc.square() + os_.square())
+    expected_a, expected_b = unrotated_a * nc - unrotated_b * ns, unrotated_b * nc + unrotated_a * ns
+    expected = torch.empty_like(x)
+    if neox_style:
+        expected[..., :32], expected[..., 32:] = expected_a, expected_b
+    else:
+        expected[..., ::2], expected[..., 1::2] = expected_a, expected_b
+    def run():
+        actual(pointers_k, pointers_v, k[0], v[0], source, destination, positions, rope,
+               rotary_dim=64, is_neox_style=neox_style)
+    run()
+    torch.cuda.synchronize()
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        run()
+    k[:, destination.long()] = 0
+    v[:, destination.long()] = 0
+    graph.replay()
+    torch.cuda.synchronize()
+    tolerance = 2e-2 if dtype == torch.bfloat16 else 2e-3
+    torch.testing.assert_close(k[:, destination.long(), :, :64].float(), expected, atol=tolerance, rtol=tolerance)
+    assert torch.equal(k[:, destination.long(), :, 64:], before_k[:, source.long(), :, 64:])
+    assert torch.equal(v[:, destination.long()], before_v[:, source.long()])
+    assert torch.equal(k[:, source.long()], before_k[:, source.long()])
+    assert torch.equal(k[:, destination[0].long()], before_k[:, source[0].long()])
+    assert torch.equal(v[:, source.long()], before_v[:, source.long()])
+    for invalid in (0, 63, 130):
+        with pytest.raises(ValueError, match="rotary_dim"):
+            actual(pointers_k, pointers_v, k[0], v[0], source, destination, positions, rope, rotary_dim=invalid)

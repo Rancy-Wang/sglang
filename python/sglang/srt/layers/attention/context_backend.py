@@ -228,6 +228,7 @@ class ContextLayerCopy:
     cos_sin_cache: torch.Tensor
     is_neox_style: bool
     skip_unmapped: bool = False
+    rotary_dim: int | None = None
 
     def apply(self):
         from sglang.kernels.ops.attention.context_reposition import reposition_kv_layers
@@ -245,6 +246,7 @@ class ContextLayerCopy:
             self.cos_sin_cache,
             is_neox_style=self.is_neox_style,
             skip_unmapped=self.skip_unmapped,
+            rotary_dim=self.rotary_dim,
         )
 
 
@@ -274,6 +276,7 @@ class ContextPoolLayer:
     v_buffer: torch.Tensor
     cos_sin_cache: torch.Tensor
     is_neox_style: bool
+    rotary_dim: int
 
 
 class ContextModelBinding:
@@ -296,6 +299,7 @@ class ContextModelBinding:
             layer_id = attn.layer_id
             k, v = pool.get_kv_buffer(layer_id)
             rope = getattr(rotary, "cos_sin_cache", None)
+            rotary_dim = getattr(rotary, "rotary_dim", k.shape[-1])
             if (
                 k.ndim != 3
                 or v.shape != k.shape
@@ -303,13 +307,16 @@ class ContextModelBinding:
                 or v.dtype != k.dtype
                 or rope is None
                 or rope.ndim != 2
-                or rope.shape[1] != k.shape[-1]
+                or type(rotary_dim) is not int
+                or not 0 < rotary_dim <= k.shape[-1]
+                or rotary_dim % 2
+                or rope.shape[1] != rotary_dim
                 or k.device != v.device
                 or k.device != rope.device
                 or k.stride(-1) != 1
                 or v.stride(-1) != 1
             ):
-                raise ValueError("Context needs native NHD KV and full-head RoPE")
+                raise ValueError("Context needs native NHD KV and valid native rotary_dim")
             layers.append(
                 ContextPoolLayer(
                     layer_id,
@@ -321,6 +328,7 @@ class ContextModelBinding:
                     v,
                     rope,
                     rotary.is_neox_style,
+                    rotary_dim,
                 )
             )
         if not layers or len({layer.layer_id for layer in layers}) != len(layers):
@@ -347,6 +355,7 @@ class ContextModelBinding:
                     layer.k_buffer.shape, layer.k_buffer.stride(),
                     layer.v_buffer.stride(), layer.k_buffer.dtype,
                     layer.cos_sin_cache.data_ptr(), layer.is_neox_style,
+                    layer.rotary_dim,
                 )
                 groups.setdefault(key, []).append(layer)
             self._existing_copy_groups = tuple(
@@ -361,6 +370,7 @@ class ContextModelBinding:
                 k_ptrs, v_ptrs, layer.k_buffer, layer.v_buffer,
                 source, destination, positions, layer.cos_sin_cache,
                 is_neox_style=layer.is_neox_style,
+                rotary_dim=layer.rotary_dim,
             )
 
     def bind(self, inputs: ContextPrefillInput) -> ContextForwardMetadata:
@@ -415,6 +425,7 @@ class ContextModelBinding:
                     layer.cos_sin_cache,
                     layer.is_neox_style,
                     skip_unmapped=layer.sliding_window and separate_swa_pool,
+                    rotary_dim=layer.rotary_dim,
                 )
         return ContextForwardMetadata(full, swa, copies)
 

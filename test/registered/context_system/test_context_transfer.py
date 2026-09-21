@@ -206,3 +206,29 @@ def test_decode_changed_branch_copies_even_at_equal_positions(compiler, transfer
         transfer.select_missing_transfer(source, source[:3], reuse.reusable)
     with pytest.raises(ValueError, match="boolean"):
         transfer.select_missing_transfer(source, source, reuse.reusable.astype(np.uint8))
+
+
+def test_decode_reuse_binding_supports_partial_native_rope(monkeypatch):
+    """D-side cached COW reaches the same partial-RoPE binding as prefill."""
+    from unittest.mock import Mock
+    from sglang.srt.layers.attention.context_backend import ContextModelBinding
+    from sglang.srt.disaggregation.context_transfer import materialize_decode_reuse
+    k, v = torch.zeros(16, 2, 128, dtype=torch.bfloat16), torch.zeros(16, 2, 128, dtype=torch.bfloat16)
+    rotary = SimpleNamespace(rotary_dim=64, cos_sin_cache=torch.zeros(256, 64), is_neox_style=True)
+    module = SimpleNamespace(attn=SimpleNamespace(layer_id=0, sliding_window_size=None), rotary_emb=rotary)
+    pool = SimpleNamespace(get_kv_buffer=lambda _: (k, v))
+    translator = SimpleNamespace(sliding_window_write_loc_for=lambda _: None, translate_full_attn_ids=lambda x: x)
+    model = SimpleNamespace(modules=lambda: [module])
+    runner = SimpleNamespace(model=model, token_to_kv_pool=pool, kv_index_translator=translator)
+    req = SimpleNamespace(context_decode_reuse=SimpleNamespace(copy_indices=np.array([0, 1]),
+            source_slots=torch.tensor([2, 3]), position_pairs=torch.tensor([[10, 2], [11, 3]], dtype=torch.int32)),
+        context_state=SimpleNamespace(slots=torch.tensor([6, 7])),
+        context_decode_layout=SimpleNamespace(device_indices=torch.tensor([0, 1])))
+    kernel = Mock()
+    monkeypatch.setattr("sglang.kernels.ops.attention.context_reposition.reposition_kv_layers", kernel)
+    materialize_decode_reuse(req, runner)
+    assert isinstance(runner.context_model_binding, ContextModelBinding)
+    assert runner.context_model_binding.layers[0].rotary_dim == 64
+    assert kernel.call_args.kwargs["rotary_dim"] == 64
+    assert torch.equal(kernel.call_args.args[4], torch.tensor([2, 3], dtype=torch.int32))
+    assert torch.equal(kernel.call_args.args[5], torch.tensor([6, 7], dtype=torch.int32))
