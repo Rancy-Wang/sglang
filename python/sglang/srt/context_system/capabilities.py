@@ -15,8 +15,24 @@ def validate_context_request(args, model_config, request):
         "Qwen3ForCausalLM",
         "Qwen3MoeForCausalLM",
         "GptOssForCausalLM",
+        "MiniMaxM2ForCausalLM",
     }:
-        raise ValueError("Context currently supports Qwen3/AgenticQwen and GPT-OSS")
+        raise ValueError("Context supports Qwen3/AgenticQwen, GPT-OSS and MiniMax M2")
+    if "MiniMaxM2ForCausalLM" in architectures:
+        config = model_config.hf_config
+        head_dim = getattr(config, "head_dim", None)
+        rotary_dim = getattr(config, "rotary_dim", None)
+        attention_types = getattr(config, "attn_type_list", None)
+        if (
+            type(head_dim) is not int
+            or type(rotary_dim) is not int
+            or not 0 < rotary_dim <= head_dim
+            or rotary_dim % 2
+            or not attention_types
+            or len(attention_types) != config.num_hidden_layers
+            or any(kind != 1 for kind in attention_types)
+        ):
+            raise ValueError("Context MiniMax requires full attention and even partial RoPE")
     if model_config.is_multimodal or str(model_config.dtype) not in (
         "torch.float16",
         "torch.bfloat16",
