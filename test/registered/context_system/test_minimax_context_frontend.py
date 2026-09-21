@@ -197,6 +197,43 @@ def test_container_file_capture_waits_for_actual_exit(monkeypatch, tmp_path):
     assert len(polls) == 2
 
 
+def test_non_stream_context_usage_is_requested_and_read(monkeypatch, tmp_path):
+    import requests
+    from minimax_context_fixture import Endpoint, context_usage
+
+    usage = {"cached_tokens": 123, "actual_prefill_tokens": 17}
+    response = {
+        "choices": [
+            {
+                "message": {"role": "assistant", "content": "M15"},
+                "finish_reason": "stop",
+                "meta_info": {"context_usage": usage},
+            }
+        ],
+        "sglext": None,
+    }
+
+    def post(url, *, json, timeout):
+        assert json["stream"] is False
+        assert json["return_meta_info"] is True
+        from types import SimpleNamespace
+
+        return SimpleNamespace(status_code=200, json=lambda: response)
+
+    monkeypatch.setattr(requests, "post", post)
+    endpoint = Endpoint(decode="http://unused", output=tmp_path)
+    result = endpoint.request({"messages": []}, "metadata-regression")
+    assert context_usage(result) == usage
+
+
+def test_context_usage_accepts_stream_summary_and_missing_metadata():
+    from minimax_context_fixture import context_usage
+
+    usage = {"cached_tokens": 123}
+    assert context_usage({"sglext": {"context_usage": {"0": usage}}}) == usage
+    assert context_usage({"choices": [{"meta_info": None}]}) is None
+
+
 def test_container_file_capture_missing_marker_is_not_success(monkeypatch, tmp_path):
     import subprocess
     import minimax_context_fixture as fixture
