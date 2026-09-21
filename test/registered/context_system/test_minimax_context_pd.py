@@ -44,3 +44,16 @@ def test_minimax_pd_swe_rolling_drop_96k():
     assert report[
         "coverage_complete"
     ], "SWE completed but did not exercise both rolling Drop and 96K Reposition"
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MINIMAX_NUMERIC_REFERENCE"),
+    reason="staged native reference required",
+)
+def test_minimax_pd_fixed_tokens_and_concurrency():
+    from minimax_context_fixture import run_fixed_token_http
+
+    assert os.environ.get("MINIMAX_DECODE_RADIX") in ("0", "1")
+    run_fixed_token_http(
+        endpoint_from_env("pd"), os.environ["MINIMAX_NUMERIC_REFERENCE"]
+    )
