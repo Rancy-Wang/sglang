@@ -395,7 +395,13 @@ class SWAComponent(TreeComponent):
         result: InsertResult,
         cache_actions: list[CacheAction | ComponentAction],
     ) -> int:
-        if params.prev_prefix_len >= total_prefix_len + prefix_len:
+        if params.context_owned is None and params.prev_prefix_len >= total_prefix_len + prefix_len:
+            return prefix_len
+        if params.context_swa_resident is not None and not bool(
+            params.context_swa_resident[total_prefix_len]
+        ):
+            # The core split this edge at every validity boundary. An absent
+            # incoming SWA page must never recover a tree tombstone.
             return prefix_len
 
         is_tombstone = node.component_data[self.component_type].value is None
@@ -474,6 +480,10 @@ class SWAComponent(TreeComponent):
         result: InsertResult,
         cache_actions: list[CacheAction | ComponentAction],
     ) -> None:
+        if params.context_swa_resident is not None and not bool(
+            params.context_swa_resident[total_prefix_len]
+        ):
+            return
         # _unevict_node_on_insert already wrote the request's fresh KV slice
         # into the base value. We just need to rebuild SWA from that slice for
         # the in-window portion. There is no old SWA slot to free here.
@@ -523,6 +533,10 @@ class SWAComponent(TreeComponent):
             return
 
         node_start = result.prefix_len
+        if params.context_swa_resident is not None and not bool(
+            params.context_swa_resident[node_start]
+        ):
+            return
         node_end = node_start + len(node.key)
         split_pos = params.swa_evicted_seqlen - node_start
         if split_pos >= len(node.key):
@@ -829,12 +843,102 @@ class SWAComponent(TreeComponent):
             result.swa_uuid_for_lock = swa_uuid
         return result
 
+    def configure_context_lock(self, node, receipt, required):
+        """Exchange a native SWA window lease for exact historical read ranges.
+
+        The caller already owns Full references on this source path and calls
+        before allocation/dispatch, or after every prior reader has completed.
+        Reconfiguration may shrink a live lease; newly needed ranges require a
+        fresh acquired receipt, never an implicit reacquire of evicted sources.
+        """
+        import numpy as np
+        from sglang.srt.context_system.recovery import mask_ranges
+
+        if (
+            required.device.type != "cpu"
+            or required.dtype != torch.bool
+            or required.ndim != 1
+        ):
+            raise ValueError("Context SWA demand must be a CPU bool vector")
+        path, cursor = [], 0
+        cur = node
+        while cur is not self.tree_core.root_node:
+            path.append(cur)
+            cursor += len(cur.key)
+            cur = cur.parent
+        if len(required) != cursor:
+            raise ValueError("Context SWA demand must cover the acquired raw prefix")
+        demand = required.numpy()
+        old = receipt.context_swa_ranges
+        if old is not None:
+            held = np.zeros(cursor, dtype=np.bool_)
+            for a, b in old:
+                held[a:b] = True
+            if np.any(demand & ~held):
+                raise ValueError(
+                    "A live Context SWA lease cannot reacquire released KV"
+                )
+        for cur in path:
+            start = cursor - len(cur.key)
+            if np.any(demand[start:cursor]):
+                if cur.component_data[self.component_type].value is None:
+                    raise ValueError("Context SWA read refers to an absent source")
+                if cur.component_data[BASE_COMPONENT_TYPE].lock_ref <= 0:
+                    raise ValueError("Context SWA read requires a Full source lease")
+            cursor = start
+        spans = tuple(mask_ranges(demand))
+        if old == spans:
+            return receipt
+        # No allocator or GPU operation occurs between release and replacement.
+        self.release_component_lock(node, receipt)
+        boundaries = sorted({p for span in spans for p in span})
+        cursor, cur = len(required), node
+        while cur is not self.tree_core.root_node:
+            start = cursor - len(cur.key)
+            for boundary in boundaries:
+                if start < boundary < cursor:
+                    _, action = self.tree_core._split_node(
+                        cur.key, cur, boundary - start
+                    )
+                    assert action is None
+                    start = boundary
+            cursor -= len(cur.key)
+            cur = cur.parent
+        self._update_context_lock_ranges(node, spans, 1)
+        receipt.context_swa_ranges = spans
+        return receipt
+
+    def _update_context_lock_ranges(self, node, ranges, delta):
+        path, cursor = [], 0
+        cur = node
+        while cur is not self.tree_core.root_node:
+            path.append(cur)
+            cursor += len(cur.key)
+            cur = cur.parent
+        ct = self.component_type
+        for cur in path:
+            start = cursor - len(cur.key)
+            if any(a <= start and cursor <= b for a, b in ranges):
+                cd = cur.component_data[ct]
+                old_ref = cd.lock_ref
+                assert old_ref + delta >= 0
+                cd.lock_ref += delta
+                if cd.value is not None and (old_ref == 0 or cd.lock_ref == 0):
+                    change = len(cd.value) * delta
+                    self.tree_core.component_evictable_size_[ct] -= change
+                    self.tree_core.component_protected_size_[ct] += change
+                self.tree_core._update_evictable_leaf_sets(cur)
+            cursor = start
+
     def release_component_lock(
         self,
         node: UnifiedTreeNode,
         params: DecLockRefParams,
         lock_host: bool = False,
     ) -> None:
+        if not lock_host and params.context_swa_ranges is not None:
+            self._update_context_lock_ranges(node, params.context_swa_ranges, -1)
+            return
         ct = self.component_type
         root = self.tree_core.root_node
         swa_uuid_for_lock = (
@@ -954,6 +1058,11 @@ class SWAComponent(TreeComponent):
     def _free_out_of_window_slots(self, req: Req, pre_len: int) -> None:
         if self.sliding_window_size is None:
             return
+        if getattr(req, "context_program", None) is not None:
+            if req.context_decode_layout is None:
+                return
+            self._free_context_decode_window(req, pre_len)
+            return
         free_swa_out_of_window_slots(
             req,
             pre_len,
@@ -963,6 +1072,42 @@ class SWAComponent(TreeComponent):
             token_to_kv_pool_allocator=self.cache.token_to_kv_pool_allocator,
             retain_floor=self.cache.swa_retain_floor(req),
         )
+
+    def _free_context_decode_window(self, req, pre_len):
+        """Apply the native raw eviction floor without releasing absent peers."""
+        if not req.kv.holds_kv:
+            return
+        if self.cache.page_size != 1:
+            raise ValueError("Context SWA eviction requires page_size=1")
+        start = max(req.kv.swa_evicted_seqlen, req.kv.swa_dead_lo(1))
+        end = req.context_decode_layout.swa_raw_floor(pre_len, self.sliding_window_size)
+        retain = self.cache.swa_retain_floor(req)
+        if retain is not None:
+            end = min(end, retain)
+        req.kv.swa_evicted_seqlen = start
+        if end <= start:
+            return
+        row = self.cache.req_to_token_pool.req_to_token[req.kv.req_pool_idx]
+        allocator = self.cache.token_to_kv_pool_allocator
+        state = req.context_state
+        if state is None or start >= len(state.terminal_rows):
+            # Steady decode frees one fresh generated peer, with no scan or
+            # materialization of the prompt's CPU validity metadata.
+            allocator.free_swa_segment(row[start:end], start_pos=start)
+        else:
+            from sglang.srt.context_system.recovery import mask_ranges
+
+            valid = torch.ones(end - start, dtype=torch.bool)
+            rows = state.terminal_rows[start : min(end, len(state.terminal_rows))]
+            valid[: len(rows)] = False
+            present = rows >= 0
+            if state.swa_resident is None:
+                valid[: len(rows)] = present
+            else:
+                valid[: len(rows)][present] = state.swa_resident[rows[present]]
+            for a, b in mask_ranges(valid.numpy()):
+                allocator.free_swa_segment(row[start + a : start + b], start_pos=start + a)
+        req.kv.swa_evicted_seqlen = end
 
     def free_out_of_window_slots(
         self, req: Req, pre_len: int, insert_params: InsertParams

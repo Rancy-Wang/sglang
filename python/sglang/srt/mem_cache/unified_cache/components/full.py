@@ -169,7 +169,7 @@ class FullComponent(TreeComponent):
         host_freed = 0
 
         # Device layer
-        if EvictLayer.DEVICE in target and cd.value is not None:
+        if EvictLayer.DEVICE in target and cd.value is not None and not node.context_hole:
             device_frees[self.component_type].append(cd.value)
             freed = len(cd.value)
             self.tree_core.component_evictable_size_[self.component_type] -= freed
@@ -195,6 +195,9 @@ class FullComponent(TreeComponent):
         self._ensure_eviction_strategy()
         self._evict_device_request_cnt = request_cnt
         self._evict_device_last_node = None
+        if self.tree_core.context_eviction_candidates is not None:
+            self._evict_device_heap = []
+            return
         self._evict_device_heap = [
             (self.session_ref_eviction_strategy(n), n)
             for n in self.tree_core.evictable_device_leaves
@@ -208,6 +211,18 @@ class FullComponent(TreeComponent):
         host_frees: dict[ComponentType, list[torch.Tensor]],
     ) -> Optional[NodeId]:
         ct = self.component_type
+        candidates = self.tree_core.context_eviction_candidates
+        if candidates is not None:
+            if tracker[ct] >= self._evict_device_request_cnt:
+                return None
+            selected = candidates.pop()
+            if selected is None:
+                return None
+            kind, node = selected
+            if kind == 0 and not node.context_path_ref:
+                return node.id
+            self.tree_core.evict_context_pages(node, tracker, device_frees, host_frees)
+            return None
         lv = self._evict_device_last_node
         if (
             lv is not None
@@ -296,12 +311,13 @@ class FullComponent(TreeComponent):
                 f"FULL invariant broken: evicted ancestor {cur.id} above device-on segment"
             )
             if cd.lock_ref == 0:
-                key_len = len(cd.value)
+                key_len = cur.full_page_count
                 self.tree_core.component_evictable_size_[ct] -= key_len
                 self.tree_core.component_protected_size_[ct] += key_len
                 delta += key_len
             cd.lock_ref += 1
             self.tree_core.evictable_device_leaves.discard(cur)
+            self.tree_core._update_context_candidate(cur)
             cur = cur.parent
         result.delta = delta
         return result
@@ -325,19 +341,32 @@ class FullComponent(TreeComponent):
 
         root = self.tree_core.root_node
         cur = node
+        cursor = 0
+        if params.context_skip_ranges:
+            while cur is not root:
+                cursor += len(cur.key)
+                cur = cur.parent
+            cur = node
         while cur != root:
             cd = cur.component_data[ct]
+            start = cursor - len(cur.key)
+            if any(a <= start and cursor <= b for a, b in params.context_skip_ranges):
+                assert cur.context_path_ref > 0, "Context path lease released twice"
+                cur.context_path_ref -= 1
+                self.tree_core._update_evictable_leaf_sets(cur)
+                cursor, cur = start, cur.parent
+                continue
             assert cd.lock_ref > 0, (
                 f"FULL segment release hit lock_ref=0 on node {cur.id}"
             )
             if cd.lock_ref == 1 and cd.value is not None:
-                key_len = len(cd.value)
+                key_len = cur.full_page_count
                 self.tree_core.component_evictable_size_[ct] += key_len
                 self.tree_core.component_protected_size_[ct] -= key_len
             cd.lock_ref -= 1
             if cd.lock_ref == 0:
                 self.tree_core._update_evictable_leaf_sets(cur)
-            cur = cur.parent
+            cursor, cur = start, cur.parent
 
     # ---- HiCache Hooks ----
 
