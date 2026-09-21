@@ -548,3 +548,36 @@ def test_idle_rejected_context_can_retry_or_fail(factory, compiler, path):
             # Native retains its existing full-batch behavior. Context retries
             # its match instead of waiting for a nonexistent decode to finish.
             assert adder.add_one_req.call_count == (1 if path == "native" else 2)
+
+
+@pytest.mark.parametrize("geometry,accepted", [({}, True), ({"rotary_dim": 0}, False),
+    ({"rotary_dim": 63}, False), ({"rotary_dim": 256}, False),
+    ({"attn_type_list": [0, 1]}, False), ({"attn_type_list": [1]}, False)])
+def test_minimax_context_geometry_admission(geometry, accepted):
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from sglang.srt.context_system.capabilities import validate_context_request
+    config = dict(architectures=["MiniMaxM2ForCausalLM"], head_dim=128, rotary_dim=64,
+                  num_hidden_layers=2, attn_type_list=[1, 1])
+    config.update(geometry)
+    model = SimpleNamespace(hf_config=SimpleNamespace(**config), is_multimodal=False, dtype="torch.bfloat16")
+    server = SimpleNamespace(page_size=1, prefill_attention_backend=None, decode_attention_backend=None,
+        attention_backend="triton", kv_cache_dtype="bfloat16", disaggregation_mode="null", pp_size=1,
+        attn_cp_size=1, dcp_size=1, speculative_algorithm=None, dllm_algorithm=None,
+        enable_deterministic_inference=False, radix_cache_backend=None)
+    request = SimpleNamespace(input_ids=[1, 2], input_embeds=None, contains_mm_input=lambda: False,
+        session_id=None, session_params=None, lora_path=None, sampling_params={}, context_program={})
+    if not accepted:
+        with pytest.raises(ValueError, match="MiniMax requires"):
+            validate_context_request(server, model, request)
+        return
+    with patch("sglang.srt.context_system.planner.ContextProgram.from_wire", return_value="compiled") as decode:
+        assert validate_context_request(server, model, request) == "compiled"
+        decode.assert_called_once_with({}, [1, 2])
+    for field, value, message in [("page_size", 16, "page_size"), ("attention_backend", "flashinfer", "Triton"),
+                                  ("kv_cache_dtype", "fp8_e4m3", "unquantized"), ("speculative_algorithm", "EAGLE", "non-speculative")]:
+        prior = getattr(server, field)
+        setattr(server, field, value)
+        with pytest.raises(ValueError, match=message):
+            validate_context_request(server, model, request)
+        setattr(server, field, prior)
