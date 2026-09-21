@@ -777,6 +777,11 @@ def _numeric_worker(rank, argv, ports, output):
     ]
     assert len(tokens) == 103
     reports, reference_rows = {}, {}
+    metadata = {
+        "humming_batch_invariant": os.environ.get("SGLANG_HUMMING_USE_BATCH_INVARIANT", "0"),
+        "cuda_graph_disabled": args.disable_cuda_graph,
+        "native_repeatability": {},
+    }
     with torch.no_grad():
         # Fixed dtype thresholds, recorded before any candidate comparison.
         thresholds = {
@@ -795,6 +800,25 @@ def _numeric_worker(rank, argv, ports, output):
             expected, expected_kv = _numeric_model_run(
                 wrapper, tokens, drops, repos, candidate=False
             )
+            repeated, repeated_kv = _numeric_model_run(
+                wrapper, tokens, drops, repos, candidate=False
+            )
+            repeat_error = (repeated.float() - expected.float()).abs()
+            metadata["native_repeatability"][policy] = {
+                "max": repeat_error.max().item(),
+                "mean": repeat_error.mean().item(),
+                "kv_equal": all(
+                    torch.equal(a, b)
+                    for pair_a, pair_b in zip(expected_kv, repeated_kv)
+                    for a, b in zip(pair_a, pair_b)
+                ),
+            }
+            Path(output, f"repeatability-rank-{rank}.json").write_text(
+                json.dumps(metadata, indent=2)
+            )
+            assert torch.equal(expected, repeated), metadata
+            assert metadata["native_repeatability"][policy]["kv_equal"], metadata
+            del repeated, repeated_kv
             actual, actual_kv = _numeric_model_run(
                 wrapper, tokens, drops, repos, candidate=True
             )
@@ -821,7 +845,7 @@ def _numeric_worker(rank, argv, ports, output):
             reports[policy] = report
             Path(output, f"numeric-rank-{rank}.json").write_text(
                 json.dumps(
-                    dict(thresholds=thresholds, reports=reports, tokens=tokens),
+                    dict(thresholds=thresholds, reports=reports, tokens=tokens, metadata=metadata),
                     indent=2,
                 )
             )
@@ -847,6 +871,7 @@ def _numeric_worker(rank, argv, ports, output):
                         forced_tokens=tokens[96:] + [tokens[96]],
                         thresholds=thresholds,
                         policies=list(reports),
+                        metadata=metadata,
                     ),
                     indent=2,
                 )
