@@ -16,6 +16,7 @@ import torch
 def test_dense_configuration_is_fixed_at_initialization(monkeypatch, enabled):
     from sglang.srt.layers.quantization import humming as module
 
+    module._lazy_import_humming()
     key = "SGLANG_HUMMING_USE_BATCH_INVARIANT"
     monkeypatch.delenv(key, raising=False)
     if enabled is not None:
