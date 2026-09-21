@@ -108,3 +108,60 @@ def test_unrecognized_macro_and_retention_guard_fail_closed(frontend):
     modified = tokenizer.chat_template.replace("reasoning_content and loop.index0", "reasoning_content and 1 + loop.index0")
     with pytest.raises(ValueError, match="thinking history guard"):
         thinking.retained_template(modified)
+
+
+def test_rolling_drop_96k_uses_full_template_boundaries(frontend):
+    from minimax_context_fixture import RollingDrop96K, TOOLS, tool_history
+
+    tokenizer, _, _ = frontend
+    messages = tool_history()[:-1]
+    state = RollingDrop96K(
+        tokenizer, provenance_builder=frontend[1].build_template_token_provenance
+    )
+    first = state.extend(messages[:26], TOOLS)  # 12 tool responses, no Drop.
+    assert first == {"drop_message": {}, "reposition": []}
+    second = state.extend(messages, TOOLS)
+    assert second["drop_message"] == {"27": [3], "29": [5], "31": [7], "33": [9]}
+    assert second["reposition"] == []  # No eager compaction below 96K.
+    assistant = copy.deepcopy(messages[-2])
+    assistant["tool_calls"][0]["id"] = "long_call"
+    messages += [
+        assistant,
+        {
+            "role": "tool",
+            "tool_call_id": "long_call",
+            "content": " token" * (96 * 1024),
+        },
+    ]
+    third = state.extend(messages, TOOLS)
+    assert third["reposition"] == [35]
+    assert all(
+        check["before"] >= 96 * 1024 and check["after"] < check["before"]
+        for check in state.checks
+    )
+    assert state.extend(messages, TOOLS) == third
+    changed = copy.deepcopy(messages)
+    changed[0]["content"] += "changed"
+    with pytest.raises(AssertionError, match="Historical messages changed"):
+        state.extend(changed, TOOLS)
+
+
+def test_output_validation_rejects_corruption_and_malformed_calls():
+    from minimax_context_fixture import output_findings
+
+    assert output_findings({"content": "中文🙂 legitimate answer"}) == []
+    assert "content:invalid_unicode" in output_findings({"content": "broken\ufffd"})
+    assert "reasoning_content:repeated_block" in output_findings(
+        {"reasoning_content": "A long repeated sentence with forty characters. " * 8}
+    )
+    assert "invalid_tool_call" in output_findings(
+        {
+            "tool_calls": [
+                {
+                    "type": "function",
+                    "id": "x",
+                    "function": {"name": "bash", "arguments": "not JSON"},
+                }
+            ]
+        }
+    )
