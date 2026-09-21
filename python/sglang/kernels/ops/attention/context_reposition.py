@@ -90,13 +90,16 @@ def _reposition_layers_kernel(
         tl.float32
     )
     scale_squared = old_cos * old_cos + old_sin * old_sin
-    delta_cos = (new_cos * old_cos + new_sin * old_sin) / scale_squared
-    delta_sin = (new_sin * old_cos - new_cos * old_sin) / scale_squared
+    # Match an explicit FP32 inverse followed by a forward rotation. Algebraic
+    # delta-angle expansion changes rounding; even a single BF16 ULP can be
+    # amplified substantially by the subsequent layers of a deep MoE model.
+    unrotated_first = tl.div_rn(first * old_cos + second * old_sin, scale_squared)
+    unrotated_second = tl.div_rn(second * old_cos - first * old_sin, scale_squared)
     # A different final Radix branch can need its own page at the same position.
     # In that case copy the source bits instead of round-tripping through RoPE.
     same_position = old_position == new_position
-    rotated_first = first * delta_cos - second * delta_sin
-    rotated_second = second * delta_cos + first * delta_sin
+    rotated_first = unrotated_first * new_cos - unrotated_second * new_sin
+    rotated_second = unrotated_second * new_cos + unrotated_first * new_sin
     tl.store(
         destination_k + first_offsets,
         tl.where(same_position, first, rotated_first),
@@ -229,4 +232,5 @@ def reposition_kv_layers(
         BLOCK_HALF=triton.next_power_of_2(rotary_dim // 2),
         BLOCK_HEAD=triton.next_power_of_2(head_dim),
         num_warps=4,
+        enable_fp_fusion=False,
     )

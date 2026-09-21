@@ -1,10 +1,6 @@
-"""Opt-in CUDA differential tests against the fixed mini production kernel."""
+"""Opt-in CUDA checks against independent inverse/forward RoPE references."""
 
-import importlib
 import os
-import sys
-import types
-from pathlib import Path
 
 import pytest
 import torch
@@ -18,25 +14,34 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture(scope="module")
 def kernels():
-    source = os.environ.get("MINI_SGLANG_REFERENCE")
-    if not source:
-        pytest.fail("MINI_SGLANG_REFERENCE is required for GPU differential checks")
-    package = types.ModuleType("mini_rope_reference")
-    package.__path__ = [str(Path(source) / "python/minisgl/kernel")]
-    sys.modules[package.__name__] = package
-    mini = importlib.import_module(package.__name__ + ".reposition_kv")
-    actual = load_file(
+    return load_file(
         "context_rope_kernel",
         ROOT / "python/sglang/kernels/ops/attention/context_reposition.py",
-    )
-    return mini.reposition_kv_with_rope_delta, actual.reposition_kv_layers
+    ).reposition_kv_layers
+
+
+def inverse_forward(k, positions, rope, neox_style, dtype=torch.float32):
+    """Independent PyTorch inverse/forward; no production kernel or delta angle."""
+    part = k.to(dtype)
+    a, b = part.chunk(2, -1) if neox_style else (part[..., ::2], part[..., 1::2])
+    oc, os_ = rope[positions[:, 0].long()].to(dtype).chunk(2, -1)
+    nc, ns = rope[positions[:, 1].long()].to(dtype).chunk(2, -1)
+    oc, os_, nc, ns = (x[None, :, None] for x in (oc, os_, nc, ns))
+    scale = oc.square() + os_.square()
+    x, y = (a * oc + b * os_) / scale, (b * oc - a * os_) / scale
+    first, second = x * nc - y * ns, y * nc + x * ns
+    rotated = torch.cat((first, second), -1) if neox_style else torch.stack((first, second), -1).flatten(-2)
+    result = rotated.to(k.dtype)
+    same = positions[:, 0] == positions[:, 1]
+    result[:, same] = k[:, same]
+    return result
 
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("neox_style", [True, False])
 @pytest.mark.parametrize("head_dim", [64, 128])
-def test_native_layer_pointers_match_mini(kernels, dtype, neox_style, head_dim):
-    reference, actual = kernels
+def test_native_layer_pointers_match_independent_inverse_forward(kernels, dtype, neox_style, head_dim):
+    actual = kernels
     device = "cuda"
     torch.manual_seed(17)
     layers, slots, heads = 3, 256, 2
@@ -78,14 +83,12 @@ def test_native_layer_pointers_match_mini(kernels, dtype, neox_style, head_dim):
         torch.cat((theta.cos(), theta.sin()), dim=-1) * 1.37
     )  # YaRN magnitude must cancel.
 
-    def to_neox(tensor):
-        if neox_style:
-            return tensor.clone()
-        return torch.cat((tensor[..., ::2], tensor[..., 1::2]), dim=-1)
-
-    expected_k = to_neox(base_k)
+    expected_k = base_k.clone()
     expected_v = base_v.clone()
-    reference(expected_k, expected_v, source, destination, positions, rope)
+    expected_k[:, destination.long()] = inverse_forward(
+        base_k[:, source.long()], positions, rope, neox_style
+    )
+    expected_v[:, destination.long()] = base_v[:, source.long()]
     actual(
         k_ptrs,
         v_ptrs,
@@ -100,7 +103,7 @@ def test_native_layer_pointers_match_mini(kernels, dtype, neox_style, head_dim):
 
     output_k = torch.stack(k_buffers)
     output_v = torch.stack(v_buffers)
-    assert torch.equal(to_neox(output_k), expected_k)
+    assert torch.equal(output_k, expected_k)
     assert torch.equal(output_v, expected_v)
     assert torch.equal(output_k[:, source.long()], base_k[:, source.long()])
     assert torch.equal(output_v[:, source.long()], base_v[:, source.long()])
@@ -111,13 +114,13 @@ def test_native_layer_pointers_match_mini(kernels, dtype, neox_style, head_dim):
 
 
 def test_reposition_rejects_large_page_before_device_access(kernels):
-    _, actual = kernels
+    actual = kernels
     with pytest.raises(ValueError, match="page_size=1"):
         actual(*([None] * 8), page_size=16)
 
 
 def test_swa_missing_copy_sources_and_destinations_survive_graph_replay(kernels):
-    _, actual = kernels
+    actual = kernels
     k = torch.randn((32, 2, 64), device="cuda", dtype=torch.bfloat16)
     v = torch.randn_like(k)
     original_k, original_v = k.clone(), v.clone()
@@ -191,7 +194,11 @@ def test_partial_rope_preserves_tail_values_sources_and_graph(dtype, neox_style,
     graph.replay()
     torch.cuda.synchronize()
     tolerance = 2e-2 if dtype == torch.bfloat16 else 2e-3
-    torch.testing.assert_close(k[:, destination.long(), :, :64].float(), expected, atol=tolerance, rtol=tolerance)
+    rounded = expected.to(dtype)
+    rounded[:, 0] = before_k[:, source[0].long(), :, :64]
+    assert torch.equal(k[:, destination.long(), :, :64], rounded)
+    precise = inverse_forward(before_k[:, source.long(), :, :64], positions, rope, neox_style, torch.float64)
+    torch.testing.assert_close(k[:, destination.long(), :, :64], precise, atol=tolerance, rtol=tolerance)
     assert torch.equal(k[:, destination.long(), :, 64:], before_k[:, source.long(), :, 64:])
     assert torch.equal(v[:, destination.long()], before_v[:, source.long()])
     assert torch.equal(k[:, source.long()], before_k[:, source.long()])
