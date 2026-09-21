@@ -79,6 +79,7 @@ class Endpoint:
     def request(self, payload, label, *, diagnostic=False):
         body = copy.deepcopy(payload)
         body["stream"] = False
+        body["return_meta_info"] = True
         body.setdefault("model", os.environ.get("MINIMAX_MODEL", "MiniMax-M2.7"))
         body.setdefault("temperature", 0)
         identity = f"{label}-{uuid.uuid4().hex}"
@@ -213,6 +214,12 @@ def short_request(policy):
 
 
 def context_usage(result):
+    # Native non-stream responses expose these counters on the choice.
+    choices = result.get("choices") or []
+    if choices:
+        usage = (choices[0].get("meta_info") or {}).get("context_usage")
+        if usage is not None:
+            return usage
     usage = (result.get("sglext") or {}).get("context_usage")
     if isinstance(usage, dict) and "0" in usage:
         return usage["0"]
