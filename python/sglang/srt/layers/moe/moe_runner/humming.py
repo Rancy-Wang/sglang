@@ -167,17 +167,20 @@ class HummingRunnerCore(MoeRunnerCore):
 
         compute_config = {
             "use_f16_accum": envs.SGLANG_HUMMING_USE_F16_ACCUM.get(),
+            "use_batch_invariant": envs.SGLANG_HUMMING_USE_BATCH_INVARIANT.get(),
             "gemm_type": humming_gemm_type.value,
         }
         w13_tuning_config = HummingMethod.get_default_tuning_configs(
             layer=self.layer,
             use_f16_accum=envs.SGLANG_HUMMING_USE_F16_ACCUM.get(),
+            use_batch_invariant=compute_config["use_batch_invariant"],
             gemm_type=humming_gemm_type,
             sublayer_name="w13",
         )
         w2_tuning_config = HummingMethod.get_default_tuning_configs(
             layer=self.layer,
             use_f16_accum=envs.SGLANG_HUMMING_USE_F16_ACCUM.get(),
+            use_batch_invariant=compute_config["use_batch_invariant"],
             gemm_type=humming_gemm_type,
             sublayer_name="w2",
         )

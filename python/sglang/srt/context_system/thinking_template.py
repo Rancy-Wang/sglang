@@ -15,7 +15,7 @@ def retained_template(template):
     marker = "{# SGLANG_CONTEXT_THINKING_HISTORY_V1:"
     if template.startswith(marker):
         family = template[len(marker) :].split(" #}", 1)[0]
-        if family in ("gpt-oss", "qwen", "native"):
+        if family in ("gpt-oss", "qwen", "minimax", "native"):
             return template, family
     Environment().parse(template)
     if "future_final_message.found" in template and "<|start|>assistant" in template:
@@ -42,6 +42,15 @@ def retained_template(template):
             "message.thinking", "(message.reasoning_content or message.thinking)"
         )
         family = "gpt-oss"
+    elif "ns.last_user_index" in template and "<minimax:tool_call>" in template:
+        patched, count = re.subn(
+            r"({%-?\s*if\s+)reasoning_content\s+and\s+loop\.index0\s*>\s*ns\.last_user_index(\s*-?%})",
+            r"\1reasoning_content and (preserve_thinking_history or loop.index0 > ns.last_user_index)\2",
+            template,
+        )
+        if count != 1:
+            raise ValueError("Unrecognized MiniMax thinking history guard")
+        family = "minimax"
     elif "ns.last_query_index" in template and "reasoning_content" in template:
         patched, count = re.subn(
             r"({%-?\s*if\s+)loop\.index0\s*>\s*ns\.last_query_index(\s*-?%})",

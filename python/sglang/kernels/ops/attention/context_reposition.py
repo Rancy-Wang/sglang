@@ -43,8 +43,10 @@ def _reposition_layers_kernel(
     NEOX_STYLE: tl.constexpr,
     SKIP_UNMAPPED: tl.constexpr,
     head_dim: tl.constexpr,
+    rotary_dim: tl.constexpr,
     half_dim: tl.constexpr,
     BLOCK_HALF: tl.constexpr,
+    BLOCK_HEAD: tl.constexpr,
 ):
     # Production KV buffers can exceed 2**31 elements even when every individual
     # stride fits in int32. Promote the grid coordinates before multiplying by
@@ -88,13 +90,16 @@ def _reposition_layers_kernel(
         tl.float32
     )
     scale_squared = old_cos * old_cos + old_sin * old_sin
-    delta_cos = (new_cos * old_cos + new_sin * old_sin) / scale_squared
-    delta_sin = (new_sin * old_cos - new_cos * old_sin) / scale_squared
+    # Match an explicit FP32 inverse followed by a forward rotation. Algebraic
+    # delta-angle expansion changes rounding; even a single BF16 ULP can be
+    # amplified substantially by the subsequent layers of a deep MoE model.
+    unrotated_first = tl.div_rn(first * old_cos + second * old_sin, scale_squared)
+    unrotated_second = tl.div_rn(second * old_cos - first * old_sin, scale_squared)
     # A different final Radix branch can need its own page at the same position.
     # In that case copy the source bits instead of round-tripping through RoPE.
     same_position = old_position == new_position
-    rotated_first = first * delta_cos - second * delta_sin
-    rotated_second = second * delta_cos + first * delta_sin
+    rotated_first = unrotated_first * new_cos - unrotated_second * new_sin
+    rotated_second = unrotated_second * new_cos + unrotated_first * new_sin
     tl.store(
         destination_k + first_offsets,
         tl.where(same_position, first, rotated_first),
@@ -106,12 +111,16 @@ def _reposition_layers_kernel(
         mask=mask,
     )
 
+    # Only the rotary subspace changes position. Copy the rest of K and every
+    # component of V, independently of the rotary width.
+    full_offsets = tl.arange(0, BLOCK_HEAD)
+    tail_mask = (full_offsets >= rotary_dim) & (full_offsets < head_dim)
+    tail = tl.load(source_k + full_offsets, mask=tail_mask, other=0.0)
+    tl.store(destination_k + full_offsets, tail, mask=tail_mask)
     source_v = v_buffer + source * v_stride_slot + head * v_stride_head
     destination_v = v_buffer + destination * v_stride_slot + head * v_stride_head
-    value_first = tl.load(source_v + offsets, mask=mask, other=0.0)
-    value_second = tl.load(source_v + half_dim + offsets, mask=mask, other=0.0)
-    tl.store(destination_v + offsets, value_first, mask=mask)
-    tl.store(destination_v + half_dim + offsets, value_second, mask=mask)
+    values = tl.load(source_v + full_offsets, mask=full_offsets < head_dim, other=0.0)
+    tl.store(destination_v + full_offsets, values, mask=full_offsets < head_dim)
 
 
 def reposition_kv_layers(
@@ -127,6 +136,7 @@ def reposition_kv_layers(
     is_neox_style: bool = True,
     page_size: int = 1,
     skip_unmapped: bool = False,
+    rotary_dim: int | None = None,
 ) -> None:
     """Rotate K and copy V across native per-layer pools in one GPU launch.
 
@@ -187,14 +197,17 @@ def reposition_kv_layers(
     ):
         raise ValueError("Reposition requires int32 slot vectors and [N, 2] positions")
     head_dim = k_layout.shape[-1]
+    rotary_dim = head_dim if rotary_dim is None else rotary_dim
     if (
-        head_dim % 2
+        type(rotary_dim) is not int
+        or not 0 < rotary_dim <= head_dim
+        or rotary_dim % 2
         or cos_sin_cache.ndim != 2
-        or cos_sin_cache.shape[1] != head_dim
+        or cos_sin_cache.shape[1] != rotary_dim
         or cos_sin_cache.stride(-1) != 1
         or not cos_sin_cache.is_floating_point()
     ):
-        raise ValueError("Reposition requires a full-head native cos/sin RoPE cache")
+        raise ValueError("Reposition requires a native cos/sin cache matching rotary_dim")
     if count == 0 or len(k_data_ptrs) == 0:
         return
     _reposition_layers_kernel[(count, len(k_data_ptrs), k_layout.shape[1])](
@@ -214,7 +227,10 @@ def reposition_kv_layers(
         NEOX_STYLE=is_neox_style,
         SKIP_UNMAPPED=skip_unmapped,
         head_dim=head_dim,
-        half_dim=head_dim // 2,
-        BLOCK_HALF=triton.next_power_of_2(head_dim // 2),
+        rotary_dim=rotary_dim,
+        half_dim=rotary_dim // 2,
+        BLOCK_HALF=triton.next_power_of_2(rotary_dim // 2),
+        BLOCK_HEAD=triton.next_power_of_2(head_dim),
         num_warps=4,
+        enable_fp_fusion=False,
     )
