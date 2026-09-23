@@ -10,8 +10,11 @@ import functools
 import json
 import os
 from pathlib import Path
+import signal
+import subprocess
 import sys
 import time
+import urllib.request
 
 from build_decode_breakdown_fixture import digest, paired_payloads, validate_fixture
 
@@ -44,9 +47,9 @@ def install():
     from sglang.srt.model_executor.model_runner import ModelRunner
 
     pending, records = deque(), []
-    cursors, token_tables = {}, {}
+    cursors, token_tables, native_requests = {}, {}, {}
     state = dict(rank=None, log=None, cohort_started=False, first_wait=None,
-                 profiling_started=False, profiling_stopped=False)
+                 profiling_started=False, profiling_stopped=False, tokens_verified=False)
 
     def emit(row):
         row.update(role=role, rank=state["rank"], pid=os.getpid())
@@ -67,6 +70,17 @@ def install():
             for row in records:
                 emit(row)
             records.clear()
+        if (role == "decode" and not state["tokens_verified"]
+                and set(native_requests) == set(requests)
+                and all(r.finished() for r in native_requests.values())):
+            for rid, req in native_requests.items():
+                actual = list(req.output_ids)
+                expected = requests[rid]["replay_tokens"][:fixture["max_new_tokens"]]
+                if actual != expected:
+                    raise ValueError(f"Emitted tokens differ from fixed continuation: {rid}")
+            emit(dict(kind="cohort_tokens_verified", hashes={
+                rid: digest(list(req.output_ids)) for rid, req in native_requests.items()}))
+            state["tokens_verified"] = True
 
     original_load = ModelRunner.load_model
 
@@ -112,6 +126,7 @@ def install():
         else:
             step = -1
         for req in batch.reqs:
+            native_requests[req.rid] = req
             if not getattr(req, "_breakdown_checked", False):
                 if digest(list(req.origin_input_ids)) != requests[req.rid]["input_sha256"]:
                     raise ValueError(f"Native server prefix differs from fixture: {req.rid}")
@@ -157,6 +172,12 @@ def install():
                    batch_size=int(batch.batch_size), request_ids=meta["identities"],
                    start_perf=time.perf_counter(), start_wall=time.time(),
                    active_seq_lens=batch.seq_lens_cpu.tolist())
+        if step == 0:
+            expected = [(requests[rid]["drop_state"]["active_tokens"]
+                         if config["strategy"] == "drop" else len(requests[rid]["input_ids"])) + 1
+                        for rid in meta["identities"]]
+            if row["active_seq_lens"] != expected:
+                raise ValueError(f"Actual active KV lengths differ from fixture: {row['active_seq_lens']} vs {expected}")
         begin, end = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
         if profile:
             torch.cuda.nvtx.range_push(f"decode_step:{step}")
@@ -257,6 +278,7 @@ async def client(args):
                     async with session.post(args.decode_url, json=body) as response:
                         response.raise_for_status()
                         done = False
+                        completion_tokens, finish = None, None
                         async for line in response.content:
                             text = line.decode().strip()
                             if not text:
@@ -264,12 +286,234 @@ async def client(args):
                             log.write(json.dumps(dict(time=time.perf_counter(), data=text)) + "\n")
                             if text == "data: [DONE]":
                                 done = True
+                            elif text.startswith("data: "):
+                                value = json.loads(text[6:])
+                                if value.get("usage"):
+                                    completion_tokens = value["usage"].get("completion_tokens")
+                                for choice in value.get("choices", []):
+                                    finish = choice.get("finish_reason") or finish
                         if not done:
                             raise RuntimeError("Decode response ended without DONE")
+                        if completion_tokens != fixture["max_new_tokens"] or finish != "length":
+                            raise RuntimeError(f"Incomplete cohort output: {completion_tokens=}, {finish=}")
             await asyncio.gather(prefill(), decode())
             return dict(rid=payload["rid"], lifecycle_s=time.perf_counter() - started)
         result = await asyncio.gather(*(send(i, p) for i, p in enumerate(payloads)))
     (root / "completed.json").write_text(json.dumps(result, indent=2))
+
+
+def run_one(args):
+    """Start an isolated pair from the verified historical launch configuration."""
+    from run_pd_matrix import GPUIsolationGuard, gpu_free
+    from analyze_decode_breakdown import analyze
+    from types import SimpleNamespace
+
+    fixture = validate_fixture(json.loads(Path(args.fixture).read_text()))
+    repo = Path(args.server_repo).resolve()
+    head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+    if head != "cfe9a570751218eab8ae8890777998f489ab5e21":
+        raise ValueError("Runtime differs from the frozen R1 experimental version")
+    if subprocess.check_output(["git", "-C", str(repo), "status", "--porcelain"]):
+        raise ValueError("Frozen runtime has local modifications")
+    root = Path(args.output).resolve()
+    root.mkdir(parents=True, exist_ok=False)
+    if not gpu_free("0,1,2,3,4,5,6,7"):
+        raise RuntimeError("GPUs occupied; no process was stopped")
+    guard = GPUIsolationGuard(root, "0,1,2,3,4,5,6,7")
+    source = json.loads(Path(args.source_launch).read_text())
+    script = str(Path(__file__).resolve())
+    procs, logs, launches = [], [], []
+    client_proc = None
+    success = False
+    try:
+        for i, role in enumerate(("prefill", "decode")):
+            original = source["servers"][i]
+            flags = original["argv"][2:]
+            expected = {"--tp-size": "4", "--dtype": "bfloat16", "--page-size": "1",
+                        "--chunked-prefill-size": "8192", "--max-prefill-tokens": "8192",
+                        "--mem-fraction-static": "0.85", "--context-length": "131072"}
+            for flag, value in expected.items():
+                if flag not in flags or flags[flags.index(flag) + 1] != value:
+                    raise ValueError(f"Unexpected source setting: {flag}")
+            if "--attention-backend" in flags or "--disable-overlap-schedule" in flags:
+                raise ValueError("Keep the native backend and overlap settings")
+            if i == 1 and "--disaggregation-decode-enable-radix-cache" not in flags:
+                raise ValueError("D Radix must be enabled")
+            for flag, value in (("--port", args.port + i),
+                                ("--disaggregation-bootstrap-port", args.port + 10),
+                                ("--nccl-port", args.port + 20 + i)):
+                flags[flags.index(flag) + 1] = str(value)
+            eviction = "--context-drop-aware-eviction"
+            flags = [f for f in flags if f != eviction]
+            if args.strategy == "drop":
+                flags.append(eviction)
+            # Native startup probes have non-fixture RIDs. The controlled
+            # cohort itself supplies 128 full-batch warmup decode steps.
+            if "--skip-server-warmup" not in flags:
+                flags.append("--skip-server-warmup")
+            cfg = dict(fixture=str(Path(args.fixture).resolve()), role=role,
+                       strategy=args.strategy, profile=args.profile, output=str(root / "timing"),
+                       warm_steps=128, measure_steps=64 if args.profile else 512, gate_timeout=1800)
+            config_path = root / f"{role}-config.json"
+            config_path.write_text(json.dumps(cfg, indent=2))
+            env = dict(os.environ, PYTHONPATH=str(repo / "python"),
+                       CUDA_VISIBLE_DEVICES="0,1,2,3" if i == 0 else "4,5,6,7",
+                       TORCHELASTIC_USE_AGENT_STORE="False",
+                       SGLANG_DISAGGREGATION_WAITING_TIMEOUT="7200",
+                       SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT="7200",
+                       SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION="0",
+                       MC_INTRANODE_NVLINK="1", MOONCAKE_PROTOCOL="nvlink_intra",
+                       SGLANG_MOONCAKE_CUSTOM_MEM_POOL="INTRA_NODE_NVLINK")
+            env.pop("MC_FORCE_TCP", None)
+            for key in ("SGLANG_CACHE_DIR", "SGLANG_JIT_CACHE_DIR", "TRITON_CACHE_DIR",
+                        "TORCHINDUCTOR_CACHE_DIR", "TORCH_EXTENSIONS_DIR", "TMPDIR"):
+                folder = root / role / key.lower()
+                folder.mkdir(parents=True)
+                env[key] = str(folder)
+            cmd = [sys.executable, script, "server", "--config", str(config_path), "--", *flags]
+            if args.profile and role == "decode":
+                cmd = [args.nsys, "profile", "--trace=cuda,nvtx", "--sample=none", "--cpuctxsw=none",
+                       "--cuda-graph-trace=node", "--capture-range=cudaProfilerApi",
+                       "--capture-range-end=stop", "--output=" + str(root / "decode-profile"), *cmd]
+            log = (root / f"{role}.log").open("x")
+            logs.append(log)
+            proc = subprocess.Popen(cmd, env=env, cwd=repo, stdout=log,
+                                    stderr=subprocess.STDOUT, start_new_session=True)
+            procs.append(proc)
+            launches.append(dict(role=role, argv=cmd, pid=proc.pid,
+                environment={k: v for k, v in env.items() if k.startswith(("CUDA_", "SGLANG_", "MC_", "MOONCAKE_", "PYTHONPATH", "LD_"))}))
+        (root / "launch.json").write_text(json.dumps(dict(runtime_head=head,
+            benchmark_head=subprocess.check_output(["git", "-C", str(Path(__file__).parents[2]), "rev-parse", "HEAD"], text=True).strip(),
+            fixture_sha256=digest(fixture), launches=launches), indent=2))
+        for i in range(2):
+            deadline = time.monotonic() + 1200
+            while True:
+                guard.check()
+                if any(p.poll() is not None for p in procs) or time.monotonic() > deadline:
+                    raise RuntimeError("PD startup failed; inspect retained logs")
+                try:
+                    with urllib.request.urlopen(f"http://127.0.0.1:{args.port+i}/health", timeout=2) as response:
+                        if response.status == 200:
+                            break
+                except (OSError, TimeoutError):
+                    pass
+                time.sleep(1)
+        guard.check(pin=True)
+        for i, role in enumerate(("prefill", "decode")):
+            with urllib.request.urlopen(f"http://127.0.0.1:{args.port+i}/server_info", timeout=30) as response:
+                info = json.load(response)
+                (root / f"{role}-server-info.json").write_text(json.dumps(info, indent=2))
+                capacity = min(s["memory_usage"]["token_capacity"] for s in info["internal_states"])
+                required = sum(len(r["input_ids"]) + fixture["max_new_tokens"] for r in fixture["requests"])
+                if required >= .85 * capacity:
+                    raise ValueError(f"Insufficient No-Drop capacity margin: {required}/{capacity}")
+        client_cmd = [sys.executable, script, "client", "--fixture", args.fixture,
+                      "--strategy", args.strategy, "--output", str(root / "client"),
+                      "--prefill-url", f"http://127.0.0.1:{args.port}/v1/chat/completions",
+                      "--decode-url", f"http://127.0.0.1:{args.port+1}/v1/chat/completions",
+                      "--bootstrap-port", str(args.port + 10)]
+        with (root / "client.log").open("x") as log:
+            client_proc = subprocess.Popen(client_cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            deadline = time.monotonic() + 3600
+            while client_proc.poll() is None:
+                guard.check()
+                if any(p.poll() is not None for p in procs) or time.monotonic() > deadline:
+                    raise RuntimeError("Cohort failed or exceeded timeout")
+                time.sleep(1)
+            if client_proc.returncode:
+                raise RuntimeError("Client validation failed")
+        # on_idle drains event buffers before timing files are analyzed.
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                analyze(SimpleNamespace(timings=str(root / "timing"), sqlite=None, output=str(root / "analysis")))
+                break
+            except ValueError:
+                if time.monotonic() > deadline:
+                    raise
+                time.sleep(1)
+        success = True
+    finally:
+        if client_proc and client_proc.poll() is None:
+            os.killpg(client_proc.pid, signal.SIGTERM)
+        for proc in reversed(procs):
+            if proc.poll() is None:
+                os.killpg(proc.pid, signal.SIGTERM)
+                try:
+                    proc.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    proc.wait()
+        for log in logs:
+            log.close()
+        (root / "outcome.json").write_text(json.dumps(dict(
+            success=success and not args.profile, timing_success=success,
+            profile_pending=success and args.profile, time=time.time())))
+    if args.profile:
+        reports = list(root.glob("decode-profile*.nsys-rep"))
+        if len(reports) != 1:
+            raise ValueError("Expected one complete Nsight report for all four D ranks")
+        database = root / "decode-profile.sqlite"
+        subprocess.run([args.nsys, "export", "--type=sqlite", "--output=" + str(database), str(reports[0])], check=True)
+        analyze(SimpleNamespace(timings=str(root / "timing"), sqlite=str(database),
+                                output=str(root / "profile-analysis")))
+        summary = json.loads((root / "profile-analysis" / "summary.json").read_text())
+        if not summary["component_coverage_pass"]:
+            raise ValueError("More than 5% unattributed GPU time; inspect trace before continuing")
+        (root / "outcome.json").write_text(json.dumps(dict(success=True, time=time.time())))
+
+
+def run_matrix(args):
+    """Bounded R1 matrix; wait for resources without stopping other workloads."""
+    from run_pd_matrix import gpu_free
+
+    root = Path(args.output).resolve()
+    root.mkdir(parents=True, exist_ok=False)
+    common = [sys.executable, str(Path(__file__).resolve()), "run",
+              "--source-launch", args.source_launch, "--server-repo", args.server_repo,
+              "--port", str(args.port), "--nsys", args.nsys]
+    # First pair establishes that admission, timing and trace attribution work
+    # before spending time on the remaining unprofiled repeats.
+    cases = []
+    for fixture_name in ("b8-48k.json", "b10-48k.json", "b4-112k-repos.json"):
+        fixture_path = Path(args.fixtures) / fixture_name
+        validate_fixture(json.loads(fixture_path.read_text()))
+        for repeat in (0, 1, 2, 3):
+            for strategy in (("no_drop", "drop") if repeat % 2 == 0 else ("drop", "no_drop")):
+                cases.append(dict(fixture=str(fixture_path), strategy=strategy,
+                                  profile=repeat == 1, repeat=repeat))
+    (root / "matrix.json").write_text(json.dumps(cases, indent=2))
+    state = root / "state.json"
+
+    def report(**value):
+        value.update(time=time.time())
+        temp = state.with_suffix(".tmp")
+        temp.write_text(json.dumps(value, indent=2))
+        temp.replace(state)
+        print(json.dumps(value), flush=True)
+
+    for index, case in enumerate(cases):
+        label = f"{index:02d}-{Path(case['fixture']).stem}-{case['strategy']}-r{case['repeat']}"
+        deadline = time.monotonic() + args.resource_timeout
+        report(status="waiting_for_gpus", index=index, case=case)
+        while not gpu_free("0,1,2,3,4,5,6,7"):
+            if time.monotonic() > deadline:
+                report(status="resource_timeout", index=index, case=case)
+                raise TimeoutError("No isolated eight-GPU window; existing tasks preserved")
+            time.sleep(30)
+        cmd = common + ["--fixture", case["fixture"], "--strategy", case["strategy"],
+                        "--output", str(root / label)]
+        if case["profile"]:
+            cmd.append("--profile")
+        with (root / (label + ".log")).open("x") as log:
+            proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
+            report(status="running", index=index, case=case, pid=proc.pid, command=cmd)
+            status = proc.wait()
+        if status:
+            report(status="failed", index=index, case=case, exit_code=status)
+            raise RuntimeError("Matrix stopped on first failure; inspect case log")
+        report(status="case_completed", index=index, case=case)
+    report(status="complete", cases=len(cases))
 
 
 def main():
@@ -283,18 +527,37 @@ def main():
     c.add_argument("--strategy", choices=("drop", "no_drop"), required=True)
     c.add_argument("--bootstrap-port", type=int, required=True)
     c.add_argument("--timeout", type=int, default=3600)
+    r = sub.add_parser("run")
+    for name in ("fixture", "output", "source-launch", "server-repo"):
+        r.add_argument("--" + name, required=True)
+    r.add_argument("--strategy", choices=("drop", "no_drop"), required=True)
+    r.add_argument("--port", type=int, default=45101)
+    r.add_argument("--profile", action="store_true")
+    r.add_argument("--nsys", default="/share/public/wangruoxi/cuda-12.1/bin/nsys")
+    m = sub.add_parser("matrix")
+    for name in ("fixtures", "output", "source-launch", "server-repo"):
+        m.add_argument("--" + name, required=True)
+    m.add_argument("--port", type=int, default=45101)
+    m.add_argument("--nsys", default="/share/public/wangruoxi/cuda-12.1/bin/nsys")
+    m.add_argument("--resource-timeout", type=int, default=14400)
     args, extra = p.parse_known_args()
     if args.command == "client":
         if extra:
             p.error(f"Unknown arguments: {extra}")
         import asyncio
         asyncio.run(client(args))
+    elif args.command in ("run", "matrix"):
+        if extra:
+            p.error(f"Unknown arguments: {extra}")
+        (run_one if args.command == "run" else run_matrix)(args)
     else:
         os.environ["DECODE_BREAKDOWN_CONFIG"] = str(Path(args.config).resolve())
         install()
         from sglang.launch_server import run_server
         from sglang.srt.server_args import prepare_server_args
+        from sglang.srt.plugins import load_plugins
         from sglang.srt.utils import kill_process_tree
+        load_plugins()
         try:
             run_server(prepare_server_args(extra[1:] if extra[:1] == ["--"] else extra))
         finally:
