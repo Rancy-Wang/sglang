@@ -13,6 +13,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 
@@ -366,10 +367,13 @@ def run_one(args):
                        SGLANG_MOONCAKE_CUSTOM_MEM_POOL="INTRA_NODE_NVLINK")
             env.pop("MC_FORCE_TCP", None)
             for key in ("SGLANG_CACHE_DIR", "SGLANG_JIT_CACHE_DIR", "TRITON_CACHE_DIR",
-                        "TORCHINDUCTOR_CACHE_DIR", "TORCH_EXTENSIONS_DIR", "TMPDIR"):
+                        "TORCHINDUCTOR_CACHE_DIR", "TORCH_EXTENSIONS_DIR"):
                 folder = root / role / key.lower()
                 folder.mkdir(parents=True)
                 env[key] = str(folder)
+            # AF_UNIX paths are limited to 107 bytes on this host. Keep IPC
+            # temporary files isolated but outside the long archive path.
+            env["TMPDIR"] = tempfile.mkdtemp(prefix="sgdb-", dir="/tmp")
             cmd = [sys.executable, script, "server", "--config", str(config_path), "--", *flags]
             if args.profile and role == "decode":
                 cmd = [args.nsys, "profile", "--trace=cuda,nvtx", "--sample=none", "--cpuctxsw=none",
@@ -381,7 +385,7 @@ def run_one(args):
                                     stderr=subprocess.STDOUT, start_new_session=True)
             procs.append(proc)
             launches.append(dict(role=role, argv=cmd, pid=proc.pid,
-                environment={k: v for k, v in env.items() if k.startswith(("CUDA_", "SGLANG_", "MC_", "MOONCAKE_", "PYTHONPATH", "LD_"))}))
+                environment={k: v for k, v in env.items() if k.startswith(("CUDA_", "SGLANG_", "MC_", "MOONCAKE_", "PYTHONPATH", "LD_", "TMPDIR"))}))
         (root / "launch.json").write_text(json.dumps(dict(runtime_head=head,
             benchmark_head=subprocess.check_output(["git", "-C", str(Path(__file__).parents[2]), "rev-parse", "HEAD"], text=True).strip(),
             fixture_sha256=digest(fixture), launches=launches), indent=2))
