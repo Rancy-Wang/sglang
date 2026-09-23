@@ -5,6 +5,7 @@ GPU component time. Graph-node attribution is used only when observed directly.
 """
 
 import argparse
+from bisect import bisect_right
 from collections import Counter, defaultdict
 import csv
 import json
@@ -44,12 +45,37 @@ def conservative_category(name):
     name = name.lower()
     if "allreduce" in name or "all_reduce" in name or "nccl" in name:
         return "tp_communication"
+    if name in {"context_decode_indices", "context_window_lengths", "get_num_kv_splits_triton"}:
+        return "attention_metadata"
     if "rope" in name or "rotary" in name:
         return "rope_or_fused_kv"
     if "rmsnorm" in name or "rms_norm" in name:
         return "norm_or_fused_residual"
     # Names alone cannot distinguish Full/SWA attention or attention/MoE GEMMs.
     return "unknown"
+
+
+class RangeIndex:
+    """Interval lookup without scanning all NVTX ranges for every CUDA API."""
+
+    def __init__(self, ranges):
+        self.ranges = sorted(ranges)
+        self.starts = [v[0] for v in self.ranges]
+        self.max_ends = []
+        maximum = -1
+        for _, end, _ in self.ranges:
+            maximum = max(maximum, end)
+            self.max_ends.append(maximum)
+
+    def enclosing(self, start, end):
+        i = bisect_right(self.starts, start) - 1
+        result = []
+        while i >= 0 and self.max_ends[i] >= end:
+            row = self.ranges[i]
+            if row[1] >= end:
+                result.append(row)
+            i -= 1
+        return result
 
 
 def read_nsys(path):
@@ -66,18 +92,51 @@ def read_nsys(path):
         label = row.get("text") or strings.get(row.get("textId"), "")
         if row.get("end") is not None and label.startswith(("component:", "decode_step:", "benchmark:")):
             ranges[row["globalTid"]].append((row["start"], row["end"], label))
-    runtime, component_nodes = {}, {}
-    for r in db.execute("select * from CUPTI_ACTIVITY_KIND_RUNTIME"):
-        row = dict(r)
-        pid = (row["globalTid"] >> 24) & 0xffffff
-        enclosing = [v for v in ranges[row["globalTid"]]
-                     if v[0] <= row["start"] and row["end"] <= v[1]]
+    indices = {tid: RangeIndex(values) for tid, values in ranges.items()}
+    empty = RangeIndex([])
+
+    def annotation(tid, start, end):
+        enclosing = indices.get(tid, empty).enclosing(start, end)
         step = next((int(v[2].split(":")[1]) for v in enclosing if v[2].startswith("decode_step:")), None)
         components = sorted((v for v in enclosing if v[2].startswith("component:")), key=lambda v: v[1] - v[0])
         category = components[0][2].split(":", 2)[1] if components else None
         if any(v[2].startswith("benchmark:") for v in enclosing):
             category = "benchmark_control"
-        runtime[pid, row["correlationId"]] = dict(step=step, category=category)
+        return dict(step=step, category=category)
+
+    runtime, component_nodes = {}, {}
+    for r in db.execute("select * from CUPTI_ACTIVITY_KIND_RUNTIME"):
+        row = dict(r)
+        pid = (row["globalTid"] >> 24) & 0xffffff
+        runtime[pid, row["correlationId"]] = annotation(row["globalTid"], row["start"], row["end"])
+    # Graph replay kernels correlate with cudaGraphLaunch, not with the
+    # original module call. Nsight retains graph creation/clone provenance.
+    # Attribute a node only from its observed creation NVTX range; follow
+    # explicit originalGraphNodeId links for instantiated/cloned nodes.
+    parents = {}
+    if "CUDA_GRAPH_NODE_EVENTS" in tables:
+        for record in db.execute("select * from CUDA_GRAPH_NODE_EVENTS order by start"):
+            row = dict(record)
+            if strings.get(row.get("nameId")) != "Graph Node Creation":
+                continue
+            pid = (row["globalTid"] >> 24) & 0xffffff
+            key = (pid, row["graphNodeId"])
+            original = row.get("originalGraphNodeId")
+            if original:
+                parents[key] = (pid, original)
+            elif key not in component_nodes:
+                category = annotation(row["globalTid"], row["start"], row["start"])["category"]
+                if category:
+                    component_nodes[key] = category
+        for key in parents:
+            chain, node = set(), key
+            while node in parents and node not in component_nodes:
+                if node in chain:
+                    raise ValueError("Cycle in Nsight graph-node provenance")
+                chain.add(node)
+                node = parents[node]
+            if node in component_nodes:
+                component_nodes[key] = component_nodes[node]
     kernels = []
     for r in db.execute("select * from CUPTI_ACTIVITY_KIND_KERNEL order by start"):
         row = dict(r)
@@ -96,6 +155,9 @@ def read_nsys(path):
     for k in kernels:
         k["attribution"] = "runtime_nvtx" if k["category"] else "graph_node" if (k["pid"], k["graph_node_id"]) in component_nodes else "name_or_unknown"
         k["category"] = k["category"] or component_nodes.get((k["pid"], k["graph_node_id"])) or conservative_category(k["name"])
+        if conservative_category(k["name"]) == "tp_communication":
+            k["enclosing_component"] = k["category"]
+            k["category"] = "tp_communication"
     db.close()
     return kernels
 

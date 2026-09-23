@@ -467,6 +467,37 @@ def run_one(args):
         (root / "outcome.json").write_text(json.dumps(dict(success=True, time=time.time())))
 
 
+def validate_completed_case(root, case):
+    """Reuse only a successfully validated run with the exact frozen pairing."""
+    root = Path(root).resolve()
+    outcome = json.loads((root / "outcome.json").read_text())
+    launch = json.loads((root / "launch.json").read_text())
+    fixture = validate_fixture(json.loads(Path(case["fixture"]).read_text()))
+    if not outcome.get("success"):
+        raise ValueError(f"Cannot reuse unsuccessful run: {root}")
+    if (launch["runtime_head"] != "cfe9a570751218eab8ae8890777998f489ab5e21"
+            or launch["fixture_sha256"] != digest(fixture)):
+        raise ValueError("Reused runtime or fixture differs")
+    for role in ("prefill", "decode"):
+        cfg = json.loads((root / f"{role}-config.json").read_text())
+        if (cfg["strategy"] != case["strategy"] or cfg["profile"] != case["profile"]
+                or cfg["warm_steps"] != 128
+                or cfg["measure_steps"] != (64 if case["profile"] else 512)):
+            raise ValueError("Reused measurement settings differ")
+    folder = "profile-analysis" if case["profile"] else "analysis"
+    folder = outcome.get("analysis_directory", folder)
+    summary = json.loads((root / folder / "summary.json").read_text())
+    if set(summary["ranks"]) != {"0", "1", "2", "3"}:
+        raise ValueError("Reused result lacks four ranks")
+    if case["profile"] and not summary.get("component_coverage_pass"):
+        raise ValueError("Reused profile lacks validated component coverage")
+    if any(r["steps"] != (64 if case["profile"] else 512)
+           or r["batch_sizes"] != [fixture["batch_size"]]
+           for r in summary["ranks"].values()):
+        raise ValueError("Reused result has wrong batch or measurement length")
+    return str(root)
+
+
 def run_matrix(args):
     """Bounded R1 matrix; wait for resources without stopping other workloads."""
     from run_pd_matrix import gpu_free
@@ -487,6 +518,13 @@ def run_matrix(args):
                 cases.append(dict(fixture=str(fixture_path), strategy=strategy,
                                   profile=repeat == 1, repeat=repeat))
     (root / "matrix.json").write_text(json.dumps(cases, indent=2))
+    reused = json.loads(Path(args.completed_cases).read_text()) if args.completed_cases else {}
+    if any(not k.isdigit() or not 0 <= int(k) < len(cases) for k in reused):
+        raise ValueError("Invalid completed-case index")
+    if len(set(reused.values())) != len(reused):
+        raise ValueError("One run cannot stand in for two independent repeats")
+    reused = {k: validate_completed_case(p, cases[int(k)]) for k, p in reused.items()}
+    (root / "reused-cases.json").write_text(json.dumps(reused, indent=2))
     state = root / "state.json"
 
     def report(**value):
@@ -497,6 +535,9 @@ def run_matrix(args):
         print(json.dumps(value), flush=True)
 
     for index, case in enumerate(cases):
+        if str(index) in reused:
+            report(status="case_reused", index=index, case=case, source=reused[str(index)])
+            continue
         label = f"{index:02d}-{Path(case['fixture']).stem}-{case['strategy']}-r{case['repeat']}"
         deadline = time.monotonic() + args.resource_timeout
         report(status="waiting_for_gpus", index=index, case=case)
@@ -544,6 +585,7 @@ def main():
     m.add_argument("--port", type=int, default=45101)
     m.add_argument("--nsys", default="/share/public/wangruoxi/cuda-12.1/bin/nsys")
     m.add_argument("--resource-timeout", type=int, default=14400)
+    m.add_argument("--completed-cases", help="JSON mapping matrix indices to validated run directories")
     args, extra = p.parse_known_args()
     if args.command == "client":
         if extra:
