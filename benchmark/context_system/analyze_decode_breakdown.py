@@ -138,6 +138,18 @@ def analyze(args):
     for p in sorted(Path(args.timings).glob("decode-rank*.jsonl")):
         rows.extend(json.loads(line) for line in p.read_text().splitlines())
     summary = summarize_steps(rows)
+    runtime = {r["rank"]: r for r in rows if r.get("kind") == "runtime"}
+    verified = {r["rank"]: r for r in rows if r.get("kind") == "cohort_tokens_verified"}
+    if set(runtime) != set(range(4)) or set(verified) != set(range(4)):
+        raise ValueError("Missing runtime metadata or final token-path verification")
+    for rank, r in runtime.items():
+        config = r["config"]
+        expected = set(range(config["warm_steps"], config["warm_steps"] + config["measure_steps"]))
+        actual = [v for v in rows if v.get("kind") == "decode_step" and v.get("measured") and v["rank"] == rank]
+        if {v["step"] for v in actual} != expected or not all(v["cuda_graph"] for v in actual):
+            raise ValueError("Incomplete fixed measurement window or CUDA graph fallback")
+        if verified[rank]["hashes"] != verified[0]["hashes"]:
+            raise ValueError("TP ranks emitted different token paths")
     out = Path(args.output)
     out.mkdir(parents=True, exist_ok=False)
     measured = {(r["pid"], r["step"]): r for r in rows if r.get("kind") == "decode_step" and r.get("measured")}
