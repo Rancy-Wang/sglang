@@ -1,15 +1,71 @@
 """CPU checks for pairing, admission and overlapping TP timeline accounting."""
 
 import copy
+import json
+import sqlite3
+from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
-from analyze_decode_breakdown import exclusive_intervals, summarize_steps
+from analyze_decode_breakdown import exclusive_intervals, read_nsys, summarize_steps
 from build_decode_breakdown_fixture import PLAN, digest, paired_payloads
-from profile_decode_breakdown import cohort_ready
+from profile_decode_breakdown import cohort_ready, validate_completed_case
 
 
 class AccountingTests(unittest.TestCase):
+    def test_graph_clone_uses_creation_component_and_replay_step_per_process(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "trace.sqlite"
+            db = sqlite3.connect(path)
+            db.executescript("""
+                CREATE TABLE StringIds(id INTEGER, value TEXT);
+                INSERT INTO StringIds VALUES(1,'Graph Node Creation'),(2,'gemm');
+                CREATE TABLE NVTX_EVENTS(start INTEGER,end INTEGER,globalTid INTEGER,text TEXT);
+                CREATE TABLE CUPTI_ACTIVITY_KIND_RUNTIME(start INTEGER,end INTEGER,globalTid INTEGER,correlationId INTEGER);
+                CREATE TABLE CUDA_GRAPH_NODE_EVENTS(start INTEGER,globalTid INTEGER,graphNodeId INTEGER,originalGraphNodeId INTEGER,nameId INTEGER);
+                CREATE TABLE CUPTI_ACTIVITY_KIND_KERNEL(start INTEGER,end INTEGER,globalPid INTEGER,correlationId INTEGER,demangledName INTEGER,graphNodeId INTEGER,streamId INTEGER,deviceId INTEGER);
+            """)
+            for pid, category in ((1, "full_attention"), (2, "moe_experts")):
+                tid = (pid << 24) | 1
+                db.executemany("INSERT INTO NVTX_EVENTS VALUES(?,?,?,?)", [
+                    (0, 100, tid, "component:outer"),
+                    (10, 30, tid, "component:" + category),
+                    (200, 300, tid, "decode_step:128")])
+                db.execute("INSERT INTO CUPTI_ACTIVITY_KIND_RUNTIME VALUES(210,220,?,7)", (tid,))
+                db.executemany("INSERT INTO CUDA_GRAPH_NODE_EVENTS VALUES(?,?,?,?,1)", [
+                    (20, tid, 10, None), (40, tid, 11, 10), (50, tid, 12, 11)])
+                db.execute("INSERT INTO CUPTI_ACTIVITY_KIND_KERNEL VALUES(230,250,?,7,2,12,1,0)", (pid << 24,))
+            db.commit()
+            db.close()
+            kernels = read_nsys(path)
+            self.assertEqual([v["category"] for v in kernels], ["full_attention", "moe_experts"])
+            self.assertTrue(all(v["step"] == 128 and v["attribution"] == "graph_node" for v in kernels))
+
+    def test_resume_rejects_failed_or_different_arm(self):
+        with tempfile.TemporaryDirectory() as tmp, patch(
+                "profile_decode_breakdown.validate_fixture", side_effect=lambda value: value):
+            root = Path(tmp)
+            fixture = dict(batch_size=8)
+            (root / "fixture.json").write_text(json.dumps(fixture))
+            case = dict(fixture=str(root / "fixture.json"), strategy="drop", profile=False)
+            (root / "outcome.json").write_text('{"success": true}')
+            (root / "launch.json").write_text(json.dumps(dict(
+                runtime_head="cfe9a570751218eab8ae8890777998f489ab5e21", fixture_sha256=digest(fixture))))
+            cfg = dict(strategy="drop", profile=False, warm_steps=128, measure_steps=512)
+            for role in ("prefill", "decode"):
+                (root / f"{role}-config.json").write_text(json.dumps(cfg))
+            (root / "analysis").mkdir()
+            (root / "analysis/summary.json").write_text(json.dumps(dict(ranks={
+                str(r): dict(steps=512, batch_sizes=[8]) for r in range(4)})))
+            self.assertEqual(validate_completed_case(root, case), str(root.resolve()))
+            with self.assertRaises(ValueError):
+                validate_completed_case(root, dict(case, strategy="no_drop"))
+            (root / "outcome.json").write_text('{"success": false}')
+            with self.assertRaises(ValueError):
+                validate_completed_case(root, case)
+
     def test_overlaps_are_not_counted_twice(self):
         events = [dict(start=0, end=10, category="attention"),
                   dict(start=2, end=8, category="attention"),
