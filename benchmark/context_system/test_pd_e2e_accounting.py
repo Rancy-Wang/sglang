@@ -1,6 +1,6 @@
 import unittest
 from analyze_pd_e2e_breakdown import partition, critical_path, contribution, request_ledger
-from profile_pd_e2e_breakdown import identity
+from profile_pd_e2e_breakdown import identity, bind_stats_identity
 
 
 class Accounting(unittest.TestCase):
@@ -47,6 +47,13 @@ class Accounting(unittest.TestCase):
             bootstrap_room=42
             origin_input_ids=[1]*100
         self.assertEqual(identity(Request()),{"rid":"x","bootstrap_room":42})
+
+    def test_stats_identity_does_not_require_native_tracing(self):
+        from types import SimpleNamespace
+        stats = SimpleNamespace()
+        req = SimpleNamespace(rid="r",bootstrap_room=123,time_stats=stats)
+        bind_stats_identity(req)
+        self.assertEqual(stats._e2e_identity,{"rid":"r","bootstrap_room":123})
 
     def test_request_ledger_keeps_queue_and_kernel_savings_distinct(self):
         p=dict(prefill_bootstrap_queue_entry_time=1,wait_queue_entry_time=2,
