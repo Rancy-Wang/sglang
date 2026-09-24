@@ -382,6 +382,7 @@ async def run(args):
             async def execute(case, instance):
                 history, rolling = [], method.RollingState(keep=12, threshold=96 * 1024)
                 for turn in case["turns"]:
+                    prepare_start = time.perf_counter()
                     history.extend(copy.deepcopy(turn["new_messages"]))
                     full, owners = await loop.run_in_executor(
                         rendering, renderer.render, history, manifest["tools"]
@@ -412,6 +413,9 @@ async def run(args):
                             reposition=state["reposition"],
                         )
                     identity = dict(case_id=case["case_id"], instance=instance["instance"], turn=turn["turn"], filler=instance["filler"])
+                    if getattr(args, "e2e_timing", False):
+                        emit(dict(kind="client_prepare", **identity, start=prepare_start,
+                                  end=time.perf_counter(), wall=time.time()))
                     emit(dict(kind="turn_start", **identity, time=time.perf_counter(), full_tokens=full,
                               active_tokens=state.get("active_tokens", full), position_tokens=state.get("position_tokens", full),
                               max_new_tokens=turn["max_new_tokens"]))
@@ -500,6 +504,7 @@ def parser():
     p.add_argument("--source-tasks", type=int)
     p.add_argument("--unique-cohort", action="store_true")
     p.add_argument("--raw-sse", action="store_true")
+    p.add_argument("--e2e-timing", action="store_true", help="Record client preparation outside user latency")
     p.add_argument("--case-id", action="append")
     p.add_argument("--drop", action="store_true")
     p.add_argument("--filler", action=argparse.BooleanOptionalAction, default=True)
