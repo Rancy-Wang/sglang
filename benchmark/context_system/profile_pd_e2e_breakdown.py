@@ -85,6 +85,12 @@ def identity(value):
     return ret
 
 
+def bind_stats_identity(req):
+    """Native tracing is optional; benchmark identity must not depend on it."""
+    req.time_stats._e2e_identity = identity(req)
+    return req.time_stats._e2e_identity
+
+
 def install():
     import torch
     # Preserve the historical benchmark's physical counters and P/D timestamps.
@@ -303,6 +309,15 @@ def install():
         rec.emit("request_identity", time=time.perf_counter(), **self._e2e_identity)
         return original_trace(self, rid, bootstrap_room, *args, **kw)
     ReqTimeStatsBase.init_trace_ctx = trace
+    original_req_init = Req.__init__
+    @functools.wraps(original_req_init)
+    def req_init(self, *args, **kw):
+        original_req_init(self, *args, **kw)
+        meta = bind_stats_identity(self)
+        rec.emit("request_identity", time=time.perf_counter(), **meta)
+        rec.emit("request_stage", stage="set_scheduler_recv_time", time=time.perf_counter(),
+                 timestamp=self.time_stats.scheduler_recv_time, **meta)
+    Req.__init__ = req_init
     for name in ("set_wait_queue_entry_time", "set_forward_entry_time", "set_prefill_finished_time",
                  "set_completion_time", "set_prefill_bootstrap_queue_entry_time",
                  "set_prefill_transfer_queue_entry_time", "set_decode_prealloc_queue_entry_time",
