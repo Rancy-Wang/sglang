@@ -3,10 +3,47 @@ import json
 import tempfile
 from pathlib import Path
 from analyze_pd_e2e_breakdown import partition, critical_path, contribution, request_ledger, IndexedStep, IndexedRequest
-from profile_pd_e2e_breakdown import identity, bind_stats_identity, batch_identity, cache_result_metadata, seed_triton_cache, mark_attention_backend
+from profile_pd_e2e_breakdown import identity, bind_stats_identity, batch_identity, cache_result_metadata, seed_triton_cache, mark_attention_backend, prefill_control_cases
 
 
 class Accounting(unittest.TestCase):
+    def control_fixture(self):
+        from build_decode_breakdown_fixture import digest, PLAN
+        row = dict(case_id="fixture", rid="fixture", input_ids=list(range(8)),
+                   messages=[dict(role="tool",content="old"),dict(role="tool",content="retained")],
+                   replay_tokens=list(range(4)),
+                   drop_state=dict(active_tokens=4,drop_message={"1":[0]},reposition=[]))
+        for name, key in (("input_ids","input_sha256"),("messages","messages_sha256"),("replay_tokens","replay_sha256")):
+            row[key] = digest(row[name])
+        return dict(plan_id=PLAN,batch_size=1,max_new_tokens=2,require_repos=False,
+                    model="test",tools=[],template_kwargs={},requests=[row])
+
+    def test_prefill_control_has_identical_inputs_and_no_generated_feedback(self):
+        fixture = self.control_fixture()
+        before = json.dumps(fixture,sort_keys=True)
+        full = prefill_control_cases(fixture,"no_drop",repeats=2,suffix_units=3)
+        drop = prefill_control_cases(fixture,"drop",repeats=2,suffix_units=3)
+        self.assertEqual(before,json.dumps(fixture,sort_keys=True))
+        for i,(a,b) in enumerate(zip(full[0]["phases"],drop[0]["phases"])):
+            self.assertEqual(a["payload"]["messages"],b["payload"]["messages"])
+            self.assertEqual(a["payload"]["messages"][-1]["content"],"retained"+" x"*(3*i))
+            self.assertEqual(a["payload"]["max_tokens"],1)
+            self.assertTrue(a["payload"]["ignore_eos"])
+            self.assertNotIn("drop_message",a["payload"])
+            self.assertEqual(b["payload"]["drop_message"],{"1":[0]})
+        self.assertEqual(len({p["payload"]["rid"] for p in full[0]["phases"]}),3)
+
+    def test_prefill_control_rejects_extended_dropped_message(self):
+        fixture = self.control_fixture()
+        fixture["requests"][0]["drop_state"]["drop_message"] = {"1":[1]}
+        with self.assertRaisesRegex(ValueError,"remain active"):
+            prefill_control_cases(fixture,"drop")
+
+    def test_prefill_control_rejects_nonpositive_work(self):
+        for repeats, units in ((0,512),(3,0)):
+            with self.assertRaises(ValueError):
+                prefill_control_cases(self.control_fixture(),"drop",repeats,units)
+
     def test_indexed_ledger_matches_exact_union_with_gaps_and_overlaps(self):
         import random
         rng = random.Random(42)
