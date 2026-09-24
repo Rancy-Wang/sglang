@@ -8,6 +8,7 @@ import argparse
 import asyncio
 import contextvars
 import concurrent.futures
+import copy
 from collections import deque
 import functools
 import hashlib
@@ -202,7 +203,7 @@ def install():
     from sglang.srt.observability.req_time_stats import ReqTimeStatsBase, SchedulerReqTimeStats
     from sglang.srt.mem_cache.radix_cache import RadixCache
     from sglang.srt.mem_cache.unified_radix_cache import UnifiedRadixCache
-    from sglang.srt.layers.attention.context_backend import ContextModelBinding
+    from sglang.srt.layers.attention.context_backend import ContextModelBinding, ContextLayerCopy
     from sglang.srt.disaggregation.mooncake.conn import MooncakeKVManager, MooncakeKVSender
     from sglang.srt.disaggregation.mooncake import conn
     from sglang.srt.distributed.device_communicators.mooncake_transfer_engine import MooncakeTransferEngine
@@ -210,6 +211,9 @@ def install():
     cfg = json.loads(Path(os.environ["PD_E2E_CONFIG"]).read_text())
     from sglang.srt.layers.attention.base_attn_backend import AttentionBackend
     mark_attention_backend(AttentionBackend, torch.cuda.nvtx, cfg["profile"])
+    if cfg["profile"]:
+        ContextLayerCopy.apply = nvtx_wrapper(
+            ContextLayerCopy.apply, "component:kv_reposition:prefill_layer_copy", torch)
     rec = Recorder(cfg["timing"], cfg["role"])
     current = contextvars.ContextVar("e2e_request", default={})
     pending = deque()
@@ -472,7 +476,119 @@ def launch_flags(source, role, port, drop):
     return flags
 
 
+def prefill_control_cases(fixture, strategy, repeats=3, suffix_units=512):
+    """Fixed text hot-extend control, separate from native-history E2E runs.
+
+    One request at a time makes the actual Prefill batch size one. Each case
+    primes its complete history, then grows only its final retained tool text.
+    The two arms share every byte of input; generated one-token outputs are
+    deliberately not fed back. Suffix units are NOT asserted to be token counts.
+    """
+    from build_decode_breakdown_fixture import paired_payloads
+    if repeats < 1 or suffix_units < 1:
+        raise ValueError("Positive repeat and suffix sizes required")
+    cases = []
+    for row, base in zip(fixture["requests"], paired_payloads(fixture, strategy)):
+        last = base["messages"][-1]
+        if last["role"] != "tool" or not isinstance(last.get("content"), str):
+            raise ValueError("Control needs a final tool message with string content")
+        final_index = len(base["messages"])-1
+        if any(final_index in ids for ids in row["drop_state"]["drop_message"].values()):
+            raise ValueError("The extended final tool message must remain active")
+        phases = []
+        for repeat in range(repeats+1):
+            payload = copy.deepcopy(base)
+            payload["max_tokens"] = 1
+            payload["rid"] = f"prefill-control-{len(cases):02d}-{repeat:02d}"
+            payload["messages"][-1]["content"] += " x" * (suffix_units*repeat)
+            phases.append(dict(phase="prime" if repeat == 0 else "hot_extend",
+                               repeat=repeat, payload=payload))
+        cases.append(dict(case_id=row["case_id"], phases=phases))
+    return cases
+
+
+async def run_prefill_control(args):
+    import aiohttp
+    from build_decode_breakdown_fixture import digest
+    from test_serving import NativeTemplateAdapter
+    flags = json.loads(Path(args.client_config).read_text())
+    def option(key):
+        return flags[flags.index("--"+key)+1]
+    fixture = json.loads(Path(args.prefill_control_fixture).read_text())
+    strategy = "drop" if "--drop" in flags else "no_drop"
+    cases = prefill_control_cases(fixture, strategy)
+    root = Path(option("output-dir")); root.mkdir(parents=True, exist_ok=False)
+    renderer = NativeTemplateAdapter(option("tokenizer"), fixture["template_kwargs"], option("chat-template"))
+    # Render before timing. These IDs prove equal native prefix/extend workload
+    # across arms; actual cache/compute counts must still be checked from usage.
+    for case in cases:
+        previous = []
+        for phase in case["phases"]:
+            renderer.render(phase["payload"]["messages"], fixture["tools"])
+            ids = list(renderer.renderer.trace.input_ids)
+            common = 0
+            while common < min(len(previous), len(ids)) and previous[common] == ids[common]:
+                common += 1
+            phase.update(input_ids=ids, input_sha256=digest(ids),
+                         prior_common_prefix=common, native_suffix_tokens=len(ids)-common)
+            if len(ids)+1 > 131072:
+                raise ValueError("Control exceeds model context")
+            previous = ids
+    save(root/"request_manifest.json", dict(plan=PLAN, strategy=strategy,
+         fixture_sha256=digest(fixture), actual_concurrency=1, cases=cases,
+         interpretation="Fixed-text operator control; not native-history E2E or quality measurement"))
+    rows = []
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1800)) as session:
+        for case in cases:
+            for key in ("prefill-url", "url"):
+                async with session.get(option(key).split("/v1/")[0]+"/flush_cache") as response:
+                    response.raise_for_status()
+                    await response.read()
+            for phase in case["phases"]:
+                room = time.time_ns() % (1 << 50)
+                body = dict(phase["payload"], bootstrap_host="127.0.0.1",
+                            bootstrap_port=int(option("bootstrap-port")), bootstrap_room=room)
+                rid = body["rid"]
+                started = time.perf_counter()
+                async def prefill():
+                    async with session.post(option("prefill-url"), json={**body, "stream":False}) as response:
+                        raw = await response.text()
+                        (root/f"{rid}-prefill.json").write_text(raw)
+                        response.raise_for_status()
+                async def decode():
+                    done, usage, finish = None, None, None
+                    with (root/f"{rid}-sse.jsonl").open("x") as log:
+                        async with session.post(option("url"), json=body) as response:
+                            response.raise_for_status()
+                            async for line in response.content:
+                                text = line.decode().strip()
+                                if not text:
+                                    continue
+                                now = time.perf_counter()
+                                log.write(json.dumps(dict(time=now, data=text))+"\n")
+                                if text == "data: [DONE]":
+                                    done = now
+                                elif text.startswith("data: "):
+                                    value = json.loads(text[6:])
+                                    usage = value.get("usage") or usage
+                                    for choice in value.get("choices", []):
+                                        finish = choice.get("finish_reason") or finish
+                    if done is None or usage is None or usage.get("completion_tokens") != 1 or finish != "length":
+                        raise RuntimeError(f"Incomplete control request: {rid}")
+                    if usage.get("prompt_tokens") != len(phase["input_ids"]):
+                        raise RuntimeError(f"Native tokenization mismatch: {rid}")
+                    return done, usage
+                _, (done, usage) = await asyncio.gather(prefill(), decode())
+                rows.append(dict(case_id=case["case_id"], rid=rid, bootstrap_room=room,
+                    phase=phase["phase"], repeat=phase["repeat"], start=started, done=done,
+                    user_latency_s=done-started, cleanup_s=time.perf_counter()-done, usage=usage))
+                save(root/"progress.json", rows)
+    save(root/"completed.json", rows)
+
+
 def run_client(args):
+    if args.prefill_control_fixture:
+        return asyncio.run(run_prefill_control(args))
     import test_serving as serving
     original_load = serving.load_method
     def load(root):
@@ -527,7 +643,8 @@ def run_one(args):
     try:
         launches = []
         for i, role in enumerate(("prefill", "decode")):
-            cfg = dict(role=role, profile=args.profile, timing=str(root/"timing"),
+            role_profile = args.profile and (not args.profile_prefill_only or i == 0)
+            cfg = dict(role=role, profile=role_profile, timing=str(root/"timing"),
                        stop_file=str(root/"stop_capture"), plan=PLAN,
                        ipc_tmp=tempfile.mkdtemp(prefix="e2e-", dir="/tmp"))
             save(root/f"{role}-config.json", cfg)
@@ -549,7 +666,7 @@ def run_one(args):
             env["TMPDIR"] = cfg["ipc_tmp"]
             cmd = [sys.executable, str(Path(__file__).resolve()), "server", "--config", str(root/f"{role}-config.json"),
                    "--", *launch_flags(source, i, args.port, args.drop)]
-            if args.profile:
+            if role_profile:
                 # Nsight's bulk temporary trace data can be large. The server
                 # restores a short local TMPDIR before spawning IPC workers.
                 profile_tmp = trace_root / (role+"-nsys-tmp")
@@ -610,6 +727,8 @@ def run_one(args):
         save(root/"client-config.json", client_flags)
         cmd = [sys.executable, str(Path(__file__).resolve()), "client", "--client-config", str(root/"client-config.json"),
                "--pilot-turns", str(args.pilot_turns)]
+        if args.prefill_control_fixture:
+            cmd += ["--prefill-control-fixture", args.prefill_control_fixture]
         with (root/"client.log").open("x") as log:
             client = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             save(root/"state.json", dict(status="workload_running", pid=client.pid, time=time.time()))
@@ -656,6 +775,7 @@ def main():
     client = sub.add_parser("client")
     client.add_argument("--client-config", required=True)
     client.add_argument("--pilot-turns", type=int, default=0)
+    client.add_argument("--prefill-control-fixture")
     run = sub.add_parser("run")
     for name in ("output", "server-repo", "source-launch", "mini-root", "requests-path", "nsys"):
         run.add_argument("--"+name, required=True)
@@ -665,12 +785,18 @@ def main():
     run.add_argument("--pilot-turns", type=int, default=0)
     run.add_argument("--drop", action="store_true")
     run.add_argument("--profile", action="store_true")
+    run.add_argument("--profile-prefill-only", action="store_true")
+    run.add_argument("--prefill-control-fixture", help="Fixed text, batch-one hot Prefill control; replaces only the benchmark client")
     run.add_argument("--trace-root", help="Unique directory for bulk Nsight data; IPC/JIT stay local")
     run.add_argument("--triton-cache-seed", help="Completed run whose compiled Triton artifacts seed independent caches; never KV state")
     args, extra = p.parse_known_args()
     if args.command != "server" and extra:
         p.error(str(extra))
     if args.command == "run":
+        if args.profile_prefill_only and not args.profile:
+            p.error("Prefill-only capture requires --profile")
+        if args.prefill_control_fixture and args.pilot_turns:
+            p.error("Fixed control and trajectory pilot are mutually exclusive")
         if args.tasks < args.concurrency:
             p.error("Fixed task cohort must contain at least C tasks")
         run_one(args)
