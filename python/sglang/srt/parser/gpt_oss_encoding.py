@@ -64,7 +64,8 @@ class _HarmonyPrompt:
 
 
 class HarmonyEncoder:
-    def __init__(self, reasoning_effort=None):
+    def __init__(self, reasoning_effort=None, *, preserve_thinking=False):
+        self._preserve_harmony_thinking = preserve_thinking
         self._reasoning_effort = reasoning_effort
         self._harmony_encoding = None
         self._chat_template_invocations = 0
@@ -268,8 +269,54 @@ class HarmonyEncoder:
             thinking_components=thinking_components,
             has_function_tools=bool(descriptions),
         )
-        # This integration always retains analysis, including across final turns.
-        return prompt
+        # Completed turns no longer contribute analysis to the next prompt.
+        # Explicit thinking_drop retains it so Context can compile its KV drop.
+        return (
+            prompt
+            if self._preserve_harmony_thinking
+            else self._drop_harmony_analysis_before_last_final(prompt)
+        )
+
+    @staticmethod
+    def _drop_harmony_analysis_before_last_final(
+        prompt: _HarmonyPrompt,
+    ) -> _HarmonyPrompt:
+        """Match vLLM's long-history cleanup while retaining component ownership."""
+
+        from openai_harmony import Conversation
+
+        last_final = -1
+        for component_id in range(len(prompt.components) - 1, -1, -1):
+            component = prompt.components[component_id]
+            role = getattr(getattr(component, "author", None), "role", None)
+            role = getattr(role, "value", role)
+            if str(role).lower() == "assistant" and component.channel == "final":
+                last_final = component_id
+                break
+        if last_final < 0:
+            return prompt
+
+        keep_ids = [
+            component_id
+            for component_id, component in enumerate(prompt.components)
+            if not (component_id < last_final and component.channel == "analysis")
+        ]
+        if len(keep_ids) == len(prompt.components):
+            return prompt
+
+        remap = {old_id: new_id for new_id, old_id in enumerate(keep_ids)}
+        components = [prompt.components[component_id] for component_id in keep_ids]
+        return _HarmonyPrompt(
+            conversation=Conversation.from_messages(components),
+            components=components,
+            ownership=[prompt.ownership[component_id] for component_id in keep_ids],
+            thinking_components={
+                remap[component_id]: source
+                for component_id, source in prompt.thinking_components.items()
+                if component_id in remap
+            },
+            has_function_tools=prompt.has_function_tools,
+        )
 
     def _render_harmony_message_drop(
         self,
