@@ -671,8 +671,8 @@ def main():
     if args.command != "server" and extra:
         p.error(str(extra))
     if args.command == "run":
-        if args.tasks < args.concurrency or (not args.pilot_turns and args.tasks != 30):
-            p.error("Formal runs require 30 fixed tasks; pilot requires >= C")
+        if args.tasks < args.concurrency:
+            p.error("Fixed task cohort must contain at least C tasks")
         run_one(args)
     elif args.command == "client":
         run_client(args)
