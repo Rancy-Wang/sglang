@@ -1,9 +1,43 @@
 import unittest
+import json
+import tempfile
+from pathlib import Path
 from analyze_pd_e2e_breakdown import partition, critical_path, contribution, request_ledger
-from profile_pd_e2e_breakdown import identity, bind_stats_identity, batch_identity, cache_result_metadata
+from profile_pd_e2e_breakdown import identity, bind_stats_identity, batch_identity, cache_result_metadata, seed_triton_cache
 
 
 class Accounting(unittest.TestCase):
+    def test_compiled_cache_copies_are_isolated_and_auditable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, target = root/"source", root/"target"
+            source.mkdir(); target.mkdir()
+            binary = source/"kernel.cubin"
+            binary.write_bytes(b"compiled")
+            group = source/"__grp__kernel.json"
+            group.write_text(json.dumps({"child_paths":{"binary":str(binary)}}))
+            original = group.read_bytes()
+            manifest = seed_triton_cache(source,target)
+            self.assertEqual(json.loads((target/group.name).read_text())["child_paths"]["binary"],str((target/binary.name).resolve()))
+            (target/binary.name).write_bytes(b"changed")
+            self.assertEqual(binary.read_bytes(),b"compiled")
+            self.assertEqual(group.read_bytes(),original)
+            second = root/"second"; second.mkdir()
+            self.assertEqual(seed_triton_cache(source,second)["source_manifest_sha256"],manifest["source_manifest_sha256"])
+            with self.assertRaises(ValueError): seed_triton_cache(source,target)
+
+    def test_cache_seed_rejects_external_group_and_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); source = root/"source"; target = root/"target"
+            source.mkdir(); target.mkdir()
+            outside = root/"outside"; outside.write_bytes(b"x")
+            group = source/"__grp__bad.json"
+            group.write_text(json.dumps({"child_paths":{"binary":str(outside)}}))
+            with self.assertRaises(ValueError): seed_triton_cache(source,target)
+            self.assertFalse(list(target.iterdir()))
+            group.unlink(); (source/"link").symlink_to(outside)
+            with self.assertRaises(ValueError): seed_triton_cache(source,target)
+
     def test_overlap_is_not_double_counted(self):
         totals, _ = partition(0,10,[dict(start=1,end=7,category="P"),dict(start=4,end=9,category="D")])
         self.assertEqual(totals,{"unobserved":2,"P":3,"overlap:D+P":3,"D":2})
