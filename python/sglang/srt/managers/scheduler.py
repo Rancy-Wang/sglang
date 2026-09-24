@@ -5242,6 +5242,21 @@ class Scheduler(
         ret["startup_time"] = self.startup_time
         ret["effective_max_running_requests_per_dp"] = self.max_running_requests
 
+        # Read-only experiment telemetry. TP ranks mirror these values: consume
+        # one DP record, never sum TP replicas. Request rows are not token slots.
+        ret["pd_telemetry"] = {
+            "version": 1,
+            "timestamp": time.time(),
+            "kv_resident_requests": (
+                self.req_to_token_pool.size - self.req_to_token_pool.available_size()
+            ),
+            "fully_idle": self.is_fully_idle(),
+            "kv_free_tokens": self.token_to_kv_pool_allocator.available_size(),
+            "kv_evictable_tokens": self.tree_cache.full_evictable_size(),
+            "kv_protected_tokens": self.tree_cache.full_protected_size(),
+            "load": self.load_inquirer.get_loads().to_dict(),
+        }
+
         if get_exec().moe.elastic_ep_backend is not None:
             from sglang.srt.elastic_ep.elastic_ep import ElasticEPStateManager
 
