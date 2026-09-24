@@ -21,7 +21,6 @@ from typing import Optional
 from unittest.mock import Mock, patch
 
 from fastapi import Request
-
 from sglang.srt.entrypoints.openai import chat_encoding
 from sglang.srt.entrypoints.openai.chat_encoding import (
     resolve_dsv4_reasoning_effort_profile,
@@ -1485,6 +1484,72 @@ class ServingChatTestCase(unittest.TestCase):
                 self.assertEqual(
                     self.chat._validate_request(duplicate),
                     "Tool names must be unique across request and message tools.",
+                )
+
+    def test_gpt_oss_native_history_and_context_share_token_ids(self):
+        from sglang.srt.parser.gpt_oss_encoding import HarmonyEncoder
+
+        self.chat.is_gpt_oss = True
+        self.chat.chat_encoding_spec = None
+        self.template_manager.chat_template_name = None
+        self.tm._config_overrides["page_size"] = 1
+        for arguments in [
+            '{"command":"ls"}',
+            '{"command":"broken}',
+            {"command": "echo 中文"},
+        ]:
+            req = ChatCompletionRequest(
+                model="x",
+                reasoning_effort="high",
+                messages=[
+                    {"role": "user", "content": "Fix it"},
+                    {
+                        "role": "assistant",
+                        "reasoning_content": "Remember the plan",
+                        "tool_calls": [
+                            {
+                                "id": "c1",
+                                "type": "function",
+                                "function": {"name": "bash", "arguments": arguments},
+                            }
+                        ],
+                    },
+                    {
+                        "role": "tool",
+                        "tool_call_id": "c1",
+                        "content": "line 1\nline 2 中文",
+                    },
+                    {
+                        "role": "assistant",
+                        "content": "Done",
+                        "reasoning_content": "Checked the fix",
+                    },
+                    {"role": "user", "content": "Continue"},
+                ],
+            )
+            original = [m.model_dump() for m in req.messages]
+            plain = self.chat._process_messages(req, is_multimodal=False)
+            contextual = self.chat._process_messages(
+                req.model_copy(
+                    update={"drop_message": {"4": ["2"]}, "reposition": [4]}
+                ),
+                is_multimodal=False,
+            )
+            self.assertEqual(plain.prompt_ids, contextual.prompt_ids)
+            self.assertIsNotNone(contextual.context_program)
+            text = HarmonyEncoder()._get_harmony_encoding().decode(plain.prompt_ids)
+            for reasoning in ("Remember the plan", "Checked the fix"):
+                self.assertIn("<|channel|>analysis<|message|>" + reasoning, text)
+            self.assertIn("line 1\nline 2 中文", text)
+            self.assertEqual([m.model_dump() for m in req.messages], original)
+            self.tm.tokenizer.apply_chat_template.assert_not_called()
+        for overrides in (
+            {"continue_final_message": True},
+            {"chat_template_kwargs": {"chat_template": "custom"}},
+        ):
+            with self.assertRaises(ValueError):
+                self.chat._process_messages(
+                    req.model_copy(update=overrides), is_multimodal=False
                 )
 
     def test_jinja_rejects_non_object_tool_call_arguments(self):
@@ -4287,6 +4352,130 @@ class ServingChatTestCase(unittest.TestCase):
         r, t = self.chat._get_parsed_response_fields(reasoning, tool_calls)
         self.assertEqual(r, reasoning)
         self.assertEqual(t, tool_calls)
+
+    def test_gpt_oss_harmony_chat_stream_and_nonstream(self):
+        import asyncio
+
+        from openai_harmony import HarmonyEncodingName, load_harmony_encoding
+
+        encoding = load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
+        self.chat.is_gpt_oss = True
+        self.chat.reasoning_parser = "gpt-oss"
+        self.chat.tool_call_parser = "gpt-oss"
+        request = ChatCompletionRequest(
+            model="gpt-oss",
+            messages=[{"role": "user", "content": "lookup"}],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {"name": n, "parameters": {"type": "object"}},
+                }
+                for n in ["search", "get_document"]
+            ],
+            stream=True,
+            n=2,
+        )
+        texts = [
+            '<|channel|>analysis<|message|>Think.<|end|><|start|>assistant<|channel|>analysis to=functions.search code<|message|>{"query":"x"}<|call|>',
+            'to=functions.get_document<|channel|>analysis<|message|>{"docid":"12"}<|call|>',
+        ]
+        ids = [encoding.encode(t, allowed_special="all") for t in texts]
+
+        def item(i, tokens, finish=None):
+            return {
+                "index": i,
+                "text": "deliberately ignored decoded text",
+                "output_ids": tokens,
+                "meta_info": {
+                    "id": "harmony-test",
+                    "weight_version": "default",
+                    "prompt_tokens": 10,
+                    "completion_tokens": len(tokens),
+                    "cached_tokens": 0,
+                    "finish_reason": finish,
+                },
+            }
+
+        for incremental in [False, True]:
+            enter_override(
+                self,
+                get_context().override_server_args(
+                    incremental_streaming_output=incremental
+                ),
+            )
+
+            async def generate(*args):
+                for step in range(max(map(len, ids))):
+                    for i, sequence in enumerate(ids):
+                        if step >= len(sequence):
+                            continue
+                        terminal = step == len(sequence) - 1
+                        result = item(
+                            i,
+                            sequence[step : step + 1]
+                            if incremental
+                            else sequence[: step + 1],
+                            {"type": "stop", "matched": sequence[-1]}
+                            if terminal
+                            else None,
+                        )
+                        result["meta_info"]["completion_tokens"] = step + 1
+                        yield result
+
+            self.tm.generate_request = generate
+
+            async def collect():
+                return [
+                    chunk
+                    async for chunk in self.chat._generate_chat_stream(
+                        None, request, None
+                    )
+                ]
+
+            chunks = asyncio.run(collect())
+            self.assertEqual(chunks[-1], "data: [DONE]\n\n")
+            choices = [
+                c
+                for chunk in chunks
+                if chunk.startswith("data: {")
+                for c in json.loads(chunk[6:]).get("choices", [])
+            ]
+            for i, name in enumerate(["search", "get_document"]):
+                selected = [c for c in choices if c["index"] == i]
+                calls = [
+                    t
+                    for c in selected
+                    for t in (c.get("delta", {}).get("tool_calls") or [])
+                ]
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(calls[0]["function"]["name"], name)
+                self.assertEqual(
+                    [c["finish_reason"] for c in selected if c.get("finish_reason")],
+                    ["tool_calls"],
+                )
+                reasoning = "".join(
+                    c.get("delta", {}).get("reasoning_content") or "" for c in selected
+                )
+                self.assertEqual(reasoning, "Think." if i == 0 else "")
+        response = self.chat._build_chat_response(
+            request,
+            [item(i, t, {"type": "stop", "matched": t[-1]}) for i, t in enumerate(ids)],
+            0,
+        )
+        self.assertEqual(
+            [c.finish_reason for c in response.choices], ["tool_calls", "tool_calls"]
+        )
+        self.assertEqual(
+            [c.message.tool_calls[0].function.name for c in response.choices],
+            ["search", "get_document"],
+        )
+        self.assertEqual(response.choices[0].message.reasoning_content, "Think.")
+
+    def test_gpt_oss_constrained_choice_uses_native_harmony(self):
+        self.chat.is_gpt_oss = True
+        self.chat.reasoning_parser = self.chat.tool_call_parser = "gpt-oss"
+        req = self.basic_req.model_copy(update={"tool_choice": "required"})
+        self.assertTrue(self.chat._uses_harmony_chat_parser(req))
 
 
 class TestProcessToolCallsWithRequiredToolChoice(unittest.TestCase):

@@ -41,7 +41,7 @@ dependencies = [
   "ninja",
   "numpy",
   "openai==2.6.1",
-  "openai-harmony==0.0.4",
+  "openai-harmony==0.0.8",
   "orjson",
   "outlines==0.1.11",
   "packaging",

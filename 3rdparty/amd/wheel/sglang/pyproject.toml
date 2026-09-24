@@ -37,7 +37,7 @@ runtime_common = [
   "msgspec",
   "ninja",
   "numpy",
-  "openai-harmony==0.0.4",
+  "openai-harmony==0.0.8",
   "openai==2.6.1",
   "orjson",
   "outlines==0.1.11",
