@@ -10,6 +10,7 @@ import contextvars
 import concurrent.futures
 from collections import deque
 import functools
+import hashlib
 import inspect
 import json
 import os
@@ -33,6 +34,49 @@ def save(path, value):
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(value, indent=2))
     tmp.replace(path)
+
+
+def seed_triton_cache(source, destination):
+    """Copy compiled artifacts, relocating group paths into an isolated cache.
+
+    No hard links, shared writable paths, or KV state. The source digest lets
+    paired captures verify identical initial compilation state.
+    """
+    source, destination = Path(source).resolve(), Path(destination).resolve()
+    if not source.is_dir() or not destination.is_dir() or any(destination.iterdir()):
+        raise ValueError("Cache seed needs an existing source and empty destination")
+    prepared, manifest = [], []
+    for path in sorted(source.rglob("*")):
+        if path.is_symlink():
+            raise ValueError(f"Cache seed symlink forbidden: {path}")
+        if not path.is_file():
+            continue
+        relative = path.relative_to(source)
+        data = path.read_bytes()
+        manifest.append(dict(path=str(relative), bytes=len(data),
+                             sha256=hashlib.sha256(data).hexdigest()))
+        if path.name.startswith("__grp__") and path.suffix == ".json":
+            group = json.loads(data)
+            for key, child in group["child_paths"].items():
+                child = Path(child)
+                if not child.is_absolute():
+                    child = path.parent / child
+                local = child.resolve().relative_to(source)
+                if not (source/local).is_file():
+                    raise ValueError(f"Missing cache group artifact: {child}")
+                group["child_paths"][key] = str(destination/local)
+            data = json.dumps(group, sort_keys=True).encode()
+        prepared.append((relative, data))
+    if not prepared:
+        raise ValueError("Empty compiled cache seed")
+    # Validate all references before writing any artifacts.
+    for relative, data in prepared:
+        path = destination/relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    digest = hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()
+    return dict(source=str(source), destination=str(destination), files=manifest,
+                source_manifest_sha256=digest, isolation="independent copies; group paths relocated")
 
 
 class Recorder:
@@ -443,6 +487,11 @@ def run_one(args):
             (root/name).symlink_to(target, target_is_directory=True)
     guard = GPUIsolationGuard(root, "0,1,2,3,4,5,6,7")
     source = json.loads(Path(args.source_launch).read_text())
+    cache_seed = Path(args.triton_cache_seed).resolve() if args.triton_cache_seed else None
+    if cache_seed:
+        seed_launch = json.loads((cache_seed/"launch.json").read_text())
+        if seed_launch["runtime_head"] != FROZEN_HEAD:
+            raise ValueError("Compiled cache seed runtime mismatch")
     procs, logs = [], []
     client = None
     success = False
@@ -465,6 +514,9 @@ def run_one(args):
                 path = root/role/key.lower()
                 path.mkdir(parents=True)
                 env[key] = str(path)
+                if cache_seed and key == "TRITON_CACHE_DIR":
+                    manifest = seed_triton_cache(cache_seed/role/key.lower(), path)
+                    save(root/f"{role}-triton-cache-seed.json", manifest)
             env["TMPDIR"] = cfg["ipc_tmp"]
             cmd = [sys.executable, str(Path(__file__).resolve()), "server", "--config", str(root/f"{role}-config.json"),
                    "--", *launch_flags(source, i, args.port, args.drop)]
@@ -585,6 +637,7 @@ def main():
     run.add_argument("--drop", action="store_true")
     run.add_argument("--profile", action="store_true")
     run.add_argument("--trace-root", help="Unique directory for bulk Nsight data; IPC/JIT stay local")
+    run.add_argument("--triton-cache-seed", help="Completed run whose compiled Triton artifacts seed independent caches; never KV state")
     args, extra = p.parse_known_args()
     if args.command != "server" and extra:
         p.error(str(extra))
