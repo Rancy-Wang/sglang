@@ -1542,7 +1542,9 @@ class OpenAIServingChat(OpenAIServingBase):
                 message.model_dump(exclude_none=True) for message in request.messages
             ]
             encoder = HarmonyEncoder(
-                kwargs.get("reasoning_effort", request.reasoning_effort)
+                kwargs.get("reasoning_effort", request.reasoning_effort),
+                preserve_thinking=getattr(context_rule, "type", None)
+                == "thinking_drop",
             )
             ids, owners, _ = encoder.render_tokens(
                 messages, tools, enable_thinking=kwargs.get("enable_thinking")

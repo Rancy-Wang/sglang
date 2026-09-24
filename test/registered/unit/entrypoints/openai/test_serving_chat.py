@@ -1539,7 +1539,17 @@ class ServingChatTestCase(unittest.TestCase):
             self.assertIsNotNone(contextual.context_program)
             text = HarmonyEncoder()._get_harmony_encoding().decode(plain.prompt_ids)
             for reasoning in ("Remember the plan", "Checked the fix"):
-                self.assertIn("<|channel|>analysis<|message|>" + reasoning, text)
+                self.assertNotIn(reasoning, text)
+            retained = self.chat._process_messages(
+                req.model_copy(update={"drop_rule": {"type": "thinking_drop"}}),
+                is_multimodal=False,
+            )
+            retained_text = (
+                HarmonyEncoder()._get_harmony_encoding().decode(retained.prompt_ids)
+            )
+            self.assertIn("Remember the plan", retained_text)
+            self.assertIn("Checked the fix", retained_text)
+            self.assertIsNotNone(retained.context_program)
             self.assertIn("line 1\nline 2 中文", text)
             self.assertEqual([m.model_dump() for m in req.messages], original)
             self.tm.tokenizer.apply_chat_template.assert_not_called()
