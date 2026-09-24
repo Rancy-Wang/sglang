@@ -3,10 +3,42 @@ import json
 import tempfile
 from pathlib import Path
 from analyze_pd_e2e_breakdown import partition, critical_path, contribution, request_ledger
-from profile_pd_e2e_breakdown import identity, bind_stats_identity, batch_identity, cache_result_metadata, seed_triton_cache
+from profile_pd_e2e_breakdown import identity, bind_stats_identity, batch_identity, cache_result_metadata, seed_triton_cache, mark_attention_backend
 
 
 class Accounting(unittest.TestCase):
+    def test_direct_attention_backend_markers_preserve_calls_and_errors(self):
+        from types import SimpleNamespace
+        events, calls = [], []
+        nvtx = SimpleNamespace(range_push=lambda label: events.append(label),
+                               range_pop=lambda: events.append("pop"))
+        result = object()
+        class Backend:
+            def forward(self, *args, **kwargs):
+                calls.append((args, kwargs))
+                if kwargs.get("fail"):
+                    raise ValueError("original failure")
+                return result
+        original = Backend.forward
+        mark_attention_backend(Backend, nvtx, False)
+        self.assertIs(Backend.forward, original)
+        mark_attention_backend(Backend, nvtx, True)
+        wrapped = Backend.forward
+        mark_attention_backend(Backend, nvtx, True)
+        self.assertIs(Backend.forward, wrapped)
+        backend = Backend()
+        args = (object(), object(), object(), SimpleNamespace(sliding_window_size=-1), object())
+        self.assertIs(backend.forward(*args, save_kv_cache=False), result)
+        self.assertEqual(calls[-1], (args, {"save_kv_cache": False}))
+        self.assertEqual(events, ["component:full_attention:attention_backend", "pop"])
+        kwargs = dict(q=args[0], k=args[1], v=args[2],
+                      layer=SimpleNamespace(sliding_window_size=128),
+                      forward_batch=args[4], fail=True)
+        with self.assertRaisesRegex(ValueError, "original failure"):
+            backend.forward(**kwargs)
+        self.assertEqual(calls[-1], ((), kwargs))
+        self.assertEqual(events[-2:], ["component:swa_attention:attention_backend", "pop"])
+
     def test_compiled_cache_copies_are_isolated_and_auditable(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

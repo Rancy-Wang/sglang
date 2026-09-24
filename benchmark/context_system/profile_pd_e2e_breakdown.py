@@ -159,6 +159,33 @@ def cache_result_metadata(value):
     return ret
 
 
+def mark_attention_backend(backend_class, nvtx, enabled):
+    """Cover direct backend calls inside breakable Prefill graph custom ops.
+
+    Those calls bypass RadixAttention.forward. Classify from the actual layer,
+    never from a generic Triton kernel name; leave light runs unwrapped.
+    """
+    if not enabled:
+        return
+    original = backend_class.forward
+    if getattr(original, "_e2e_attention_marker", False):
+        return
+    from profile_decode_breakdown import module_category
+
+    @functools.wraps(original)
+    def forward(*args, **kwargs):
+        layer = args[4] if len(args) > 4 else kwargs["layer"]
+        category = module_category("attn", layer)
+        nvtx.range_push(f"component:{category}:attention_backend")
+        try:
+            return original(*args, **kwargs)
+        finally:
+            nvtx.range_pop()
+
+    forward._e2e_attention_marker = True
+    backend_class.forward = forward
+
+
 def install():
     import torch
     # Preserve the historical benchmark's physical counters and P/D timestamps.
@@ -181,6 +208,8 @@ def install():
     from sglang.srt.distributed.device_communicators.mooncake_transfer_engine import MooncakeTransferEngine
 
     cfg = json.loads(Path(os.environ["PD_E2E_CONFIG"]).read_text())
+    from sglang.srt.layers.attention.base_attn_backend import AttentionBackend
+    mark_attention_backend(AttentionBackend, torch.cuda.nvtx, cfg["profile"])
     rec = Recorder(cfg["timing"], cfg["role"])
     current = contextvars.ContextVar("e2e_request", default={})
     pending = deque()
