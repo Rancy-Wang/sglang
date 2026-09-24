@@ -1,5 +1,5 @@
 import unittest
-from analyze_pd_e2e_breakdown import partition, critical_path, contribution
+from analyze_pd_e2e_breakdown import partition, critical_path, contribution, request_ledger
 from profile_pd_e2e_breakdown import identity
 
 
@@ -47,6 +47,19 @@ class Accounting(unittest.TestCase):
             bootstrap_room=42
             origin_input_ids=[1]*100
         self.assertEqual(identity(Request()),{"rid":"x","bootstrap_room":42})
+
+    def test_request_ledger_keeps_queue_and_kernel_savings_distinct(self):
+        p=dict(prefill_bootstrap_queue_entry_time=1,wait_queue_entry_time=2,
+               forward_entry_time=3,prefill_finished_time=5)
+        d=dict(wait_queue_entry_time=6,forward_entry_time=7,completion_time=9)
+        result=request_ledger(0,10,p,d,[dict(start=3.5,end=4.5,category="P/attention"),
+                                       dict(start=7.5,end=8.5,category="D/attention")])
+        self.assertEqual(result["residual_s"],0)
+        self.assertEqual(result["components"]["p_queue"],1)
+        self.assertEqual(result["components"]["P/attention"],1)
+        self.assertEqual(result["components"]["d_forward_wait_or_unclassified"],1)
+        with self.assertRaises(ValueError):
+            request_ledger(0,10,p,dict(d,wait_queue_entry_time=4),[])
 
 
 if __name__ == "__main__":

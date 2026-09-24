@@ -7,6 +7,7 @@ CPU spans are elapsed call intervals, NOT CPU-active or GPU durations.
 import argparse
 import asyncio
 import contextvars
+import concurrent.futures
 from collections import deque
 import functools
 import inspect
@@ -99,6 +100,7 @@ def install():
     from sglang.srt.managers.tokenizer_manager import TokenizerManager
     from sglang.srt.observability.req_time_stats import ReqTimeStatsBase, SchedulerReqTimeStats
     from sglang.srt.mem_cache.radix_cache import RadixCache
+    from sglang.srt.layers.attention.context_backend import ContextModelBinding
     from sglang.srt.disaggregation.mooncake.conn import MooncakeKVManager, MooncakeKVSender
     from sglang.srt.disaggregation.mooncake import conn
     from sglang.srt.distributed.device_communicators.mooncake_transfer_engine import MooncakeTransferEngine
@@ -124,10 +126,30 @@ def install():
                      end=time.perf_counter(), **transfer_context.chunk)
             return item
     conn.FastQueue = ObservedQueue
+    original_submit = concurrent.futures.ThreadPoolExecutor.submit
+    def submit(self, fn, /, *args, **kw):
+        chunk = getattr(transfer_context, "chunk", None)
+        if chunk is None:
+            return original_submit(self, fn, *args, **kw)
+        def invoke():
+            previous = getattr(transfer_context, "chunk", None)
+            transfer_context.chunk = chunk
+            try:
+                return fn(*args, **kw)
+            finally:
+                transfer_context.chunk = previous
+        return original_submit(self, invoke)
+    concurrent.futures.ThreadPoolExecutor.submit = submit
     original_transfer = MooncakeTransferEngine.batch_transfer_sync
     def transfer(self, peer, src, dst, lengths):
         start = time.perf_counter()
-        result = original_transfer(self, peer, src, dst, lengths)
+        if cfg["profile"]:
+            torch.cuda.nvtx.range_push("component:kv_transfer:batch_transfer_sync")
+        try:
+            result = original_transfer(self, peer, src, dst, lengths)
+        finally:
+            if cfg["profile"]:
+                torch.cuda.nvtx.range_pop()
         rec.emit("transfer_sync", start=start, end=time.perf_counter(), bytes=sum(lengths),
                  blocks=len(lengths), result=result, peer=peer,
                  chunk=getattr(transfer_context, "chunk", None))
@@ -172,16 +194,19 @@ def install():
                 meta.update(identity(obj))
             token = current.set(meta)
             start = time.perf_counter()
+            cpu_start = time.thread_time()
             if cfg["profile"]:
                 torch.cuda.nvtx.range_push("e2e_cpu:" + label)
-            return start, token, meta
+            return start, cpu_start, token, meta
 
-        def leave(start, token, meta):
+        def leave(start, cpu_start, token, meta):
             end = time.perf_counter()
+            cpu_s = time.thread_time()-cpu_start
             if cfg["profile"]:
                 torch.cuda.nvtx.range_pop()
             current.reset(token)
-            rec.emit("cpu_span", label=label, start=start, end=end, **meta)
+            rec.emit("cpu_span", label=label, start=start, end=end,
+                     thread_cpu_s=cpu_s, **meta)
 
         if inspect.iscoroutinefunction(original):
             # Async spans may interleave on one OS thread: no push/pop NVTX.
@@ -201,11 +226,13 @@ def install():
         else:
             @functools.wraps(original)
             def wrapped(*args, **kw):
-                start, token, meta = enter(args)
+                if name == "process_input_requests" and len(args) > 1 and not args[1]:
+                    return original(*args, **kw)
+                start, cpu_start, token, meta = enter(args)
                 try:
                     return original(*args, **kw)
                 finally:
-                    leave(start, token, meta)
+                    leave(start, cpu_start, token, meta)
         setattr(cls, name, wrapped)
 
     original_load = ModelRunner.load_model
@@ -293,7 +320,9 @@ def install():
              (Scheduler, "process_input_requests"), (Scheduler, "run_batch"),
              (Scheduler, "process_batch_result"), (Scheduler, "send_kv_chunk"),
              (RadixCache, "match_prefix"), (RadixCache, "evict"),
+             (Req, "init_next_round_input"),
              (Req, "plan_context_prefill"), (Req, "prepare_context_recovery"),
+             (ContextModelBinding, "reposition_existing"),
              (ScheduleBatch, "_prepare_context_occurrences"),
              (ModelRunner, "sample"), (MooncakeKVSender, "send"),
              (MooncakeKVManager, "_transfer_data")]
@@ -354,6 +383,10 @@ def run_one(args):
         raise RuntimeError("GPUs occupied; no unrelated process stopped")
     root = Path(args.output).resolve()
     root.mkdir(parents=True, exist_ok=False)
+    trace_root = root
+    if args.trace_root:
+        trace_root = Path(args.trace_root).resolve()
+        trace_root.mkdir(parents=True, exist_ok=False)
     guard = GPUIsolationGuard(root, "0,1,2,3,4,5,6,7")
     source = json.loads(Path(args.source_launch).read_text())
     procs, logs = [], []
@@ -363,7 +396,8 @@ def run_one(args):
         launches = []
         for i, role in enumerate(("prefill", "decode")):
             cfg = dict(role=role, profile=args.profile, timing=str(root/"timing"),
-                       stop_file=str(root/"stop_capture"), plan=PLAN)
+                       stop_file=str(root/"stop_capture"), plan=PLAN,
+                       ipc_tmp=tempfile.mkdtemp(prefix="e2e-", dir="/tmp"))
             save(root/f"{role}-config.json", cfg)
             env = dict(os.environ, CUDA_VISIBLE_DEVICES="0,1,2,3" if i == 0 else "4,5,6,7",
                        PYTHONPATH=str(repo/"python"), TORCHELASTIC_USE_AGENT_STORE="False",
@@ -377,13 +411,18 @@ def run_one(args):
                 path = root/role/key.lower()
                 path.mkdir(parents=True)
                 env[key] = str(path)
-            env["TMPDIR"] = tempfile.mkdtemp(prefix="e2e-", dir="/tmp")
+            env["TMPDIR"] = cfg["ipc_tmp"]
             cmd = [sys.executable, str(Path(__file__).resolve()), "server", "--config", str(root/f"{role}-config.json"),
                    "--", *launch_flags(source, i, args.port, args.drop)]
             if args.profile:
+                # Nsight's bulk temporary trace data can be large. The server
+                # restores a short local TMPDIR before spawning IPC workers.
+                profile_tmp = trace_root / (role+"-nsys-tmp")
+                profile_tmp.mkdir()
+                env["TMPDIR"] = str(profile_tmp)
                 cmd = [args.nsys, "profile", "--trace=cuda,nvtx", "--sample=none", "--cpuctxsw=none",
                        "--cuda-graph-trace=node", "--capture-range=cudaProfilerApi", "--capture-range-end=stop",
-                       "--output="+str(root/f"{role}-profile"), *cmd]
+                       "--output="+str(trace_root/f"{role}-profile"), *cmd]
             log = (root/f"{role}.log").open("x")
             logs.append(log)
             proc = subprocess.Popen(cmd, env=env, cwd=repo, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
@@ -443,8 +482,10 @@ def run_one(args):
                 guard.check()
                 if any(p.poll() is not None for p in procs):
                     raise RuntimeError("Server exited during workload")
-                if os.statvfs(root).f_bavail * os.statvfs(root).f_frsize < 5*1024**3:
-                    raise RuntimeError("Capture filesystem below 5 GiB free")
+                for storage in (root, trace_root):
+                    stat = os.statvfs(storage)
+                    if stat.f_bavail * stat.f_frsize < 5*1024**3:
+                        raise RuntimeError(f"Capture filesystem below 5 GiB free: {storage}")
                 time.sleep(5)
         if client.returncode:
             raise RuntimeError("Workload failed; retain all partial tokens/events")
@@ -487,6 +528,7 @@ def main():
     run.add_argument("--pilot-turns", type=int, default=0)
     run.add_argument("--drop", action="store_true")
     run.add_argument("--profile", action="store_true")
+    run.add_argument("--trace-root", help="Unique directory for bulk Nsight data; IPC/JIT stay local")
     args, extra = p.parse_known_args()
     if args.command != "server" and extra:
         p.error(str(extra))
@@ -498,6 +540,9 @@ def main():
         run_client(args)
     else:
         os.environ["PD_E2E_CONFIG"] = str(Path(args.config).resolve())
+        cfg = json.loads(Path(args.config).read_text())
+        if cfg.get("ipc_tmp"):
+            os.environ["TMPDIR"] = cfg["ipc_tmp"]
         install()
         from sglang.launch_server import run_server
         from sglang.srt.server_args import prepare_server_args
