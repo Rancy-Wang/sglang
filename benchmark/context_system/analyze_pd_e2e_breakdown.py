@@ -135,7 +135,156 @@ def coverage(root):
     return result
 
 
-def export_kernels(sqlite_path, output):
+def summarize_gpu_steps(root, kernel_paths):
+    """Exact observed per-step GPU ledger. No conversion into E2E attribution.
+
+    Select the rank finishing last for each batch. Other rank work is retained
+    in per-rank totals, never summed into batch elapsed time.
+    """
+    root = Path(root)
+    forwards, events = {}, {}
+    for path in (root/"timing").glob("*.jsonl"):
+        for row in rows(path):
+            key = row["pid"], row.get("step")
+            if row["kind"] == "forward":
+                forwards[key] = row
+            elif row["kind"] == "gpu_completed":
+                events[key] = row["gpu_ms"]
+    kernels = defaultdict(list)
+    for path in kernel_paths:
+        for row in rows(path):
+            if row["step"] is not None:
+                if row["start"] is None:
+                    raise ValueError("Kernel has no monotonic clock alignment")
+                kernels[row["pid"],row["step"]].append(row)
+    grouped = defaultdict(list)
+    for key, items in kernels.items():
+        f = forwards.get(key)
+        if f is None:
+            raise ValueError(f"Kernel step has no forward record: {key}")
+        # Step counters must align across all TP workers; request identity is
+        # checked below, not inferred from counter equality alone.
+        grouped[f["role"], f["step"]].append((f,items))
+    result = []
+    for (role, step), group in sorted(grouped.items()):
+        ranks = {f["rank"] for f,_ in group}
+        if ranks != set(range(4)) or len(group) != 4:
+            raise ValueError(f"Incomplete TP coverage: {role}/{step}/{ranks}")
+        signatures = {tuple((r.get("rid"),r.get("output_len")) for r in f["requests"]) for f,_ in group}
+        if len(signatures) != 1:
+            raise ValueError("TP workers disagree on request/step identity")
+        chosen, selected = max(group, key=lambda pair:max(k["end"] for k in pair[1]))
+        start = min(k["start"] for _,ks in group for k in ks)
+        end = max(k["end"] for _,ks in group for k in ks)
+        totals, pieces = partition(start,end,selected)
+        per_rank = {}
+        for f, ks in group:
+            lo, hi = min(k["start"] for k in ks), max(k["end"] for k in ks)
+            parts,_ = partition(lo,hi,ks)
+            per_rank[f["rank"]] = dict(components=parts, kernel_envelope_s=hi-lo,
+                cuda_event_ms=events.get((f["pid"],f["step"])))
+        result.append(dict(role=role, step=step, start=start, end=end,
+            last_finishing_rank=chosen["rank"], requests=chosen["requests"],
+            batch_size=chosen["batch_size"], mode=chosen["mode"], seq_lens=chosen["seq_lens"],
+            graph_batch_size=chosen["graph_batch_size"], components=totals, pieces=pieces,
+            per_rank=per_rank, note="GPU kernel envelope; unobserved includes gaps/rank skew, not CPU attribution"))
+    return result
+
+
+def request_ledger(start, done, p, d, gpu_pieces):
+    """Partition observed P-to-D milestones and insert own-request GPU work.
+
+    This is an additive observed latency ledger, NOT a causal replay. Queue
+    reductions cannot be reassigned to attention without dependency evidence.
+    Missing/reversed milestones are rejected rather than clamped to zero.
+    """
+    marks = [
+        (start,"client_to_p_entry"),
+        (p["prefill_bootstrap_queue_entry_time"],"p_bootstrap"),
+        (p["wait_queue_entry_time"],"p_queue"),
+        (p["forward_entry_time"],"p_forward_wait_or_unclassified"),
+        (p["prefill_finished_time"],"handoff_wait_or_unclassified"),
+        (d["wait_queue_entry_time"],"d_ready_wait_or_unclassified"),
+        (d["forward_entry_time"],"d_forward_wait_or_unclassified"),
+        (d["completion_time"],"output_delivery"),
+        (done,None),
+    ]
+    if any(t is None or not math.isfinite(t) for t,_ in marks):
+        raise ValueError("Missing request milestone")
+    if any(b[0] < a[0]-1e-6 for a,b in zip(marks,marks[1:])):
+        raise ValueError("Milestones overlap/out of order: dependency DAG required")
+    totals, pieces = Counter(), []
+    for (a,stage),(b,_) in zip(marks,marks[1:]):
+        if b < a:
+            raise ValueError("Clock precision violates ordered boundary")
+        # GPU kernels can be present during handoff too (e.g. D prebuilt).
+        own = [k for k in gpu_pieces if k["end"] > a and k["start"] < b]
+        values, parts = partition(a,b,own)
+        for key,value in values.items():
+            totals[stage if key == "unobserved" else key] += value
+        for part in parts:
+            if part["category"] == "unobserved":
+                part["category"] = stage
+            pieces.append(part)
+    return dict(components=dict(totals), pieces=pieces,
+                residual_s=done-start-sum(totals.values()),
+                interpretation="Observed exclusive elapsed-time ledger; waits retain unclassified causes")
+
+
+def join_request_ledgers(root, gpu_steps):
+    root = Path(root)
+    result = json.loads((root/"workload/result.json").read_text())
+    by_room, rid_room = defaultdict(dict), {}
+    for path in (root/"timing").glob("*.jsonl"):
+        for row in rows(path):
+            if row.get("rank") != 0:
+                continue
+            role, rid, room = row["role"], row.get("rid"), row.get("bootstrap_room")
+            if rid is not None and room is not None:
+                rid_room[role,rid] = room
+            if row["kind"] == "request_stage" and room is not None:
+                stamp = row.get("timestamp")
+                if stamp and stamp > 0:
+                    by_room[role,room][row["stage"][4:]] = stamp
+    request_gpu = defaultdict(list)
+    for step in gpu_steps:
+        role = step["role"]
+        for req in step["requests"]:
+            room = req.get("bootstrap_room",rid_room.get((role,req.get("rid"))))
+            if room is None:
+                continue
+            for piece in step["pieces"]:
+                # Per-rank idle/gap is NOT a GPU component.
+                if piece["category"] == "unobserved":
+                    continue
+                request_gpu[room].append(dict(piece,category=role+"/"+piece["category"]))
+    ledgers, rejected = [], []
+    for turn in result["turns"]:
+        room = turn.get("pd_bootstrap_room")
+        if turn.get("raw_done_time") is None:
+            rejected.append(dict(instance=turn["instance"],turn=turn["turn"],reason="No user DONE; censored"))
+            continue
+        try:
+            ledger = request_ledger(turn["start_time"],turn["raw_done_time"],
+                                    by_room["prefill",room],by_room["decode",room],request_gpu[room])
+        except (KeyError,ValueError) as exc:
+            rejected.append(dict(instance=turn["instance"],turn=turn["turn"],reason=str(exc)))
+            continue
+        ledger.update(case_id=turn["case_id"],instance=turn["instance"],turn=turn["turn"],
+                      start=turn["start_time"],done=turn["raw_done_time"],
+                      user_latency_s=turn["latency"],cleanup_s=turn["cleanup_time_s"],
+                      usage=turn.get("last_received_usage"))
+        ledgers.append(ledger)
+    total = Counter()
+    for ledger in ledgers:
+        total.update(ledger["components"])
+    return dict(turns=ledgers,rejected=rejected,mean_components_s={k:v/len(ledgers) for k,v in total.items()},
+                decomposition_complete=not rejected and len(ledgers)==len(result["turns"]),
+                causal_attribution_complete=False,
+                note="CPU, transfer, and waiting causes still require their own dependency join. No kernel extrapolation.")
+
+
+def export_kernels(sqlite_path, output, copies_output=None):
     """Stream node-attributed kernels with per-process monotonic clock anchors.
 
     Nsight timestamp offsets can differ between independent P and D captures.
@@ -199,6 +348,8 @@ def export_kernels(sqlite_path, output):
             api = runtime.get((pid,r["correlationId"]),{})
             name = strings.get(r.get("demangledName"),strings.get(r.get("shortName"),"unknown"))
             cat = api.get("category") or nodes.get((pid,r.get("graphNodeId"))) or conservative_category(name)
+            if api.get("cpu") == "e2e_cpu:ContextModelBinding.reposition_existing":
+                cat = "kv_reposition"
             if conservative_category(name) == "tp_communication":
                 cat = "tp_communication"
             counts[cat] += 1
@@ -206,9 +357,27 @@ def export_kernels(sqlite_path, output):
             out.write(json.dumps(dict(pid=pid, start_ns=r["start"], end_ns=r["end"],
                 start=(r["start"]+offset)/1e9 if offset is not None else None,
                 end=(r["end"]+offset)/1e9 if offset is not None else None,
-                step=api.get("step"), category=cat, name=name, stream=r["streamId"], device=r["deviceId"]))+"\n")
+                step=api.get("step"), category=cat, cpu_caller=api.get("cpu"),
+                name=name, stream=r["streamId"], device=r["deviceId"]))+"\n")
+    copy_counts = Counter()
+    if copies_output:
+        with Path(copies_output).open("x") as out:
+            for table in ("CUPTI_ACTIVITY_KIND_MEMCPY", "CUPTI_ACTIVITY_KIND_MEMCPY2", "CUPTI_ACTIVITY_KIND_MEMSET"):
+                if table not in tables:
+                    continue
+                for row in db.execute(f"select * from {table} order by start"):
+                    r = dict(row)
+                    pid = (r["globalPid"] >> 24)&0xffffff
+                    api = runtime.get((pid,r["correlationId"]),{})
+                    offset = offsets.get(pid)
+                    copy_counts[table] += 1
+                    out.write(json.dumps(dict(pid=pid, kind=table, raw=r,
+                        start=(r["start"]+offset)/1e9 if offset is not None else None,
+                        end=(r["end"]+offset)/1e9 if offset is not None else None,
+                        step=api.get("step"), cpu_caller=api.get("cpu"),
+                        category=api.get("category") or "memory_copy_unclassified"))+"\n")
     db.close()
-    return dict(kernel_counts=dict(counts), clock_offsets_ns=offsets,
+    return dict(kernel_counts=dict(counts), copy_counts=dict(copy_counts), clock_offsets_ns=offsets,
                 clock_spread_ns={pid:max(v)-min(v) for pid,v in anchors.items()},
                 note="Kernel export only; host spans and copies must also be joined before E2E attribution")
 
@@ -218,11 +387,18 @@ def main():
     p.add_argument("--run")
     p.add_argument("--nsys-sqlite")
     p.add_argument("--kernels-output")
+    p.add_argument("--copies-output", help="Optional separate raw CUDA copy/memset ledger")
+    p.add_argument("--step-kernels", action="append", help="Join exported kernels with --run")
+    p.add_argument("--gpu-steps", help="Join a GPU-step JSON file into per-turn observed latency ledgers")
     p.add_argument("--output", required=True)
     a = p.parse_args()
     if bool(a.run) == bool(a.nsys_sqlite):
         p.error("Specify exactly one of --run / --nsys-sqlite")
-    value = coverage(a.run) if a.run else export_kernels(a.nsys_sqlite,a.kernels_output)
+    if a.run:
+        value = (join_request_ledgers(a.run,json.loads(Path(a.gpu_steps).read_text())) if a.gpu_steps else
+                 summarize_gpu_steps(a.run,a.step_kernels) if a.step_kernels else coverage(a.run))
+    else:
+        value = export_kernels(a.nsys_sqlite,a.kernels_output,a.copies_output)
     Path(a.output).write_text(json.dumps(value,indent=2))
     print(json.dumps(value,indent=2))
 
