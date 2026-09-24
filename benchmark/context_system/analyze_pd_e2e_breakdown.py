@@ -4,6 +4,7 @@ Unobserved intervals remain unknown. Coverage is NOT proof of causal attribution
 No percentile summation, GPU-rank summation, or treating CPU spans as GPU work.
 """
 import argparse
+from array import array
 from bisect import bisect_right
 from collections import Counter, defaultdict
 import json
@@ -199,7 +200,67 @@ def summarize_gpu_steps(root, kernel_paths):
     return result
 
 
-def request_ledger(start, done, p, d, gpu_pieces):
+class IndexedStep:
+    """One shared index per batch, independent of the number of requests.
+
+    Input pieces are already an exclusive partition, including explicit gaps.
+    Per-category integrals preserve clipped boundaries without kernel expansion.
+    """
+    def __init__(self, step):
+        self.start, self.end = step["start"], step["end"]
+        self.role, self.pieces = step["role"], step["pieces"]
+        self.categories = {}
+        previous = self.start
+        for piece in self.pieces:
+            a, b = piece["start"], piece["end"]
+            if not math.isfinite(a+b) or a < previous or b < a or b > self.end:
+                raise ValueError("GPU pieces are not an ordered exclusive partition")
+            previous = b
+            if piece["category"] == "unobserved" or a == b:
+                continue
+            label = self.role+"/"+piece["category"]
+            bounds, integral = self.categories.setdefault(label, (array("d"), array("d")))
+            total = integral[-1] if integral else 0.0
+            bounds.extend((a,b))
+            integral.extend((total,total+(b-a)))
+
+    @staticmethod
+    def integral_at(bounds, integral, x):
+        i = bisect_right(bounds,x)-1
+        if i < 0:
+            return 0.0
+        return integral[i] + (x-bounds[i] if i % 2 == 0 else 0.0)
+
+    def totals(self, start, end):
+        return {label:self.integral_at(b,v,end)-self.integral_at(b,v,start)
+                for label,(b,v) in self.categories.items()}
+
+
+class IndexedRequest:
+    def __init__(self, steps):
+        self.steps = sorted(steps,key=lambda step:step.start)
+        self.overlapping = any(a.end > b.start for a,b in zip(self.steps,self.steps[1:]))
+
+    def totals(self, start, end):
+        selected = [step for step in self.steps if step.end > start and step.start < end]
+        if self.overlapping:
+            # Never sum potentially concurrent P/D or successive batch work.
+            # Rare overlap retains the original exact union algorithm.
+            return partition(start,end,(dict(piece,category=step.role+"/"+piece["category"])
+                for step in selected for piece in step.pieces
+                if piece["category"] != "unobserved"))[0]
+        values = Counter()
+        for step in selected:
+            values.update(step.totals(start,end))
+        values = Counter({key:value for key,value in values.items() if value})
+        gap = end-start-sum(values.values())
+        if gap < -1e-8:
+            raise ValueError("Indexed GPU work exceeds stage duration")
+        values["unobserved"] = max(0.0,gap)
+        return dict(values)
+
+
+def request_ledger(start, done, p, d, gpu_pieces, compact=False):
     """Partition observed P-to-D milestones and insert own-request GPU work.
 
     This is an additive observed latency ledger, NOT a causal replay. Queue
@@ -226,8 +287,11 @@ def request_ledger(start, done, p, d, gpu_pieces):
         if b < a:
             raise ValueError("Clock precision violates ordered boundary")
         # GPU kernels can be present during handoff too (e.g. D prebuilt).
-        own = [k for k in gpu_pieces if k["end"] > a and k["start"] < b]
-        values, parts = partition(a,b,own)
+        if compact:
+            values, parts = gpu_pieces.totals(a,b), []
+        else:
+            own = [k for k in gpu_pieces if k["end"] > a and k["start"] < b]
+            values, parts = partition(a,b,own)
         for key,value in values.items():
             totals[stage if key == "unobserved" else key] += value
         for part in parts:
@@ -239,7 +303,7 @@ def request_ledger(start, done, p, d, gpu_pieces):
                 interpretation="Observed exclusive elapsed-time ledger; waits retain unclassified causes")
 
 
-def join_request_ledgers(root, gpu_steps):
+def join_request_ledgers(root, gpu_steps, compact=False):
     root = Path(root)
     result = json.loads((root/"workload/result.json").read_text())
     by_room, rid_room = defaultdict(dict), {}
@@ -257,9 +321,13 @@ def join_request_ledgers(root, gpu_steps):
     request_gpu = defaultdict(list)
     for step in gpu_steps:
         role = step["role"]
+        indexed = IndexedStep(step) if compact else None
         for req in step["requests"]:
             room = req.get("bootstrap_room",rid_room.get((role,req.get("rid"))))
             if room is None:
+                continue
+            if compact:
+                request_gpu[room].append(indexed)
                 continue
             for piece in step["pieces"]:
                 # Per-rank idle/gap is NOT a GPU component.
@@ -274,7 +342,9 @@ def join_request_ledgers(root, gpu_steps):
             continue
         try:
             ledger = request_ledger(turn["start_time"],turn["raw_done_time"],
-                                    by_room["prefill",room],by_room["decode",room],request_gpu[room])
+                                    by_room["prefill",room],by_room["decode",room],
+                                    IndexedRequest(request_gpu[room]) if compact else request_gpu[room],
+                                    compact=compact)
         except (KeyError,ValueError) as exc:
             rejected.append(dict(instance=turn["instance"],turn=turn["turn"],reason=str(exc)))
             continue
@@ -286,7 +356,7 @@ def join_request_ledgers(root, gpu_steps):
     total = Counter()
     for ledger in ledgers:
         total.update(ledger["components"])
-    return dict(turns=ledgers,rejected=rejected,mean_components_s={k:v/len(ledgers) for k,v in total.items()},
+    return dict(turns=ledgers,rejected=rejected,detail_mode="indexed_summary" if compact else "full_pieces",mean_components_s={k:v/len(ledgers) for k,v in total.items()},
                 decomposition_complete=not rejected and len(ledgers)==len(result["turns"]),
                 causal_attribution_complete=False,
                 note="CPU, transfer, and waiting causes still require their own dependency join. No kernel extrapolation.")
@@ -398,17 +468,21 @@ def main():
     p.add_argument("--copies-output", help="Optional separate raw CUDA copy/memset ledger")
     p.add_argument("--step-kernels", action="append", help="Join exported kernels with --run")
     p.add_argument("--gpu-steps", help="Join a GPU-step JSON file into per-turn observed latency ledgers")
+    p.add_argument("--compact-ledger", action="store_true",
+                   help="Exact category totals using shared batch indexes; omit duplicated per-turn pieces")
     p.add_argument("--output", required=True)
     a = p.parse_args()
     if bool(a.run) == bool(a.nsys_sqlite):
         p.error("Specify exactly one of --run / --nsys-sqlite")
     if a.run:
-        value = (join_request_ledgers(a.run,json.loads(Path(a.gpu_steps).read_text())) if a.gpu_steps else
+        value = (join_request_ledgers(a.run,json.loads(Path(a.gpu_steps).read_text()),compact=a.compact_ledger) if a.gpu_steps else
                  summarize_gpu_steps(a.run,a.step_kernels) if a.step_kernels else coverage(a.run))
     else:
         value = export_kernels(a.nsys_sqlite,a.kernels_output,a.copies_output)
-    Path(a.output).write_text(json.dumps(value,indent=2))
-    print(json.dumps(value,indent=2))
+    with Path(a.output).open("w") as output:
+        json.dump(value,output,indent=None if a.compact_ledger else 2)
+    # The full artifact is already saved; do not serialize it a second time.
+    print(json.dumps(dict(output=a.output, count=len(value))))
 
 
 if __name__ == "__main__":

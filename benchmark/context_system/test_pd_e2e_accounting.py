@@ -2,11 +2,47 @@ import unittest
 import json
 import tempfile
 from pathlib import Path
-from analyze_pd_e2e_breakdown import partition, critical_path, contribution, request_ledger
+from analyze_pd_e2e_breakdown import partition, critical_path, contribution, request_ledger, IndexedStep, IndexedRequest
 from profile_pd_e2e_breakdown import identity, bind_stats_identity, batch_identity, cache_result_metadata, seed_triton_cache, mark_attention_backend
 
 
 class Accounting(unittest.TestCase):
+    def test_indexed_ledger_matches_exact_union_with_gaps_and_overlaps(self):
+        import random
+        rng = random.Random(42)
+        p = dict(prefill_bootstrap_queue_entry_time=1,wait_queue_entry_time=2,
+                 forward_entry_time=3,prefill_finished_time=5)
+        d = dict(wait_queue_entry_time=6,forward_entry_time=7,completion_time=9)
+        for overlap in (False, True):
+            for _ in range(20):
+                steps, expanded = [], []
+                for i in range(4):
+                    start = i*2.0 if not overlap else i*1.3
+                    end = start+2
+                    raw = [dict(start=rng.uniform(start,end),end=end,
+                                category=rng.choice(["attention","moe","unknown"])) for _ in range(10)]
+                    _, pieces = partition(start,end,raw)
+                    role = "prefill" if i < 2 else "decode"
+                    steps.append(IndexedStep(dict(start=start,end=end,role=role,pieces=pieces)))
+                    expanded.extend(dict(piece,category=role+"/"+piece["category"])
+                                    for piece in pieces if piece["category"] != "unobserved")
+                expected = request_ledger(0,10,p,d,expanded)
+                actual = request_ledger(0,10,p,d,IndexedRequest(steps),compact=True)
+                for key in expected["components"].keys() | actual["components"].keys():
+                    self.assertAlmostEqual(expected["components"].get(key,0),actual["components"].get(key,0))
+                self.assertAlmostEqual(actual["residual_s"],0)
+                self.assertEqual(actual["pieces"],[])
+
+    def test_index_rejects_nonexclusive_and_handles_boundary_queries(self):
+        step = dict(start=0,end=4,role="decode",pieces=[
+            dict(start=1,end=2,category="attention"),dict(start=2,end=3,category="attention")])
+        index = IndexedStep(step)
+        for start,end,expected in [(-1,0,0),(1,2,1),(2,2,0),(2.5,5,0.5),(0,4,2)]:
+            self.assertAlmostEqual(index.totals(start,end)["decode/attention"],expected)
+        step["pieces"].append(dict(start=2,end=4,category="moe"))
+        with self.assertRaises(ValueError):
+            IndexedStep(step)
+
     def test_direct_attention_backend_markers_preserve_calls_and_errors(self):
         from types import SimpleNamespace
         events, calls = [], []
