@@ -91,6 +91,30 @@ def bind_stats_identity(req):
     return req.time_stats._e2e_identity
 
 
+def batch_identity(value):
+    """Read small host metadata only; no tensor materialization/synchronization."""
+    reqs = getattr(value, "reqs", None)
+    if reqs is None and isinstance(value, (list, tuple)):
+        reqs = value
+    if reqs is None:
+        return {}
+    identities = [identity(req) for req in reqs]
+    return {"requests": [item for item in identities if item]}
+
+
+def cache_result_metadata(value):
+    ret = {}
+    indices = getattr(value, "device_indices", None)
+    if indices is not None:
+        ret["matched_slots"] = len(indices)
+    for name in ("context_exact_prefix_len", "context_retry", "full_kv_hit_length",
+                 "num_tokens_evicted", "swa_num_tokens_evicted"):
+        item = getattr(value, name, None)
+        if isinstance(item, (bool, int, float)):
+            ret[name] = item
+    return ret
+
+
 def install():
     import torch
     # Preserve the historical benchmark's physical counters and P/D timestamps.
@@ -106,6 +130,7 @@ def install():
     from sglang.srt.managers.tokenizer_manager import TokenizerManager
     from sglang.srt.observability.req_time_stats import ReqTimeStatsBase, SchedulerReqTimeStats
     from sglang.srt.mem_cache.radix_cache import RadixCache
+    from sglang.srt.mem_cache.unified_radix_cache import UnifiedRadixCache
     from sglang.srt.layers.attention.context_backend import ContextModelBinding
     from sglang.srt.disaggregation.mooncake.conn import MooncakeKVManager, MooncakeKVSender
     from sglang.srt.disaggregation.mooncake import conn
@@ -198,6 +223,7 @@ def install():
             meta = dict(current.get())
             for obj in args[:3]:
                 meta.update(identity(obj))
+                meta.update(batch_identity(obj))
             token = current.set(meta)
             start = time.perf_counter()
             cpu_start = time.thread_time()
@@ -236,7 +262,11 @@ def install():
                     return original(*args, **kw)
                 start, cpu_start, token, meta = enter(args)
                 try:
-                    return original(*args, **kw)
+                    result = original(*args, **kw)
+                    if name in ("match_prefix", "evict", "evict_for_alloc"):
+                        rec.emit("cache_result", label=label, time=time.perf_counter(),
+                                 **meta, **cache_result_metadata(result))
+                    return result
                 finally:
                     leave(start, cpu_start, token, meta)
         setattr(cls, name, wrapped)
@@ -335,6 +365,8 @@ def install():
              (Scheduler, "process_input_requests"), (Scheduler, "run_batch"),
              (Scheduler, "process_batch_result"), (Scheduler, "send_kv_chunk"),
              (RadixCache, "match_prefix"), (RadixCache, "evict"),
+             (UnifiedRadixCache, "match_prefix"), (UnifiedRadixCache, "evict"),
+             (UnifiedRadixCache, "evict_for_alloc"),
              (Req, "init_next_round_input"),
              (Req, "plan_context_prefill"), (Req, "prepare_context_recovery"),
              (ContextModelBinding, "reposition_existing"),
@@ -402,6 +434,13 @@ def run_one(args):
     if args.trace_root:
         trace_root = Path(args.trace_root).resolve()
         trace_root.mkdir(parents=True, exist_ok=False)
+    if trace_root != root:
+        # Logs/SSE are experiment data. JIT/model/IPC remain on local storage.
+        for name in ("timing", "workload"):
+            target = trace_root / name
+            if name == "timing":
+                target.mkdir()
+            (root/name).symlink_to(target, target_is_directory=True)
     guard = GPUIsolationGuard(root, "0,1,2,3,4,5,6,7")
     source = json.loads(Path(args.source_launch).read_text())
     procs, logs = [], []
@@ -477,7 +516,7 @@ def run_one(args):
             with urllib.request.urlopen(f"http://127.0.0.1:{args.port+i}/server_info", timeout=30) as response:
                 save(root/f"{role}-server-info.json", json.load(response))
         pairs = {"mini-root": args.mini_root, "requests-path": args.requests_path,
-                 "output-dir": str(root/"workload"), "model": model, "tokenizer": model,
+                 "output-dir": str((root/"workload").resolve()), "model": model, "tokenizer": model,
                  "url": f"http://127.0.0.1:{args.port+1}/v1/chat/completions",
                  "prefill-url": f"http://127.0.0.1:{args.port}/v1/chat/completions",
                  "bootstrap-port": args.port+10, "chat-template": flags[flags.index("--chat-template")+1],
@@ -517,7 +556,9 @@ def run_one(args):
                 os.killpg(proc.pid, signal.SIGTERM)
         for proc in procs:
             try:
-                proc.wait(timeout=120)
+                # Long complete traces may take minutes to assemble after
+                # cudaProfilerStop; do not truncate them with a short grace.
+                proc.wait(timeout=1800 if args.profile else 120)
             except subprocess.TimeoutExpired:
                 os.killpg(proc.pid, signal.SIGKILL)
                 proc.wait()

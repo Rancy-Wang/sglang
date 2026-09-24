@@ -1,6 +1,6 @@
 import unittest
 from analyze_pd_e2e_breakdown import partition, critical_path, contribution, request_ledger
-from profile_pd_e2e_breakdown import identity, bind_stats_identity
+from profile_pd_e2e_breakdown import identity, bind_stats_identity, batch_identity, cache_result_metadata
 
 
 class Accounting(unittest.TestCase):
@@ -54,6 +54,20 @@ class Accounting(unittest.TestCase):
         req = SimpleNamespace(rid="r",bootstrap_room=123,time_stats=stats)
         bind_stats_identity(req)
         self.assertEqual(stats._e2e_identity,{"rid":"r","bootstrap_room":123})
+
+    def test_batch_and_cache_metadata_do_not_materialize_device_values(self):
+        from types import SimpleNamespace
+        class DeviceShapeOnly:
+            def __len__(self): return 64
+            def tolist(self): raise AssertionError("GPU sync forbidden")
+            def item(self): raise AssertionError("GPU sync forbidden")
+        req = SimpleNamespace(rid="x",bootstrap_room=7)
+        self.assertEqual(batch_identity(SimpleNamespace(reqs=[req])),
+                         {"requests":[{"rid":"x","bootstrap_room":7}]})
+        result = SimpleNamespace(device_indices=DeviceShapeOnly(),context_retry=True,
+                                 context_exact_prefix_len=80)
+        self.assertEqual(cache_result_metadata(result),dict(matched_slots=64,
+                         context_retry=True,context_exact_prefix_len=80))
 
     def test_request_ledger_keeps_queue_and_kernel_savings_distinct(self):
         p=dict(prefill_bootstrap_queue_entry_time=1,wait_queue_entry_time=2,

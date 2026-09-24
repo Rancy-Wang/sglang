@@ -142,21 +142,29 @@ def summarize_gpu_steps(root, kernel_paths):
     in per-rank totals, never summed into batch elapsed time.
     """
     root = Path(root)
+    measured_rooms = None
+    if (root/"workload/result.json").exists():
+        workload = json.loads((root/"workload/result.json").read_text())
+        measured_rooms = {t["pd_bootstrap_room"] for t in workload["turns"]}
     forwards, events = {}, {}
     for path in (root/"timing").glob("*.jsonl"):
         for row in rows(path):
             key = row["pid"], row.get("step")
             if row["kind"] == "forward":
-                forwards[key] = row
+                if measured_rooms is None or any(
+                    req.get("bootstrap_room") in measured_rooms for req in row["requests"]
+                ):
+                    forwards[key] = row
             elif row["kind"] == "gpu_completed":
                 events[key] = row["gpu_ms"]
     kernels = defaultdict(list)
     for path in kernel_paths:
         for row in rows(path):
-            if row["step"] is not None:
+            if row["step"] is not None and (row["pid"],row["step"]) in forwards:
                 if row["start"] is None:
                     raise ValueError("Kernel has no monotonic clock alignment")
-                kernels[row["pid"],row["step"]].append(row)
+                kernels[row["pid"],row["step"]].append(
+                    {key:row[key] for key in ("start","end","category")})
     grouped = defaultdict(list)
     for key, items in kernels.items():
         f = forwards.get(key)
