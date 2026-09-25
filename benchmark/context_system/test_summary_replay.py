@@ -145,5 +145,54 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(replay.canonical(index+1)[-1]['role'],'user')
 
 
+class PersistentServerTests(unittest.TestCase):
+    def test_cache_reset_requires_both_native_successes(self):
+        from run_pd_matrix import reset_pd_cache
+        from unittest.mock import MagicMock
+        calls=[]
+        def response(req, **kw):
+            calls.append(req.full_url)
+            reply=MagicMock(); reply.__enter__.return_value=reply
+            reply.status=200; reply.read.return_value=b"Cache flushed."
+            return reply
+        with tempfile.TemporaryDirectory() as tmp, patch('urllib.request.urlopen',side_effect=response):
+            reset_pd_cache(42101,Path(tmp),'boundary')
+            evidence=json.loads((Path(tmp)/'boundary-cache-reset.json').read_text())
+        self.assertEqual(len(evidence['endpoints']),2)
+        self.assertEqual([u.split('/')[-1].split('?')[0] for u in calls],
+                         ['abort_request','abort_request','flush_cache','flush_cache'])
+        def fail(req, **kw):
+            reply=response(req,**kw)
+            if '/flush_cache' in req.full_url: reply.read.return_value=b"Flush cache failed."
+            return reply
+        with tempfile.TemporaryDirectory() as tmp, patch('urllib.request.urlopen',side_effect=fail):
+            with self.assertRaises(RuntimeError): reset_pd_cache(42101,Path(tmp),'boundary')
+            self.assertFalse((Path(tmp)/'boundary-cache-reset.json').exists())
+
+    def test_matrix_reuses_pair_and_closes_after_last_or_failure(self):
+        from run_pd_matrix import persistent_cases
+        from types import SimpleNamespace
+        for failing in (False,True):
+            seen=[]
+            def run(args,session):
+                if not seen: session['owned_pid']=12345
+                seen.append((args.concurrency,session['owned_pid'],id(session)))
+                if failing and args.concurrency==6: raise RuntimeError('failed case')
+            with tempfile.TemporaryDirectory() as tmp:
+                plan=Path(tmp)/'plan.json'
+                plan.write_text(json.dumps([dict(concurrency=c) for c in (4,6,8)]))
+                args=SimpleNamespace(persistent_plan=str(plan),profile_session=None,drop=False,
+                                     summary_policy_dir='policy',max_running_requests=16)
+                with patch('run_pd_matrix.run_one',side_effect=run),patch('run_pd_matrix.close_pd_session') as close:
+                    if failing:
+                        with self.assertRaises(RuntimeError): persistent_cases(args)
+                    else: persistent_cases(args)
+                    close.assert_called_once()
+                self.assertEqual(len({x[2] for x in seen}),1)
+                self.assertEqual(len(seen),2 if failing else 3)
+                plan.write_text(json.dumps([dict(mem_fraction_static=.5)]))
+                with self.assertRaises(ValueError): persistent_cases(args)
+
+
 if __name__=='__main__':
     unittest.main()
