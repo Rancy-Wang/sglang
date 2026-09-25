@@ -26,6 +26,7 @@ class WindowTests(unittest.IsolatedAsyncioTestCase):
             def commit_agent(self, *unused): pass
         class Transport:
             async def request(self, url, payload, identity):
+                assert payload["stream_options"]["continuous_usage_stats"] is True
                 return dict(success=True, prompt_len=10, start_time=100, raw_done_time=102,
                             output_len=2, ttft=.5, tpot_s=1.5, cleanup_time_s=.1,
                             assistant=dict(role="assistant",content="generated"))
