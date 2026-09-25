@@ -232,7 +232,7 @@ async def execute_case(case, instance, *, args, renderer, rendering, transport, 
                 return None
             payload = dict(model=args.model, messages=messages, tools=tools, max_tokens=budget,
                            ignore_eos=True, temperature=0, stream=True,
-                           stream_options={'include_usage': True},
+                           stream_options={'include_usage': True, 'continuous_usage_stats': True},
                            chat_template_kwargs=json.loads(args.template_kwargs))
             emit(dict(kind='turn_start', **call_id, time=time.perf_counter(), full_tokens=full,
                       active_tokens=full, position_tokens=full, max_new_tokens=budget))
