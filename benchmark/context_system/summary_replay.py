@@ -210,9 +210,10 @@ async def execute_case(case, instance, *, args, renderer, rendering, transport, 
         emit(dict(kind='logical_turn_start', **identity, time=logical_start))
         prepared = await loop.run_in_executor(rendering, state.prepare, group)
         texts = {}
+        first_dispatch = None
 
         async def send(messages, budget, purpose, source_usage):
-            nonlocal physical
+            nonlocal physical, first_dispatch
             if type(budget) is not int or budget <= 0:
                 raise ValueError('Unknown physical output budget')
             call_id = dict(identity, turn=physical, purpose=purpose)
@@ -236,6 +237,8 @@ async def execute_case(case, instance, *, args, renderer, rendering, transport, 
             emit(dict(kind='turn_start', **call_id, time=time.perf_counter(), full_tokens=full,
                       active_tokens=full, position_tokens=full, max_new_tokens=budget))
             row = await transport.request(args.url, payload, call_id)
+            if first_dispatch is None:
+                first_dispatch = row["start_time"]
             if row['success'] and row['prompt_len'] != full:
                 row.update(success=False, status='template_mismatch', error='Summary native template mismatch')
             row.update(**call_id, trial=case['trial'], requested_max_tokens=budget,
@@ -272,9 +275,10 @@ async def execute_case(case, instance, *, args, renderer, rendering, transport, 
         if not row['success']:
             return row['status']
         state.commit_agent(op, row['assistant'])
-        parent = dict(identity, start_time=logical_start, raw_done_time=row['raw_done_time'],
-                      latency=row['raw_done_time']-logical_start,
-                      ttft=(row['start_time']+row['ttft']-logical_start) if row['ttft'] is not None else None,
+        parent = dict(identity, start_time=first_dispatch, prepare_start=logical_start,
+                      prepare_time_s=first_dispatch-logical_start, raw_done_time=row['raw_done_time'],
+                      latency=row['raw_done_time']-first_dispatch,
+                      ttft=(row['start_time']+row['ttft']-first_dispatch) if row['ttft'] is not None else None,
                       tpot_s=row['tpot_s'], output_len=row['output_len'],
                       cleanup_time_s=row['cleanup_time_s'], success=True)
         user_turns.append(parent)

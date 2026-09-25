@@ -13,6 +13,36 @@ from summarize_summary_serving import summarize
 
 
 class WindowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_no_summary_latency_matches_original_http_boundary(self):
+        from types import SimpleNamespace
+        from concurrent.futures import ThreadPoolExecutor
+        from summary_replay import execute_case
+        class FakeReplay:
+            original = []
+            def __init__(self, *unused): pass
+            def prepare(self, group): return dict(requests=[], event=None)
+            def active(self, prepared): return [dict(role="user", content="input")]
+            def commit_summary(self, *unused): pass
+            def commit_agent(self, *unused): pass
+        class Transport:
+            async def request(self, url, payload, identity):
+                return dict(success=True, prompt_len=10, start_time=100, raw_done_time=102,
+                            output_len=2, ttft=.5, tpot_s=1.5, cleanup_time_s=.1,
+                            assistant=dict(role="assistant",content="generated"))
+        args=SimpleNamespace(summary_policy_dir="unused", summary_smoke=False,
+                             model_context_limit=100,model="model",template_kwargs="{}",url="unused")
+        case=dict(case_id="task",trial=0,tools=[],groups=[dict(agent=dict(logical_call_index=0,
+                  replay_output_budget_known=True,observed_output_tokens=2,source_usage={}),summaries=[])])
+        parents=[]
+        with ThreadPoolExecutor(max_workers=1) as executor, patch('summary_replay.Replay',FakeReplay), patch('time.perf_counter',return_value=97):
+            status=await execute_case(case,dict(instance=0,filler=False),args=args,
+                renderer=SimpleNamespace(render=lambda *a:(10,None)),rendering=executor,
+                transport=Transport(),emit=lambda e:None,rows=[],user_turns=parents)
+        self.assertEqual(status,"all_turns_completed")
+        self.assertEqual(parents[0]['latency'],2)
+        self.assertEqual(parents[0]['ttft'],.5)
+        self.assertEqual(parents[0]['prepare_time_s'],3)
+
     async def test_filler_does_not_finish_primary_and_is_cancelled(self):
         events = []
         async def execute(case, inst):
