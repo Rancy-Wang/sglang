@@ -333,9 +333,16 @@ async def run(args):
     import aiohttp
 
     method = load_method(args.mini_root)
-    cases, manifest = method.load_cases(
-        args.requests_path, args.source_tasks or args.num_tasks, args.seed, args.case_id
-    )
+    if args.summary_policy_dir:
+        from summary_replay import load_cases as load_summary
+        if args.drop or not args.unique_cohort:
+            raise ValueError("Summary replay requires unique cohort and no Drop")
+        cases, manifest = load_summary(args.requests_path, args.source_tasks or args.num_tasks,
+                                       args.seed, args.case_id, args.summary_policy_dir)
+    else:
+        cases, manifest = method.load_cases(
+            args.requests_path, args.source_tasks or args.num_tasks, args.seed, args.case_id
+        )
     renderer = NativeTemplateAdapter(
         args.tokenizer, json.loads(args.template_kwargs), args.chat_template
     )
@@ -345,6 +352,7 @@ async def run(args):
         method.write_json(root / "selection.json", dict(seed=args.seed, primary_count=args.num_tasks,
                           source_order=[case["case_id"] for case in cases]))
     rows = []
+    user_turns = []
     writes = []
     raw_journal = Journal(root) if args.raw_sse else None
     loop = asyncio.get_running_loop()
@@ -380,6 +388,10 @@ async def run(args):
             )
 
             async def execute(case, instance):
+                if args.summary_policy_dir:
+                    from summary_replay import execute_case
+                    return await execute_case(case, instance, args=args, renderer=renderer,
+                        rendering=rendering, transport=transport, emit=emit, rows=rows, user_turns=user_turns)
                 history, rolling = [], method.RollingState(keep=12, threshold=96 * 1024)
                 for turn in case["turns"]:
                     prepare_start = time.perf_counter()
@@ -444,17 +456,23 @@ async def run(args):
                     history.append(copy.deepcopy(row["assistant"]))
                 return "all_turns_completed"
 
-            scheduler = (UniqueCohort(cases, args.concurrency, args.num_tasks, execute, emit)
+            scheduler = (UniqueCohort(cases if args.filler else cases[:args.num_tasks], args.concurrency, args.num_tasks, execute, emit,
+                max_seconds=args.measurement_seconds, stop_file=root / "STOP.json",
+                source_terminal_ok=bool(args.summary_policy_dir))
                          if args.unique_cohort else method.Scheduler(cases, args.concurrency, execute, emit, filler=args.filler))
             await scheduler.run()
     for future in writes:
         future.result()
     count = sum(
-        item["instance"]["status"] in COMPLETED
+        item["instance"]["status"] in (COMPLETED | {"source_terminal_replayed"})
         for item in scheduler.completed
     )
     result = {
-        "valid": count == args.num_tasks,
+        "valid": (count == args.num_tasks or getattr(scheduler, "stop_reason", None) in
+                  ("measurement_time_limit", "cache_pressure_after_1h")) and not getattr(scheduler, "failure", None),
+        "stop_reason": getattr(scheduler, "stop_reason", None),
+        "logical_user_turns": user_turns,
+        "source_terminal_tasks": sum(t["status"] == "source_terminal_replayed" for t in scheduler.instances),
         "cohort_failure": getattr(scheduler, "failure", None),
         "successful_tasks": count,
         "args": vars(args),
@@ -506,6 +524,9 @@ def parser():
     p.add_argument("--raw-sse", action="store_true")
     p.add_argument("--e2e-timing", action="store_true", help="Record client preparation outside user latency")
     p.add_argument("--case-id", action="append")
+    p.add_argument("--summary-policy-dir", help="Hashed original pi compaction helpers for full summary replay")
+    p.add_argument("--summary-smoke", action="store_true", help="Only first summary event from source prefix; never formal")
+    p.add_argument("--measurement-seconds", type=float, help="Graceful cutoff preserving partial SSE and usage")
     p.add_argument("--drop", action="store_true")
     p.add_argument("--filler", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--model-context-limit", type=int)
