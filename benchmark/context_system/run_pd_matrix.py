@@ -358,13 +358,22 @@ def run_one(args):
         client = [sys.executable, str(HERE / "test_serving.py"), "--mini-root", args.mini_root,
                   "--model", model, "--tokenizer", model, "--requests-path", args.requests_path,
                   "--output-dir", str(root / "workload"), "--concurrency", str(args.concurrency),
-                  "--num-tasks", str(args.concurrency * args.rounds), "--seed", str(args.seed), "--url",
+                  "--num-tasks", str(args.primary_tasks or args.concurrency * args.rounds), "--seed", str(args.seed), "--url",
                   f"http://127.0.0.1:{args.port+1}/v1/chat/completions", "--prefill-url",
                   f"http://127.0.0.1:{args.port}/v1/chat/completions", "--bootstrap-port", str(args.port+10),
                   "--chat-template", str(template), "--template-kwargs", '{"preserve_thinking_history":true}',
                   "--timeout", str(args.request_timeout)]
         if args.unique_cohort:
             client += ["--unique-cohort", "--source-tasks", "80", "--raw-sse"]
+        if args.summary_policy_dir:
+            if args.drop:
+                raise ValueError("Summary benchmark cannot enable Drop")
+            client += ["--summary-policy-dir", args.summary_policy_dir]
+            if args.summary_smoke:
+                client += ["--summary-smoke", "--case-id", args.summary_smoke_case]
+                client[client.index("--source-tasks")+1] = "1"
+            if args.measurement_seconds:
+                client += ["--measurement-seconds", str(args.measurement_seconds)]
         if not args.filler:
             client.append("--no-filler")
         if args.model_context_limit is not None:
@@ -375,7 +384,7 @@ def run_one(args):
         if args.unique_cohort:
             # Restart history is never pooled into the current attempt.
             write(root / "measurement-ready.json", dict(time=time.time(), seed=args.seed,
-                  primary_tasks=3 * args.concurrency, source_tasks=80))
+                  primary_tasks=args.primary_tasks or args.concurrency * args.rounds, source_tasks=80))
         with (root / "client.log").open("x") as log:
             client_proc = subprocess.Popen(client, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             # Scale the whole-workload watchdog for the larger task cohort only.
@@ -394,7 +403,12 @@ def run_one(args):
                 raise subprocess.CalledProcessError(client_proc.returncode, client)
         # Completed request records may flush just after the HTTP final event.
         time.sleep(2)
-        result = summarize(root, args.mini_root, tp=len(args.gpu_ids.split(",")) // 2)
+        if args.summary_policy_dir:
+            from summarize_summary_serving import summarize as summarize_summary
+            accounting = summarize_summary(root / "workload")
+            result = dict(valid=accounting['valid'], overall=accounting, measurement={})
+        else:
+            result = summarize(root, args.mini_root, tp=len(args.gpu_ids.split(",")) // 2)
         result["measurement"]["profiler"] = bool(args.profile_session)
         write(root / "counted-result.json", result)
         write(root / "outcome.json", dict(valid=result["valid"], overall=result["overall"]))
@@ -624,6 +638,11 @@ def parser():
     p.add_argument("--filler", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--unique-cohort", action="store_true")
+    p.add_argument("--primary-tasks", type=int)
+    p.add_argument("--summary-policy-dir")
+    p.add_argument("--summary-smoke", action="store_true")
+    p.add_argument("--summary-smoke-case")
+    p.add_argument("--measurement-seconds", type=float)
     p.add_argument("--model-context-limit", type=int)
     p.add_argument("--plan-id", default=OVERLAP_PLAN)
     p.add_argument("--port", type=int, default=30041)

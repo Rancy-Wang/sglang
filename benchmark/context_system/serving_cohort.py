@@ -81,7 +81,7 @@ class Journal:
 
 class UniqueCohort:
     """Finish the fixed primary cohort; fill free slots from unused source tasks."""
-    def __init__(self, cases, concurrency, target, execute, emit):
+    def __init__(self, cases, concurrency, target, execute, emit, *, max_seconds=None, stop_file=None, source_terminal_ok=False):
         if not 1 <= concurrency <= target <= len(cases):
             raise ValueError("Require concurrency <= primary target <= source count")
         if len({x['case_id'] for x in cases}) != len(cases):
@@ -92,9 +92,13 @@ class UniqueCohort:
         self.active, self.completed, self.instances, self.round_ends, self.workers = set(), [], [], [], []
         self.cutoff = None
         self.failure = None
+        self.stop_reason = None
+        self.max_seconds, self.stop_file = max_seconds, stop_file
+        self.accepted = COMPLETED | ({"source_terminal_replayed"} if source_terminal_ok else set())
 
     def stop(self, reason):
         if self.cutoff is None:
+            self.stop_reason = reason
             self.cutoff = time.perf_counter()
             self.emit(dict(kind="measurement_cutoff", time=self.cutoff, reason=reason))
             for task in self.workers:
@@ -119,28 +123,45 @@ class UniqueCohort:
                 status = "client_error:" + repr(exc)
             inst.update(status=status, end_time=time.perf_counter())
             self.active.remove(key)
-            if status in COMPLETED and not filler:
+            if status in self.accepted and not filler:
                 self.completed.append(dict(case=case, instance=inst))
                 if len(self.completed) % self.concurrency == 0:
                     self.round_ends.append(inst['end_time'])
                     self.emit(dict(kind="round_end", round=len(self.round_ends), time=inst['end_time']))
                 if len(self.completed) == self.target:
                     self.stop("primary_cohort_completed")
-            elif status not in COMPLETED and self.cutoff is None:
+            elif status not in self.accepted and self.cutoff is None:
                 self.failure = dict(case_id=key, status=status, filler=filler)
                 self.stop("request_failure")
             self.emit(dict(kind="task_end", **inst))
             await asyncio.sleep(0)
 
+    async def monitor(self):
+        while self.cutoff is None:
+            elapsed = time.perf_counter() - self.start
+            if self.max_seconds is not None and elapsed >= self.max_seconds:
+                self.stop("measurement_time_limit")
+                return
+            if self.stop_file and Path(self.stop_file).exists():
+                evidence = json.loads(Path(self.stop_file).read_text())
+                if elapsed >= 3600 and evidence.get("reason") == "cache_pressure_after_1h" and evidence.get("evidence"):
+                    self.emit(dict(kind="early_stop_evidence", evidence=evidence))
+                    self.stop("cache_pressure_after_1h")
+                    return
+            await asyncio.sleep(0.2)
+
     async def run(self):
         self.start = time.perf_counter()
         self.workers = [asyncio.create_task(self.worker(i)) for i in range(self.concurrency)]
+        monitor = asyncio.create_task(self.monitor())
         try:
             outcomes = await asyncio.gather(*self.workers, return_exceptions=True)
             for value in outcomes:
                 if isinstance(value, BaseException) and not isinstance(value, asyncio.CancelledError):
                     raise value
         finally:
+            monitor.cancel()
+            await asyncio.gather(monitor, return_exceptions=True)
             for task in self.workers:
                 if not task.done():
                     task.cancel()
