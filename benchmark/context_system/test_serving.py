@@ -477,6 +477,7 @@ async def run(args):
         "successful_tasks": count,
         "args": vars(args),
         "mini_method_head": MINI_HEAD,
+        "benchmark_head": subprocess.check_output(["git", "-C", str(Path(__file__).resolve().parent), "rev-parse", "HEAD"], text=True).strip(),
         "overall": method.summary(rows, scheduler.start, scheduler.cutoff),
         "user_e2e_latency_s": method.stats([r["latency"] for r in rows if r["success"]]),
         "cleanup_time_s": method.stats([r["cleanup_time_s"] for r in rows if r["success"]]),
