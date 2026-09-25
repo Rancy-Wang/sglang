@@ -218,7 +218,73 @@ class GPUIsolationGuard:
             raise RuntimeError("GPU co-location detected; performance measurement invalid")
 
 
-def run_one(args):
+def reset_pd_cache(port, root, label):
+    """Abort only this dedicated pair, then wait for native drain/flush success."""
+    evidence = dict(started_wall=time.time(), endpoints=[])
+    for offset in (0, 1):
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{port+offset}/abort_request",
+            data=b'{"abort_all":true}', headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            if response.status != 200:
+                raise RuntimeError("Between-case abort failed")
+    for offset in (0, 1):
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{port+offset}/flush_cache?timeout=120",
+            data=b"", method="POST")
+        with urllib.request.urlopen(request, timeout=130) as response:
+            body = response.read().decode()
+            if response.status != 200 or "Cache flushed" not in body:
+                raise RuntimeError("Between-case cache reset failed")
+            evidence['endpoints'].append(dict(port=port+offset, response=body))
+    evidence['finished_wall'] = time.time()
+    write(root / f"{label}-cache-reset.json", evidence)
+
+
+def close_pd_session(session):
+    for proc in session.get('procs', []):
+        if proc.poll() is None:
+            os.killpg(proc.pid, signal.SIGTERM)
+    for proc in session.get('procs', []):
+        try:
+            proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
+    for log in session.get('logs', []):
+        log.close()
+    for temp in session.get('temps', []):
+        temp.cleanup()
+    session.clear()
+
+
+def persistent_cases(args):
+    """One owned P/D process pair across a fixed-setting Summary matrix."""
+    if args.profile_session or args.drop or not args.summary_policy_dir:
+        raise ValueError("Persistent matrix currently supports unprofiled Summary only")
+    if not args.max_running_requests:
+        raise ValueError("Persistent matrix requires fixed server admission")
+    rows = json.loads(Path(args.persistent_plan).read_text())
+    allowed = {'output_dir','requests_path','concurrency','primary_tasks','measurement_seconds'}
+    if not rows or any(set(row) - allowed for row in rows):
+        raise ValueError("Persistent cases may only vary client/cohort settings")
+    session = {}
+    state_path = Path(args.persistent_plan).with_suffix('.state.json')
+    try:
+        for index, row in enumerate(rows):
+            current = SimpleNamespace(**(vars(args) | row))
+            write(state_path, dict(index=index, state='running', case=row, time=time.time()))
+            run_one(current, session)
+            write(state_path, dict(index=index, state='complete', case=row, time=time.time()))
+    except BaseException as exc:
+        write(state_path, dict(index=index, state='failed', case=row,
+                              error=repr(exc), time=time.time()))
+        raise
+    finally:
+        close_pd_session(session)
+
+
+def run_one(args, session=None):
     root = Path(args.output_dir)
     root.mkdir(parents=True, exist_ok=False)
     repo = Path(args.server_repo)
@@ -229,9 +295,11 @@ def run_one(args):
         raise ValueError("Pinned server revision changed")
     if subprocess.check_output(["git", "-C", str(repo), "status", "--porcelain"]):
         raise ValueError("Native baseline is dirty")
-    if not gpu_free(args.gpu_ids):
+    reused = bool(session)
+    if not reused and not gpu_free(args.gpu_ids):
         raise RuntimeError(f"GPU {args.gpu_ids} unavailable; no co-located benchmark allowed")
-    isolation = GPUIsolationGuard(root, args.gpu_ids)
+    isolation = session['isolation'] if reused else GPUIsolationGuard(root, args.gpu_ids)
+    isolation.root = root
     source = json.loads(Path(args.source_launch).read_text())
     source_servers = source["servers"]
     template = root / "retained_history.jinja"
@@ -242,70 +310,84 @@ def run_one(args):
         allow_generated_channel_tags=template.read_text() != source_template,
         output_text_modified=False, client_and_servers_share_template=True))
     procs, logs, temps, launch = [], [], [], []
+    success = False
+    if reused:
+        procs, logs, temps, launch = (session[k] for k in ('procs','logs','temps','launch'))
+        for mode in ('prefill','decode'):
+            for suffix in ('.log','-forward.jsonl'):
+                original = session['root'] / (mode + suffix)
+                (root / (mode + suffix)).symlink_to(original)
+        write(root / 'server-session.json', dict(reused=True, origin=str(session['root']),
+              pids=[p.pid for p in procs], started_wall=time.time(),
+              log_start_bytes={m: (root / (m+'.log')).stat().st_size for m in ('prefill','decode')}))
+        if any(proc.poll() is not None for proc in procs):
+            raise RuntimeError("Persistent P/D server exited; restart required")
+        reset_pd_cache(args.port, root, 'before-warmup')
     collecting = False
     cpu_sampler = None
     client_proc = None
     try:
-        for i, mode in enumerate(("prefill", "decode")):
-            cmd = list(source_servers[i]["argv"])
-            cmd[cmd.index("--tp-size") + 1] = str(len(args.gpu_ids.split(",")) // 2)
-            if args.approved_overlap_matrix:
-                cmd = overlap_command(cmd, args.max_running_requests or max(8, args.concurrency),
-                                      args.prefill_token_budget, args.mem_fraction_static, args.kv_pages)
-            if args.model_context_limit is not None:
-                flag = "--context-length"
-                if flag in cmd:
-                    cmd[cmd.index(flag) + 1] = str(args.model_context_limit)
+        if not reused:
+            for i, mode in enumerate(("prefill", "decode")):
+                cmd = list(source_servers[i]["argv"])
+                cmd[cmd.index("--tp-size") + 1] = str(len(args.gpu_ids.split(",")) // 2)
+                if args.approved_overlap_matrix:
+                    cmd = overlap_command(cmd, args.max_running_requests or max(8, args.concurrency),
+                                          args.prefill_token_budget, args.mem_fraction_static, args.kv_pages)
+                if args.model_context_limit is not None:
+                    flag = "--context-length"
+                    if flag in cmd:
+                        cmd[cmd.index(flag) + 1] = str(args.model_context_limit)
+                    else:
+                        cmd += [flag, str(args.model_context_limit)]
+                if args.unique_cohort:
+                    cmd += ["--enable-metrics", "--random-seed", str(args.seed), "--watchdog-timeout", "1800"]
+                cmd[0:2] = [sys.executable, str(HERE / "launch_pd_counted.py")]
+                for flag, value in (("--port", args.port + i), ("--disaggregation-bootstrap-port", args.port + 10),
+                                    ("--nccl-port", args.port + 20 + i), ("--chat-template", template)):
+                    cmd[cmd.index(flag) + 1] = str(value)
+                radix = "--disaggregation-decode-enable-radix-cache"
+                if radix in cmd:
+                    cmd.remove(radix)
+                if i == 1 and args.decode_radix:
+                    cmd.append(radix)
+                eviction = "--context-drop-aware-eviction"
+                if eviction in cmd:
+                    cmd.remove(eviction)
+                if args.drop and (i == 0 or args.decode_radix):
+                    cmd.append(eviction)
+                temp = tempfile.TemporaryDirectory(prefix="pd8-")
+                temps.append(temp)
+                env = dict(os.environ, PYTHONPATH=str(repo / "python"),
+                           CUDA_VISIBLE_DEVICES=stage_gpus(args.gpu_ids, i), TMPDIR=temp.name,
+                           PD_MATRIX_PROFILE="1" if args.profile_session else "0",
+                           PD_MATRIX_RESERVE_FREE_MIB=str(args.reserve_free_mib),
+                           TORCHELASTIC_USE_AGENT_STORE="False", SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN="1")
+                if os.environ.get("PD_MATRIX_FORWARD_TIMING") == "1":
+                    env["PD_MATRIX_FORWARD_LOG"] = str(root / f"{mode}-forward.jsonl")
+                if args.model_context_limit is not None:
+                    env.pop("SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN", None)
+                if args.pd_timeout is not None:
+                    env.update(SGLANG_DISAGGREGATION_WAITING_TIMEOUT=str(args.pd_timeout),
+                               SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=str(args.pd_timeout))
+                if args.http_keepalive_timeout is not None:
+                    env["SGLANG_TIMEOUT_KEEP_ALIVE"] = str(args.http_keepalive_timeout)
+                for key in ("MC_FORCE_TCP", "MC_INTRANODE_NVLINK", "MOONCAKE_PROTOCOL", "SGLANG_MOONCAKE_CUSTOM_MEM_POOL"):
+                    env.pop(key, None)
+                if args.transport == "tcp":
+                    env.update(MC_FORCE_TCP="1", MOONCAKE_PROTOCOL="tcp")
                 else:
-                    cmd += [flag, str(args.model_context_limit)]
-            if args.unique_cohort:
-                cmd += ["--enable-metrics", "--random-seed", str(args.seed), "--watchdog-timeout", "1800"]
-            cmd[0:2] = [sys.executable, str(HERE / "launch_pd_counted.py")]
-            for flag, value in (("--port", args.port + i), ("--disaggregation-bootstrap-port", args.port + 10),
-                                ("--nccl-port", args.port + 20 + i), ("--chat-template", template)):
-                cmd[cmd.index(flag) + 1] = str(value)
-            radix = "--disaggregation-decode-enable-radix-cache"
-            if radix in cmd:
-                cmd.remove(radix)
-            if i == 1 and args.decode_radix:
-                cmd.append(radix)
-            eviction = "--context-drop-aware-eviction"
-            if eviction in cmd:
-                cmd.remove(eviction)
-            if args.drop and (i == 0 or args.decode_radix):
-                cmd.append(eviction)
-            temp = tempfile.TemporaryDirectory(prefix="pd8-")
-            temps.append(temp)
-            env = dict(os.environ, PYTHONPATH=str(repo / "python"),
-                       CUDA_VISIBLE_DEVICES=stage_gpus(args.gpu_ids, i), TMPDIR=temp.name,
-                       PD_MATRIX_PROFILE="1" if args.profile_session else "0",
-                       PD_MATRIX_RESERVE_FREE_MIB=str(args.reserve_free_mib),
-                       TORCHELASTIC_USE_AGENT_STORE="False", SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN="1")
-            if os.environ.get("PD_MATRIX_FORWARD_TIMING") == "1":
-                env["PD_MATRIX_FORWARD_LOG"] = str(root / f"{mode}-forward.jsonl")
-            if args.model_context_limit is not None:
-                env.pop("SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN", None)
-            if args.pd_timeout is not None:
-                env.update(SGLANG_DISAGGREGATION_WAITING_TIMEOUT=str(args.pd_timeout),
-                           SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=str(args.pd_timeout))
-            if args.http_keepalive_timeout is not None:
-                env["SGLANG_TIMEOUT_KEEP_ALIVE"] = str(args.http_keepalive_timeout)
-            for key in ("MC_FORCE_TCP", "MC_INTRANODE_NVLINK", "MOONCAKE_PROTOCOL", "SGLANG_MOONCAKE_CUSTOM_MEM_POOL"):
-                env.pop(key, None)
-            if args.transport == "tcp":
-                env.update(MC_FORCE_TCP="1", MOONCAKE_PROTOCOL="tcp")
-            else:
-                env.update(MC_INTRANODE_NVLINK="1", MOONCAKE_PROTOCOL="nvlink_intra", SGLANG_MOONCAKE_CUSTOM_MEM_POOL="INTRA_NODE_NVLINK")
-            for key in ("SGLANG_CACHE_DIR", "SGLANG_JIT_CACHE_DIR", "TRITON_CACHE_DIR", "TORCHINDUCTOR_CACHE_DIR", "TORCH_EXTENSIONS_DIR"):
-                path = root / mode / key.lower()
-                path.mkdir(parents=True)
-                env[key] = str(path)
-            log = (root / f"{mode}.log").open("x")
-            logs.append(log)
-            proc = subprocess.Popen(cmd, cwd=repo, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
-            procs.append(proc)
-            launch.append(dict(mode=mode, argv=cmd, pid=proc.pid, gpu=env["CUDA_VISIBLE_DEVICES"],
-                               environment={k:v for k,v in env.items() if k.startswith(("MC_", "MOONCAKE_", "SGLANG_", "PD_MATRIX_"))}))
+                    env.update(MC_INTRANODE_NVLINK="1", MOONCAKE_PROTOCOL="nvlink_intra", SGLANG_MOONCAKE_CUSTOM_MEM_POOL="INTRA_NODE_NVLINK")
+                for key in ("SGLANG_CACHE_DIR", "SGLANG_JIT_CACHE_DIR", "TRITON_CACHE_DIR", "TORCHINDUCTOR_CACHE_DIR", "TORCH_EXTENSIONS_DIR"):
+                    path = root / mode / key.lower()
+                    path.mkdir(parents=True)
+                    env[key] = str(path)
+                log = (root / f"{mode}.log").open("x")
+                logs.append(log)
+                proc = subprocess.Popen(cmd, cwd=repo, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+                procs.append(proc)
+                launch.append(dict(mode=mode, argv=cmd, pid=proc.pid, gpu=env["CUDA_VISIBLE_DEVICES"],
+                                   environment={k:v for k,v in env.items() if k.startswith(("MC_", "MOONCAKE_", "SGLANG_", "PD_MATRIX_"))}))
         write(root / "launch.json", dict(args=vars(args), head=expected_head, servers=launch))
         for i, proc in enumerate(procs):
             deadline = time.monotonic() + 900
@@ -320,7 +402,7 @@ def run_one(args):
                 except (OSError, TimeoutError):
                     pass
                 time.sleep(1)
-        isolation.check(pin=True)
+        isolation.check(force=True) if reused else isolation.check(pin=True)
         capacities = {}
         for i, mode in enumerate(("prefill", "decode")):
             with urllib.request.urlopen(f"http://127.0.0.1:{args.port+i}/server_info", timeout=30) as response:
@@ -414,6 +496,15 @@ def run_one(args):
         write(root / "outcome.json", dict(valid=result["valid"], overall=result["overall"]))
         if not result["valid"]:
             raise RuntimeError("Incomplete first-pass tasks; do not continue matrix")
+        if session is not None:
+            reset_pd_cache(args.port, root, 'after-measurement')
+            if not reused:
+                session.update(procs=procs, logs=logs, temps=temps, launch=launch,
+                               isolation=isolation, root=root)
+            write(root / 'session-boundary.json', dict(origin=str(session['root']),
+                  pids=[p.pid for p in procs], ended_wall=time.time(),
+                  log_end_bytes={m: (root / (m+'.log')).stat().st_size for m in ('prefill','decode')}))
+        success = True
     except Exception as exc:
         write(root / "failure.json", {"error": repr(exc), "time": time.time()})
         raise
@@ -439,19 +530,10 @@ def run_one(args):
         if cpu_sampler is not None:
             cpu_sampler.terminate()
             cpu_sampler.wait(timeout=10)
-        for proc in procs:
-            if proc.poll() is None:
-                os.killpg(proc.pid, signal.SIGTERM)
-        for proc in procs:
-            try:
-                proc.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                os.killpg(proc.pid, signal.SIGKILL)
-                proc.wait()
-        for log in logs:
-            log.close()
-        for temp in temps:
-            temp.cleanup()
+        if session is None or not success:
+            close_pd_session(dict(procs=procs, logs=logs, temps=temps))
+            if session is not None:
+                session.clear()
 
 
 def case_process_running(pid, case, proc_root=Path("/proc")):
@@ -640,6 +722,7 @@ def parser():
     p.add_argument("--unique-cohort", action="store_true")
     p.add_argument("--primary-tasks", type=int)
     p.add_argument("--summary-policy-dir")
+    p.add_argument("--persistent-plan", help="JSON client-only case overrides; reuse one owned P/D pair")
     p.add_argument("--summary-smoke", action="store_true")
     p.add_argument("--summary-smoke-case")
     p.add_argument("--measurement-seconds", type=float)
@@ -685,4 +768,4 @@ def parser():
 
 if __name__ == "__main__":
     args = parser().parse_args()
-    (run_one if args.one else overlap_matrix if args.approved_overlap_matrix else matrix)(args)
+    (persistent_cases if args.persistent_plan else run_one if args.one else overlap_matrix if args.approved_overlap_matrix else matrix)(args)
