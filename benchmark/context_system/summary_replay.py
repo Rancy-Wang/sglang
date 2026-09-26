@@ -23,6 +23,31 @@ def clean(message):
     return {k: copy.deepcopy(v) for k, v in message.items() if k in fields}
 
 
+def wire_history(messages):
+    """Preserve malformed generated arguments using the source pi adapter's field.
+
+    SGLang's native chat renderer requires JSON objects. Keep canonical model
+    output untouched; only the wire copy uses this explicit lossless wrapper.
+    """
+    messages = copy.deepcopy(messages)
+    changes = []
+    for index, message in enumerate(messages):
+        if message.get('role') != 'assistant':
+            continue
+        for call in message.get('tool_calls') or []:
+            function = call['function']
+            raw = function.get('arguments', '{}')
+            try:
+                parsed = json.loads(raw) if isinstance(raw, str) else raw
+            except ValueError:
+                parsed = None
+            if not isinstance(parsed, dict):
+                function['arguments'] = json.dumps({'__raw_arguments__': raw}, ensure_ascii=False)
+                changes.append(dict(message_index=index, tool_call_id=call.get('id'),
+                                    raw_arguments=raw, wire_arguments=function['arguments']))
+    return messages, changes
+
+
 def helpers(directory):
     directory = Path(directory).resolve()
     checks = json.loads((directory / 'sha256.json').read_text())
@@ -220,7 +245,10 @@ async def execute_case(case, instance, *, args, renderer, rendering, transport, 
             physical += 1
             # Tool result names are required by Harmony. Preserve source names
             # when new model output uses different tool IDs, as in legacy replay.
-            messages = copy.deepcopy(messages)
+            messages, adaptations = wire_history(messages)
+            if adaptations:
+                emit(dict(kind='history_arguments_wrapped', **call_id,
+                          adaptations=adaptations, time=time.perf_counter()))
             names = {c['id']: c['function']['name'] for m in state.original for c in m.get('tool_calls', [])}
             for message in messages:
                 if message['role'] == 'tool' and not message.get('name'):

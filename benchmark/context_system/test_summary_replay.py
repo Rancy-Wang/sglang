@@ -8,8 +8,33 @@ import unittest
 from unittest.mock import patch
 
 from serving_cohort import UniqueCohort
-from summary_replay import Replay, load_cases
+from summary_replay import Replay, load_cases, wire_history
 from summarize_summary_serving import summarize
+
+
+class WireHistoryTests(unittest.TestCase):
+    def test_malformed_arguments_preserved_without_mutating_history(self):
+        import copy
+        for raw in ('["command"]', 'null', '42', '"text"', '{broken', [], None):
+            with self.subTest(raw=raw):
+                history = [dict(role='assistant', reasoning_content='original reasoning',
+                    tool_calls=[dict(id='call', type='function', function=dict(name='bash', arguments=raw))]),
+                    dict(role='tool', tool_call_id='call', content='original feedback')]
+                original = copy.deepcopy(history)
+                wire, changes = wire_history(history)
+                self.assertEqual(history, original)
+                self.assertEqual(json.loads(wire[0]['tool_calls'][0]['function']['arguments']),
+                                 {'__raw_arguments__': raw})
+                self.assertEqual(changes[0]['raw_arguments'], raw)
+                self.assertEqual(wire[1], original[1])
+                self.assertEqual(wire[0]['reasoning_content'], 'original reasoning')
+                self.assertEqual(wire_history(wire), (wire, []))
+
+    def test_valid_history_exactly_unchanged(self):
+        for raw in ('{ "command": "ls" }', {'command': 'ls'}):
+            history = [dict(role='assistant', tool_calls=[dict(id='ok',
+                       function=dict(name='bash', arguments=raw))])]
+            self.assertEqual(wire_history(history), (history, []))
 
 
 class WindowTests(unittest.IsolatedAsyncioTestCase):
