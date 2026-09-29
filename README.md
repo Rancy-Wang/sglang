@@ -22,6 +22,32 @@
 <a href="https://github.com/sgl-project/sgl-learning-materials?tab=readme-ov-file#slides"><b>Slides</b></a>
 </p>
 
+## System branch: GPT-OSS environment upgrade
+
+This branch requires `openai-harmony==0.0.8` for native GPT-OSS prompt encoding
+and response parsing. All six Python dependency manifests pin this version;
+a fresh project installation with dependency resolution installs it automatically.
+
+For an existing environment, `git pull` alone does not update installed packages.
+Activate the environment used to run SGLang, then run:
+
+```bash
+python -m pip install 'openai-harmony==0.0.8'
+python -c 'import importlib.metadata; print(importlib.metadata.version("openai-harmony"))'
+```
+
+The version check must print `0.0.8`. Restart existing SGLang server processes
+after upgrading so they load the updated code and dependency.
+
+GPT-OSS clients may send full reasoning history. Before rendering the next
+prompt, the server removes analysis preceding the last assistant final and
+retains analysis for the unfinished tool-call turn, following the official chat
+template's inference behavior. Tool messages and final answers remain intact.
+Explicit `thinking_drop` retains analysis for Context KV-drop compilation.
+Client token counters must mirror this rendering policy; do not count the raw
+history directly. Restart servers and use new evaluation output directories
+when migrating from the earlier retain-all-analysis implementation.
+
 ## News
 - [2026/07] 🔥 SGLang and Miles add day-0 support for Kimi K3 ([blog](https://lmsys.org/blog/2026-07-27-kimi-k3-day0-support/)).
 - [2026/07] RadixArk and Google bring full SGLang features to TPUs ([blog](https://lmsys.org/blog/2026-07-30-sglang-google-tpu/)).
