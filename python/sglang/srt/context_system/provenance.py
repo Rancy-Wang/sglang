@@ -300,6 +300,37 @@ def _parse_character_owners(
     return clean_text, owners
 
 
+def _encode_with_offsets(tokenizer, text, *, add_special_tokens):
+    if bool(getattr(tokenizer, "is_fast", False)):
+        encoded = tokenizer(
+            text, add_special_tokens=add_special_tokens, return_offsets_mapping=True
+        )
+        input_ids = [int(token_id) for token_id in encoded["input_ids"]]
+        offsets = [(int(a), int(b)) for a, b in encoded["offset_mapping"]]
+    else:
+        # Original Qwen uses tiktoken. Decode exact token bytes from the single
+        # canonical encoding, never independently tokenize message fragments.
+        decoder = getattr(getattr(tokenizer, "tokenizer", None), "decode_single_token_bytes", None)
+        if not callable(decoder):
+            raise RuntimeError("Drop Message ownership requires offset_mapping or exact token bytes")
+        input_ids = [int(i) for i in tokenizer.encode(text, add_special_tokens=add_special_tokens)]
+        pieces = [decoder(i) for i in input_ids]
+        if b"".join(pieces) != text.encode("utf-8"):
+            raise RuntimeError("Tokenizer bytes do not reproduce the canonical template")
+        from bisect import bisect_left, bisect_right
+
+        char_bytes = [0]
+        for char in text:
+            char_bytes.append(char_bytes[-1] + len(char.encode("utf-8")))
+        offsets = []
+        cursor = 0
+        for piece in pieces:
+            start = bisect_right(char_bytes, cursor) - 1
+            cursor += len(piece)
+            offsets.append((start, bisect_left(char_bytes, cursor)))
+    return input_ids, offsets
+
+
 def build_template_token_provenance(
     tokenizer,
     messages: list[dict[str, Any]],
@@ -336,33 +367,7 @@ def build_template_token_provenance(
         add_generation_prompt=add_generation_prompt,
     )
 
-    if bool(getattr(tokenizer, "is_fast", False)):
-        encoded = tokenizer(
-            canonical_text, add_special_tokens=False, return_offsets_mapping=True
-        )
-        input_ids = [int(token_id) for token_id in encoded["input_ids"]]
-        offsets = [(int(a), int(b)) for a, b in encoded["offset_mapping"]]
-    else:
-        # Original Qwen uses tiktoken. Decode exact token bytes from the single
-        # canonical encoding, never independently tokenize message fragments.
-        decoder = getattr(getattr(tokenizer, "tokenizer", None), "decode_single_token_bytes", None)
-        if not callable(decoder):
-            raise RuntimeError("Drop Message ownership requires offset_mapping or exact token bytes")
-        input_ids = [int(i) for i in tokenizer.encode(canonical_text, add_special_tokens=False)]
-        pieces = [decoder(i) for i in input_ids]
-        if b"".join(pieces) != canonical_text.encode("utf-8"):
-            raise RuntimeError("Tokenizer bytes do not reproduce the canonical template")
-        from bisect import bisect_left, bisect_right
-
-        char_bytes = [0]
-        for char in canonical_text:
-            char_bytes.append(char_bytes[-1] + len(char.encode("utf-8")))
-        offsets = []
-        cursor = 0
-        for piece in pieces:
-            start = bisect_right(char_bytes, cursor) - 1
-            cursor += len(piece)
-            offsets.append((start, bisect_left(char_bytes, cursor)))
+    input_ids, offsets = _encode_with_offsets(tokenizer, canonical_text, add_special_tokens=False)
     owners: list[int] = []
     cross_owner_tokens = 0
     previous_owner = 0
@@ -402,9 +407,7 @@ def append_assistant_prefix(
     encoded assistant-prefix IDs. Their character offsets still point into the
     joined text, so text Drop sees the same content and exact token boundaries.
     """
-    encoded = tokenizer(text, return_offsets_mapping=True)
-    ids = list(encoded["input_ids"])
-    offsets = list(encoded["offset_mapping"])
+    ids, offsets = _encode_with_offsets(tokenizer, text, add_special_tokens=True)
     if ids and ids[0] == tokenizer.bos_token_id:
         ids = ids[1:]
         offsets = offsets[1:]

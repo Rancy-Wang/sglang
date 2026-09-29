@@ -208,7 +208,8 @@ def test_decode_changed_branch_copies_even_at_equal_positions(compiler, transfer
         transfer.select_missing_transfer(source, source, reuse.reusable.astype(np.uint8))
 
 
-def test_decode_reuse_binding_supports_partial_native_rope(monkeypatch):
+@pytest.mark.parametrize("separate_swa", [False, True])
+def test_decode_reuse_binding_supports_partial_native_rope(monkeypatch, separate_swa):
     """D-side cached COW reaches the same partial-RoPE binding as prefill."""
     from unittest.mock import Mock
     from sglang.srt.layers.attention.context_backend import ContextModelBinding
@@ -218,7 +219,11 @@ def test_decode_reuse_binding_supports_partial_native_rope(monkeypatch):
     module = SimpleNamespace(attn=SimpleNamespace(layer_id=0, sliding_window_size=None), rotary_emb=rotary)
     pool = SimpleNamespace(get_kv_buffer=lambda _: (k, v))
     translator = SimpleNamespace(sliding_window_write_loc_for=lambda _: None, translate_full_attn_ids=lambda x: x)
-    model = SimpleNamespace(modules=lambda: [module])
+    modules = [module]
+    if separate_swa:
+        modules.append(SimpleNamespace(attn=SimpleNamespace(layer_id=1, sliding_window_size=4), rotary_emb=rotary))
+        translator.sliding_window_write_loc_for = lambda x: x + 10
+    model = SimpleNamespace(modules=lambda: modules)
     runner = SimpleNamespace(model=model, token_to_kv_pool=pool, kv_index_translator=translator)
     req = SimpleNamespace(context_decode_reuse=SimpleNamespace(copy_indices=np.array([0, 1]),
             source_slots=torch.tensor([2, 3]), position_pairs=torch.tensor([[10, 2], [11, 3]], dtype=torch.int32)),
@@ -230,8 +235,15 @@ def test_decode_reuse_binding_supports_partial_native_rope(monkeypatch):
     assert isinstance(runner.context_model_binding, ContextModelBinding)
     assert runner.context_model_binding.layers[0].rotary_dim == 64
     assert kernel.call_args.kwargs["rotary_dim"] == 64
-    assert torch.equal(kernel.call_args.args[4], torch.tensor([2, 3], dtype=torch.int32))
-    assert torch.equal(kernel.call_args.args[5], torch.tensor([6, 7], dtype=torch.int32))
+    full = kernel.call_args_list[0]
+    assert torch.equal(full.args[4], torch.tensor([2, 3], dtype=torch.int32))
+    assert torch.equal(full.args[5], torch.tensor([6, 7], dtype=torch.int32))
+    if separate_swa:
+        assert len(kernel.call_args_list) == 2
+        swa = kernel.call_args_list[1]
+        assert torch.equal(swa.args[4], torch.tensor([12, 13], dtype=torch.int32))
+        assert torch.equal(swa.args[5], torch.tensor([16, 17], dtype=torch.int32))
+        assert swa.kwargs["skip_unmapped"] is True
 
 
 def test_decode_swa_tail_stays_private_with_full_cache_reuse(compiler, transfer_modules):

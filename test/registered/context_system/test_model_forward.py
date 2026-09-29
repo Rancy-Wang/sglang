@@ -41,8 +41,6 @@ def runtime():
     publish(args, role="scheduler")
     wrapper, tokenizer = load_model(args, PortArgs.init_new(args), 0, 0)
     runner = wrapper.torch_runner
-    if runner.prefill_attention_backend_str != "triton":
-        pytest.fail("This consumer test currently requires the Context Triton backend")
     binding = ContextModelBinding(
         runner.model, runner.token_to_kv_pool, runner.kv_index_translator, page_size=1
     )
@@ -342,34 +340,35 @@ def test_context_decode_native_graph_and_position_window(runtime):
                 req.kv.req_pool_idx, active_raw
             ]
             expected = runner.kv_index_translator.translate_full_attn_ids(raw_slots)
-            count = int(backend.kv_indptr[1])
-            torch.testing.assert_close(
-                backend.cuda_graph_kv_indices[:count], expected.to(torch.int64)
-            )
-            if runner.sliding_window_size is not None:
-                positions = torch.cat(
-                    (
-                        layout.positions[layout.keep_mask],
-                        torch.arange(layout.next_position, layout.next_position + 4),
-                    )
-                ).to(runner.device)
-                visible = (
-                    positions >= layout.next_position + 3 - runner.sliding_window_size
-                )
-                swa = runner.kv_index_translator.sliding_window_write_loc_for(
-                    expected[visible]
-                )
-                count = int(backend.window_kv_indptr[1])
+            if runner.decode_attention_backend_str == "triton":
+                count = int(backend.kv_indptr[1])
                 torch.testing.assert_close(
-                    backend.cuda_graph_window_kv_indices[:count], swa.to(torch.int64)
+                    backend.cuda_graph_kv_indices[:count], expected.to(torch.int64)
                 )
-                print(
-                    "DECODE_SWA_COUNT",
-                    count,
-                    "WINDOW_DISTANCE",
-                    runner.sliding_window_size,
-                    flush=True,
-                )
+                if runner.sliding_window_size is not None:
+                    positions = torch.cat(
+                        (
+                            layout.positions[layout.keep_mask],
+                            torch.arange(layout.next_position, layout.next_position + 4),
+                        )
+                    ).to(runner.device)
+                    visible = (
+                        positions >= layout.next_position + 3 - runner.sliding_window_size
+                    )
+                    swa = runner.kv_index_translator.sliding_window_write_loc_for(
+                        expected[visible]
+                    )
+                    count = int(backend.window_kv_indptr[1])
+                    torch.testing.assert_close(
+                        backend.cuda_graph_window_kv_indices[:count], swa.to(torch.int64)
+                    )
+                    print(
+                        "DECODE_SWA_COUNT",
+                        count,
+                        "WINDOW_DISTANCE",
+                        runner.sliding_window_size,
+                        flush=True,
+                    )
     torch.cuda.synchronize()
     print("DECODE_GENERATED", generated, "GRAPH_REPLAYS", 4, flush=True)
     assert torch.isfinite(logits).all()
@@ -401,4 +400,24 @@ def test_context_decode_native_graph_and_position_window(runtime):
         flush=True,
     )
     assert torch.isfinite(restored).all()
+    wrapper.clear()
+
+    # Retain the engine registry, then switch the same model graph to ordinary.
+    assert getattr(runner, "context_decode_registry", None) is not None
+    wrapper.clear()
+    tokens = tokenizer.encode("The answer to two plus three is")
+    batch = prepare_batch(runner, [tokens])
+    logits = forward(runner, batch)
+    token = int(logits.argmax(-1)[0])
+    batch.reqs[0].output_ids.append(token)
+    batch.input_ids = torch.tensor([token], device=runner.device, dtype=torch.int64)
+    batch.prepare_for_decode()
+    fb = ForwardBatch.init_new(batch, runner, return_hidden_states_before_norm=False)
+    assert fb.context_decode_refs is None
+    for backend in (runner.attn_backend, runner.decode_attn_backend):
+        if backend is not None:
+            assert backend.context_decode_registry is None
+    result = runner.forward(fb)
+    assert result.can_run_graph
+    assert torch.isfinite(result.logits_output.next_token_logits).all()
     wrapper.clear()

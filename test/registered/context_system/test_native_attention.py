@@ -204,7 +204,7 @@ def test_native_position_windows(
     )
 
 
-@pytest.mark.parametrize("backend", ["flashinfer", "fa3", "fa4"])
+@pytest.mark.parametrize("backend", ["flashinfer", "fa3", "fa4", "trtllm_mha"])
 @pytest.mark.parametrize("window", [-1, 4])
 @pytest.mark.parametrize("with_sink", [False, True])
 def test_context_native_ragged_position_holes(backend, window, with_sink):
@@ -215,8 +215,8 @@ def test_context_native_ragged_position_holes(backend, window, with_sink):
         ContextSequence, ContextAttentionPlan, ContextForwardMetadata,
     )
 
-    if backend in ("fa3", "fa4") and torch.cuda.get_device_capability()[0] < 9:
-        pytest.skip("FA3/FA4 kernels require Hopper or newer")
+    if backend in ("fa4", "trtllm_mha") and torch.cuda.get_device_capability()[0] < 9:
+        pytest.skip("FA4/TRTLLM kernels require Hopper or newer")
     torch.manual_seed(391)
     device, dtype = "cuda", torch.bfloat16
     q = torch.randn(3, 4, 64, device=device, dtype=dtype)
@@ -240,6 +240,11 @@ def test_context_native_ragged_position_holes(backend, window, with_sink):
         from sglang.srt.layers.attention.flashinfer_backend import FlashInferAttnBackend
         engine = object.__new__(FlashInferAttnBackend)
         engine.workspace_buffer = torch.empty(32 * 1024 * 1024, dtype=torch.uint8, device=device)
+    elif backend == "trtllm_mha":
+        from sglang.srt.layers.attention.trtllm_mha_backend import TRTLLMHAAttnBackend
+        engine = object.__new__(TRTLLMHAAttnBackend)
+        engine.workspace_buffer = torch.empty(32 * 1024 * 1024, dtype=torch.uint8, device=device)
+        engine.use_fmha_v2 = torch.cuda.get_device_capability()[0] != 10
     else:
         from sglang.srt.layers.attention.flashattention_backend import FlashAttentionBackend
         engine = object.__new__(FlashAttentionBackend)
