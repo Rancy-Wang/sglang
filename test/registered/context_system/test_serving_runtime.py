@@ -77,8 +77,9 @@ def server(tmp_path_factory):
             "gpt-oss",
             "--reasoning-parser",
             "gpt-oss",
-            "--disable-hybrid-swa-memory",
         ]
+    if os.environ.get("CONTEXT_SHARED_SWA") == "1":
+        cmd += ["--disable-hybrid-swa-memory"]
     backend = os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND")
     if backend:
         cmd += ["--attention-backend", backend]
@@ -281,7 +282,10 @@ def test_chunk_retry_and_mixed_http_generation(server):
             )
         # Native mini mask/occurrence produces these tokens for this extreme
         # first-user deletion too; decoded replacement bytes are not a failure.
-        assert item["sglext"]["output_ids"] == [151645, 243] * 4, item
+        usage = item["sglext"]["context_usage"]["0"]
+        assert sum(usage[k] for k in ("cached_tokens", "repos_tokens", "drop_skipped_tokens", "actual_prefill_tokens")) == item["usage"]["prompt_tokens"], item
+        if "Qwen3-0.6B" in os.environ["CONTEXT_SERVER_MODEL"]:
+            assert item["sglext"]["output_ids"] == [[151645, 243] * 4], item
     assert cold["choices"][0]["message"] == hot["choices"][0]["message"]
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         outputs = list(
@@ -291,3 +295,24 @@ def test_chunk_retry_and_mixed_http_generation(server):
         )
     print("HTTP_RESULTS", json.dumps([baseline, cold, hot, *outputs]), flush=True)
     assert requests.get(server + "/health", timeout=5).status_code == 200
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("operation", [{"drop_message": None}, {"drop_message": {}}, {"reposition": []}])
+def test_context_zero_usage_without_response_options(server, stream, operation):
+    assert requests.post(server + "/flush_cache", timeout=5).status_code == 200
+    body = dict(model=os.environ["CONTEXT_SERVER_MODEL"], messages=[{"role": "user", "content": "Say hello."}],
+                max_tokens=2, temperature=0, stream=stream, **operation)
+    response = requests.post(server + "/v1/chat/completions", json=body, timeout=60)
+    assert response.status_code == 200, response.text
+    if stream:
+        chunks = [json.loads(line[6:]) for line in response.text.splitlines()
+                  if line.startswith("data: ") and line != "data: [DONE]"]
+    else:
+        chunks = [response.json()]
+    reports = [chunk["sglext"]["context_usage"]["0"] for chunk in chunks
+               if (chunk.get("sglext") or {}).get("context_usage") is not None]
+    assert len(reports) == 1, chunks
+    report = reports[0]
+    assert all(report[key] == 0 for key in ("cached_tokens", "repos_tokens", "drop_skipped_tokens")), report
+    assert report["actual_prefill_tokens"] > 0, report
