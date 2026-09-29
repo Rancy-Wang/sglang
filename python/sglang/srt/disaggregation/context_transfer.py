@@ -222,6 +222,15 @@ def allocate_context_destination(req, allocator, pool, *, window=None):
     owned = torch.ones(count, dtype=torch.bool)
     if reuse is not None:
         owned = torch.from_numpy(~reuse.borrowed)
+        private_raw = plan.decode.raw_indices[~reuse.borrowed]
+        if len(private_raw):
+            # Native SWA eviction treats cache_protected_len as already owned
+            # by the tree. A freshly received tail is private even on an exact
+            # cache hit; excluding it from that prefix also keeps its SWA peers
+            # live until insertion adopts or frees the duplicate destinations.
+            req.context_exact_prefix_len = min(
+                req.context_exact_prefix_len, int(private_raw[0])
+            )
         slots = torch.empty(count, dtype=torch.int64, device=allocator.device)
         slots[owned.to(device=allocator.device)] = allocated
         borrowed = torch.from_numpy(np.flatnonzero(reuse.borrowed)).to(allocator.device)

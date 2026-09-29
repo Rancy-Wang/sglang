@@ -61,6 +61,7 @@ def server(tmp_path_factory):
         "--enable-mixed-chunk",
     ]
     cmd += ["--tp-size", os.environ.get("CONTEXT_TEST_TP", "1")]
+    cmd += json.loads(os.environ.get("CONTEXT_SERVER_EXTRA_ARGS", "[]"))
     if os.environ.get("CONTEXT_BCP_ORACLE"):
         from bcp_numeric_fixture import oracle_chat_template
 
@@ -94,7 +95,7 @@ def server(tmp_path_factory):
             cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=env
         )
         try:
-            deadline = time.monotonic() + 240
+            deadline = time.monotonic() + int(os.environ.get("CONTEXT_START_TIMEOUT", "240"))
             while time.monotonic() < deadline:
                 if proc.poll() is not None:
                     pytest.fail(log_path.read_text()[-12000:])

@@ -99,6 +99,7 @@ def pd_servers():
                 "--enable-custom-logit-processor",
             ]
             cmd += ["--tp-size", os.environ.get("CONTEXT_TEST_TP", "1")]
+            cmd += json.loads(os.environ.get("CONTEXT_SERVER_EXTRA_ARGS", "[]"))
             if mode == "decode" and os.environ.get("CONTEXT_PD_RADIX") == "1":
                 cmd += ["--disaggregation-decode-enable-radix-cache"]
             if template:
@@ -138,7 +139,7 @@ def pd_servers():
                 json.dumps(cmd),
                 flush=True,
             )
-            deadline = time.monotonic() + 240
+            deadline = time.monotonic() + int(os.environ.get("CONTEXT_START_TIMEOUT", "240"))
             while time.monotonic() < deadline:
                 if proc.poll() is not None:
                     pytest.fail(log_path.read_text()[-16000:])
@@ -377,7 +378,7 @@ def test_pd_usage_roundtrip(pd_servers):
     p_base, d_base, bootstrap = pd_servers
     messages = [
         {"role": "user", "content": "Remember " + "red blue green " * 32},
-        {"role": "assistant", "content": "I have read that."},
+        {"role": "assistant", "content": "I have read that." + " blue ocean" * 80},
         {"role": "user", "content": "Say hello."},
     ]
     records = []

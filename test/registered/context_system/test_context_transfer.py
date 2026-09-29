@@ -246,7 +246,8 @@ def test_decode_reuse_binding_supports_partial_native_rope(monkeypatch, separate
         assert swa.kwargs["skip_unmapped"] is True
 
 
-def test_decode_swa_tail_stays_private_with_full_cache_reuse(compiler, transfer_modules):
+@pytest.mark.parametrize("exact_hit", [False, True])
+def test_decode_swa_tail_stays_private_with_full_cache_reuse(compiler, transfer_modules, exact_hit):
     transfer, _ = transfer_modules
     layout = compiler(*args(list(range(12)), {6: [(1, 4)]}, [7]))
     program = SimpleNamespace(layout=layout, visible_until=torch.full((12,), 99, dtype=torch.int32))
@@ -254,6 +255,10 @@ def test_decode_swa_tail_stays_private_with_full_cache_reuse(compiler, transfer_
         context_resident=torch.ones(10, dtype=torch.bool),
         context_source_positions=torch.arange(10, dtype=torch.int32),
         context_exact_prefix_len=1, prefix_indices=torch.arange(20, 30), kv=SimpleNamespace(req_pool_idx=0))
+    if exact_hit:
+        req.context_source_positions = layout.positions[:10]
+        req.context_exact_prefix_len = 10
+    initial_exact = req.context_exact_prefix_len
     plan = transfer.ContextTransferPlan.build(program, "cpu")
     req.context_decode_reuse = reuse = transfer.ContextDecodeReuse.build(req, plan, window=4)
     start = plan.swa_start(4)
@@ -270,3 +275,7 @@ def test_decode_swa_tail_stays_private_with_full_cache_reuse(compiler, transfer_
     assert calls == [(reuse.allocation_count, plan.active_count - start)]
     assert (slots[start:] >= 100).all()
     assert req.context_state.swa_resident.tolist() == [False] * start + [True] * (plan.active_count - start)
+
+    private_raw = plan.decode.raw_indices[~reuse.borrowed]
+    assert req.context_exact_prefix_len == min(initial_exact, int(private_raw[0]))
+    assert req.context_state.exact_prefix_len == req.context_exact_prefix_len
