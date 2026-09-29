@@ -574,7 +574,7 @@ def test_minimax_context_geometry_admission(geometry, accepted):
     with patch("sglang.srt.context_system.planner.ContextProgram.from_wire", return_value="compiled") as decode:
         assert validate_context_request(server, model, request) == "compiled"
         decode.assert_called_once_with({}, [1, 2])
-    for field, value, message in [("page_size", 16, "page_size"), ("attention_backend", "flashinfer", "Triton"),
+    for field, value, message in [("page_size", 16, "page_size"), ("attention_backend", "torch_native", "Triton"),
                                   ("kv_cache_dtype", "fp8_e4m3", "unquantized"), ("speculative_algorithm", "EAGLE", "non-speculative")]:
         prior = getattr(server, field)
         setattr(server, field, value)

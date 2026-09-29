@@ -494,6 +494,15 @@ async fn chat_completions_handler(
         requests.push(payload.clone());
     }
 
+    if CHAT_FAILURES
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap()
+        .remove(&config.port)
+    {
+        return (StatusCode::INTERNAL_SERVER_ERROR, "retry this request").into_response();
+    }
+
     if should_fail(&config).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1900,4 +1909,14 @@ pub fn take_chat_requests(port: u16) -> Vec<serde_json::Value> {
         .unwrap()
         .remove(&port)
         .unwrap()
+}
+
+static CHAT_FAILURES: OnceLock<Mutex<HashSet<u16>>> = OnceLock::new();
+
+pub fn fail_next_chat_request(port: u16) {
+    CHAT_FAILURES
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap()
+        .insert(port);
 }

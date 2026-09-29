@@ -255,7 +255,7 @@ def test_context_native_ragged_position_holes(backend, window, with_sink):
         engine.flash_attn_varlen_func = flash_attn_varlen_func
     engine.token_to_kv_pool = pool
     engine.kv_index_translator = translator
-    sinks = torch.randn(4, device=device) if with_sink else None
+    sinks = torch.randn(4, device=device, dtype=torch.float32 if backend == "trtllm_mha" else dtype) if with_sink else None
     result = engine.forward_extend(q, k, v, layer, batch, sinks=sinks).view_as(q)
     pos = torch.tensor([0, 3, 6, 7, 9, 10, 11, 12], device=device)
     scores = torch.einsum("qhd,khd->hqk", q.float(), kp[:8].repeat_interleave(2, dim=1).float()) * layer.scaling

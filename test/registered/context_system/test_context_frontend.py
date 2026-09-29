@@ -642,3 +642,12 @@ def test_slow_tokenizer_exact_bytes_preserve_unicode_boundaries():
     tokenizer.tokenizer.decode_single_token_bytes = lambda _: b"bad"
     with pytest.raises(RuntimeError, match="bytes do not reproduce"):
         _encode_with_offsets(tokenizer, "你a", add_special_tokens=False)
+
+
+def test_compiler_warmup_failure_leaves_ordinary_requests_available(chat):
+    chat.tokenizer_manager.context_warmup_error = "compiler unavailable"
+    assert chat._process_messages(request(), False).context_program is None
+    with patch("sglang.srt.context_system.provenance.build_template_token_provenance",
+               side_effect=AssertionError("unavailable compiler must be rejected before rendering")):
+        with pytest.raises(ValueError, match="compiler unavailable"):
+            chat._process_messages(request(reposition=[]), False)

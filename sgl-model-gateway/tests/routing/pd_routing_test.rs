@@ -712,7 +712,9 @@ mod pd_responses_routing_tests {
 
 #[tokio::test]
 async fn context_fields_reach_both_pd_workers() {
-    use crate::common::mock_worker::{capture_chat_requests, take_chat_requests};
+    use crate::common::mock_worker::{
+        capture_chat_requests, fail_next_chat_request, take_chat_requests,
+    };
     use axum::body::to_bytes;
     let ports = [19870, 19871];
     let config = RouterConfig::builder()
@@ -736,6 +738,7 @@ async fn context_fields_reach_both_pd_workers() {
     for port in ports {
         capture_chat_requests(port);
     }
+    fail_next_chat_request(ports[0]);
     for stream in [false, true] {
         let payload = json!({"model":"test-model", "messages":[{"role":"user","content":"hi"}],
             "stream":stream, "drop_message":{"1":[0]}, "reposition":[], "return_meta_info":true});
@@ -756,7 +759,7 @@ async fn context_fields_reach_both_pd_workers() {
     }
     for port in ports {
         let requests = take_chat_requests(port);
-        assert_eq!(requests.len(), 2);
+        assert_eq!(requests.len(), 3);
         for value in requests {
             assert_eq!(value["drop_message"], json!({"1":[0]}));
             assert_eq!(value["reposition"], json!([]));

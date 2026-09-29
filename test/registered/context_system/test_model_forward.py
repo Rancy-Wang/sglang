@@ -112,14 +112,15 @@ def forward(runner, batch):
 
     fb = ForwardBatch.init_new(batch, runner, return_hidden_states_before_norm=False)
     context_calls = 0
-    original = ContextAttentionMetadata.forward
+    method = "forward" if runner.prefill_attention_backend_str == "triton" else "native_plan"
+    original = getattr(ContextAttentionMetadata, method)
 
     def observe(metadata, *args, **kwargs):
         nonlocal context_calls
         context_calls += 1
         return original(metadata, *args, **kwargs)
 
-    with patch.object(ContextAttentionMetadata, "forward", observe):
+    with patch.object(ContextAttentionMetadata, method, observe):
         result = runner.forward(fb)
     if batch.context_prefill_input is not None:
         assert context_calls == len(runner.context_model_binding.layers)
@@ -413,7 +414,7 @@ def test_context_decode_native_graph_and_position_window(runtime):
     batch.input_ids = torch.tensor([token], device=runner.device, dtype=torch.int64)
     batch.prepare_for_decode()
     fb = ForwardBatch.init_new(batch, runner, return_hidden_states_before_norm=False)
-    assert fb.context_decode_refs is None
+    assert getattr(fb, "context_decode_refs", None) is None
     for backend in (runner.attn_backend, runner.decode_attn_backend):
         if backend is not None:
             assert backend.context_decode_registry is None
