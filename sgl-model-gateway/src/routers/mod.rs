@@ -39,6 +39,46 @@ pub use factory::RouterFactory;
 // Re-export HTTP routers for convenience
 pub use http::{pd_router, pd_types, router};
 
+/// Keep SRT extensions beside the upstream schema, retaining its validation.
+/// Unknown fields remain ignored, as in the original OpenAI protocol extractor.
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+pub struct ExtendedChatRequest {
+    #[serde(flatten)]
+    pub request: ChatCompletionRequest,
+    #[serde(flatten)]
+    pub extensions: serde_json::Map<String, serde_json::Value>,
+}
+
+impl crate::protocols::validated::Normalizable for ExtendedChatRequest {
+    fn normalize(&mut self) {
+        crate::protocols::validated::Normalizable::normalize(&mut self.request);
+        self.extensions.retain(|key, _| {
+            matches!(
+                key.as_str(),
+                "drop_message" | "drop_rule" | "reposition" | "return_meta_info"
+            )
+        });
+    }
+}
+
+impl validator::Validate for ExtendedChatRequest {
+    fn validate(&self) -> Result<(), validator::ValidationErrors> {
+        validator::Validate::validate(&self.request)
+    }
+}
+
+impl crate::protocols::common::GenerationRequest for ExtendedChatRequest {
+    fn is_stream(&self) -> bool {
+        self.request.stream
+    }
+    fn get_model(&self) -> Option<&str> {
+        Some(&self.request.model)
+    }
+    fn extract_text_for_routing(&self) -> String {
+        crate::protocols::common::GenerationRequest::extract_text_for_routing(&self.request)
+    }
+}
+
 /// Core trait for all router implementations
 ///
 /// This trait provides a unified interface for routing requests,
@@ -97,6 +137,27 @@ pub trait RouterTrait: Send + Sync + Debug {
         body: &ChatCompletionRequest,
         model_id: Option<&str>,
     ) -> Response;
+
+    /// Optional SRT fields use the same routing/dispatch pipeline. Backends
+    /// without an implementation must reject features instead of losing them.
+    async fn route_chat_with_extensions(
+        &self,
+        headers: Option<&HeaderMap>,
+        body: &ExtendedChatRequest,
+        model_id: Option<&str>,
+    ) -> Response {
+        if body
+            .extensions
+            .keys()
+            .any(|key| matches!(key.as_str(), "drop_message" | "drop_rule" | "reposition"))
+        {
+            return error::bad_request(
+                "unsupported_context",
+                "This router does not support Drop/Reposition requests",
+            );
+        }
+        self.route_chat(headers, &body.request, model_id).await
+    }
 
     /// Route a completion request
     async fn route_completion(

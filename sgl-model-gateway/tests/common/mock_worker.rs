@@ -485,6 +485,15 @@ async fn chat_completions_handler(
 ) -> Response {
     let config = config.read().await;
 
+    if let Some(requests) = CHAT_REQUESTS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap()
+        .get_mut(&config.port)
+    {
+        requests.push(payload.clone());
+    }
+
     if should_fail(&config).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1870,4 +1879,25 @@ impl Drop for OpenAiOnlyMockWorker {
             let _ = tx.send(());
         }
     }
+}
+
+// Opt-in capture: assertions inspect the JSON received after the gateway's
+// extraction, routing, bootstrap injection, and serialization.
+static CHAT_REQUESTS: OnceLock<Mutex<HashMap<u16, Vec<serde_json::Value>>>> = OnceLock::new();
+
+pub fn capture_chat_requests(port: u16) {
+    CHAT_REQUESTS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap()
+        .insert(port, Vec::new());
+}
+
+pub fn take_chat_requests(port: u16) -> Vec<serde_json::Value> {
+    CHAT_REQUESTS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap()
+        .remove(&port)
+        .unwrap()
 }
