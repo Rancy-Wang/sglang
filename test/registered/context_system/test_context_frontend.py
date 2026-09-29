@@ -651,3 +651,19 @@ def test_compiler_warmup_failure_leaves_ordinary_requests_available(chat):
                side_effect=AssertionError("unavailable compiler must be rejected before rendering")):
         with pytest.raises(ValueError, match="compiler unavailable"):
             chat._process_messages(request(reposition=[]), False)
+
+
+@pytest.mark.parametrize("continue_final", [False, True])
+def test_native_chatml_context_matches_original_prompt(chat, continue_final):
+    from sglang.srt.context_system.planner import ContextProgram
+
+    chat.template_manager.chat_template_name = "chatml"
+    history = [{"role": "system", "content": "Be concise."},
+               {"role": "user", "content": "你你好 repeated repeated"},
+               {"role": "assistant", "content": "hello"}]
+    native = chat._process_messages(request(messages=history, continue_final_message=continue_final), False)
+    context = chat._process_messages(request(messages=history, continue_final_message=continue_final,
+                                             drop_message={"2": [1]}, reposition=[2]), False)
+    assert context.prompt_ids == native.prompt_ids
+    program = ContextProgram.from_wire(context.context_program, context.prompt_ids)
+    assert not program.layout.keep_mask.all()
