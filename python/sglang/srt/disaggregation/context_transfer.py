@@ -164,13 +164,18 @@ class ContextDecodeReuse:
     position_pairs: torch.Tensor
 
     @classmethod
-    def build(cls, req, plan):
+    def build(cls, req, plan, *, window=None):
         raw = plan.decode.raw_indices
         matched = len(req.prefix_indices)
         reusable = raw < matched
         resident = req.context_resident
         if resident is not None:
             reusable[reusable] &= resident.numpy()[raw[reusable]]
+        if window is not None:
+            # Match native PD: receive the SWA tail into fresh owners. The
+            # transport sends that state as one payload, so borrowing any of
+            # its destinations would overwrite a shared cache page.
+            reusable[plan.swa_start(window):] = False
         source = req.context_source_positions
         if source is None:
             source = torch.arange(matched, dtype=torch.int32)
@@ -198,15 +203,17 @@ def allocate_context_destination(req, allocator, pool, *, window=None):
     plan = transfer_plan(req, allocator.device)
     count = plan.active_count
     reuse = getattr(req, "context_decode_reuse", None)
-    if reuse is not None and window is not None:
-        raise ValueError("Context decode Radix requires shared Full/SWA KV")
+    allocation_count = count if reuse is None else reuse.allocation_count
     if window is None:
-        allocated = allocator.alloc(count if reuse is None else reuse.allocation_count)
+        allocated = allocator.alloc(allocation_count)
         slots = allocated
         swa = None
     else:
         start = plan.swa_start(window)
-        slots = allocator.alloc_context_swa_tail(count, count - start)
+        if reuse is not None and reuse.reusable[start:].any():
+            raise ValueError("Context SWA transfer destinations must be private")
+        allocated = allocator.alloc_context_swa_tail(allocation_count, count - start)
+        slots = allocated
         swa = torch.arange(count) >= start
     if slots is None:
         raise RuntimeError(

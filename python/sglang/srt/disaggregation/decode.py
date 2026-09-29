@@ -1341,7 +1341,11 @@ class DecodePreallocQueue(DecodeHiCachePreallocMixin):
                     plan = prepare_decode_transfer_plan(
                         decode_req.req, self.token_to_kv_pool_allocator.device, fill_len
                     )
-                    reuse = ContextDecodeReuse.build(decode_req.req, plan)
+                    reuse = ContextDecodeReuse.build(
+                        decode_req.req, plan,
+                        window=(self.scheduler.sliding_window_size
+                                if self.scheduler.tp_worker.is_hybrid_swa else None),
+                    )
                     decode_req.req.context_decode_reuse = reuse
                     required_alloc_tokens = reuse.allocation_count
                     # Context keeps raw/active coordinates separate. Its sparse

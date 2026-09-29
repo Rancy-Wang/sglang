@@ -232,3 +232,29 @@ def test_decode_reuse_binding_supports_partial_native_rope(monkeypatch):
     assert kernel.call_args.kwargs["rotary_dim"] == 64
     assert torch.equal(kernel.call_args.args[4], torch.tensor([2, 3], dtype=torch.int32))
     assert torch.equal(kernel.call_args.args[5], torch.tensor([6, 7], dtype=torch.int32))
+
+
+def test_decode_swa_tail_stays_private_with_full_cache_reuse(compiler, transfer_modules):
+    transfer, _ = transfer_modules
+    layout = compiler(*args(list(range(12)), {6: [(1, 4)]}, [7]))
+    program = SimpleNamespace(layout=layout, visible_until=torch.full((12,), 99, dtype=torch.int32))
+    req = SimpleNamespace(context_program=program, context_recompute_program=None,
+        context_resident=torch.ones(10, dtype=torch.bool),
+        context_source_positions=torch.arange(10, dtype=torch.int32),
+        context_exact_prefix_len=1, prefix_indices=torch.arange(20, 30), kv=SimpleNamespace(req_pool_idx=0))
+    plan = transfer.ContextTransferPlan.build(program, "cpu")
+    req.context_decode_reuse = reuse = transfer.ContextDecodeReuse.build(req, plan, window=4)
+    start = plan.swa_start(4)
+    assert not reuse.reusable[start:].any()
+    assert reuse.reusable[:start].any()
+    calls = []
+    def allocate(count, tail):
+        calls.append((count, tail))
+        return torch.arange(100, 100 + count)
+    table = torch.full((1, 12), -1, dtype=torch.int64)
+    slots = transfer.allocate_context_destination(req,
+        SimpleNamespace(device="cpu", alloc_context_swa_tail=allocate),
+        SimpleNamespace(write=lambda i, v: table.__setitem__(i, v)), window=4)
+    assert calls == [(reuse.allocation_count, plan.active_count - start)]
+    assert (slots[start:] >= 100).all()
+    assert req.context_state.swa_resident.tolist() == [False] * start + [True] * (plan.active_count - start)

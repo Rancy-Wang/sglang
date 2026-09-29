@@ -871,38 +871,43 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
             ret.context_attention = batch.context_prefill_input.bind(model_runner)
             ret.positions = ret.context_attention.full.query_positions
 
-        if ret.forward_mode.is_decode() and (
-            getattr(model_runner, "context_decode_registry", None) is not None
-            or any(getattr(req, "context_program", None) is not None for req in batch.reqs)
-        ):
-            from sglang.srt.layers.attention.context_backend import ContextDecodeRegistry
-
-            if ret.spec_info is not None or seq_lens_cpu is None:
-                raise ValueError("Context decode needs native non-spec CPU length metadata")
+        if ret.forward_mode.is_decode():
             registry = getattr(model_runner, "context_decode_registry", None)
-            if registry is None:
-                if model_runner.decode_attention_backend_str != "triton":
-                    raise ValueError("Context decode currently requires native Triton")
-                registry = ContextDecodeRegistry(
-                    model_runner.kv_index_translator, model_runner.token_to_kv_pool,
-                    model_runner.req_to_token_pool,
-                )
-                model_runner.context_decode_registry = registry
+            has_context = any(req.context_program is not None for req in batch.reqs)
+            if has_context:
+                from sglang.srt.layers.attention.context_backend import ContextDecodeRegistry
+
+                if ret.spec_info is not None or seq_lens_cpu is None:
+                    raise ValueError("Context decode needs native non-spec CPU length metadata")
+                if registry is None:
+                    if model_runner.decode_attention_backend_str != "triton":
+                        raise ValueError("Context decode currently requires native Triton")
+                    registry = ContextDecodeRegistry(
+                        model_runner.kv_index_translator, model_runner.token_to_kv_pool,
+                        model_runner.req_to_token_pool,
+                    )
+                    model_runner.context_decode_registry = registry
+                (
+                    ret.seq_lens_cpu, ret.seq_lens, ret.positions, ret.context_decode_refs,
+                ) = registry.bind_batch(batch.reqs, seq_lens_cpu, ret.req_pool_indices)
+                ret.seq_lens_sum = int(ret.seq_lens_cpu.sum())
+            if registry is not None:
+                # The registry remains allocated, but ordinary batches use the
+                # original gather and upload no Context rows. Metadata graphs
+                # capture that branch, so invalidate prep when it changes.
+                active = registry if has_context else None
                 backends = [model_runner.attn_backend, model_runner.decode_attn_backend]
                 backends.extend(model_runner.decode_attn_backend_group or [])
+                changed = False
                 for backend in backends:
                     if backend is not None:
-                        backend.context_decode_registry = registry
-                # Metadata glue may have captured the old raw gather. Rebuild
-                # only that prep graph once; model decode graphs stay captured.
-                graph = model_runner.decode_cuda_graph_runner
-                glue = getattr(graph, "_metadata_glue", None)
-                if glue is not None:
-                    glue.reset()
-            (
-                ret.seq_lens_cpu, ret.seq_lens, ret.positions, ret.context_decode_refs,
-            ) = registry.bind_batch(batch.reqs, seq_lens_cpu, ret.req_pool_indices)
-            ret.seq_lens_sum = int(ret.seq_lens_cpu.sum())
+                        changed |= getattr(backend, "context_decode_registry", None) is not active
+                        backend.context_decode_registry = active
+                if changed:
+                    graph = model_runner.decode_cuda_graph_runner
+                    glue = getattr(graph, "_metadata_glue", None)
+                    if glue is not None:
+                        glue.reset()
 
         ret._maybe_init_non_generation_fields(batch)
 

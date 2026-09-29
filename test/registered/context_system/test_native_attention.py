@@ -202,3 +202,64 @@ def test_native_position_windows(
         float(context_error.max())
         <= float(upstream_error.max()) + torch.finfo(dtype).eps
     )
+
+
+@pytest.mark.parametrize("backend", ["flashinfer", "fa3", "fa4"])
+@pytest.mark.parametrize("window", [-1, 4])
+@pytest.mark.parametrize("with_sink", [False, True])
+def test_context_native_ragged_position_holes(backend, window, with_sink):
+    """Exercise the actual backend entry, KV store and native library, not a stub."""
+    import numpy as np
+    from types import SimpleNamespace
+    from sglang.srt.layers.attention.context_backend import (
+        ContextSequence, ContextAttentionPlan, ContextForwardMetadata,
+    )
+
+    if backend in ("fa3", "fa4") and torch.cuda.get_device_capability()[0] < 9:
+        pytest.skip("FA3/FA4 kernels require Hopper or newer")
+    torch.manual_seed(391)
+    device, dtype = "cuda", torch.bfloat16
+    q = torch.randn(3, 4, 64, device=device, dtype=dtype)
+    k, v = [torch.randn(3, 2, 64, device=device, dtype=dtype) for _ in range(2)]
+    kp, vp = [torch.randn(16, 2, 64, device=device, dtype=dtype) for _ in range(2)]
+    seq = ContextSequence(8, (3,), np.array([0, 5]), np.arange(5),
+                          np.array([10, 11, 12]), np.array([0, 3, 6, 7, 9]))
+    metadata = ContextAttentionPlan.merge([seq]).bind(torch.arange(8, device=device))
+    context = ContextForwardMetadata(metadata, metadata, {})
+    def store(layer, loc, key, value):
+        kp[5:8] = key
+        vp[5:8] = value
+    pool = SimpleNamespace(get_kv_buffer=lambda _: (kp, vp), set_kv_buffer=store)
+    translator = SimpleNamespace(sliding_window_write_loc_for=lambda _: None)
+    layer = SimpleNamespace(layer_id=0, tp_q_head_num=4, tp_k_head_num=2,
+                            v_head_dim=64, head_dim=64, logit_cap=0., scaling=0.125,
+                            sliding_window_size=window, k_scale=None, v_scale=None,
+                            is_cross_attention=False)
+    batch = SimpleNamespace(context_attention=context, out_cache_loc=torch.arange(5, 8, device=device), spec_info=None)
+    if backend == "flashinfer":
+        from sglang.srt.layers.attention.flashinfer_backend import FlashInferAttnBackend
+        engine = object.__new__(FlashInferAttnBackend)
+        engine.workspace_buffer = torch.empty(32 * 1024 * 1024, dtype=torch.uint8, device=device)
+    else:
+        from sglang.srt.layers.attention.flashattention_backend import FlashAttentionBackend
+        engine = object.__new__(FlashAttentionBackend)
+        if backend == "fa3":
+            from sgl_kernel.flash_attn import flash_attn_varlen_func
+        else:
+            from sglang.kernels.ops.attention.flash_attention_v4 import flash_attn_varlen_func
+        engine.flash_attn_varlen_func = flash_attn_varlen_func
+    engine.token_to_kv_pool = pool
+    engine.kv_index_translator = translator
+    sinks = torch.randn(4, device=device) if with_sink else None
+    result = engine.forward_extend(q, k, v, layer, batch, sinks=sinks).view_as(q)
+    pos = torch.tensor([0, 3, 6, 7, 9, 10, 11, 12], device=device)
+    scores = torch.einsum("qhd,khd->hqk", q.float(), kp[:8].repeat_interleave(2, dim=1).float()) * layer.scaling
+    mask = torch.arange(8, device=device)[None, :] <= torch.arange(5, 8, device=device)[:, None]
+    if window >= 0:
+        mask &= pos[None, :] >= pos[5:, None] - window
+    scores.masked_fill_(~mask[None], -torch.inf)
+    if sinks is not None:
+        scores = torch.cat((scores, sinks[:, None, None].expand(4, 3, 1)), dim=-1)
+    probabilities = scores.softmax(-1)[..., :8]
+    expected = torch.einsum("hqk,khd->qhd", probabilities, vp[:8].repeat_interleave(2, dim=1).float())
+    torch.testing.assert_close(result.float(), expected, atol=0.02, rtol=0.02)

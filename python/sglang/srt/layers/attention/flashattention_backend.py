@@ -746,6 +746,9 @@ class FlashAttentionBackend(AttentionBackend):
 
     def init_forward_metadata(self, forward_batch: ForwardBatch):
         """Initialize forward metadata hence all layers in the forward pass can reuse it."""
+        if forward_batch.context_attention is not None:
+            self.forward_metadata = None
+            return
         metadata = FlashAttentionMetadata()
         seqlens_in_batch = forward_batch.seq_lens
         batch_size = forward_batch.batch_size
@@ -761,6 +764,24 @@ class FlashAttentionBackend(AttentionBackend):
             if seq_lens_cpu is not None and seq_lens_cpu.numel() > 0
             else self.max_context_len
         )
+
+        if forward_batch.forward_mode.is_decode() and forward_batch.spec_info is None and (
+            getattr(self, "context_decode_registry", None) is not None
+            or (self.has_swa and self.page_size == 1 and not self.is_prefill_aware_swa)
+        ):
+            metadata.cache_seqlens_int32 = torch.empty_like(seqlens_in_batch, dtype=torch.int32)
+            metadata.cu_seqlens_q = torch.arange(batch_size + 1, device=device, dtype=torch.int32)
+            metadata.cu_seqlens_k = torch.zeros(batch_size + 1, device=device, dtype=torch.int32)
+            metadata.page_table = torch.empty((batch_size, max(eager_max_k, 1)), device=device, dtype=torch.int32)
+            metadata.max_seq_len_k = eager_max_k
+            if self.has_swa:
+                metadata.pa_swa_page_table = torch.zeros((batch_size, self.sliding_window_size + 1), device=device, dtype=torch.int32)
+                metadata.pa_swa_cache_seqlens = torch.empty_like(metadata.cache_seqlens_int32)
+            self._set_decode_page_metadata(metadata, forward_batch.req_pool_indices, seqlens_in_batch, 0)
+            if self.use_sliding_window_kv_pool:
+                metadata.swa_out_cache_loc = self.kv_index_translator.sliding_window_write_loc_for(forward_batch.out_cache_loc)
+            self.forward_metadata = metadata
+            return
 
         if forward_batch.forward_mode.is_decode_or_idle():
             # Draft Decode
@@ -1284,6 +1305,26 @@ class FlashAttentionBackend(AttentionBackend):
         rel_bias=None,
         rel_bias_event=None,
     ):
+        if forward_batch.context_attention is not None:
+            from sglang.srt.layers.attention.context_backend import prepare_native_context
+
+            if score_mod is not None or aux_tensors is not None or rel_bias is not None:
+                raise ValueError("Context does not support custom attention score modifiers")
+            _, plan, query, k_pool, v_pool = prepare_native_context(
+                q, k, v, layer, forward_batch, self.token_to_kv_pool,
+                self.kv_index_translator, save_kv_cache,
+            )
+            _, _, qo, kv, slots, max_q, max_k = plan
+            window = layer.sliding_window_size
+            result = self.flash_attn_varlen_func(
+                q=query, k=k_pool[slots], v=v_pool[slots],
+                cu_seqlens_q=qo, cu_seqlens_k=kv,
+                max_seqlen_q=max_q, max_seqlen_k=max_k,
+                softmax_scale=layer.scaling, causal=True,
+                window_size=(window, 0) if window is not None and window >= 0 else (-1, -1),
+                softcap=layer.logit_cap or 0.0, sinks=sinks,
+            )
+            return result.view(-1, layer.tp_q_head_num * layer.v_head_dim)
         if score_mod is not None and self.fa_impl_ver != 4:
             raise RuntimeError("score_mod is only supported by the FA4 backend.")
         cp_active = is_cp_active(forward_batch)
@@ -2010,7 +2051,7 @@ class FlashAttentionBackend(AttentionBackend):
                 max_seqlen_q = metadata.max_seq_len_q
 
                 pa_swa_active = False
-                if self.is_prefill_aware_swa and metadata.pa_swa_page_table is not None:
+                if metadata.pa_swa_page_table is not None and (self.is_prefill_aware_swa or is_swa_layer):
                     page_table = metadata.pa_swa_page_table
                     cache_seqlens = metadata.pa_swa_cache_seqlens
                     window_size = (-1, -1)
@@ -2590,6 +2631,12 @@ class FlashAttentionBackend(AttentionBackend):
                     metadata.swa_out_cache_loc = self.cuda_graph_swa_out_cache_loc[
                         :num_tokens
                     ]
+                if self.has_swa and self.page_size == 1 and not self.is_prefill_aware_swa:
+                    # Always present at model capture; only values change later.
+                    metadata.pa_swa_page_table = torch.zeros(
+                        (bs, self.sliding_window_size + 1), device=device, dtype=torch.int32
+                    )
+                    metadata.pa_swa_cache_seqlens = torch.empty_like(metadata.cache_seqlens_int32)
                 self.decode_cuda_graph_metadata[bs] = metadata
 
         elif forward_mode.is_target_verify():
@@ -2735,30 +2782,55 @@ class FlashAttentionBackend(AttentionBackend):
         so the fused kernel is left with the prefix sum alone -- one pass over
         the rows instead of a translated build plus a verbatim copy of it.
         """
-        translated = self.kv_index_translator.reads_are_translated
-        normal_decode_set_metadata(
-            metadata.cache_seqlens_int32,
-            metadata.cu_seqlens_k,
-            metadata.page_table,
-            self.req_to_token,
-            req_pool_indices,
-            self.max_num_pages,
-            seq_lens,
-            seq_len_delta,
-            self.page_size,
-            metadata.swa_page_table,
-            self.token_to_kv_pool if self.use_sliding_window_kv_pool else None,
-            skip_page_table=translated,
-        )
-        if translated:
-            # Fill to `cache_seqlens_int32`, which the kernels bound their reads
-            # by: a draft decode reads `seq_len_delta` past `seq_lens`.
-            self.kv_index_translator.fill_read_table(
-                out=metadata.page_table,
-                sliding_window_out=metadata.swa_page_table,
-                req_pool_indices=req_pool_indices,
-                seq_lens=metadata.cache_seqlens_int32,
+        registry = getattr(self, "context_decode_registry", None)
+        if registry is not None:
+            if seq_len_delta:
+                raise ValueError("Context decode cannot use speculative sequence deltas")
+            metadata.cache_seqlens_int32.copy_(seq_lens)
+            metadata.cu_seqlens_k[0] = 0
+            metadata.cu_seqlens_k[1:] = seq_lens.cumsum(0)
+            registry.fill_table(req_pool_indices, seq_lens, metadata.page_table)
+        else:
+            translated = self.kv_index_translator.reads_are_translated
+            normal_decode_set_metadata(
+                metadata.cache_seqlens_int32,
+                metadata.cu_seqlens_k,
+                metadata.page_table,
+                self.req_to_token,
+                req_pool_indices,
+                self.max_num_pages,
+                seq_lens,
+                seq_len_delta,
+                self.page_size,
+                metadata.swa_page_table,
+                self.token_to_kv_pool if self.use_sliding_window_kv_pool else None,
+                skip_page_table=translated,
             )
+            if translated:
+                # Fill to `cache_seqlens_int32`, which the kernels bound their reads
+                # by: a draft decode reads `seq_len_delta` past `seq_lens`.
+                self.kv_index_translator.fill_read_table(
+                    out=metadata.page_table,
+                    sliding_window_out=metadata.swa_page_table,
+                    req_pool_indices=req_pool_indices,
+                    seq_lens=metadata.cache_seqlens_int32,
+                )
+
+        if metadata.pa_swa_page_table is not None and not self.is_prefill_aware_swa:
+            table = metadata.pa_swa_page_table
+            if registry is not None:
+                lengths = registry.fill_table(req_pool_indices, seq_lens, table, window=self.sliding_window_size)
+            else:
+                lengths = seq_lens.clamp(max=self.sliding_window_size + 1)
+                indptr = torch.arange(len(seq_lens) + 1, device=seq_lens.device, dtype=torch.int32) * table.stride(0)
+                translated = self.kv_index_translator.fill_packed_read_stream(
+                    req_pool_indices=req_pool_indices, seq_lens=lengths, indptr=indptr,
+                    total_tokens=table.numel(), out=table.view(-1), kv_start_idx=seq_lens - lengths,
+                    sliding_window=self.use_sliding_window_kv_pool,
+                )
+                if self.use_sliding_window_kv_pool and not translated:
+                    table.copy_(self.token_to_kv_pool.translate_loc_from_full_to_swa(table))
+            metadata.pa_swa_cache_seqlens.copy_(lengths)
 
     def _apply_cuda_graph_metadata(
         self,
