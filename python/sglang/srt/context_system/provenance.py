@@ -301,10 +301,10 @@ def _parse_character_owners(
 
 
 def _encode_with_offsets(tokenizer, text, *, add_special_tokens):
-    if bool(getattr(tokenizer, "is_fast", False)):
-        encoded = tokenizer(
-            text, add_special_tokens=add_special_tokens, return_offsets_mapping=True
-        )
+    if bool(getattr(tokenizer, "is_fast", True)):
+        # Preserve the tokenizer's native default for an assistant continuation.
+        kwargs = {} if add_special_tokens else {"add_special_tokens": False}
+        encoded = tokenizer(text, return_offsets_mapping=True, **kwargs)
         input_ids = [int(token_id) for token_id in encoded["input_ids"]]
         offsets = [(int(a), int(b)) for a, b in encoded["offset_mapping"]]
     else:
