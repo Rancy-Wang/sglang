@@ -408,6 +408,8 @@ class FlashAttentionBackend(AttentionBackend):
             return None
         if self._disable_scheduler_metadata_precompute:
             return None
+        # max_seq_len_k must match the native kernel's page-table bound,
+        # including graph padding; it controls the metadata buffer shape.
         # Always use window_size=(-1, -1) because scheduler_metadata is only
         # consumed by non-SWA layers (SWA layers skip it in forward_decode).
         return self._get_scheduler_metadata(
@@ -604,7 +606,7 @@ class FlashAttentionBackend(AttentionBackend):
                 if self._sched_meta_buf is not None:
                     sched = self._compute_scheduler_metadata(
                         bs,
-                        max(metadata.max_seq_len_k, 1),
+                        metadata.page_table.shape[1] * self.page_size,
                         metadata.cache_seqlens_int32,
                         metadata.cu_seqlens_q,
                     )
@@ -929,7 +931,7 @@ class FlashAttentionBackend(AttentionBackend):
                 # prepare_varlen_num_blocks kernel calls
                 metadata.scheduler_metadata = self._compute_scheduler_metadata(
                     batch_size,
-                    metadata.max_seq_len_k,
+                    metadata.page_table.shape[1] * self.page_size,
                     metadata.cache_seqlens_int32,
                     metadata.cu_seqlens_q,
                 )
@@ -3033,7 +3035,7 @@ class FlashAttentionBackend(AttentionBackend):
                 ):
                     sched = self._compute_scheduler_metadata(
                         bs,
-                        metadata.max_seq_len_k,
+                        metadata.page_table.shape[1] * self.page_size,
                         metadata.cache_seqlens_int32,
                         metadata.cu_seqlens_q,
                     )

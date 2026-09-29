@@ -18,7 +18,7 @@ from bcp_numeric_fixture import oracle_chat_template, request_for
 from serving_logits_probe import serialized_probe
 
 pytestmark = pytest.mark.skipif(
-    not os.environ.get("CONTEXT_PD_BCP_ORACLE"),
+    not (os.environ.get("CONTEXT_PD_BCP_ORACLE") or os.environ.get("CONTEXT_PD_SMOKE")),
     reason="explicit PD BCP reference required",
 )
 
@@ -109,8 +109,9 @@ def pd_servers():
                     "gpt-oss",
                     "--reasoning-parser",
                     "gpt-oss",
-                    "--disable-hybrid-swa-memory",
                 ]
+            if os.environ.get("CONTEXT_SHARED_SWA") == "1":
+                cmd += ["--disable-hybrid-swa-memory"]
             backend = os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND")
             if backend:
                 cmd += ["--attention-backend", backend]
@@ -163,6 +164,7 @@ def pd_servers():
             log.close()
 
 
+@pytest.mark.skipif(not os.environ.get("CONTEXT_PD_BCP_ORACLE"), reason="numeric reference required")
 def test_bcp_pd_terminal_handoff(pd_servers):
     p_base, d_base, bootstrap = pd_servers
     reference_path = Path(os.environ["CONTEXT_PD_BCP_ORACLE"])
@@ -368,3 +370,44 @@ def test_bcp_pd_terminal_handoff(pd_servers):
         assert reused["drop_repos-hot"]["missing"] < reused["drop_repos-hot"]["active"]
         assert reused["drop_repos-retry"]["copied"] > 0
         assert reused["drop_repos-consecutive"]["copied"] > 0
+
+
+def test_pd_usage_roundtrip(pd_servers):
+    """Assert P accounting survives Mooncake, independently of D cache hits."""
+    p_base, d_base, bootstrap = pd_servers
+    messages = [
+        {"role": "user", "content": "Remember " + "red blue green " * 32},
+        {"role": "assistant", "content": "I have read that."},
+        {"role": "user", "content": "Say hello."},
+    ]
+    records = []
+    for stream in (False, True):
+        for operation in ({"drop_message": None}, {"drop_message": {"1": [0]}, "reposition": [1]}):
+            for repeat in range(2):
+                body = dict(model=os.environ["CONTEXT_SERVER_MODEL"], messages=messages,
+                            temperature=0, max_tokens=4, ignore_eos=True,
+                            bootstrap_host="127.0.0.1", bootstrap_port=bootstrap,
+                            bootstrap_room=time.time_ns() % (1 << 52), **operation)
+                def send(base):
+                    payload = dict(body, stream=stream if base == d_base else False)
+                    response = requests.post(base + "/v1/chat/completions", json=payload, timeout=180)
+                    assert response.status_code == 200, response.text
+                    if payload["stream"]:
+                        chunks = [json.loads(line[6:]) for line in response.text.splitlines()
+                                  if line.startswith("data: ") and line != "data: [DONE]"]
+                        reports = [c["sglext"]["context_usage"]["0"] for c in chunks
+                                   if (c.get("sglext") or {}).get("context_usage") is not None]
+                        assert len(reports) == 1, chunks
+                        return reports[0]
+                    return response.json()["sglext"]["context_usage"]["0"]
+                with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                    p = executor.submit(send, p_base)
+                    d = executor.submit(send, d_base)
+                    p_usage, d_usage = p.result(), d.result()
+                for key in ("cached_tokens", "repos_tokens", "drop_skipped_tokens", "actual_prefill_tokens"):
+                    assert isinstance(d_usage[key], int) and d_usage[key] >= 0, d_usage
+                    assert p_usage[key] == d_usage[key], (p_usage, d_usage)
+                records.append(dict(stream=stream, repeat=repeat, operation=operation, prefill=p_usage, decode=d_usage))
+    (Path(os.environ["CONTEXT_TRACE_DIR"]) / "usage-roundtrip.json").write_text(json.dumps(records, indent=2))
+    for base in (p_base, d_base):
+        assert requests.get(base + "/health", timeout=5).status_code == 200
