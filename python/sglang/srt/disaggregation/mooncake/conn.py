@@ -12,6 +12,7 @@ from typing import List, Optional, Set, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
+import torch
 import zmq
 from prometheus_client import Counter
 
@@ -255,15 +256,16 @@ class MooncakeKVManager(StagingManagerMixin, CommonKVManager):
                 f"The environment variable SGLANG_DISAGGREGATION_THREAD_POOL_SIZE={transfer_thread_pool_size} must be "
                 f"greater than or equal to SGLANG_DISAGGREGATION_QUEUE_SIZE={transfer_queue_size}."
             )
-            self.executors = [
-                concurrent.futures.ThreadPoolExecutor(
-                    transfer_thread_pool_size // transfer_queue_size
-                )
-                for _ in range(transfer_queue_size)
-            ]
             self.enable_custom_mem_pool, self.custom_mem_pool_type = (
                 check_mooncake_custom_mem_pool_enabled()
             )
+            self.executors = [
+                concurrent.futures.ThreadPoolExecutor(
+                    transfer_thread_pool_size // transfer_queue_size,
+                    initializer=self.init_transfer_thread_device,
+                )
+                for _ in range(transfer_queue_size)
+            ]
             self._staging_ctx = PrefillStagingContext() if self.enable_staging else None
             if self.enable_staging:
                 self._init_staging_buffers(len(self.transfer_queues))
@@ -1871,6 +1873,16 @@ class MooncakeKVManager(StagingManagerMixin, CommonKVManager):
 
         return self._transfer_data(req.mooncake_session_id, transfer_blocks)
 
+    def init_transfer_thread_device(self):
+        # CUDA's current device is thread-local. Mooncake creates source-device
+        # streams but restores the caller device before opening IPC mappings.
+        # Bind every NVLink transfer thread before its first native operation.
+        if (
+            self.enable_custom_mem_pool
+            and self.custom_mem_pool_type == "INTRA_NODE_NVLINK"
+        ):
+            torch.cuda.set_device(self.kv_args.gpu_id)
+
     def transfer_worker(
         self,
         queue: FastQueue,
@@ -1878,6 +1890,7 @@ class MooncakeKVManager(StagingManagerMixin, CommonKVManager):
         staging_buffer=None,
         worker_index=0,
     ):
+        self.init_transfer_thread_device()
         staging_strategy = None
         if self.enable_trace:
             trace_set_thread_info(
