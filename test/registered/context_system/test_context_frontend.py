@@ -29,6 +29,12 @@ def chat():
     reset_context()
     publish(ServerArgs(model_path="dummy", page_size=1), role="tokenizer")
     manager = fixture._MockTokenizerManager()
+    import torch
+    manager.server_args = ServerArgs(model_path="dummy", page_size=1, attention_backend="triton")
+    manager.model_config.hf_config.architectures = ["Qwen2ForCausalLM"]
+    manager.model_config.hf_config.dual_chunk_attention_config = None
+    manager.model_config._resolved_model_arch = "Qwen2ForCausalLM"
+    manager.model_config.dtype = torch.bfloat16
     manager._config_overrides["page_size"] = 1
     template = fixture._MockTemplateManager()
     template.chat_template_name = None
@@ -97,9 +103,10 @@ def test_no_feature_uses_original_render(chat):
 
 
 @pytest.mark.parametrize(
-    "reported", [None, {"actual_prefill_tokens": 11, "actual_decode_tokens": 3}]
+    "reported", [None, {"cached_tokens": 0, "repos_tokens": 0, "drop_skipped_tokens": 0, "actual_prefill_tokens": 11, "actual_decode_tokens": 3}]
 )
-def test_context_stream_reports_terminal_compute(chat, reported):
+@pytest.mark.parametrize("include_usage", [False, True])
+def test_context_stream_reports_terminal_compute(chat, reported, include_usage):
     import asyncio
     import json
     from unittest.mock import Mock
@@ -122,7 +129,7 @@ def test_context_stream_reports_terminal_compute(chat, reported):
             chunk
             async for chunk in chat._generate_chat_stream(
                 Mock(),
-                request(stream=True, stream_options={"include_usage": True}),
+                request(stream=True, stream_options={"include_usage": include_usage}),
                 None,
             )
         ]
@@ -583,3 +590,29 @@ def test_context_usage_streams_scalar_snapshot_in_mixed_batch():
         else:
             assert "context_usage" not in meta
     assert state.customized_info_accumulated == {}
+
+
+@pytest.mark.parametrize("fields", [{"reposition": []}, {"drop_message": None}])
+def test_explicit_empty_feature_keeps_program_and_prompt(chat, fields):
+    plain = chat._process_messages(request(), False)
+    feature = chat._process_messages(request(**fields), False)
+    assert feature.prompt_ids == plain.prompt_ids
+    assert feature.context_program is not None
+
+
+def test_unsupported_model_rejected_before_template_compilation(chat):
+    chat.tokenizer_manager.model_config._resolved_model_arch = "LlamaForCausalLM"
+    with patch("sglang.srt.context_system.provenance.build_template_token_provenance", side_effect=AssertionError("compiled unsupported model")):
+        assert chat._process_messages(request(), False).context_program is None
+        with pytest.raises(ValueError, match="not supported by Llama"):
+            chat._process_messages(request(reposition=[]), False)
+
+
+def test_nonstream_reports_zero_context_usage_without_meta_flag(chat):
+    values = {"cached_tokens": 0, "repos_tokens": 0, "drop_skipped_tokens": 0,
+              "actual_prefill_tokens": 4, "actual_decode_tokens": 1}
+    ret = [{"text": "answer", "meta_info": {"id": "context-zero", "prompt_tokens": 4,
+            "completion_tokens": 1, "cached_tokens": 0,
+            "finish_reason": {"type": "length", "length": 1}, "context_usage": values}}]
+    response = chat._build_chat_response(request(), ret, 0)
+    assert response.sglext.context_usage == {0: values}

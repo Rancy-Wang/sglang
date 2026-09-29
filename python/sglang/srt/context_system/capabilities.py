@@ -7,18 +7,26 @@ or acquire restrictions from these staged integration limits.
 from __future__ import annotations
 
 
-def validate_context_request(args, model_config, request):
+def validate_context_config(args, model_config):
     if args.page_size != 1:
         raise ValueError("Context Drop/Reposition requires page_size=1")
-    architectures = set(model_config.hf_config.architectures or ())
-    if not architectures or not architectures <= {
+    architectures = model_config.hf_config.architectures or ()
+    architecture = getattr(model_config, "_resolved_model_arch", None)
+    if not isinstance(architecture, str):
+        architecture = architectures[0] if architectures else None
+    if architecture not in {
+        "QWenLMHeadModel",
+        "Qwen2ForCausalLM",
+        "Qwen2MoeForCausalLM",
         "Qwen3ForCausalLM",
         "Qwen3MoeForCausalLM",
         "GptOssForCausalLM",
         "MiniMaxM2ForCausalLM",
     }:
-        raise ValueError("Context supports Qwen3/AgenticQwen, GPT-OSS and MiniMax M2")
-    if "MiniMaxM2ForCausalLM" in architectures:
+        raise ValueError(f"Context Drop/Reposition is not supported by {architecture}")
+    if getattr(model_config.hf_config, "dual_chunk_attention_config", None):
+        raise ValueError("Context Drop/Reposition does not support DualChunk RoPE")
+    if architecture == "MiniMaxM2ForCausalLM":
         config = model_config.hf_config
         head_dim = getattr(config, "head_dim", None)
         rotary_dim = getattr(config, "rotary_dim", None)
@@ -84,6 +92,10 @@ def validate_context_request(args, model_config, request):
             raise ValueError(f"Context is not yet supported with {name}")
     if args.radix_cache_backend is not None:
         raise ValueError("Context requires the native unified Radix cache")
+
+
+def validate_context_request(args, model_config, request):
+    validate_context_config(args, model_config)
     if request.input_ids is None or request.input_embeds is not None:
         raise ValueError("A Context program requires its original input_ids")
     if request.contains_mm_input() or request.session_id or request.session_params:

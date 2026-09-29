@@ -35,6 +35,7 @@ def compiler():
     )
     ir = load_file("context_test_ir", ROOT / "python/sglang/srt/context_system/ir.py")
     ir._load_module = kernel.load_context_plan
+    ir._load_text_match_module = kernel.load_context_text_match
     ir.prewarm_context_layout()
     return ir.compile_context_layout
 

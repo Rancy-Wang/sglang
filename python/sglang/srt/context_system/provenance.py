@@ -310,10 +310,6 @@ def build_template_token_provenance(
     chat_template: str | None = None,
     template_kwargs: dict[str, Any] | None = None,
 ) -> TemplateTokenProvenance:
-    if not bool(getattr(tokenizer, "is_fast", False)):
-        raise RuntimeError(
-            "Drop Message ownership requires a fast tokenizer with offset_mapping support."
-        )
     if chat_template is None:
         chat_template = tokenizer.get_chat_template(tools=tools)
     if template_kwargs and template_kwargs.get("preserve_thinking_history", False):
@@ -340,14 +336,33 @@ def build_template_token_provenance(
         add_generation_prompt=add_generation_prompt,
     )
 
-    encoded = tokenizer(
-        canonical_text,
-        add_special_tokens=False,
-        return_offsets_mapping=True,
-    )
-    input_ids = [int(token_id) for token_id in encoded["input_ids"]]
+    if bool(getattr(tokenizer, "is_fast", False)):
+        encoded = tokenizer(
+            canonical_text, add_special_tokens=False, return_offsets_mapping=True
+        )
+        input_ids = [int(token_id) for token_id in encoded["input_ids"]]
+        offsets = [(int(a), int(b)) for a, b in encoded["offset_mapping"]]
+    else:
+        # Original Qwen uses tiktoken. Decode exact token bytes from the single
+        # canonical encoding, never independently tokenize message fragments.
+        decoder = getattr(getattr(tokenizer, "tokenizer", None), "decode_single_token_bytes", None)
+        if not callable(decoder):
+            raise RuntimeError("Drop Message ownership requires offset_mapping or exact token bytes")
+        input_ids = [int(i) for i in tokenizer.encode(canonical_text, add_special_tokens=False)]
+        pieces = [decoder(i) for i in input_ids]
+        if b"".join(pieces) != canonical_text.encode("utf-8"):
+            raise RuntimeError("Tokenizer bytes do not reproduce the canonical template")
+        from bisect import bisect_left, bisect_right
 
-    offsets = [(int(start), int(end)) for start, end in encoded["offset_mapping"]]
+        char_bytes = [0]
+        for char in canonical_text:
+            char_bytes.append(char_bytes[-1] + len(char.encode("utf-8")))
+        offsets = []
+        cursor = 0
+        for piece in pieces:
+            start = bisect_right(char_bytes, cursor) - 1
+            cursor += len(piece)
+            offsets.append((start, bisect_left(char_bytes, cursor)))
     owners: list[int] = []
     cross_owner_tokens = 0
     previous_owner = 0

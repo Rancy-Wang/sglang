@@ -282,9 +282,15 @@ def compile_context_layout(
     )
 
 
-def prewarm_context_layout() -> None:
-    """Load and execute the structured Radix compiler before accepting work."""
+def _load_text_match_module():
+    from sglang.kernels.ops.attention.context_plan import load_context_text_match
 
+    return load_context_text_match()
+
+
+def prewarm_context_layout() -> None:
+    """Warm both CPU JIT modules; no model or CUDA state is initialized."""
+    _load_text_match_module()
     empty = torch.empty(0, dtype=torch.int32, device="cpu")
     compile_context_layout(
         torch.tensor([0], dtype=torch.int32, device="cpu"),

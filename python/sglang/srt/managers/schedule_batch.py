@@ -1635,6 +1635,7 @@ class Req(ReqDllmMixin):
             self.context_usage = ContextUsage(
                 recovery.reusable_prefix,
                 ~program.layout.keep_mask[:matched],
+                query_intervals=recovery.intervals,
             )
         if swa is not None:
             required = self.context_swa_read_demand(matched, recovery.start)
