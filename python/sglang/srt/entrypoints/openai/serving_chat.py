@@ -1351,10 +1351,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 raise ValueError(
                     "Drop/Reposition requires text messages with template provenance"
                 )
-            if (
-                self.chat_encoding_spec is not None
-                or self.template_manager.chat_template_name is not None
-            ):
+            if self.chat_encoding_spec is not None:
                 raise ValueError(
                     "Drop/Reposition requires the model's native Jinja template"
                 )
@@ -1485,7 +1482,9 @@ class OpenAIServingChat(OpenAIServingBase):
                 has_context=has_context,
             )
         else:
-            result = self._apply_conversation_template(request, is_multimodal)
+            result = self._apply_conversation_template(
+                request, is_multimodal, context_rule=context_rule, has_context=has_context
+            )
 
         if tool_call_stop is not None:
             if isinstance(result.stop, str):
@@ -1978,6 +1977,9 @@ class OpenAIServingChat(OpenAIServingBase):
         self,
         request: ChatCompletionRequest,
         is_multimodal: bool,
+        *,
+        context_rule=None,
+        has_context: bool = False,
     ) -> MessageProcessingResult:
         """Apply conversation template"""
         prompt = ""
@@ -2027,12 +2029,26 @@ class OpenAIServingChat(OpenAIServingBase):
             else:
                 stop.extend(request.stop)
 
-        if not is_multimodal:
+        context_program = None
+        if has_context:
+            from sglang.srt.context_system.provenance import build_conversation_token_provenance
+            from sglang.srt.context_system.planner import compile_chat_program
+
+            messages = [message.model_dump() for message in request.messages]
+            trace = build_conversation_token_provenance(
+                self.tokenizer_manager.tokenizer, conv, messages, prompt
+            )
+            prompt_ids = trace.input_ids
+            context_program = compile_chat_program(
+                messages, trace, context_rule, request.reposition
+            ).to_wire()
+        elif not is_multimodal:
             prompt_ids = self.tokenizer_manager.tokenizer.encode(prompt)
 
         return MessageProcessingResult(
             prompt=prompt,
             prompt_ids=prompt_ids,
+            context_program=context_program,
             image_data=image_data,
             video_data=video_data,
             audio_data=audio_data,
