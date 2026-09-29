@@ -258,3 +258,77 @@ mod request_format_tests {
         ctx.shutdown().await;
     }
 }
+
+#[test]
+fn context_fields_survive_protocol_roundtrip() {
+    use smg::protocols::validated::Normalizable;
+    use validator::Validate;
+    let value = json!({"model": "test-model", "messages": [{"role": "user", "content": "hi"}],
+        "drop_message": null, "drop_rule": {"type": "message", "messages": [0]},
+        "reposition": [], "return_meta_info": true, "bootstrap_host": "untrusted", "unknown": 1});
+    let mut req: smg::routers::ExtendedChatRequest = serde_json::from_value(value.clone()).unwrap();
+    req.normalize();
+    req.validate().unwrap();
+    let out = serde_json::to_value(req).unwrap();
+    for key in [
+        "drop_message",
+        "drop_rule",
+        "reposition",
+        "return_meta_info",
+    ] {
+        assert!(out.get(key).is_some());
+        assert_eq!(out[key], value[key]);
+    }
+    assert!(out.get("unknown").is_none());
+}
+
+#[tokio::test]
+async fn context_fields_reach_http_worker() {
+    use crate::common::{
+        mock_worker::{capture_chat_requests, take_chat_requests},
+        AppTestContext,
+    };
+    use axum::{
+        body::{to_bytes, Body},
+        http::Request,
+    };
+    use tower::ServiceExt;
+    let port = 19070;
+    let ctx = AppTestContext::new(vec![MockWorkerConfig {
+        port,
+        worker_type: WorkerType::Regular,
+        health_status: HealthStatus::Healthy,
+        response_delay_ms: 0,
+        fail_rate: 0.0,
+    }])
+    .await;
+    let app = ctx.create_app().await;
+    capture_chat_requests(port);
+    for stream in [false, true] {
+        let payload = json!({"model":"test-model", "messages":[{"role":"user","content":"hi"}],
+            "stream":stream, "drop_message":null, "drop_rule":{}, "reposition":[], "return_meta_info":true});
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/chat/completions")
+                    .header("content-type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+        to_bytes(response.into_body(), 1 << 20).await.unwrap();
+    }
+    let requests = take_chat_requests(port);
+    assert_eq!(requests.len(), 2);
+    for value in requests {
+        assert_eq!(value.get("drop_message"), Some(&serde_json::Value::Null));
+        assert_eq!(value["drop_rule"], json!({}));
+        assert_eq!(value["reposition"], json!([]));
+        assert_eq!(value["return_meta_info"], true);
+    }
+    ctx.shutdown().await;
+}

@@ -40,7 +40,6 @@ use crate::{
         otel_trace,
     },
     protocols::{
-        chat::ChatCompletionRequest,
         classify::ClassifyRequest,
         completion::CompletionRequest,
         embedding::EmbeddingRequest,
@@ -184,12 +183,19 @@ async fn generate(
 async fn v1_chat_completions(
     State(state): State<Arc<AppState>>,
     headers: http::HeaderMap,
-    ValidatedJson(body): ValidatedJson<ChatCompletionRequest>,
+    ValidatedJson(body): ValidatedJson<crate::routers::ExtendedChatRequest>,
 ) -> Response {
-    state
-        .router
-        .route_chat(Some(&headers), &body, Some(&body.model))
-        .await
+    if body.extensions.is_empty() {
+        state
+            .router
+            .route_chat(Some(&headers), &body.request, Some(&body.request.model))
+            .await
+    } else {
+        state
+            .router
+            .route_chat_with_extensions(Some(&headers), &body, Some(&body.request.model))
+            .await
+    }
 }
 
 async fn v1_completions(
