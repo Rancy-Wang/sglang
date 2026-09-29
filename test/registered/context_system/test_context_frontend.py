@@ -526,6 +526,8 @@ def test_context_admission_limits_preserve_native_tp_and_overlap(chat):
     for field, value, error in (
         ("page_size", 16, "page_size=1"),
         ("attention_backend", "torch_native", "Triton"),
+        ("attention_backend", "fa4", "validated backend"),
+        ("attention_backend", "trtllm_mha", "validated backend"),
         ("enable_hierarchical_cache", True, "hierarchical"),
         ("speculative_algorithm", "EAGLE", "non-speculative"),
     ):

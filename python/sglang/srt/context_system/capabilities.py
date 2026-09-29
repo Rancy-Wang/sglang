@@ -48,9 +48,10 @@ def validate_context_config(args, model_config):
         raise ValueError("Context requires text-only FP16/BF16 model execution")
     prefill = args.prefill_attention_backend or args.attention_backend
     decode = args.decode_attention_backend or args.attention_backend
-    supported = {"triton", "flashinfer", "fa3", "fa4"}
+    # FA4 shares the adapter but needs validation on supported hardware first.
+    supported = {"triton", "flashinfer", "fa3"}
     if prefill not in supported or decode not in supported:
-        raise ValueError("Context requires Triton, FlashInfer, FA3 or FA4 attention")
+        raise ValueError("Context requires a validated backend: Triton, FlashInfer or FA3")
     if args.kv_cache_dtype not in ("auto", "float16", "bfloat16"):
         raise ValueError("Context requires unquantized FP16/BF16 KV")
     if args.disaggregation_mode != "null":
