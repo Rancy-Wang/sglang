@@ -9,7 +9,7 @@ There is no dense attention mask or per-layer CPU planning in this module.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from sglang.srt.context_system.request_storage import request_row
@@ -164,6 +164,7 @@ class ContextAttentionPlan:
             self.query_lengths,
             sum(self.query_lengths),
             max(self.query_lengths),
+            tuple(self.packed[a:b].numpy() for a, b in self.field_ranges),
         )
 
 
@@ -177,6 +178,48 @@ class ContextAttentionMetadata:
     query_lengths: tuple[int, ...]
     query_count: int
     max_query_length: int
+    cpu_fields: tuple = ()
+    native_plans: dict = field(default_factory=dict, compare=False, repr=False)
+
+    def native_plan(self, birth_slots, window=-1):
+        """Reuse occurrence segments with native ragged attention interfaces.
+
+        Contiguous SWA segments use the library's window. Position gaps split
+        only those segments into singleton queries with their visible KV;
+        storage is O(queries * window), never a full-history dense mask.
+        The plan and physical gather are built once per pool/window/forward.
+        """
+        window = window if window is not None else -1
+        if window in self.native_plans:
+            return self.native_plans[window]
+        qo, kv, _, qpos, kpos = self.cpu_fields
+        q_lengths, k_lengths, gathers = [], [], []
+        prefix_count = len(kpos)
+        for a, b, x, y in zip(qo[:-1], qo[1:], kv[:-1], kv[1:]):
+            positions = np.r_[kpos[x:y], qpos[a:b]]
+            indices = np.r_[np.arange(x, y), prefix_count + np.arange(a, b)]
+            if window >= 0 and np.any(np.diff(positions) != 1):
+                for query in range(a, b):
+                    end = y - x + query - a + 1
+                    start = np.searchsorted(positions[:end], qpos[query] - window)
+                    gathers.append(indices[start:end])
+                    q_lengths.append(1)
+                    k_lengths.append(end - start)
+            else:
+                start = np.searchsorted(positions, qpos[a] - window) if window >= 0 else 0
+                gathers.append(indices[start:])
+                q_lengths.append(b - a)
+                k_lengths.append(len(indices) - start)
+        cpu_qo = torch.tensor(np.r_[0, np.cumsum(q_lengths)], dtype=torch.int32)
+        cpu_kv = torch.tensor(np.r_[0, np.cumsum(k_lengths)], dtype=torch.int32)
+        device = birth_slots.device
+        gather = torch.from_numpy(np.concatenate(gathers)).to(device, non_blocking=True)
+        slots = torch.cat((self.kv_indices, birth_slots)).index_select(0, gather)
+        result = (cpu_qo, cpu_kv, cpu_qo.to(device, non_blocking=True),
+                  cpu_kv.to(device, non_blocking=True), slots,
+                  int(max(q_lengths)), int(max(k_lengths)))
+        self.native_plans[window] = result
+        return result
 
     def forward(self, kernel, q, k, v, output, k_pool, v_pool, **kwargs):
         """One native extend launch, after this layer's KV writes and COW."""
@@ -206,6 +249,31 @@ class ContextAttentionMetadata:
             **kwargs,
         )
         return output
+
+
+def prepare_native_context(q, k, v, layer, batch, pool, translator, save_kv_cache):
+    """Write birth KV and finish COW before the selected native library reads it."""
+    from sglang.srt.mem_cache.memory_pool import KVWriteLoc
+
+    context = batch.context_attention
+    if k is None or v is None or layer.k_scale is not None or layer.v_scale is not None:
+        raise ValueError("Context requires unquantized query KV")
+    if layer.is_cross_attention or batch.spec_info is not None:
+        raise ValueError("Context requires native causal MHA/GQA")
+    swa_slots = translator.sliding_window_write_loc_for(batch.out_cache_loc)
+    if save_kv_cache:
+        pool.set_kv_buffer(layer, KVWriteLoc(batch.out_cache_loc, swa_slots), k, v)
+    copy = context.layer_copies.get(layer.layer_id)
+    if copy is not None:
+        copy.apply()
+    metadata = context.for_layer(layer)
+    slots = batch.out_cache_loc
+    if layer.sliding_window_size is not None and layer.sliding_window_size >= 0:
+        if swa_slots is not None:
+            slots = swa_slots
+    plan = metadata.native_plan(slots, layer.sliding_window_size)
+    k_pool, v_pool = pool.get_kv_buffer(layer.layer_id)
+    return metadata, plan, q.view(-1, layer.tp_q_head_num, layer.head_dim), k_pool, v_pool
 
 
 @dataclass(frozen=True)
@@ -346,13 +414,11 @@ class ContextModelBinding:
         """
         from sglang.kernels.ops.attention.context_reposition import reposition_kv_layers
 
-        if self.translator.sliding_window_write_loc_for(source) is not None:
-            raise ValueError("Context decode Radix requires shared Full/SWA KV")
         if self._existing_copy_groups is None:
             groups = {}
             for layer in self.layers:
                 key = (
-                    layer.k_buffer.shape, layer.k_buffer.stride(),
+                    layer.sliding_window, layer.k_buffer.shape, layer.k_buffer.stride(),
                     layer.v_buffer.stride(), layer.k_buffer.dtype,
                     layer.cos_sin_cache.data_ptr(), layer.is_neox_style,
                     layer.rotary_dim,
@@ -366,11 +432,20 @@ class ContextModelBinding:
         source = self.translator.translate_full_attn_ids(source).to(torch.int32)
         destination = self.translator.translate_full_attn_ids(destination).to(torch.int32)
         for layer, k_ptrs, v_ptrs in self._existing_copy_groups:
+            src, dst = source, destination
+            separate_swa = False
+            if layer.sliding_window:
+                swa_src = self.translator.sliding_window_write_loc_for(source)
+                if swa_src is not None:
+                    separate_swa = True
+                    src = swa_src.to(torch.int32)
+                    dst = self.translator.sliding_window_write_loc_for(destination).to(torch.int32)
             reposition_kv_layers(
                 k_ptrs, v_ptrs, layer.k_buffer, layer.v_buffer,
-                source, destination, positions, layer.cos_sin_cache,
+                src, dst, positions, layer.cos_sin_cache,
                 is_neox_style=layer.is_neox_style,
                 rotary_dim=layer.rotary_dim,
+                skip_unmapped=separate_swa,
             )
 
     def bind(self, inputs: ContextPrefillInput) -> ContextForwardMetadata:
@@ -589,12 +664,14 @@ class ContextDecodeRegistry:
         from sglang.srt.context_system.occurrence import ContextDecodeLayout
 
         entries, lengths, positions, refs = [], [], [], []
+        self.batch_layouts = []
         for req, raw_length in zip(reqs, raw_lengths):
             raw_length = int(raw_length)
             if req.context_program is None:
                 entries.append((0, 0, 0, 0, 0, 0))
                 lengths.append(raw_length)
                 positions.append(raw_length - 1)
+                self.batch_layouts.append((None, raw_length))
                 continue
             layout = req.context_decode_layout
             if layout is None:
@@ -626,6 +703,7 @@ class ContextDecodeRegistry:
             lengths.append(count + generated)
             positions.append(layout.next_position + generated - 1)
             refs.append(layout)
+            self.batch_layouts.append((layout, generated))
         packed = torch.tensor(
             [(*entry, n, p) for entry, n, p in zip(entries, lengths, positions)],
             dtype=torch.int64,
@@ -637,6 +715,18 @@ class ContextDecodeRegistry:
             packed[:, 7],
             tuple(refs),
         )
+
+    def window_lengths_cpu(self, window, batch_size):
+        lengths = []
+        for layout, generated in self.batch_layouts:
+            if layout is None:
+                lengths.append(min(generated, window + 1))
+            else:
+                lower = layout.next_position + generated - 1 - window
+                start = np.searchsorted(layout.positions, lower)
+                lengths.append(len(layout.positions) - start + min(generated, window + 1))
+        # Native decode graph padding uses seq_len=1; its outputs are discarded.
+        return torch.tensor(lengths + [1] * (batch_size - len(lengths)), dtype=torch.int64)
 
     def fill(self, row_ids, lengths, indptr, output, *, starts=None, swa=False):
         from sglang.kernels.ops.attention.context_page_table import (
@@ -668,6 +758,18 @@ class ContextDecodeRegistry:
             MULTIPLIER=multiplier,
             HAS_START=starts is not None,
         )
+
+    def fill_table(self, row_ids, seq_lens, output, *, window=None):
+        """Fill an existing page-one native decode table without raw-row copies."""
+        lengths, starts = seq_lens, None
+        if window is not None:
+            from sglang.kernels.ops.attention.context_page_table import context_window_lengths
+            lengths = torch.empty_like(seq_lens)
+            context_window_lengths[(len(seq_lens),)](self.rows, row_ids, seq_lens, lengths, window)
+            starts = seq_lens - lengths
+        indptr = torch.arange(len(seq_lens) + 1, device=seq_lens.device, dtype=torch.int32) * output.stride(0)
+        self.fill(row_ids, lengths, indptr, output.view(-1), starts=starts, swa=window is not None)
+        return lengths
 
     def fill_window(self, row_ids, seq_lens, indptr, window, output):
         from sglang.kernels.ops.attention.context_page_table import (

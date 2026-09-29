@@ -540,8 +540,7 @@ def test_context_admission_limits_preserve_native_tp_and_overlap(chat):
             args.disaggregation_decode_retraction_backup = backup
             validate_context_request(args, config, obj)
         args.disaggregation_decode_enable_radix_cache = True
-        with pytest.raises(ValueError, match="radix_cache"):
-            validate_context_request(args, config, obj)
+        validate_context_request(args, config, obj)
         args.disaggregation_decode_enable_radix_cache = False
 
 
@@ -611,7 +610,7 @@ def test_unsupported_model_rejected_before_template_compilation(chat):
 def test_nonstream_reports_zero_context_usage_without_meta_flag(chat):
     values = {"cached_tokens": 0, "repos_tokens": 0, "drop_skipped_tokens": 0,
               "actual_prefill_tokens": 4, "actual_decode_tokens": 1}
-    ret = [{"text": "answer", "meta_info": {"id": "context-zero", "prompt_tokens": 4,
+    ret = [{"text": "answer", "meta_info": {"id": "context-zero", "weight_version": "test", "prompt_tokens": 4,
             "completion_tokens": 1, "cached_tokens": 0,
             "finish_reason": {"type": "length", "length": 1}, "context_usage": values}}]
     response = chat._build_chat_response(request(), ret, 0)
