@@ -19,7 +19,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def native_attention(tmp_path_factory):
     # Load the real kernel dependencies. Only unrelated SRT bootstrap and
     # platform detection are isolated, so this also runs in the mini oracle env.
