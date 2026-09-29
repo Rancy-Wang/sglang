@@ -956,8 +956,8 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
                 if ret.spec_info is not None or seq_lens_cpu is None:
                     raise ValueError("Context decode needs native non-spec CPU length metadata")
                 if registry is None:
-                    if model_runner.decode_attention_backend_str != "triton":
-                        raise ValueError("Context decode currently requires native Triton")
+                    if model_runner.decode_attention_backend_str not in {"triton", "flashinfer", "fa3", "fa4"}:
+                        raise ValueError("Context decode requires a supported native attention backend")
                     registry = ContextDecodeRegistry(
                         model_runner.kv_index_translator, model_runner.token_to_kv_pool,
                         model_runner.req_to_token_pool,

@@ -525,7 +525,7 @@ def test_context_admission_limits_preserve_native_tp_and_overlap(chat):
     validate_context_request(args, config, obj)
     for field, value, error in (
         ("page_size", 16, "page_size=1"),
-        ("attention_backend", "flashinfer", "Triton"),
+        ("attention_backend", "torch_native", "Triton"),
         ("enable_hierarchical_cache", True, "hierarchical"),
         ("speculative_algorithm", "EAGLE", "non-speculative"),
     ):
@@ -615,3 +615,30 @@ def test_nonstream_reports_zero_context_usage_without_meta_flag(chat):
             "finish_reason": {"type": "length", "length": 1}, "context_usage": values}}]
     response = chat._build_chat_response(request(), ret, 0)
     assert response.sglext.context_usage == {0: values}
+
+
+@pytest.mark.parametrize("architecture", ["QWenLMHeadModel", "Qwen2ForCausalLM", "Qwen2MoeForCausalLM", "Qwen3ForCausalLM", "Qwen3MoeForCausalLM", "GptOssForCausalLM"])
+def test_context_model_permissions_are_checked_per_request(chat, architecture):
+    chat.tokenizer_manager.model_config._resolved_model_arch = architecture
+    chat.tokenizer_manager.model_config.hf_config.architectures = [architecture]
+    result = chat._process_messages(request(drop_message={"1": [0]}, reposition=[1]), False)
+    assert result.context_program is not None
+    assert result.prompt_ids
+
+
+def test_slow_tokenizer_exact_bytes_preserve_unicode_boundaries():
+    from types import SimpleNamespace
+    from sglang.srt.context_system.provenance import _encode_with_offsets, append_assistant_prefix, TemplateTokenProvenance
+    tokenizer = SimpleNamespace(is_fast=False, bos_token_id=None,
+        encode=lambda text, **_: list(text.encode("utf-8")),
+        tokenizer=SimpleNamespace(decode_single_token_bytes=lambda value: bytes([value])))
+    ids, offsets = _encode_with_offsets(tokenizer, "你a", add_special_tokens=False)
+    assert ids == list("你a".encode("utf-8"))
+    assert offsets == [(0, 1), (0, 1), (0, 1), (1, 2)]
+    trace = TemplateTokenProvenance([], [], [], "", [], 0)
+    extended = append_assistant_prefix(trace, tokenizer, "你a", owner=2)
+    assert extended.input_ids == ids and extended.offsets == offsets
+    assert extended.owners == [2] * 4
+    tokenizer.tokenizer.decode_single_token_bytes = lambda _: b"bad"
+    with pytest.raises(RuntimeError, match="bytes do not reproduce"):
+        _encode_with_offsets(tokenizer, "你a", add_special_tokens=False)

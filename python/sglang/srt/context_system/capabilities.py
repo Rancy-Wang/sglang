@@ -48,10 +48,9 @@ def validate_context_config(args, model_config):
         raise ValueError("Context requires text-only FP16/BF16 model execution")
     prefill = args.prefill_attention_backend or args.attention_backend
     decode = args.decode_attention_backend or args.attention_backend
-    if prefill != "triton" or decode != "triton":
-        raise ValueError(
-            "Context attention integration currently requires native Triton"
-        )
+    supported = {"triton", "flashinfer", "fa3", "fa4"}
+    if prefill not in supported or decode not in supported:
+        raise ValueError("Context requires Triton, FlashInfer, FA3 or FA4 attention")
     if args.kv_cache_dtype not in ("auto", "float16", "bfloat16"):
         raise ValueError("Context requires unquantized FP16/BF16 KV")
     if args.disaggregation_mode != "null":
@@ -67,12 +66,6 @@ def validate_context_config(args, model_config):
                 raise ValueError(f"Context PD is not yet supported with {name}")
         if envs.SGLANG_DISAGG_STAGING_BUFFER.get():
             raise ValueError("Context PD staging transfer is not yet supported")
-        if (
-            getattr(args, "disaggregation_decode_enable_radix_cache", False)
-            and "GptOssForCausalLM" in architectures
-            and not args.disable_hybrid_swa_memory
-        ):
-            raise ValueError("Context decode Radix requires shared Full/SWA KV")
     if args.pp_size != 1 or args.attn_cp_size != 1 or args.dcp_size != 1:
         raise ValueError("Context currently supports TP without PP/CP/DCP")
     if args.speculative_algorithm or args.dllm_algorithm:
