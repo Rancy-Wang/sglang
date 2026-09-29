@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 from typing import TYPE_CHECKING, Optional
 
 import numpy as np
@@ -54,6 +55,12 @@ from sglang.kernels.ops.attention.flash_attention import (
     flash_attn_varlen_func,
     flash_attn_with_kvcache,
 )
+
+
+from sglang.srt.layers.attention.context_backend import flash_attention_with_sink
+
+flash_attn_varlen_func = partial(flash_attention_with_sink, flash_attn_varlen_func)
+flash_attn_with_kvcache = partial(flash_attention_with_sink, flash_attn_with_kvcache)
 
 
 def _should_disable_scheduler_metadata_precompute() -> bool:
@@ -279,6 +286,8 @@ class FlashAttentionBackend(AttentionBackend):
                 get_scheduler_metadata,
             )
 
+            flash_attn_varlen_func = partial(flash_attention_with_sink, flash_attn_varlen_func)
+            flash_attn_with_kvcache = partial(flash_attention_with_sink, flash_attn_with_kvcache)
             self._get_scheduler_metadata = get_scheduler_metadata
             self._get_fa_runtime_policy = None
         elif self.fa_impl_ver == 4:
@@ -747,7 +756,7 @@ class FlashAttentionBackend(AttentionBackend):
     def init_forward_metadata(self, forward_batch: ForwardBatch):
         """Initialize forward metadata hence all layers in the forward pass can reuse it."""
         if forward_batch.context_attention is not None:
-            self.forward_metadata = None
+            self.forward_metadata = forward_batch
             return
         metadata = FlashAttentionMetadata()
         seqlens_in_batch = forward_batch.seq_lens
@@ -1305,13 +1314,13 @@ class FlashAttentionBackend(AttentionBackend):
         rel_bias=None,
         rel_bias_event=None,
     ):
-        if forward_batch.context_attention is not None:
+        if getattr(self.forward_metadata, "context_attention", None) is not None:
             from sglang.srt.layers.attention.context_backend import prepare_native_context
 
             if score_mod is not None or aux_tensors is not None or rel_bias is not None:
                 raise ValueError("Context does not support custom attention score modifiers")
             _, plan, query, k_pool, v_pool = prepare_native_context(
-                q, k, v, layer, forward_batch, self.token_to_kv_pool,
+                q, k, v, layer, self.forward_metadata, self.token_to_kv_pool,
                 self.kv_index_translator, save_kv_cache,
             )
             _, _, qo, kv, slots, max_q, max_k = plan
@@ -1324,7 +1333,9 @@ class FlashAttentionBackend(AttentionBackend):
                 window_size=(window, 0) if window is not None and window >= 0 else (-1, -1),
                 softcap=layer.logit_cap or 0.0, sinks=sinks,
             )
-            return result.view(-1, layer.tp_q_head_num * layer.v_head_dim)
+            padded = q.new_empty((q.shape[0], layer.tp_q_head_num * layer.v_head_dim))
+            padded[:result.shape[0]].copy_(result.flatten(1))
+            return padded
         if score_mod is not None and self.fa_impl_ver != 4:
             raise RuntimeError("score_mod is only supported by the FA4 backend.")
         cp_active = is_cp_active(forward_batch)

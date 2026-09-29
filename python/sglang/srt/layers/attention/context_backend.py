@@ -251,6 +251,27 @@ class ContextAttentionMetadata:
         return output
 
 
+def flash_attention_with_sink(kernel, *args, sinks=None, **kwargs):
+    """FA3's Ampere kernels accept but ignore sinks; normalize using native LSE.
+
+    Keep the attention computation in the selected native kernel. FA4 has its
+    own sink support, and requests without sinks take the unchanged call.
+    """
+    if sinks is None or kwargs.get("ver", 3) != 3:
+        return kernel(*args, sinks=sinks, **kwargs)
+    return_lse = kwargs.pop("return_softmax_lse", False)
+    output, lse, *rest = kernel(
+        *args, sinks=None, return_softmax_lse=True, **kwargs
+    )
+    # FA uses natural-log LSE, with heads before the query dimension.
+    logits = lse.transpose(-1, -2)
+    output.mul_(torch.sigmoid(logits - sinks.float()).unsqueeze(-1))
+    if return_lse:
+        lse = torch.logaddexp(logits, sinks.float()).transpose(-1, -2)
+        return output, lse, *rest
+    return output
+
+
 def prepare_native_context(q, k, v, layer, batch, pool, translator, save_kv_cache):
     """Write birth KV and finish COW before the selected native library reads it."""
     from sglang.srt.mem_cache.memory_pool import KVWriteLoc
@@ -260,20 +281,22 @@ def prepare_native_context(q, k, v, layer, batch, pool, translator, save_kv_cach
         raise ValueError("Context requires unquantized query KV")
     if layer.is_cross_attention or batch.spec_info is not None:
         raise ValueError("Context requires native causal MHA/GQA")
-    swa_slots = translator.sliding_window_write_loc_for(batch.out_cache_loc)
+    metadata = context.for_layer(layer)
+    count = metadata.query_count
+    locations = batch.out_cache_loc[:count]
+    swa_slots = translator.sliding_window_write_loc_for(locations)
     if save_kv_cache:
-        pool.set_kv_buffer(layer, KVWriteLoc(batch.out_cache_loc, swa_slots), k, v)
+        pool.set_kv_buffer(layer, KVWriteLoc(locations, swa_slots), k[:count], v[:count])
     copy = context.layer_copies.get(layer.layer_id)
     if copy is not None:
         copy.apply()
-    metadata = context.for_layer(layer)
-    slots = batch.out_cache_loc
+    slots = locations
     if layer.sliding_window_size is not None and layer.sliding_window_size >= 0:
         if swa_slots is not None:
             slots = swa_slots
     plan = metadata.native_plan(slots, layer.sliding_window_size)
     k_pool, v_pool = pool.get_kv_buffer(layer.layer_id)
-    return metadata, plan, q.view(-1, layer.tp_q_head_num, layer.head_dim), k_pool, v_pool
+    return metadata, plan, q[:count].view(-1, layer.tp_q_head_num, layer.head_dim), k_pool, v_pool
 
 
 @dataclass(frozen=True)

@@ -939,7 +939,7 @@ class FlashInferAttnBackend(AttentionBackend):
         if forward_batch.context_attention is not None:
             # Context supplies occurrence metadata; gathering a raw-prefix
             # table here would read holes before the feature branch executes.
-            self.forward_metadata = None
+            self.forward_metadata = forward_batch
             return
         swa_out_cache_loc = None
         if self.use_sliding_window_kv_pool and forward_batch.out_cache_loc is not None:
@@ -1302,11 +1302,11 @@ class FlashInferAttnBackend(AttentionBackend):
         save_kv_cache=True,
         sinks=None,
     ):
-        if forward_batch.context_attention is not None:
+        if getattr(self.forward_metadata, "context_attention", None) is not None:
             from sglang.srt.layers.attention.context_backend import prepare_native_context
 
             metadata, plan, query, k_pool, v_pool = prepare_native_context(
-                q, k, v, layer, forward_batch, self.token_to_kv_pool,
+                q, k, v, layer, self.forward_metadata, self.token_to_kv_pool,
                 self.kv_index_translator, save_kv_cache,
             )
             cpu_qo, cpu_kv, _, _, slots, _, _ = plan
@@ -1326,7 +1326,9 @@ class FlashInferAttnBackend(AttentionBackend):
                 output, lse = wrapper.run(query, k_pool[slots], v_pool[slots], return_lse=True)
                 # FlashInfer FA2 LSE is base two; sinks are natural-log logits.
                 output.mul_(torch.sigmoid(lse * 0.6931471805599453 - sinks.float()).unsqueeze(-1))
-            return output.view(-1, layer.tp_q_head_num * layer.v_head_dim)
+            padded = q.new_empty((q.shape[0], layer.tp_q_head_num * layer.v_head_dim))
+            padded[:output.shape[0]].copy_(output.flatten(1))
+            return padded
         prefill_wrapper_paged = self.forward_metadata.prefill_wrappers[
             self._get_wrapper_idx(layer)
         ]

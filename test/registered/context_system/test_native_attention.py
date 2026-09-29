@@ -252,7 +252,11 @@ def test_context_native_ragged_position_holes(backend, window, with_sink):
             from sgl_kernel.flash_attn import flash_attn_varlen_func
         else:
             from sglang.kernels.ops.attention.flash_attention_v4 import flash_attn_varlen_func
-        engine.flash_attn_varlen_func = flash_attn_varlen_func
+        from functools import partial
+        from sglang.srt.layers.attention.context_backend import flash_attention_with_sink
+        engine.flash_attn_varlen_func = (partial(flash_attention_with_sink, flash_attn_varlen_func)
+                                       if backend == "fa3" else flash_attn_varlen_func)
+    engine.forward_metadata = batch
     engine.token_to_kv_pool = pool
     engine.kv_index_translator = translator
     sinks = torch.randn(4, device=device, dtype=torch.float32 if backend == "trtllm_mha" else dtype) if with_sink else None
