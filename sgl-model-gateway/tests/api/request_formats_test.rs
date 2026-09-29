@@ -285,7 +285,7 @@ fn context_fields_survive_protocol_roundtrip() {
 #[tokio::test]
 async fn context_fields_reach_http_worker() {
     use crate::common::{
-        mock_worker::{capture_chat_requests, take_chat_requests},
+        mock_worker::{capture_chat_requests, fail_next_chat_request, take_chat_requests},
         AppTestContext,
     };
     use axum::{
@@ -304,6 +304,7 @@ async fn context_fields_reach_http_worker() {
     .await;
     let app = ctx.create_app().await;
     capture_chat_requests(port);
+    fail_next_chat_request(port);
     for stream in [false, true] {
         let payload = json!({"model":"test-model", "messages":[{"role":"user","content":"hi"}],
             "stream":stream, "drop_message":null, "drop_rule":{}, "reposition":[], "return_meta_info":true});
@@ -323,7 +324,7 @@ async fn context_fields_reach_http_worker() {
         to_bytes(response.into_body(), 1 << 20).await.unwrap();
     }
     let requests = take_chat_requests(port);
-    assert_eq!(requests.len(), 2);
+    assert_eq!(requests.len(), 3);
     for value in requests {
         assert_eq!(value.get("drop_message"), Some(&serde_json::Value::Null));
         assert_eq!(value["drop_rule"], json!({}));
