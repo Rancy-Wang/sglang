@@ -105,3 +105,32 @@ def test_streaming_decode_snapshot_does_not_scan_prompt(usage_type, monkeypatch)
             assert result.actual_decode_tokens == count
     usage.record_prefill(mask(0, 1), mask(0, 0), 2)
     assert usage.snapshot().drop_skipped_tokens == 0
+
+
+@pytest.mark.parametrize("resident_drop", [False, True])
+def test_drop_skip_includes_evicted_holes(usage_type, resident_drop):
+    recovery_module = load_file(
+        "usage_recovery", ROOT / "python/sglang/srt/context_system/recovery.py"
+    )
+    resident = mask(*([resident_drop] * 4 + [True] * 4))
+    expiry = torch.tensor([8] * 4 + [13] * 8, dtype=torch.int32)
+    recovery = recovery_module.plan_recovery(resident, expiry, 12)
+    assert recovery.intervals == ((8, 12),)
+    usage = usage_type(
+        recovery.reusable_prefix, mask(*([True] * 4 + [False] * 4)),
+        query_intervals=recovery.intervals,
+    )
+    usage.record_prefill(mask(*([False] * 4 + [True] * 4)), mask(*([False] * 8)), 4)
+    result = usage.snapshot()
+    assert (result.cached_tokens, result.repos_tokens, result.drop_skipped_tokens) == (4, 0, 4)
+    assert 12 - result.cached_tokens - result.repos_tokens - result.drop_skipped_tokens == result.actual_prefill_tokens
+
+
+def test_repaired_drop_is_not_saved_compute(usage_type):
+    # Token 0 must be recomputed before the later Drop. Token 1 is an evicted
+    # Drop hole that no query needs; token 2 is read before being dropped.
+    usage = usage_type(mask(0, 0, 1), mask(1, 1, 1), query_intervals=((0, 1), (3, 5)))
+    usage.record_prefill(mask(0, 0, 1), mask(0, 0, 0), 3)
+    result = usage.snapshot()
+    assert (result.cached_tokens, result.repos_tokens, result.drop_skipped_tokens) == (1, 0, 1)
+    assert result.actual_prefill_tokens == 3

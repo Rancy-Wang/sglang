@@ -1326,12 +1326,20 @@ class OpenAIServingChat(OpenAIServingBase):
     ) -> MessageProcessingResult:
         """Process chat messages and apply chat template"""
         context_rule = None
-        has_context = (
-            request.drop_message is not None
-            or request.drop_rule is not None
-            or bool(request.reposition)
+        has_context = bool(
+            request.model_fields_set & {"drop_message", "drop_rule", "reposition"}
         )
         if has_context:
+            from sglang.srt.arg_groups.overrides import resolving_view
+            from sglang.srt.context_system.capabilities import validate_context_config
+
+            validate_context_config(
+                resolving_view(self.tokenizer_manager.server_args),
+                self.tokenizer_manager.model_config,
+            )
+            warmup_error = getattr(self.tokenizer_manager, "context_warmup_error", None)
+            if isinstance(warmup_error, str):
+                raise ValueError(f"Context compiler is unavailable: {warmup_error}")
             from sglang.srt.context_system.rules import (
                 KeepTextDropRule,
                 parse_drop_rule,
@@ -1363,8 +1371,9 @@ class OpenAIServingChat(OpenAIServingBase):
                 ).messages
                 request = request.model_copy(update={"messages": full})
                 if context_rule.use_visible_as_full:
+                    # Preserve the explicit feature request as an empty program,
+                    # using the actual fallback prompt and the same P accounting.
                     context_rule = None
-                    has_context = bool(request.reposition)
         if self.default_chat_template_kwargs:
             ctk = dict(request.chat_template_kwargs or {})
             for k, v in self.default_chat_template_kwargs.items():
@@ -2136,10 +2145,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 image_tokens[index] = content["meta_info"].get("image_tokens", 0)
                 audio_tokens[index] = content["meta_info"].get("audio_tokens", 0)
                 video_tokens[index] = content["meta_info"].get("video_tokens", 0)
-                if (
-                    include_usage
-                    and content["meta_info"].get("context_usage") is not None
-                ):
+                if content["meta_info"].get("context_usage") is not None:
                     context_usage[index] = content["meta_info"]["context_usage"]
 
                 finish_reason = content["meta_info"].get("finish_reason", None)
@@ -2473,6 +2479,11 @@ class OpenAIServingChat(OpenAIServingBase):
         output_ids = None
         if self._should_return_output_ids(request):
             output_ids = [list(ret_item["output_ids"]) for ret_item in ret]
+        context_usage = {
+            idx: item["meta_info"]["context_usage"]
+            for idx, item in enumerate(ret)
+            if item["meta_info"].get("context_usage") is not None
+        }
         response_sglext = None
         if (
             routed_experts
@@ -2480,6 +2491,7 @@ class OpenAIServingChat(OpenAIServingBase):
             or spec_tokens_details
             or input_ids is not None
             or output_ids is not None
+            or context_usage
         ):
             response_sglext = SglExt(
                 routed_experts=routed_experts,
@@ -2487,6 +2499,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 spec_tokens_details=spec_tokens_details,
                 input_ids=input_ids,
                 output_ids=output_ids,
+                context_usage=context_usage or None,
             )
 
         for idx, ret_item in enumerate(ret):

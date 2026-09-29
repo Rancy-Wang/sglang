@@ -26,7 +26,9 @@ class ContextUsage:
     Drop-skipped. Cacheback copies and CUDA-graph padding are not model compute.
     """
 
-    def __init__(self, resident: torch.Tensor, dropped: torch.Tensor):
+    def __init__(
+        self, resident: torch.Tensor, dropped: torch.Tensor, *, query_intervals=()
+    ):
         for value in (resident, dropped):
             if (
                 value.device.type != "cpu"
@@ -37,7 +39,12 @@ class ContextUsage:
         if resident.shape != dropped.shape:
             raise ValueError("Drop proof must cover the initial cache match")
         self.resident = resident.numpy().copy()
+        # Drop avoids queries even when the matched KV has already been evicted.
+        # Exclude historical repair queries: computing a token and then dropping
+        # it is not saved work. Recovery intervals use original raw-token indices.
         self.dropped = dropped.numpy().copy()
+        for start, end in query_intervals:
+            self.dropped[start : min(end, len(self.dropped))] = False
         self.read = np.zeros(len(resident), dtype=np.bool_)
         self.transformed = np.zeros(len(resident), dtype=np.bool_)
         self.prefill_queries = 0
@@ -108,7 +115,7 @@ class ContextUsage:
             self._cache_counts = (
                 int(np.count_nonzero(used & ~self.transformed)),
                 int(np.count_nonzero(used & self.transformed)),
-                int(np.count_nonzero(self.resident & self.dropped & ~self.read)),
+                int(np.count_nonzero(self.dropped & ~self.read)),
             )
         return ContextUsageSnapshot(
             *self._cache_counts,
