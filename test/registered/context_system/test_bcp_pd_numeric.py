@@ -88,7 +88,6 @@ def pd_servers():
                 "4",
                 "--chunked-prefill-size",
                 os.environ.get("CONTEXT_CHUNK_SIZE", "512"),
-                "--context-drop-aware-eviction",
                 "--cuda-graph-config",
                 json.dumps(
                     {

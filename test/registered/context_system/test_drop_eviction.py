@@ -11,6 +11,30 @@ from test_ir import ROOT, args, load_file
 pytest_plugins = ("test_ir",)
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="native SRT runtime")
+@pytest.mark.parametrize("disabled", [False, True])
+def test_drop_aware_eviction_cli_and_runtime_default(disabled):
+    import argparse
+
+    from sglang.srt.runtime_context import get_memory, publish, reset_context
+    from sglang.srt.server_args import ServerArgs
+
+    parser = argparse.ArgumentParser()
+    ServerArgs.add_cli_args(parser)
+    argv = ["--model-path", "dummy", "--page-size", "1"]
+    if disabled:
+        argv.append("--disable-drop-aware-eviction")
+    parsed = ServerArgs.from_cli_args(parser.parse_args(argv))
+    assert parsed.disable_drop_aware_eviction is disabled
+    assert "--context-drop-aware-eviction" not in parser._option_string_actions
+    reset_context()
+    try:
+        publish(parsed, role="scheduler")
+        assert get_memory().disable_drop_aware_eviction is disabled
+    finally:
+        reset_context()
+
+
 def test_candidate_drop_priority_and_bounded_stale_entries():
     module = load_file(
         "context_drop_eviction", ROOT / "python/sglang/srt/context_system/recovery.py"
@@ -623,7 +647,7 @@ def test_swa_req_recovery_publication_and_pressure(
     reset_context()
     publish(
         ServerArgs(
-            model_path="dummy", page_size=1, context_drop_aware_eviction=drop_aware
+            model_path="dummy", page_size=1, disable_drop_aware_eviction=not drop_aware
         ),
         role="scheduler",
     )
@@ -707,6 +731,8 @@ def test_swa_req_recovery_publication_and_pressure(
                 if drop_aware and req.kv.cache_protected_len > 32:
                     assert req.lock_receipt.context_skip_ranges
                     assert torch.all(state.terminal_rows[8:16] < 0)
+                if not drop_aware:
+                    assert req.lock_receipt.context_skip_ranges == ()
         if drop_aware:
             assert req.kv.cache_protected_len == 48
             assert req.lock_receipt.context_skip_ranges

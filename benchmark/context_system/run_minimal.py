@@ -272,8 +272,8 @@ def main():
                         }
                     ),
                 ]
-                if args.drop and (mode != "decode" or args.decode_radix):
-                    cmd += ["--context-drop-aware-eviction"]
+                if not (args.drop and (mode != "decode" or args.decode_radix)):
+                    cmd += ["--disable-drop-aware-eviction"]
                 if "gpt-oss" in args.model.lower():
                     cmd += [
                         "--tool-call-parser",

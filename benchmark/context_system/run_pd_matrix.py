@@ -351,10 +351,10 @@ def run_one(args, session=None):
                     cmd.remove(radix)
                 if i == 1 and args.decode_radix:
                     cmd.append(radix)
-                eviction = "--context-drop-aware-eviction"
-                if eviction in cmd:
-                    cmd.remove(eviction)
-                if args.drop and (i == 0 or args.decode_radix):
+                eviction = "--disable-drop-aware-eviction"
+                # Replay both old opt-in manifests and current default-on ones.
+                cmd = [f for f in cmd if f not in (eviction, "--context-drop-aware-eviction")]
+                if not (args.drop and (i == 0 or args.decode_radix)):
                     cmd.append(eviction)
                 temp = tempfile.TemporaryDirectory(prefix="pd8-")
                 temps.append(temp)

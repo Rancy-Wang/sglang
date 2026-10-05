@@ -1240,7 +1240,7 @@ class UnifiedRadixCache(BasePrefixCache):
                 swa_resident=req.context_swa_resident,
             )
             req.context_cache_published = True
-            if get_memory().context_drop_aware_eviction:
+            if not get_memory().disable_drop_aware_eviction:
                 self._configure_context_drop_eviction(req)
             if not needs_context_source_lease(req):
                 # This chunk has completed and the target lease is installed.

@@ -69,11 +69,11 @@ class Memory(msgspec.Struct):
             resolvable=True,
         ),
     ] = False
-    context_drop_aware_eviction: A[
+    disable_drop_aware_eviction: A[
         bool,
-        "Allow page_size=1 Context requests to release proven-unread dropped "
-        "Radix KV while retaining path references. Reclaim leaves before "
-        "eligible dropped internal pages. Disabled for ordinary eviction baselines.",
+        "Disable reclaiming proven-unread dropped Radix KV for page_size=1 "
+        "Context requests. Drop-aware eviction is enabled by default and "
+        "retains path references. Ordinary requests keep native eviction.",
     ] = False
     enable_page_major_kv_layout: A[
         bool,

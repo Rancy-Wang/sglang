@@ -344,9 +344,10 @@ def run_one(args):
                                 ("--disaggregation-bootstrap-port", args.port + 10),
                                 ("--nccl-port", args.port + 20 + i)):
                 flags[flags.index(flag) + 1] = str(value)
-            eviction = "--context-drop-aware-eviction"
-            flags = [f for f in flags if f != eviction]
-            if args.strategy == "drop":
+            eviction = "--disable-drop-aware-eviction"
+            # Historical manifests may still contain the removed opt-in flag.
+            flags = [f for f in flags if f not in (eviction, "--context-drop-aware-eviction")]
+            if args.strategy != "drop":
                 flags.append(eviction)
             # Native startup probes have non-fixture RIDs. The controlled
             # cohort itself supplies 128 full-batch warmup decode steps.

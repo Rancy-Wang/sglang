@@ -57,7 +57,6 @@ def server(tmp_path_factory):
         os.environ.get("CONTEXT_CHUNK_SIZE", "64"),
         "--cuda-graph-config",
         json.dumps(graph),
-        "--context-drop-aware-eviction",
         "--enable-mixed-chunk",
     ]
     cmd += ["--tp-size", os.environ.get("CONTEXT_TEST_TP", "1")]

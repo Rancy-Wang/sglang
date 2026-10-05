@@ -249,7 +249,7 @@ def test_context_occurrence_native_publication_and_release(compiler, mode):
 
     reset_context()
     publish(
-        ServerArgs(model_path="dummy", page_size=1, context_drop_aware_eviction=True),
+        ServerArgs(model_path="dummy", page_size=1),
         role="scheduler",
     )
     try:

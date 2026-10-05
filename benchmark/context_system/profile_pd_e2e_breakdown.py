@@ -470,9 +470,11 @@ def launch_flags(source, role, port, drop):
     for key, value in (("--port", port+role), ("--nccl-port", port+20+role),
                        ("--disaggregation-bootstrap-port", port+10)):
         flags[flags.index(key)+1] = str(value)
-    flags = [f for f in flags if f != "--context-drop-aware-eviction"]
-    if drop:
-        flags.append("--context-drop-aware-eviction")
+    flags = [f for f in flags if f not in (
+        "--context-drop-aware-eviction", "--disable-drop-aware-eviction"
+    )]
+    if not drop:
+        flags.append("--disable-drop-aware-eviction")
     return flags
 
 
