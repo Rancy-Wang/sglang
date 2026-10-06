@@ -3268,7 +3268,8 @@ class Scheduler(
             if sender is not None:
                 try:
                     # Unadmitted requests have no transfer chunks in flight.
-                    assert self.drain_context_capacity_abort(req, message)
+                    drained = self.drain_context_capacity_abort(req, message)
+                    assert drained
                 except Exception:
                     logger.exception(
                         "Failed to notify KV sender of abort for %s", req.rid

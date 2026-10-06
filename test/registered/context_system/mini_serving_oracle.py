@@ -1,0 +1,177 @@
+"""Capture the native mini default mask/page-occurrence BCP reference."""
+
+import asyncio
+import importlib.util
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+from bcp_numeric_fixture import load_fixture, request_for
+
+
+async def main():
+    # Mini owns a separate TCPStore on port 2333. Torchrun's agent store is
+    # elsewhere; older PyTorch otherwise treats both ranks as store clients.
+    os.environ["TORCHELASTIC_USE_AGENT_STORE"] = "False"
+    root = Path(os.environ["CONTEXT_MINI_ROOT"])
+    sys.path.insert(0, str(root / "python"))
+    spec = importlib.util.spec_from_file_location(
+        "mask_staged_runner", root / "tests/contextual/mask_staged_runner.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    original_config = module.SchedulerConfig
+
+    def bounded_config(**kwargs):
+        kwargs["tp_info"] = module.DistributedInfo(
+            int(os.environ.get("LOCAL_RANK", "0")),
+            int(os.environ.get("WORLD_SIZE", "1")),
+        )
+        kwargs.update(
+            max_seq_len_override=24576,
+            num_page_override=24576,
+            max_extend_tokens=8192,
+        )
+        return original_config(**kwargs)
+
+    module.SchedulerConfig = bounded_config
+    original_body = module.request_body
+
+    def draining_body(*args, **kwargs):
+        kwargs["ignore_eos"] = True
+        return original_body(*args, **kwargs)
+
+    module.request_body = draining_body
+    from minisgl.tokenizer.server import _build_occurrence_user_msg
+
+    original_build = module._build_user_msg
+
+    def native_dispatch(msg, tokenized):
+        if tokenized.reposition_input_ids is not None:
+            return _build_occurrence_user_msg(msg, tokenized)
+        return original_build(msg, tokenized)
+
+    module._build_user_msg = native_dispatch
+    model = os.environ["CONTEXT_SERVER_MODEL"]
+    runner = module.Runner(model, reference_alignment=True)
+    sampler = runner.scheduler.engine.sampler
+    observed_sample = sampler.sample
+
+    def raw_sample(logits, args):
+        raw = logits.detach().clone()
+        output = observed_sample(logits, args)
+        for i, req in enumerate(runner.batch.reqs):
+            record = runner.records[req.uid]
+            if req.sample_is_committed:
+                record["logits_gpu"][-1] = raw[i]
+            else:
+                record["logits_gpu"].pop()
+                record["sample_rows"].pop()
+        return output
+
+    sampler.sample = raw_sample
+    fixture = load_fixture()
+    if trace := fixture.get("native_sglang_trace"):
+        # Numerical isolation only: keep mini's default compiler, scheduler,
+        # mask/page-occurrence, model, sampler and kernels. Both engines consume
+        # SGLang's exact native prompt. Original mini-chat evidence is separate.
+        assert runner.tokenizer.is_gpt_oss and trace["model"] == model
+        assert len(trace["input_ids"]) == len(trace["owners"])
+
+        expected_messages = [
+            module.api.Message(**message).model_dump()
+            for message in fixture["messages"]
+        ]
+
+        def normalized_harmony(messages, **kwargs):
+            assert messages == expected_messages
+            runner.tokenizer._tokenize_invocations += 1
+            runner.tokenizer._chat_template_invocations += 1
+            runner.tokenizer._harmony_thinking_ranges = {}
+            return (
+                list(trace["input_ids"]),
+                list(trace["owners"]),
+                trace["generation_start"],
+            )
+
+        runner.tokenizer._render_harmony_message_drop = normalized_harmony
+    result = {
+        "head": (
+            await asyncio.to_thread(
+                subprocess.check_output,
+                ["git", "-C", str(root), "rev-parse", "HEAD"],
+                text=True,
+            )
+        ).strip(),
+        "gpu": os.environ.get("CUDA_VISIBLE_DEVICES"),
+        "model": model,
+        "fixture": fixture,
+        "runs": {},
+    }
+    logits = {}
+    consecutive_path = os.environ.get("CONTEXT_ORACLE_CONSECUTIVE_REFERENCE")
+    reference_path = consecutive_path or os.environ.get("CONTEXT_ORACLE_RETRY_REFERENCE")
+    reference = json.loads(Path(reference_path).read_text()) if reference_path else None
+    if reference is not None:
+        assert reference["fixture"] == fixture and reference["model"] == model
+        result["reference_path"] = reference_path
+        result["comparison_kind"] = "matched_cache_retry_fixed_tokens"
+    if consecutive_path:
+        result["comparison_kind"] = "matched_cache_consecutive_reposition_fixed_tokens"
+        runner.clear()
+        tokens = reference["runs"]["drop_repos"]["records"][0]["tokens"]
+        for key, warm in (("consecutive-source", True), ("drop_repos-consecutive", False)):
+            request = request_for(fixture, "drop_repos")
+            if warm:
+                request["reposition"] = fixture["reposition"][:1]
+            runner.forced_tokens = tokens[:1] if warm else tokens
+            run = await runner.generate("mask", [request], max_tokens=len(runner.forced_tokens))
+            (record,) = [r for r in run["records"] if not r["warmup"]]
+            assert record["tokens"] == runner.forced_tokens
+            logits[key] = runner.full_logits[record["uid"]]
+            result["runs"][key] = run
+            print("MINI_BCP", key, run["responses"], flush=True)
+    features = () if consecutive_path else (
+        ("none", "drop_repos") if reference else ("none", "drop", "drop_repos")
+    )
+    for feature in features:
+        if feature == "none" or reference is None:
+            runner.clear()
+        if reference:
+            runner.forced_tokens = reference["runs"][feature]["records"][0]["tokens"]
+        run = await runner.generate(
+            "mask",
+            [request_for(fixture, feature)],
+            max_tokens=int(os.environ.get("CONTEXT_NUMERIC_TOKENS", "64")),
+        )
+        (record,) = [r for r in run["records"] if not r["warmup"]]
+        logits[feature] = runner.full_logits[record["uid"]]
+        if reference:
+            assert record["tokens"] == runner.forced_tokens
+        result["runs"][feature] = run
+        print("MINI_BCP", feature, run["responses"], flush=True)
+    if not reference and os.environ.get("CONTEXT_ORACLE_INCLUDE_RETRY") == "1":
+        runner.clear()
+        for feature in ("none", "drop_repos"):
+            runner.forced_tokens = result["runs"][feature]["records"][0]["tokens"]
+            run = await runner.generate(
+                "mask",
+                [request_for(fixture, feature)],
+                max_tokens=len(runner.forced_tokens),
+            )
+            (record,) = [r for r in run["records"] if not r["warmup"]]
+            assert record["tokens"] == runner.forced_tokens
+            key = feature + "-retry"
+            logits[key] = runner.full_logits[record["uid"]]
+            result["runs"][key] = run
+    runner.clear()
+    output = os.environ["CONTEXT_ORACLE_OUTPUT"]
+    if int(os.environ.get("LOCAL_RANK", "0")) == 0:
+        Path(output).write_text(json.dumps(result))
+        module.torch.save(logits, output + ".pt")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

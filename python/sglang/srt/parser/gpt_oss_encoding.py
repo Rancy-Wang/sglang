@@ -34,17 +34,10 @@ from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from datetime import date
 from functools import lru_cache
-from typing import Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List
 
-
-@dataclass(frozen=True)
-class TemplateTokenProvenance:
-    input_ids: list[int]
-    owners: list[int]
-    offsets: list[tuple[int, int]]
-    rendered_text: str
-    char_owners: list[int]
-    cross_owner_tokens: int
+if TYPE_CHECKING:
+    from sglang.srt.context_system.provenance import TemplateTokenProvenance
 
 
 @dataclass(frozen=True)
@@ -59,17 +52,12 @@ class _HarmonyPrompt:
     conversation: Any
     components: list[Any]
     ownership: list[_HarmonyComponentOwnership]
-    thinking_components: dict[int, tuple[int, str]]
-    has_function_tools: bool
 
 
 class HarmonyEncoder:
     def __init__(self, reasoning_effort=None, *, preserve_thinking=False):
         self._preserve_harmony_thinking = preserve_thinking
         self._reasoning_effort = reasoning_effort
-        self._harmony_encoding = None
-        self._chat_template_invocations = 0
-        self._tokenize_invocations = 0
 
     def render_tokens(self, messages, tools=None, *, enable_thinking=None):
         return self._render_harmony_message_drop(
@@ -130,7 +118,6 @@ class HarmonyEncoder:
             )
         ]
         ownership = [_HarmonyComponentOwnership(owner=-1)]
-        thinking_components: dict[int, tuple[int, str]] = {}
 
         instruction_sources = tuple(
             (raw_message_id, content)
@@ -203,13 +190,11 @@ class HarmonyEncoder:
                 if not isinstance(reasoning, str):
                     reasoning = legacy_reasoning
                 if isinstance(reasoning, str) and reasoning:
-                    component_id = len(harmony_messages)
                     harmony_messages.append(
                         HarmonyMessage.from_role_and_content(
                             Role.ASSISTANT, reasoning
                         ).with_channel("analysis")
                     )
-                    thinking_components[component_id] = (raw_message_id, reasoning)
                     ownership.append(
                         _HarmonyComponentOwnership(
                             owner=raw_message_id,
@@ -266,8 +251,6 @@ class HarmonyEncoder:
             conversation=Conversation.from_messages(harmony_messages),
             components=harmony_messages,
             ownership=ownership,
-            thinking_components=thinking_components,
-            has_function_tools=bool(descriptions),
         )
         # Completed turns no longer contribute analysis to the next prompt.
         # Explicit thinking_drop retains it so Context can compile its KV drop.
@@ -304,18 +287,11 @@ class HarmonyEncoder:
         if len(keep_ids) == len(prompt.components):
             return prompt
 
-        remap = {old_id: new_id for new_id, old_id in enumerate(keep_ids)}
         components = [prompt.components[component_id] for component_id in keep_ids]
         return _HarmonyPrompt(
             conversation=Conversation.from_messages(components),
             components=components,
             ownership=[prompt.ownership[component_id] for component_id in keep_ids],
-            thinking_components={
-                remap[component_id]: source
-                for component_id, source in prompt.thinking_components.items()
-                if component_id in remap
-            },
-            has_function_tools=prompt.has_function_tools,
         )
 
     def _render_harmony_message_drop(
@@ -335,8 +311,6 @@ class HarmonyEncoder:
             tools=tools,
         )
         encoding = self._get_harmony_encoding()
-        self._chat_template_invocations += 1
-        self._tokenize_invocations += 1
         input_ids = [
             int(token_id)
             for token_id in encoding.render_conversation_for_completion(
@@ -368,7 +342,6 @@ class HarmonyEncoder:
         ):
             raise RuntimeError("Harmony completion render has no generation prompt.")
         expected: list[_HarmonyComponentOwnership] = []
-        expected_component_ids: list[int] = []
         component_id = 0
         for start, end in complete_ranges:
             header = encoding.decode(input_ids[start:end]).split("<|message|>", 1)[0]
@@ -388,7 +361,6 @@ class HarmonyEncoder:
                     "cannot align message ownership."
                 )
             expected.append(prompt.ownership[component_id])
-            expected_component_ids.append(component_id)
             component_id += 1
         if any(not item.is_analysis for item in prompt.ownership[component_id:]):
             raise RuntimeError(
@@ -456,6 +428,8 @@ class HarmonyEncoder:
         owners: List[int],
     ) -> TemplateTokenProvenance:
         """Recover character offsets from Harmony bytes without retokenizing."""
+
+        from sglang.srt.context_system.provenance import TemplateTokenProvenance
 
         encoding = self._get_harmony_encoding()
         decode_bytes = getattr(getattr(encoding, "_inner", None), "decode_bytes", None)

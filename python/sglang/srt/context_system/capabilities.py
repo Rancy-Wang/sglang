@@ -7,18 +7,26 @@ or acquire restrictions from these staged integration limits.
 from __future__ import annotations
 
 
-def validate_context_request(args, model_config, request):
+def validate_context_config(args, model_config):
     if args.page_size != 1:
         raise ValueError("Context Drop/Reposition requires page_size=1")
-    architectures = set(model_config.hf_config.architectures or ())
-    if not architectures or not architectures <= {
+    architectures = model_config.hf_config.architectures or ()
+    architecture = getattr(model_config, "_resolved_model_arch", None)
+    if not isinstance(architecture, str):
+        architecture = architectures[0] if architectures else None
+    if architecture not in {
+        "QWenLMHeadModel",
+        "Qwen2ForCausalLM",
+        "Qwen2MoeForCausalLM",
         "Qwen3ForCausalLM",
         "Qwen3MoeForCausalLM",
         "GptOssForCausalLM",
         "MiniMaxM2ForCausalLM",
     }:
-        raise ValueError("Context supports Qwen3/AgenticQwen, GPT-OSS and MiniMax M2")
-    if "MiniMaxM2ForCausalLM" in architectures:
+        raise ValueError(f"Context Drop/Reposition is not supported by {architecture}")
+    if getattr(model_config.hf_config, "dual_chunk_attention_config", None):
+        raise ValueError("Context Drop/Reposition does not support DualChunk RoPE")
+    if architecture == "MiniMaxM2ForCausalLM":
         config = model_config.hf_config
         head_dim = getattr(config, "head_dim", None)
         rotary_dim = getattr(config, "rotary_dim", None)
@@ -40,10 +48,10 @@ def validate_context_request(args, model_config, request):
         raise ValueError("Context requires text-only FP16/BF16 model execution")
     prefill = args.prefill_attention_backend or args.attention_backend
     decode = args.decode_attention_backend or args.attention_backend
-    if prefill != "triton" or decode != "triton":
-        raise ValueError(
-            "Context attention integration currently requires native Triton"
-        )
+    # FA4 shares the adapter but needs validation on supported hardware first.
+    supported = {"triton", "flashinfer", "fa3"}
+    if prefill not in supported or decode not in supported:
+        raise ValueError("Context requires a validated backend: Triton, FlashInfer or FA3")
     if args.kv_cache_dtype not in ("auto", "float16", "bfloat16"):
         raise ValueError("Context requires unquantized FP16/BF16 KV")
     if args.disaggregation_mode != "null":
@@ -59,12 +67,6 @@ def validate_context_request(args, model_config, request):
                 raise ValueError(f"Context PD is not yet supported with {name}")
         if envs.SGLANG_DISAGG_STAGING_BUFFER.get():
             raise ValueError("Context PD staging transfer is not yet supported")
-        if (
-            getattr(args, "disaggregation_decode_enable_radix_cache", False)
-            and "GptOssForCausalLM" in architectures
-            and not args.disable_hybrid_swa_memory
-        ):
-            raise ValueError("Context decode Radix requires shared Full/SWA KV")
     if args.pp_size != 1 or args.attn_cp_size != 1 or args.dcp_size != 1:
         raise ValueError("Context currently supports TP without PP/CP/DCP")
     if args.speculative_algorithm or args.dllm_algorithm:
@@ -84,6 +86,10 @@ def validate_context_request(args, model_config, request):
             raise ValueError(f"Context is not yet supported with {name}")
     if args.radix_cache_backend is not None:
         raise ValueError("Context requires the native unified Radix cache")
+
+
+def validate_context_request(args, model_config, request):
+    validate_context_config(args, model_config)
     if request.input_ids is None or request.input_embeds is not None:
         raise ValueError("A Context program requires its original input_ids")
     if request.contains_mm_input() or request.session_id or request.session_params:

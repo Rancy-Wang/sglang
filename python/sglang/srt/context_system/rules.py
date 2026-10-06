@@ -133,8 +133,6 @@ class TokenDropEvents:
     range_offsets: torch.Tensor
     raw_ranges: torch.Tensor
     full_token_visible_until: torch.Tensor
-    effective_event_count: int
-    effective_ranges: tuple[tuple[int, int], ...]
 
 
 @dataclass(frozen=True)
@@ -143,21 +141,13 @@ class DropCompileContext:
 
     raw_messages: Sequence[Mapping[str, Any]]
     owner_ranges: Mapping[int, Sequence[tuple[int, int]]]
-    provenance: Any | None
-    full_input_ids: Sequence[int]
-    owners: Sequence[int]
-    target_offset: int
+    provenance: Any
     normalized_message_count: int
-    is_gpt_oss: bool
-    harmony_thinking_ranges: Mapping[int, Sequence[tuple[int, int]]]
     normalize_content: Callable[[Any], str]
     rendered_source_start: Callable[..., int]
     token_ranges_for_char_spans: Callable[..., list[tuple[int, int]]]
     canonicalize_ranges: Callable[[Sequence[tuple[int, int]]], list[tuple[int, int]]]
     position_ranges_from_ids: Callable[[list[int]], list[tuple[int, int]]]
-    find_owned_subsequence: Callable[..., tuple[int, int]]
-    encode_text: Callable[[str], list[int]]
-    compile_events: Callable[[dict[int, list[tuple[int, int]]]], TokenDropEvents]
 
 
 @dataclass(frozen=True)
@@ -225,16 +215,11 @@ class MessageDropRule:
     ) -> dict[int, list[tuple[int, int]]]:
         events: dict[int, list[tuple[int, int]]] = {}
         effective: set[int] = set()
-        for raw_trigger in sorted(self.drop_messages):
-            trigger = raw_trigger + context.target_offset
+        for trigger in sorted(self.drop_messages):
             if trigger >= context.normalized_message_count:
                 continue
-            shifted = {
-                message_id + context.target_offset
-                for message_id in self.drop_messages[raw_trigger]
-            }
-            newly_effective = shifted - effective
-            effective.update(shifted)
+            newly_effective = set(self.drop_messages[trigger]) - effective
+            effective.update(newly_effective)
             ranges = [
                 item
                 for message_id in sorted(newly_effective)
@@ -243,9 +228,6 @@ class MessageDropRule:
             if ranges:
                 events[trigger] = ranges
         return events
-
-    def compile_token_drop_events(self, context: DropCompileContext) -> TokenDropEvents:
-        return context.compile_events(self.position_events(context))
 
 
 @dataclass(frozen=True)
@@ -316,8 +298,6 @@ class TextDropRule:
                 raise ValueError(
                     f"text_drop.drop_messages[{index}].role must match messages[{index}].role"
                 )
-            if "occurence" in entry:
-                raise ValueError("use the spelling 'occurrence', not 'occurence'")
             raw_selector = entry.get("content")
             occurrence_supplied = "occurrence" in entry
             raw_occurrence = entry.get("occurrence")
@@ -420,21 +400,17 @@ class TextDropRule:
     def position_events(
         self, context: DropCompileContext
     ) -> dict[int, list[tuple[int, int]]]:
-        trigger = self.trigger_message_id + context.target_offset
+        trigger = self.trigger_message_id
         if trigger >= context.normalized_message_count:
             return {}
         ranges: list[tuple[int, int]] = []
         for raw_message_id, selection in enumerate(self.selections):
             if selection is None:
                 continue
-            owner = raw_message_id + context.target_offset
+            owner = raw_message_id
             if selection.whole_message:
                 ranges.extend(context.owner_ranges.get(owner, ()))
                 continue
-            if context.provenance is None:
-                raise ValueError(
-                    "Partial text_drop requires a fast tokenizer with canonical offset mapping"
-                )
             source = context.normalize_content(
                 context.raw_messages[raw_message_id].get("content")
             )
@@ -459,9 +435,6 @@ class TextDropRule:
             )
         canonical = context.canonicalize_ranges(ranges)
         return {trigger: canonical} if canonical else {}
-
-    def compile_token_drop_events(self, context: DropCompileContext) -> TokenDropEvents:
-        return context.compile_events(self.position_events(context))
 
 
 @dataclass(frozen=True)
@@ -594,10 +567,8 @@ class KeepTextDropRule:
         key_ids = {
             value: key_id for key_id, value in enumerate(dict.fromkeys(fingerprints))
         }
-        full_keys = [
-            key_ids[_protocol_fingerprint(message)] for message in full_messages
-        ]
-        visible_keys = [key_ids[_protocol_fingerprint(message)] for message in messages]
+        full_keys = [key_ids[value] for value in fingerprints[: len(full_messages)]]
+        visible_keys = [key_ids[value] for value in fingerprints[len(full_messages) :]]
         try:
             matches = find_ordered_latest(
                 full_contents,
@@ -635,33 +606,12 @@ class KeepTextDropRule:
             ],
         }
 
-    def has_drop(self) -> bool:
-        return any(
-            span is None
-            or span
-            != (
-                0,
-                len(
-                    _matchable_content(
-                        message, field=f"keep_text_drop.full_messages[{message_id}]"
-                    )
-                ),
-            )
-            for message_id, (message, span) in enumerate(
-                zip(self.full_messages, self.keep_spans, strict=True)
-            )
-        )
-
     def position_events(
         self, context: DropCompileContext
     ) -> dict[int, list[tuple[int, int]]]:
-        if context.provenance is None:
-            raise ValueError(
-                "keep_text_drop requires exact chat-template token provenance"
-            )
         ranges: list[tuple[int, int]] = []
         for raw_message_id, keep_span in enumerate(self.keep_spans):
-            owner = raw_message_id + context.target_offset
+            owner = raw_message_id
             if keep_span is None:
                 ranges.extend(context.owner_ranges.get(owner, ()))
                 continue
@@ -715,9 +665,6 @@ class KeepTextDropRule:
         canonical = context.canonicalize_ranges(ranges)
         return {trigger: canonical} if canonical else {}
 
-    def compile_token_drop_events(self, context: DropCompileContext) -> TokenDropEvents:
-        return context.compile_events(self.position_events(context))
-
 
 @dataclass(frozen=True)
 class ThinkingDropRule:
@@ -770,44 +717,23 @@ class ThinkingDropRule:
     ) -> dict[int, list[tuple[int, int]]]:
         events: dict[int, list[tuple[int, int]]] = {}
         for raw_message_id, source in self.thinking_by_message.items():
-            owner = raw_message_id + context.target_offset
+            owner = raw_message_id
             if owner >= context.normalized_message_count:
                 continue
-            if context.provenance is not None:
-                rendered_start = context.rendered_source_start(
-                    context.provenance,
-                    owner=owner,
-                    source=source,
-                    field="thinking",
-                )
-                ranges = context.token_ranges_for_char_spans(
-                    context.provenance,
-                    owner=owner,
-                    spans=[(rendered_start, rendered_start + len(source))],
-                    field="thinking",
-                )
-            elif context.is_gpt_oss:
-                ranges = list(context.harmony_thinking_ranges.get(raw_message_id, ()))
-                if not ranges:
-                    raise ValueError(
-                        f"Cannot map thinking for messages[{raw_message_id}] into "
-                        "the retained Harmony analysis component"
-                    )
-            else:
-                ranges = [
-                    context.find_owned_subsequence(
-                        context.full_input_ids,
-                        context.owners,
-                        context.encode_text(source),
-                        owner=owner,
-                        field="thinking",
-                    )
-                ]
+            rendered_start = context.rendered_source_start(
+                context.provenance,
+                owner=owner,
+                source=source,
+                field="thinking",
+            )
+            ranges = context.token_ranges_for_char_spans(
+                context.provenance,
+                owner=owner,
+                spans=[(rendered_start, rendered_start + len(source))],
+                field="thinking",
+            )
             events[owner] = context.canonicalize_ranges(ranges)
         return events
-
-    def compile_token_drop_events(self, context: DropCompileContext) -> TokenDropEvents:
-        return context.compile_events(self.position_events(context))
 
 
 DropRule = MessageDropRule | TextDropRule | KeepTextDropRule | ThinkingDropRule
@@ -847,40 +773,6 @@ def parse_drop_rule(
         "drop_rule.type must be one of: message_drop, text_drop, "
         "keep_text_drop, thinking_drop"
     )
-
-
-def project_drop_rule_for_prefix(
-    payload: Mapping[str, Any] | None,
-    prefix_len: int,
-) -> dict[str, Any] | None:
-    if payload is None:
-        return None
-    rule_type = payload.get("type")
-    if rule_type == "message_drop":
-        return {
-            "type": rule_type,
-            "drop_messages": {
-                str(trigger): ids
-                for trigger, ids in payload.get("drop_messages", {}).items()
-                if int(trigger) < prefix_len
-            },
-        }
-    if rule_type == "text_drop":
-        trigger = int(payload.get("_trigger_message_id", prefix_len))
-        return {
-            "type": rule_type,
-            "drop_messages": list(payload.get("drop_messages", []))[:prefix_len],
-            "_trigger_message_id": trigger,
-        }
-    if rule_type == "keep_text_drop":
-        return {
-            "type": rule_type,
-            "force": bool(payload.get("force", False)),
-            "_keep_spans": list(payload.get("_keep_spans", []))[:prefix_len],
-        }
-    if rule_type == "thinking_drop":
-        return {"type": rule_type}
-    raise ValueError(f"unsupported drop rule type: {rule_type!r}")
 
 
 def _extract_leading_think(content: str, *, message_id: int) -> str | None:

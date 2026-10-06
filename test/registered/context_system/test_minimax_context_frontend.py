@@ -1,0 +1,321 @@
+"""Official MiniMax tokenizer regression; no CUDA/model weights required.
+
+Set MINIMAX_TOKENIZER_PATH to the pinned M2.7 snapshot. Missing fixtures fail,
+so this opt-in file cannot be mistaken for completed model coverage.
+"""
+import copy
+import importlib.util
+import os
+from pathlib import Path
+import sys
+
+import pytest
+from transformers import AutoTokenizer
+
+ROOT = Path(__file__).resolve().parents[3]
+
+
+def load(name, path):
+    spec = importlib.util.spec_from_file_location(name, ROOT / path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture(scope="module")
+def frontend():
+    path = os.environ.get("MINIMAX_TOKENIZER_PATH")
+    if not path:
+        pytest.fail("Set MINIMAX_TOKENIZER_PATH to the verified M2.7 tokenizer snapshot")
+    tokenizer = AutoTokenizer.from_pretrained(path, local_files_only=True)
+    provenance = load("minimax_provenance", "python/sglang/srt/context_system/provenance.py")
+    thinking = load("sglang.srt.context_system.thinking_template", "python/sglang/srt/context_system/thinking_template.py")
+    return tokenizer, provenance, thinking
+
+
+TOOLS = [{"type": "function", "function": {"name": "lookup", "description": "Look up a key", "parameters": {"type": "object", "properties": {"q": {"type": "string"}}}}}]
+
+
+def trace(frontend, messages, **kwargs):
+    tokenizer, provenance, _ = frontend
+    return provenance.build_template_token_provenance(tokenizer, messages, tools=TOOLS,
+        add_generation_prompt=True, enable_thinking=None, template_kwargs=kwargs)
+
+
+@pytest.mark.parametrize("content", ["", "FINAL_TEXT", "<think>INLINE_REASONING</think>FINAL_TEXT",
+    [{"type": "text", "text": "<think>INLINE_REASONING</think>FINAL_TEXT"}], "中文🙂 café"])
+@pytest.mark.parametrize("later_user", [False, True])
+def test_native_text_tokens_and_owner(frontend, content, later_user):
+    tokenizer, _, _ = frontend
+    messages = [{"role": "system", "content": "SYSTEM_SENTINEL"}, {"role": "user", "content": "QUESTION"}, {"role": "assistant", "content": content}]
+    if later_user:
+        messages.append({"role": "user", "content": "NEXT_QUESTION"})
+    original = copy.deepcopy(messages)
+    actual = trace(frontend, messages)
+    native = tokenizer.apply_chat_template(messages, tools=TOOLS, add_generation_prompt=True, tokenize=False)
+    assert actual.rendered_text == native
+    assert actual.input_ids == tokenizer(native, add_special_tokens=False)["input_ids"]
+    assert messages == original
+    assert actual.owners[-1] == len(messages)
+    for sentinel, owner in [("SYSTEM_SENTINEL", 0), ("FINAL_TEXT", 2), ("中文🙂 café", 2)]:
+        start = native.find(sentinel)
+        if start >= 0:
+            assert set(actual.char_owners[start:start + len(sentinel)]) == {owner}
+
+
+def test_parallel_tools_and_cross_owner_tokens(frontend):
+    messages = [{"role": "user", "content": "Find A and B"},
+        {"role": "assistant", "content": "", "reasoning_content": "REASONING", "tool_calls": [
+            {"type": "function", "function": {"name": "lookup", "arguments": {"q": "A"}}},
+            {"type": "function", "function": {"name": "lookup", "arguments": {"q": "B"}}}]},
+        {"role": "tool", "content": "TOOL_A"}, {"role": "tool", "content": "TOOL_B"}]
+    actual = trace(frontend, messages)
+    tokenizer, _, _ = frontend
+    assert actual.rendered_text == tokenizer.apply_chat_template(messages, tools=TOOLS, add_generation_prompt=True, tokenize=False)
+    for sentinel, owner in [("TOOL_A", 2), ("TOOL_B", 3), ("REASONING", 1)]:
+        start = actual.rendered_text.index(sentinel)
+        assert set(actual.char_owners[start:start + len(sentinel)]) == {owner}
+    for owner, (start, end) in zip(actual.owners, actual.offsets):
+        if end > start:
+            assert owner == actual.char_owners[start]
+
+
+@pytest.mark.parametrize("inline", [False, True])
+def test_history_retention_is_request_local(frontend, inline):
+    tokenizer, _, thinking = frontend
+    original = tokenizer.chat_template
+    assistant = ({"role": "assistant", "content": "<think>OLDER_REASONING</think>ANSWER"} if inline
+                 else {"role": "assistant", "content": "ANSWER", "reasoning_content": "OLDER_REASONING"})
+    messages = [{"role": "user", "content": "old"}, assistant, {"role": "user", "content": "new"}]
+    assert "OLDER_REASONING" not in trace(frontend, messages).rendered_text
+    actual = trace(frontend, messages, preserve_thinking_history=True)
+    start = actual.rendered_text.index("OLDER_REASONING")
+    assert set(actual.char_owners[start:start + len("OLDER_REASONING")]) == {1}
+    patched, family = thinking.retained_template(original)
+    assert family == "minimax"
+    assert thinking.retained_template(patched) == (patched, family)
+    assert tokenizer.chat_template == original
+    assert "OLDER_REASONING" not in trace(frontend, messages).rendered_text
+
+
+def test_unrecognized_macro_and_retention_guard_fail_closed(frontend):
+    tokenizer, provenance, thinking = frontend
+    modified = tokenizer.chat_template.replace("{{ content }}", "{{ content + 'changed' }}", 1)
+    assert modified != tokenizer.chat_template
+    with pytest.raises(ValueError, match="visible_text macro"):
+        provenance._compile_traced_template(modified)
+    modified = tokenizer.chat_template.replace("reasoning_content and loop.index0", "reasoning_content and 1 + loop.index0")
+    with pytest.raises(ValueError, match="thinking history guard"):
+        thinking.retained_template(modified)
+
+
+def test_rolling_drop_96k_uses_full_template_boundaries(frontend):
+    from minimax_context_fixture import RollingDrop96K, TOOLS, tool_history
+
+    tokenizer, _, _ = frontend
+    messages = tool_history()[:-1]
+    state = RollingDrop96K(
+        tokenizer, provenance_builder=frontend[1].build_template_token_provenance
+    )
+    first = state.extend(messages[:26], TOOLS)  # 12 tool responses, no Drop.
+    assert first == {"drop_message": {}, "reposition": []}
+    second = state.extend(messages, TOOLS)
+    assert second["drop_message"] == {"27": [3], "29": [5], "31": [7], "33": [9]}
+    assert second["reposition"] == []  # No eager compaction below 96K.
+    assistant = copy.deepcopy(messages[-2])
+    assistant["tool_calls"][0]["id"] = "long_call"
+    messages += [
+        assistant,
+        {
+            "role": "tool",
+            "tool_call_id": "long_call",
+            "content": " token" * (96 * 1024),
+        },
+    ]
+    third = state.extend(messages, TOOLS)
+    assert third["reposition"] == [35]
+    assert all(
+        check["before"] >= 96 * 1024 and check["after"] < check["before"]
+        for check in state.checks
+    )
+    assert state.extend(messages, TOOLS) == third
+    changed = copy.deepcopy(messages)
+    changed[0]["content"] += "changed"
+    with pytest.raises(AssertionError, match="Historical messages changed"):
+        state.extend(changed, TOOLS)
+
+
+def test_output_validation_rejects_corruption_and_malformed_calls():
+    from minimax_context_fixture import output_findings
+
+    assert output_findings({"content": "中文🙂 legitimate answer"}) == []
+    assert "content:invalid_unicode" in output_findings({"content": "broken\ufffd"})
+    assert "reasoning_content:repeated_block" in output_findings(
+        {"reasoning_content": "A long repeated sentence with forty characters. " * 8}
+    )
+    assert "invalid_tool_call" in output_findings(
+        {
+            "tool_calls": [
+                {
+                    "type": "function",
+                    "id": "x",
+                    "function": {"name": "bash", "arguments": "not JSON"},
+                }
+            ]
+        }
+    )
+
+
+def test_container_file_capture_waits_for_actual_exit(monkeypatch, tmp_path):
+    import subprocess
+    import minimax_context_fixture as fixture
+
+    calls, polls = [], []
+    command = "printf '%s' '$(not-a-host-command)'; exit 17"
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        if argv[1] == "exec":
+            assert argv[-2] == command
+            assert not kwargs.get("shell")
+            return subprocess.CompletedProcess(argv, 0)
+        if argv[2].endswith(".rc"):
+            polls.append(1)
+            if len(polls) == 1:
+                return subprocess.CompletedProcess(argv, 1)
+            Path(argv[3]).write_text("17")
+        else:
+            Path(argv[3]).write_bytes(b"actual tool output")
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(fixture.subprocess, "run", run)
+    monkeypatch.setattr(fixture.time, "sleep", lambda seconds: None)
+    assert fixture.execute_container_command(
+        "owned-container", command, tmp_path, capture="files"
+    ) == (17, b"actual tool output")
+    assert len(polls) == 2
+
+
+def test_non_stream_context_usage_is_requested_and_read(monkeypatch, tmp_path):
+    import requests
+    from minimax_context_fixture import Endpoint, context_usage
+
+    usage = {"cached_tokens": 123, "actual_prefill_tokens": 17}
+    response = {
+        "choices": [
+            {
+                "message": {"role": "assistant", "content": "M15"},
+                "finish_reason": "stop",
+                "meta_info": {"context_usage": usage},
+            }
+        ],
+        "sglext": None,
+    }
+
+    def post(url, *, json, timeout):
+        assert json["stream"] is False
+        assert json["return_meta_info"] is True
+        from types import SimpleNamespace
+
+        return SimpleNamespace(status_code=200, json=lambda: response)
+
+    monkeypatch.setattr(requests, "post", post)
+    endpoint = Endpoint(decode="http://unused", output=tmp_path)
+    result = endpoint.request({"messages": []}, "metadata-regression")
+    assert context_usage(result) == usage
+
+
+def test_context_usage_accepts_stream_summary_and_missing_metadata():
+    from minimax_context_fixture import context_usage
+
+    usage = {"cached_tokens": 123, "repos_tokens": 0, "drop_skipped_tokens": 0}
+    assert context_usage({"usage": {"prompt_tokens_details": usage}}) == usage
+    assert context_usage({"choices": [{"meta_info": None}]}) is None
+
+
+def test_container_file_capture_missing_marker_is_not_success(monkeypatch, tmp_path):
+    import subprocess
+    import minimax_context_fixture as fixture
+
+    clock = iter([0, 0, 211])
+    monkeypatch.setattr(fixture.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(fixture.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(
+        fixture.subprocess,
+        "run",
+        lambda argv, **kwargs: subprocess.CompletedProcess(argv, int(argv[1] == "cp")),
+    )
+    with pytest.raises(TimeoutError, match="completion marker"):
+        fixture.execute_container_command(
+            "owned-container", "true", tmp_path, capture="files"
+        )
+
+
+def test_independent_numeric_timeline_preserves_birth_and_drop_positions():
+    from minimax_context_fixture import numeric_timeline
+
+    drops = {4: [(1, 3)], 7: [(3, 5)]}
+    plain, live, positions = numeric_timeline(9, drops, [])
+    assert plain[4] == ([0, 3], [0, 3], 4)
+    assert live == [0, 5, 6, 7, 8]
+    assert positions == [0, 5, 6, 7, 8]
+    repositioned, live, positions = numeric_timeline(9, drops, [3, 6])
+    assert repositioned[4] == ([0, 3], [0, 1], 2)
+    assert repositioned[7] == ([0, 5, 6], [0, 1, 2], 3)
+    assert live == [0, 5, 6, 7, 8]
+    assert positions == [0, 1, 2, 3, 4]
+    assert plain[3] == repositioned[3]  # Historical birth KV precedes events.
+
+
+@pytest.mark.parametrize("neox", [False, True])
+@pytest.mark.parametrize("dtype_name", ["float16", "bfloat16"])
+def test_staged_oracle_inverse_rotation_keeps_tail_values_and_other_pages(
+    neox, dtype_name
+):
+    from types import SimpleNamespace
+
+    torch = pytest.importorskip("torch")
+    from minimax_context_fixture import _native_rotate
+
+    torch.manual_seed(8317)
+    dtype = getattr(torch, dtype_name)
+    raw = torch.randn(5, 2, 128, dtype=torch.float32)
+    phases = (
+        torch.arange(12, dtype=torch.float32)[:, None]
+        * torch.linspace(0.01, 0.8, 32)[None, :]
+    )
+    cache = torch.cat((phases.cos(), phases.sin()), -1) * 1.2
+    pages = torch.tensor([0, 2, 4])
+    old_pos, new_pos = torch.tensor([1, 6, 10]), torch.tensor([1, 2, 3])
+
+    def rotate(x, positions):
+        value = x.clone()
+        c, s = cache[positions].chunk(2, -1)
+        c, s = c[:, None, :], s[:, None, :]
+        a, b = x[..., :32], x[..., 32:64]
+        if not neox:
+            a, b = x[..., :64:2], x[..., 1:64:2]
+        first, second = a * c - b * s, a * s + b * c
+        value[..., :64] = (
+            torch.cat((first, second), -1)
+            if neox
+            else torch.stack((first, second), -1).flatten(-2)
+        )
+        return value.to(dtype)
+
+    k = raw.to(dtype)
+    k[pages] = rotate(raw[pages], old_pos)
+    v = torch.randn_like(k)
+    before_k, before_v = k.clone(), v.clone()
+    layer = SimpleNamespace(
+        k_buffer=k, v_buffer=v, rotary_dim=64, is_neox_style=neox, cos_sin_cache=cache
+    )
+    _native_rotate(layer, pages, old_pos, new_pos)
+    torch.testing.assert_close(
+        k[pages], rotate(raw[pages], new_pos), atol=0.04, rtol=0.02
+    )
+    assert torch.equal(k[0], before_k[0])
+    assert torch.equal(k[[1, 3]], before_k[[1, 3]])
+    assert torch.equal(k[..., 64:], before_k[..., 64:])
+    assert torch.equal(v, before_v)

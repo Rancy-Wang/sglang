@@ -1070,10 +1070,10 @@ class PrefillAdder:
         # immediately (counts against `cur_rem`) and held for the request lifetime
         # (counts against `rem_total`). See `_mamba_gap_budget_for_req`.
         self.rem_total_token_offset += (
-            extend_input_len + max_new_tokens + page_overhead + mamba_gap_reserve
+            extend_input_len + max_new_tokens + page_overhead + mamba_gap_reserve + context_extra_pages
         )
         self.cur_rem_token_offset += (
-            extend_input_len + page_overhead + mamba_gap_reserve
+            extend_input_len + page_overhead + mamba_gap_reserve + context_extra_pages
         )
         self.memory_budget.total_offset += context_future_pages
         if context_extra_pages:
@@ -1229,7 +1229,18 @@ class PrefillAdder:
         if self.dllm_config is not None:
             _rem_tokens = self._get_dllm_remain_tokens()
         else:
-            _rem_tokens = min(self.rem_chunk_tokens, int(self.rem_total_tokens))
+            chunk_limit = self.rem_chunk_tokens
+            if (
+                chunk_limit is None
+                and getattr(req, "context_recovery_plan", None) is not None
+            ):
+                # Sparse repair has several query intervals even when the user
+                # has disabled ordinary chunk splitting.
+                prefix_len = len(req.prefix_indices)
+                chunk_limit = (
+                    req.context_recovery_plan.next_interval(prefix_len)[1] - prefix_len
+                )
+            _rem_tokens = min(chunk_limit, int(self.rem_total_tokens))
             if self.is_hybrid_swa and not self._swa_req_ring:
                 # alloc_extend needs extend_num_tokens + page_size per request,
                 # so reserve one page here to avoid OOM.
@@ -1242,7 +1253,7 @@ class PrefillAdder:
             if _rem_tokens <= 0:
                 if self.is_hybrid_swa:
                     return req
-                _rem_tokens = self.rem_chunk_tokens
+                _rem_tokens = chunk_limit
 
         # A mid-chunk rank prefills this pass regardless of the delayer
         # verdict, so report prefillable=True and ignore the result.
@@ -1260,18 +1271,20 @@ class PrefillAdder:
         )
         truncated = cand_extend_input_len > _rem_tokens
         new_len = min(cand_extend_input_len, _rem_tokens)
-        admission = self._fit_context_admission(
-            req,
-            _PrefillAdmission(
-                len(req.prefix_indices), new_len,
-                min(req.sampling_params.max_new_tokens, CLIP_MAX_NEW_TOKENS)
-                if not truncated else 0,
-                truncated,
-            ),
-        )
-        if isinstance(admission, AddReqResult):
-            return req
-        new_len, truncated = admission.extend_len, admission.is_chunked
+        admission = None
+        if getattr(req, "context_program", None) is not None:
+            admission = self._fit_context_admission(
+                req,
+                _PrefillAdmission(
+                    len(req.prefix_indices), new_len,
+                    min(req.sampling_params.max_new_tokens, CLIP_MAX_NEW_TOKENS)
+                    if not truncated else 0,
+                    truncated,
+                ),
+            )
+            if isinstance(admission, AddReqResult):
+                return req
+            new_len, truncated = admission.extend_len, admission.is_chunked
         req.set_extend_range(len(req.prefix_indices), len(req.prefix_indices) + new_len)
         self.can_run_list.append(req)
         self._update_prefill_budget(
@@ -1285,8 +1298,8 @@ class PrefillAdder:
             req.retracted_stain,
             mamba_gap_reserve=self._mamba_gap_budget_for_req(req),
             is_chunked_continuation=True,
-            context_extra_pages=admission.context_extra_pages,
-            context_future_pages=admission.context_future_pages,
+            context_extra_pages=admission.context_extra_pages if admission else 0,
+            context_future_pages=admission.context_future_pages if admission else 0,
             compute_charge=req.extend_range.length if self.exact_chunk_fill else None,
         )
 

@@ -729,10 +729,8 @@ class OpenAIServingChat(OpenAIServingBase):
     def _continuous_usage_cached_details(
         self, content: Dict[str, Any]
     ) -> Optional[PromptTokensDetails]:
-        if not get_serving().enable_cache_report:
-            return None
-        return UsageProcessor._details_if_cached(
-            content["meta_info"].get("cached_tokens", 0)
+        return UsageProcessor.prompt_tokens_details(
+            [content["meta_info"]], get_serving().enable_cache_report
         )
 
     def _reported_prompt_tokens(self, meta_info: Dict[str, Any]) -> int:
@@ -1299,27 +1297,30 @@ class OpenAIServingChat(OpenAIServingBase):
     ) -> MessageProcessingResult:
         """Process chat messages and apply chat template"""
         context_rule = None
-        has_context = (
-            request.drop_message is not None
-            or request.drop_rule is not None
-            or bool(request.reposition)
+        has_context = bool(
+            request.model_fields_set & {"drop_message", "drop_rule", "reposition"}
         )
         if has_context:
+            from sglang.srt.arg_groups.overrides import resolving_view
+            from sglang.srt.context_system.capabilities import validate_context_config
+
+            validate_context_config(
+                resolving_view(self.tokenizer_manager.server_args),
+                self.tokenizer_manager.model_config,
+            )
+            warmup_error = getattr(self.tokenizer_manager, "context_warmup_error", None)
+            if isinstance(warmup_error, str):
+                raise ValueError(f"Context compiler is unavailable: {warmup_error}")
             from sglang.srt.context_system.rules import (
                 KeepTextDropRule,
                 parse_drop_rule,
             )
 
-            if self.tokenizer_manager.config_value("page_size") != 1:
-                raise ValueError("Drop/Reposition requires page_size=1")
             if is_multimodal or request.input_ids is not None:
                 raise ValueError(
                     "Drop/Reposition requires text messages with template provenance"
                 )
-            if (
-                self.chat_encoding_spec is not None
-                or self.template_manager.chat_template_name is not None
-            ):
+            if self.chat_encoding_spec is not None:
                 raise ValueError(
                     "Drop/Reposition requires the model's native Jinja template"
                 )
@@ -1336,8 +1337,9 @@ class OpenAIServingChat(OpenAIServingBase):
                 ).messages
                 request = request.model_copy(update={"messages": full})
                 if context_rule.use_visible_as_full:
+                    # Preserve the explicit feature request as an empty program,
+                    # using the actual fallback prompt and the same P accounting.
                     context_rule = None
-                    has_context = bool(request.reposition)
         if self.default_chat_template_kwargs:
             ctk = dict(request.chat_template_kwargs or {})
             for k, v in self.default_chat_template_kwargs.items():
@@ -1449,7 +1451,9 @@ class OpenAIServingChat(OpenAIServingBase):
                 has_context=has_context,
             )
         else:
-            result = self._apply_conversation_template(request, is_multimodal)
+            result = self._apply_conversation_template(
+                request, is_multimodal, context_rule=context_rule, has_context=has_context
+            )
 
         if tool_call_stop is not None:
             if isinstance(result.stop, str):
@@ -1904,6 +1908,9 @@ class OpenAIServingChat(OpenAIServingBase):
         self,
         request: ChatCompletionRequest,
         is_multimodal: bool,
+        *,
+        context_rule=None,
+        has_context: bool = False,
     ) -> MessageProcessingResult:
         """Apply conversation template"""
         prompt = ""
@@ -1953,12 +1960,26 @@ class OpenAIServingChat(OpenAIServingBase):
             else:
                 stop.extend(request.stop)
 
-        if not is_multimodal:
+        context_program = None
+        if has_context:
+            from sglang.srt.context_system.provenance import build_conversation_token_provenance
+            from sglang.srt.context_system.planner import compile_chat_program
+
+            messages = [message.model_dump() for message in request.messages]
+            trace = build_conversation_token_provenance(
+                self.tokenizer_manager.tokenizer, conv, messages, prompt
+            )
+            prompt_ids = trace.input_ids
+            context_program = compile_chat_program(
+                messages, trace, context_rule, request.reposition
+            ).to_wire()
+        elif not is_multimodal:
             prompt_ids = self.tokenizer_manager.tokenizer.encode(prompt)
 
         return MessageProcessingResult(
             prompt=prompt,
             prompt_ids=prompt_ids,
+            context_program=context_program,
             image_data=image_data,
             video_data=video_data,
             audio_data=audio_data,
@@ -2071,10 +2092,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 image_tokens[index] = content["meta_info"].get("image_tokens", 0)
                 audio_tokens[index] = content["meta_info"].get("audio_tokens", 0)
                 video_tokens[index] = content["meta_info"].get("video_tokens", 0)
-                if (
-                    include_usage
-                    and content["meta_info"].get("context_usage") is not None
-                ):
+                if content["meta_info"].get("context_usage") is not None:
                     context_usage[index] = content["meta_info"]["context_usage"]
 
                 finish_reason = content["meta_info"].get("finish_reason", None)
@@ -2256,7 +2274,6 @@ class OpenAIServingChat(OpenAIServingBase):
                 spec_tokens_details=sglext_spec_tokens_details,
                 input_ids=sglext_input_ids,
                 output_ids=sglext_output_ids,
-                context_usage=context_usage or None,
             )
             sglext_non_ids, sglext_ids = sglext_full.split_ids()
 
@@ -2292,7 +2309,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 yield f"data: {sglext_chunk.model_dump_json()}\n\n"
 
             # Additional usage chunk
-            if include_usage:
+            if include_usage or context_usage:
                 # Multimodal tokens are per-prompt (input side), so aggregate
                 # once per prompt (first choice), matching prompt/cached semantics.
                 total_image_tokens = sum(
@@ -2314,6 +2331,7 @@ class OpenAIServingChat(OpenAIServingBase):
                     image_tokens=total_image_tokens,
                     audio_tokens=total_audio_tokens,
                     video_tokens=total_video_tokens,
+                    context_usage=context_usage,
                 )
                 usage_chunk = ChatCompletionStreamResponse(
                     id=content["meta_info"]["id"],

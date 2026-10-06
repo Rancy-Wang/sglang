@@ -709,3 +709,63 @@ mod pd_responses_routing_tests {
         );
     }
 }
+
+#[tokio::test]
+async fn context_fields_reach_both_pd_workers() {
+    use crate::common::mock_worker::{
+        capture_chat_requests, fail_next_chat_request, take_chat_requests,
+    };
+    use axum::body::to_bytes;
+    let ports = [19870, 19871];
+    let config = RouterConfig::builder()
+        .prefill_decode_mode(
+            vec![(format!("http://127.0.0.1:{}", ports[0]), None)],
+            vec![format!("http://127.0.0.1:{}", ports[1])],
+        )
+        .random_policy()
+        .worker_startup_timeout_secs(5)
+        .worker_startup_check_interval_secs(1)
+        .build_unchecked();
+    let ctx = AppTestContext::new_with_config(
+        config,
+        vec![
+            TestWorkerConfig::prefill(ports[0]),
+            TestWorkerConfig::decode(ports[1]),
+        ],
+    )
+    .await;
+    let app = ctx.create_app().await;
+    for port in ports {
+        capture_chat_requests(port);
+    }
+    fail_next_chat_request(ports[0]);
+    for stream in [false, true] {
+        let payload = json!({"model":"test-model", "messages":[{"role":"user","content":"hi"}],
+            "stream":stream, "drop_message":{"1":[0]}, "reposition":[], "return_meta_info":true});
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/chat/completions")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+        to_bytes(response.into_body(), 1 << 20).await.unwrap();
+    }
+    for port in ports {
+        let requests = take_chat_requests(port);
+        assert_eq!(requests.len(), 3);
+        for value in requests {
+            assert_eq!(value["drop_message"], json!({"1":[0]}));
+            assert_eq!(value["reposition"], json!([]));
+            assert_eq!(value["return_meta_info"], true);
+            assert!(value.get("bootstrap_room").is_some());
+        }
+    }
+    ctx.shutdown().await;
+}

@@ -300,6 +300,37 @@ def _parse_character_owners(
     return clean_text, owners
 
 
+def _encode_with_offsets(tokenizer, text, *, add_special_tokens):
+    if bool(getattr(tokenizer, "is_fast", True)):
+        # Preserve the tokenizer's native default for an assistant continuation.
+        kwargs = {} if add_special_tokens else {"add_special_tokens": False}
+        encoded = tokenizer(text, return_offsets_mapping=True, **kwargs)
+        input_ids = [int(token_id) for token_id in encoded["input_ids"]]
+        offsets = [(int(a), int(b)) for a, b in encoded["offset_mapping"]]
+    else:
+        # Original Qwen uses tiktoken. Decode exact token bytes from the single
+        # canonical encoding, never independently tokenize message fragments.
+        decoder = getattr(getattr(tokenizer, "tokenizer", None), "decode_single_token_bytes", None)
+        if not callable(decoder):
+            raise RuntimeError("Drop Message ownership requires offset_mapping or exact token bytes")
+        input_ids = [int(i) for i in tokenizer.encode(text, add_special_tokens=add_special_tokens)]
+        pieces = [decoder(i) for i in input_ids]
+        if b"".join(pieces) != text.encode("utf-8"):
+            raise RuntimeError("Tokenizer bytes do not reproduce the canonical template")
+        from bisect import bisect_left, bisect_right
+
+        char_bytes = [0]
+        for char in text:
+            char_bytes.append(char_bytes[-1] + len(char.encode("utf-8")))
+        offsets = []
+        cursor = 0
+        for piece in pieces:
+            start = bisect_right(char_bytes, cursor) - 1
+            cursor += len(piece)
+            offsets.append((start, bisect_left(char_bytes, cursor)))
+    return input_ids, offsets
+
+
 def build_template_token_provenance(
     tokenizer,
     messages: list[dict[str, Any]],
@@ -310,10 +341,6 @@ def build_template_token_provenance(
     chat_template: str | None = None,
     template_kwargs: dict[str, Any] | None = None,
 ) -> TemplateTokenProvenance:
-    if not bool(getattr(tokenizer, "is_fast", False)):
-        raise RuntimeError(
-            "Drop Message ownership requires a fast tokenizer with offset_mapping support."
-        )
     if chat_template is None:
         chat_template = tokenizer.get_chat_template(tools=tools)
     if template_kwargs and template_kwargs.get("preserve_thinking_history", False):
@@ -340,14 +367,11 @@ def build_template_token_provenance(
         add_generation_prompt=add_generation_prompt,
     )
 
-    encoded = tokenizer(
-        canonical_text,
-        add_special_tokens=False,
-        return_offsets_mapping=True,
-    )
-    input_ids = [int(token_id) for token_id in encoded["input_ids"]]
+    return _token_provenance(tokenizer, canonical_text, char_owners, add_special_tokens=False)
 
-    offsets = [(int(start), int(end)) for start, end in encoded["offset_mapping"]]
+
+def _token_provenance(tokenizer, canonical_text, char_owners, *, add_special_tokens):
+    input_ids, offsets = _encode_with_offsets(tokenizer, canonical_text, add_special_tokens=add_special_tokens)
     owners: list[int] = []
     cross_owner_tokens = 0
     previous_owner = 0
@@ -378,6 +402,43 @@ def build_template_token_provenance(
     )
 
 
+def build_conversation_token_provenance(tokenizer, conv, messages, canonical_text):
+    """Trace native ChatML text boundaries, then encode the full prompt once.
+
+    Legacy Qwen can use SGLang's existing --chat-template chatml. Prefix
+    rendering verifies append-only boundaries including role/separator text;
+    it never tokenizes messages independently or guesses from content matches.
+    """
+    from sglang.srt.parser.conversation import SeparatorStyle
+
+    if conv.sep_style != SeparatorStyle.CHATML:
+        raise ValueError("Context conversation provenance requires native ChatML")
+    systems = [i for i, message in enumerate(messages) if message["role"] == "system"]
+    if systems not in ([], [0]) or conv.offset:
+        raise ValueError("Context ChatML requires at most one leading system message")
+    message_owners = [i for i in range(len(messages)) if i not in systems]
+    if len(conv.messages) == len(message_owners) + 1 and conv.messages[-1][1] is None:
+        message_owners.append(len(messages))
+    if len(conv.messages) != len(message_owners):
+        raise ValueError("Native conversation did not preserve the message sequence")
+    prefix = conv.copy()
+    prefix.messages = []
+    system_text = prefix.get_prompt()
+    if not canonical_text.startswith(system_text):
+        raise ValueError("Native ChatML system prefix changed during rendering")
+    char_owners = [0] * len(system_text)
+    for message, owner in zip(conv.messages, message_owners):
+        prefix.messages.append(message)
+        rendered = prefix.get_prompt()
+        # continue_final_message may strip the final separator.
+        end = min(len(rendered), len(canonical_text))
+        if not canonical_text.startswith(rendered[:end]) or end < len(char_owners):
+            raise ValueError("Native ChatML rendering is not append-only")
+        char_owners.extend([owner] * (end - len(char_owners)))
+    char_owners.extend([len(messages)] * (len(canonical_text) - len(char_owners)))
+    return _token_provenance(tokenizer, canonical_text, char_owners, add_special_tokens=True)
+
+
 def append_assistant_prefix(
     trace: TemplateTokenProvenance, tokenizer, text: str, *, owner: int
 ) -> TemplateTokenProvenance:
@@ -387,9 +448,7 @@ def append_assistant_prefix(
     encoded assistant-prefix IDs. Their character offsets still point into the
     joined text, so text Drop sees the same content and exact token boundaries.
     """
-    encoded = tokenizer(text, return_offsets_mapping=True)
-    ids = list(encoded["input_ids"])
-    offsets = list(encoded["offset_mapping"])
+    ids, offsets = _encode_with_offsets(tokenizer, text, add_special_tokens=True)
     if ids and ids[0] == tokenizer.bos_token_id:
         ids = ids[1:]
         offsets = offsets[1:]

@@ -350,7 +350,9 @@ class FullComponent(TreeComponent):
         while cur != root:
             cd = cur.component_data[ct]
             start = cursor - len(cur.key)
-            if any(a <= start and cursor <= b for a, b in params.context_skip_ranges):
+            if params.context_skip_ranges and any(
+                a <= start and cursor <= b for a, b in params.context_skip_ranges
+            ):
                 assert cur.context_path_ref > 0, "Context path lease released twice"
                 cur.context_path_ref -= 1
                 self.tree_core._update_evictable_leaf_sets(cur)

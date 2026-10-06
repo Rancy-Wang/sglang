@@ -1100,7 +1100,8 @@ class UnifiedRadixCache(BasePrefixCache):
                 if cl is not None:
                     effective_cache_len = min(effective_cache_len, cl)
 
-            effective_cache_len = context_publish_length(req, effective_cache_len)
+            if getattr(req, "context_state", None) is not None:
+                effective_cache_len = context_publish_length(req, effective_cache_len)
 
             # Truncate if needed; the tail free is deferred and batched with
             # the unaligned tail below so a shared boundary page is emitted once.
@@ -1122,11 +1123,16 @@ class UnifiedRadixCache(BasePrefixCache):
 
             insert_params.key = radix_key
             insert_params.value = values
-            insert_params.context_resident = self._context_cache_residency(
-                req, page_aligned_len
-            )
-            insert_params.context_swa_resident = self._context_cache_swa_residency(req, page_aligned_len)
-            insert_params.context_owned = self._context_cache_ownership(req, page_aligned_len)
+            if getattr(req, "context_state", None) is not None:
+                insert_params.context_resident = self._context_cache_residency(
+                    req, page_aligned_len
+                )
+                insert_params.context_swa_resident = self._context_cache_swa_residency(
+                    req, page_aligned_len
+                )
+                insert_params.context_owned = self._context_cache_ownership(
+                    req, page_aligned_len
+                )
             result = self.insert(insert_params)
 
             # Keep the prompt as an independent radix node. Finished requests
@@ -1240,7 +1246,7 @@ class UnifiedRadixCache(BasePrefixCache):
                 swa_resident=req.context_swa_resident,
             )
             req.context_cache_published = True
-            if get_memory().context_drop_aware_eviction:
+            if not get_memory().disable_drop_aware_eviction:
                 self._configure_context_drop_eviction(req)
             if not needs_context_source_lease(req):
                 # This chunk has completed and the target lease is installed.
@@ -1371,14 +1377,14 @@ class UnifiedRadixCache(BasePrefixCache):
         """Exclude Full holes and absent SWA peers using CPU ownership data."""
         if not ranges:
             return
-        length = max(end for _, end in ranges)
-        resident = self._context_cache_residency(req, length)
         state = getattr(req, "context_state", None)
-        swa = state.terminal_swa_residency() if state is not None else None
-        owned = self._context_cache_ownership(req, length)
-        if resident is None and swa is None and owned is None:
+        if state is None:
             self.free_kv_row(req.kv, ranges)
             return
+        length = max(end for _, end in ranges)
+        resident = self._context_cache_residency(req, length)
+        swa = state.terminal_swa_residency()
+        owned = self._context_cache_ownership(req, length)
         from sglang.srt.context_system.recovery import mask_ranges
         from sglang.srt.mem_cache.common import coalesce_ranges
 
@@ -1456,7 +1462,8 @@ class UnifiedRadixCache(BasePrefixCache):
             if cl is not None:
                 effective_cache_len = min(effective_cache_len, cl)
 
-        effective_cache_len = context_publish_length(req, effective_cache_len)
+        if getattr(req, "context_state", None) is not None:
+            effective_cache_len = context_publish_length(req, effective_cache_len)
 
         radix_key = req.make_prefix_key(
             token_ids[:effective_cache_len], is_bigram=self.tree_core.is_eagle
@@ -1487,9 +1494,14 @@ class UnifiedRadixCache(BasePrefixCache):
 
         insert_params.key = radix_key
         insert_params.value = values
-        insert_params.context_resident = self._context_cache_residency(req, page_aligned_len)
-        insert_params.context_swa_resident = self._context_cache_swa_residency(req, page_aligned_len)
-        insert_params.context_owned = self._context_cache_ownership(req, page_aligned_len)
+        if getattr(req, "context_state", None) is not None:
+            insert_params.context_resident = self._context_cache_residency(
+                req, page_aligned_len
+            )
+            insert_params.context_swa_resident = self._context_cache_swa_residency(
+                req, page_aligned_len
+            )
+            insert_params.context_owned = self._context_cache_ownership(req, page_aligned_len)
         result = self.insert(insert_params)
 
         if result.rotation_tail_declined:

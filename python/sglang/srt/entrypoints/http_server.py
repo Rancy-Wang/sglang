@@ -284,6 +284,17 @@ async def lifespan(fast_api_app: FastAPI):
         warmup_thread_kwargs = dict(server_args=server_args)
         thread_label = f"MultiTokenizer-{_global_state.tokenizer_manager.worker_id}"
 
+    # CPU-only, once per tokenizer process. Ordinary serving remains available
+    # if the optional Context compiler cannot be built in this environment.
+    if not get_serving().skip_server_warmup:
+        try:
+            from sglang.srt.context_system.ir import prewarm_context_layout
+
+            prewarm_context_layout()
+        except Exception as exc:
+            _global_state.tokenizer_manager.context_warmup_error = str(exc)
+            logger.exception("Context CPU compiler warmup failed")
+
     # Add prometheus middleware
     if get_observability().enable_metrics:
         add_prometheus_middleware(app)
