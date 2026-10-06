@@ -729,10 +729,8 @@ class OpenAIServingChat(OpenAIServingBase):
     def _continuous_usage_cached_details(
         self, content: Dict[str, Any]
     ) -> Optional[PromptTokensDetails]:
-        if not get_serving().enable_cache_report:
-            return None
-        return UsageProcessor._details_if_cached(
-            content["meta_info"].get("cached_tokens", 0)
+        return UsageProcessor.prompt_tokens_details(
+            [content["meta_info"]], get_serving().enable_cache_report
         )
 
     def _reported_prompt_tokens(self, meta_info: Dict[str, Any]) -> int:
@@ -2278,7 +2276,6 @@ class OpenAIServingChat(OpenAIServingBase):
                 spec_tokens_details=sglext_spec_tokens_details,
                 input_ids=sglext_input_ids,
                 output_ids=sglext_output_ids,
-                context_usage=context_usage or None,
             )
             sglext_non_ids, sglext_ids = sglext_full.split_ids()
 
@@ -2314,7 +2311,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 yield f"data: {sglext_chunk.model_dump_json()}\n\n"
 
             # Additional usage chunk
-            if include_usage:
+            if include_usage or context_usage:
                 # Multimodal tokens are per-prompt (input side), so aggregate
                 # once per prompt (first choice), matching prompt/cached semantics.
                 total_image_tokens = sum(
@@ -2336,6 +2333,7 @@ class OpenAIServingChat(OpenAIServingBase):
                     image_tokens=total_image_tokens,
                     audio_tokens=total_audio_tokens,
                     video_tokens=total_video_tokens,
+                    context_usage=context_usage,
                 )
                 usage_chunk = ChatCompletionStreamResponse(
                     id=content["meta_info"]["id"],
@@ -2430,11 +2428,6 @@ class OpenAIServingChat(OpenAIServingBase):
         output_ids = None
         if self._should_return_output_ids(request):
             output_ids = [list(ret_item["output_ids"]) for ret_item in ret]
-        context_usage = {
-            idx: item["meta_info"]["context_usage"]
-            for idx, item in enumerate(ret)
-            if item["meta_info"].get("context_usage") is not None
-        }
         response_sglext = None
         if (
             routed_experts
@@ -2442,7 +2435,6 @@ class OpenAIServingChat(OpenAIServingBase):
             or spec_tokens_details
             or input_ids is not None
             or output_ids is not None
-            or context_usage
         ):
             response_sglext = SglExt(
                 routed_experts=routed_experts,
@@ -2450,7 +2442,6 @@ class OpenAIServingChat(OpenAIServingBase):
                 spec_tokens_details=spec_tokens_details,
                 input_ids=input_ids,
                 output_ids=output_ids,
-                context_usage=context_usage or None,
             )
 
         for idx, ret_item in enumerate(ret):

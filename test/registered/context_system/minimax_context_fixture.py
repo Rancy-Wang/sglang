@@ -220,10 +220,8 @@ def context_usage(result):
         usage = (choices[0].get("meta_info") or {}).get("context_usage")
         if usage is not None:
             return usage
-    usage = (result.get("sglext") or {}).get("context_usage")
-    if isinstance(usage, dict) and "0" in usage:
-        return usage["0"]
-    return usage
+    usage = (result.get("usage") or {}).get("prompt_tokens_details")
+    return usage if usage is not None and "repos_tokens" in usage else None
 
 
 class RollingDrop96K:

@@ -229,8 +229,8 @@ def test_non_stream_context_usage_is_requested_and_read(monkeypatch, tmp_path):
 def test_context_usage_accepts_stream_summary_and_missing_metadata():
     from minimax_context_fixture import context_usage
 
-    usage = {"cached_tokens": 123}
-    assert context_usage({"sglext": {"context_usage": {"0": usage}}}) == usage
+    usage = {"cached_tokens": 123, "repos_tokens": 0, "drop_skipped_tokens": 0}
+    assert context_usage({"usage": {"prompt_tokens_details": usage}}) == usage
     assert context_usage({"choices": [{"meta_info": None}]}) is None
 
 

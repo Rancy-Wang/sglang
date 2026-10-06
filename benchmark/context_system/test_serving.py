@@ -167,6 +167,13 @@ class NativeTemplateAdapter:
 
 def compute_metrics(event):
     """Translate only reported physical counters, never logical usage."""
+    details = (event.get("usage") or {}).get("prompt_tokens_details")
+    if details is not None and "repos_tokens" in details:
+        # The public usage schema reports cache savings, not physical compute.
+        # Actual forward counts come from the existing server-side probes.
+        return {key: details[key] for key in
+                ("cached_tokens", "repos_tokens", "drop_skipped_tokens")}
+    # Retain compatibility when replaying historical benchmark responses.
     choices = (event.get("sglext") or {}).get("context_usage")
     if not choices:
         return None

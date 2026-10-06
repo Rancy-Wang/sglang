@@ -282,8 +282,10 @@ def test_chunk_retry_and_mixed_http_generation(server):
             )
         # Native mini mask/occurrence produces these tokens for this extreme
         # first-user deletion too; decoded replacement bytes are not a failure.
-        usage = item["sglext"]["context_usage"]["0"]
-        assert sum(usage[k] for k in ("cached_tokens", "repos_tokens", "drop_skipped_tokens", "actual_prefill_tokens")) == item["usage"]["prompt_tokens"], item
+        usage = item["usage"]["prompt_tokens_details"]
+        actual = item["choices"][0]["meta_info"]["context_usage"]
+        assert all(usage[k] == actual[k] for k in ("cached_tokens", "repos_tokens", "drop_skipped_tokens")), item
+        assert sum(usage[k] for k in ("cached_tokens", "repos_tokens", "drop_skipped_tokens")) + actual["actual_prefill_tokens"] == item["usage"]["prompt_tokens"], item
         if "Qwen3-0.6B" in os.environ["CONTEXT_SERVER_MODEL"]:
             assert item["sglext"]["output_ids"] == [[151645, 243] * 4], item
     assert cold["choices"][0]["message"] == hot["choices"][0]["message"]
@@ -310,9 +312,10 @@ def test_context_zero_usage_without_response_options(server, stream, operation):
                   if line.startswith("data: ") and line != "data: [DONE]"]
     else:
         chunks = [response.json()]
-    reports = [chunk["sglext"]["context_usage"]["0"] for chunk in chunks
-               if (chunk.get("sglext") or {}).get("context_usage") is not None]
+    assert all("context_usage" not in (chunk.get("sglext") or {}) for chunk in chunks)
+    reports = [chunk["usage"]["prompt_tokens_details"] for chunk in chunks
+               if chunk.get("usage") is not None]
     assert len(reports) == 1, chunks
     report = reports[0]
     assert all(report[key] == 0 for key in ("cached_tokens", "repos_tokens", "drop_skipped_tokens")), report
-    assert report["actual_prefill_tokens"] > 0, report
+    assert set(report) == {"cached_tokens", "repos_tokens", "drop_skipped_tokens"}, report

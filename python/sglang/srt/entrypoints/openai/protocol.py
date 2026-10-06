@@ -189,6 +189,9 @@ class PromptTokensDetails(BaseModel):
     """Details about prompt tokens."""
 
     cached_tokens: int = 0
+    # Present for Context requests, including zero-valued counters.
+    repos_tokens: Optional[int] = None
+    drop_skipped_tokens: Optional[int] = None
     # Multimodal prompt token counts (only populated when present in the prompt)
     image_tokens: Optional[int] = None
     audio_tokens: Optional[int] = None
@@ -197,9 +200,15 @@ class PromptTokensDetails(BaseModel):
     @model_serializer(mode="wrap")
     def _serialize(self, handler):
         data = handler(self)
-        # Drop multimodal fields when absent so text-only/cache-only responses
+        # Drop optional fields when absent so native text/cache-only responses
         # keep the original {"cached_tokens": N} shape.
-        for key in ("image_tokens", "audio_tokens", "video_tokens"):
+        for key in (
+            "image_tokens",
+            "audio_tokens",
+            "video_tokens",
+            "repos_tokens",
+            "drop_skipped_tokens",
+        ):
             if data.get(key) is None:
                 data.pop(key, None)
         return data
@@ -448,9 +457,6 @@ class SglExt(BaseModel):
     )
     input_ids: Optional[List[int]] = None
     output_ids: Optional[List[List[int]]] = None
-    # Terminal request-lifetime counters, keyed by choice index. Unavailable for
-    # native requests that never entered Context; do not infer physical compute.
-    context_usage: dict[int, dict[str, int]] | None = None
 
     def split_ids(self) -> Tuple[Optional[SglExt], Optional[SglExt]]:
         """Split set fields into (non_ids, ids); a side with no set fields is None."""

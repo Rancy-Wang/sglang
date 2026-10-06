@@ -103,10 +103,13 @@ def test_no_feature_uses_original_render(chat):
 
 
 @pytest.mark.parametrize(
-    "reported", [None, {"cached_tokens": 0, "repos_tokens": 0, "drop_skipped_tokens": 0, "actual_prefill_tokens": 11, "actual_decode_tokens": 3}]
+    "reported", [None,
+                 {"cached_tokens": 0, "repos_tokens": 0, "drop_skipped_tokens": 0, "actual_prefill_tokens": 11, "actual_decode_tokens": 3},
+                 {"cached_tokens": 12, "repos_tokens": 20, "drop_skipped_tokens": 30, "actual_prefill_tokens": 38, "actual_decode_tokens": 1}]
 )
 @pytest.mark.parametrize("include_usage", [False, True])
-def test_context_stream_reports_terminal_compute(chat, reported, include_usage):
+@pytest.mark.parametrize("continuous", [False, True])
+def test_context_stream_reports_native_usage(chat, reported, include_usage, continuous):
     import asyncio
     import json
     from unittest.mock import Mock
@@ -129,7 +132,8 @@ def test_context_stream_reports_terminal_compute(chat, reported, include_usage):
             chunk
             async for chunk in chat._generate_chat_stream(
                 Mock(),
-                request(stream=True, stream_options={"include_usage": include_usage}),
+                request(stream=True, stream_options={"include_usage": include_usage,
+                                                     "continuous_usage_stats": continuous}),
                 None,
             )
         ]
@@ -137,12 +141,18 @@ def test_context_stream_reports_terminal_compute(chat, reported, include_usage):
     chat.tokenizer_manager.generate_request = generate
     chunks = asyncio.run(collect())
     events = [json.loads(chunk[6:]) for chunk in chunks if chunk != "data: [DONE]\n\n"]
-    usage = [
-        event["sglext"]["context_usage"]
-        for event in events
-        if (event.get("sglext") or {}).get("context_usage")
-    ]
-    assert usage == ([{"0": reported}] if reported else [])
+    assert all("context_usage" not in (event.get("sglext") or {}) for event in events)
+    terminal = [event["usage"] for event in events
+                if not event["choices"] and event.get("usage") is not None]
+    assert len(terminal) == int(include_usage or reported is not None)
+    for event in events:
+        if event.get("usage") is not None:
+            details = event["usage"]["prompt_tokens_details"]
+            if reported is not None:
+                assert details == {key: reported[key] for key in
+                                   ("cached_tokens", "repos_tokens", "drop_skipped_tokens")}
+            else:
+                assert details is None
 
 
 @pytest.mark.parametrize("repos", [None, [1]])
@@ -616,7 +626,42 @@ def test_nonstream_reports_zero_context_usage_without_meta_flag(chat):
             "completion_tokens": 1, "cached_tokens": 0,
             "finish_reason": {"type": "length", "length": 1}, "context_usage": values}}]
     response = chat._build_chat_response(request(), ret, 0)
-    assert response.sglext.context_usage == {0: values}
+    assert response.sglext is None
+    assert response.usage.prompt_tokens_details.model_dump() == {
+        "cached_tokens": 0, "repos_tokens": 0, "drop_skipped_tokens": 0,
+    }
+
+
+@pytest.mark.parametrize("cache_report", [False, True])
+def test_native_usage_context_aggregation_counts_prompt_once(cache_report):
+    from sglang.srt.entrypoints.openai.usage_processor import UsageProcessor
+
+    contexts = [dict(cached_tokens=7, repos_tokens=11, drop_skipped_tokens=13),
+                dict(cached_tokens=70, repos_tokens=110, drop_skipped_tokens=130),
+                dict(cached_tokens=2, repos_tokens=3, drop_skipped_tokens=5),
+                dict(cached_tokens=20, repos_tokens=30, drop_skipped_tokens=50)]
+    # Two prompts, two choices each. D's native cache count must not replace P's
+    # Context snapshot, nor may prompt counters be summed across choices.
+    responses = [{"meta_info": dict(prompt_tokens=40, completion_tokens=i + 1,
+                                    cached_tokens=999, context_usage=context)}
+                 for i, context in enumerate(contexts)]
+    ordinary = UsageProcessor.calculate_response_usage(
+        responses, n_choices=2, enable_cache_report=cache_report)
+    streamed = UsageProcessor.calculate_streaming_usage(
+        {i: 40 for i in range(4)}, {}, {i: i + 1 for i in range(4)},
+        {i: 999 for i in range(4)}, n_choices=2, enable_cache_report=cache_report,
+        context_usage=dict(enumerate(contexts)))
+    assert ordinary.model_dump() == streamed.model_dump()
+    assert ordinary.prompt_tokens == 80 and ordinary.completion_tokens == 10
+    assert ordinary.prompt_tokens_details.model_dump() == {
+        "cached_tokens": 9, "repos_tokens": 14, "drop_skipped_tokens": 18,
+    }
+    for response in responses:
+        del response["meta_info"]["context_usage"]
+    native = UsageProcessor.calculate_response_usage(
+        responses, n_choices=2, enable_cache_report=cache_report)
+    assert (native.prompt_tokens_details.model_dump() if native.prompt_tokens_details else None) == (
+        {"cached_tokens": 1998} if cache_report else None)
 
 
 @pytest.mark.parametrize("architecture", ["QWenLMHeadModel", "Qwen2ForCausalLM", "Qwen2MoeForCausalLM", "Qwen3ForCausalLM", "Qwen3MoeForCausalLM", "GptOssForCausalLM"])

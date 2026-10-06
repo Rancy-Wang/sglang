@@ -288,3 +288,17 @@ def test_concurrent_pd_rooms_preserve_reported_counters(native):
             assert row["prefill_compute_tokens"] == 11
             assert row["decode_compute_tokens"] == 3
             assert row["drop_skipped_tokens"] == 50
+
+
+def test_native_context_usage_does_not_infer_physical_compute():
+    bench = load_file(
+        "context_bcp_usage", ROOT / "benchmark/context_system/test_serving.py"
+    )
+    details = {"cached_tokens": 70, "repos_tokens": 20, "drop_skipped_tokens": 50}
+    assert bench.compute_metrics({"usage": {
+        "prompt_tokens": 151, "completion_tokens": 4,
+        "prompt_tokens_details": details,
+    }}) == details
+    assert bench.compute_metrics({"usage": {
+        "prompt_tokens_details": {"cached_tokens": 70},
+    }}) is None

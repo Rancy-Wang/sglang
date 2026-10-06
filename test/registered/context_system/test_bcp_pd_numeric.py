@@ -395,16 +395,19 @@ def test_pd_usage_roundtrip(pd_servers):
                     if payload["stream"]:
                         chunks = [json.loads(line[6:]) for line in response.text.splitlines()
                                   if line.startswith("data: ") and line != "data: [DONE]"]
-                        reports = [c["sglext"]["context_usage"]["0"] for c in chunks
-                                   if (c.get("sglext") or {}).get("context_usage") is not None]
+                        assert all("context_usage" not in (c.get("sglext") or {}) for c in chunks)
+                        reports = [c["usage"]["prompt_tokens_details"] for c in chunks
+                                   if c.get("usage") is not None]
                         assert len(reports) == 1, chunks
                         return reports[0]
-                    return response.json()["sglext"]["context_usage"]["0"]
+                    result = response.json()
+                    assert "context_usage" not in (result.get("sglext") or {})
+                    return result["usage"]["prompt_tokens_details"]
                 with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
                     p = executor.submit(send, p_base)
                     d = executor.submit(send, d_base)
                     p_usage, d_usage = p.result(), d.result()
-                for key in ("cached_tokens", "repos_tokens", "drop_skipped_tokens", "actual_prefill_tokens"):
+                for key in ("cached_tokens", "repos_tokens", "drop_skipped_tokens"):
                     assert isinstance(d_usage[key], int) and d_usage[key] >= 0, d_usage
                     assert p_usage[key] == d_usage[key], (p_usage, d_usage)
                 records.append(dict(stream=stream, repeat=repeat, operation=operation, prefill=p_usage, decode=d_usage))
