@@ -69,8 +69,9 @@ def test_context_prebuilt_preserves_restored_ownership(native_cache, compiler, h
 @pytest.mark.parametrize(
     "prefill,transport_error", [(False, False), (True, False), (True, True)]
 )
+@pytest.mark.parametrize("optimized", [False, True])
 def test_capacity_rejection_preserves_program_and_releases_pd_metadata(
-    prefill, transport_error
+    prefill, transport_error, optimized
 ):
     from types import SimpleNamespace
     from unittest.mock import Mock
@@ -103,7 +104,16 @@ def test_capacity_rejection_preserves_program_and_releases_pd_metadata(
         req_to_metadata_buffer_idx_allocator=Mock(),
         output_streamer=Mock(),
     )
-    Scheduler._reject_context_prefill_capacity(scheduler, req, "capacity exhausted")
+    reject = Scheduler._reject_context_prefill_capacity
+    if optimized:
+        import inspect
+        import textwrap
+
+        # Python -O must not remove the transport abort with an assertion.
+        namespace = dict(reject.__globals__)
+        exec(compile(textwrap.dedent(inspect.getsource(reject)), __file__, "exec", optimize=2), namespace)
+        reject = namespace[reject.__name__]
+    reject(scheduler, req, "capacity exhausted")
     assert req.origin_input_ids is original and req.context_program is program
     assert req.finished_reason.to_json()["status_code"] == 503
     scheduler._release_aborted_request.assert_called_once_with(req)
@@ -581,3 +591,31 @@ def test_minimax_context_geometry_admission(geometry, accepted):
         with pytest.raises(ValueError, match=message):
             validate_context_request(server, model, request)
         setattr(server, field, prior)
+
+
+def test_ordinary_chunk_continuation_skips_context_admission(factory):
+    from unittest.mock import patch
+
+    adder = factory.create_shared_adder()
+    req = factory.create_shared_req("ordinary", max_new_tokens=80)
+    req.context_program = None
+    with patch.object(adder, "_fit_context_admission", side_effect=AssertionError("ordinary admission")):
+        assert adder.add_chunked_req(req) is req
+    assert req.extend_range.length == 8
+    assert adder.memory_budget.total_offset == 12
+    assert adder.memory_budget.swa_offset == 12
+
+
+def test_ordinary_request_round_and_retract_skip_context_recovery():
+    from unittest.mock import patch
+
+    from sglang.srt.managers.schedule_batch import Req
+    from sglang.srt.sampling.sampling_params import SamplingParams
+
+    req = Req("ordinary", "", array("q", [1, 2, 3]), SamplingParams(max_new_tokens=4))
+    with patch.object(req, "advance_context_recovery_gap", side_effect=AssertionError("ordinary recovery")):
+        req.init_next_round_input()
+    assert list(req.full_untruncated_fill_ids) == [1, 2, 3]
+    req.reset_for_retract()
+    assert req.is_retracted and req.retraction_count == 1
+    assert req.context_state is None and req.context_usage is None

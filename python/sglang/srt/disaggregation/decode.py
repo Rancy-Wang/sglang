@@ -181,9 +181,14 @@ class DecodeReqToTokenPool:
         # inheriting ReqToTokenPool.alloc, which bumps it.
         self.req_generation = torch.zeros(self._alloc_size, dtype=torch.int64)
         self._aux_cache: Any = None
+        self._context_rows = None
+        self._context_row_pointers = None
 
     def write(self, indices, values):
-        write_request_slots(self, indices, values)
+        if self._context_rows:
+            write_request_slots(self, indices, values)
+        else:
+            self.req_to_token[indices] = values
 
     def available_size(self):
         return len(self.free_slots)
@@ -223,18 +228,21 @@ class DecodeReqToTokenPool:
                 r.kv.req_pool_idx = select_index[offset]
                 self.req_generation[r.kv.req_pool_idx] += 1
                 offset += 1
-            prepare_request_row(self, r)
+            if getattr(r, "context_program", None) is not None:
+                prepare_request_row(self, r)
         return [r.kv.req_pool_idx for r in reqs]
 
     def free(self, req: Req):
         assert req.kv.holds_kv, "request must have req_pool_idx"
-        release_request_row(self, req.kv.req_pool_idx)
+        if self._context_rows:
+            release_request_row(self, req.kv.req_pool_idx)
         self.free_slots.append(req.kv.req_pool_idx)
         req.kv.req_pool_idx = None
 
     def clear(self):
-        for index in tuple(getattr(self, "_context_rows", ())):
-            release_request_row(self, index)
+        if self._context_rows:
+            for index in tuple(self._context_rows):
+                release_request_row(self, index)
         self.free_slots = list(range(1, self._alloc_size))
         self.req_generation.zero_()
 

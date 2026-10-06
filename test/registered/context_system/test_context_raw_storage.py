@@ -357,3 +357,51 @@ def test_overflow_fused_prefix_decode_scatter_and_graph_gather():
     registry.bind_batch([req], [4], rows)
     graph.replay()
     assert output.tolist() == [7, 8, 9, 10]
+
+
+@pytest.mark.parametrize("decode", [False, True])
+def test_native_pool_lazily_routes_overflow_and_restores_reused_rows(decode):
+    import sys
+    from array import array
+    from unittest.mock import patch
+
+    if sys.platform != "linux":
+        pytest.skip("native SRT runtime requires Linux")
+    from sglang.srt.disaggregation import decode as decode_module
+    from sglang.srt.managers.schedule_batch import Req
+    from sglang.srt.mem_cache import memory_pool
+    from sglang.srt.sampling.sampling_params import SamplingParams
+
+    module = decode_module if decode else memory_pool
+    cls = module.DecodeReqToTokenPool if decode else module.ReqToTokenPool
+    pool = cls(size=2, max_context_len=16, device="cpu", enable_memory_saver=False,
+               **({"pre_alloc_size": 1} if decode else {}))
+    req = Req("ordinary", "", array("q", [1, 2, 3]), SamplingParams(max_new_tokens=4))
+    original = pool.req_to_token.data_ptr()
+    with (
+        patch.object(module, "prepare_request_row", side_effect=AssertionError("ordinary prepare")),
+        patch.object(module, "write_request_slots", side_effect=AssertionError("ordinary scatter")),
+        patch.object(module, "release_request_row", side_effect=AssertionError("ordinary release")),
+    ):
+        index = pool.alloc([req])[0]
+        pool.write((index, slice(0, 3)), torch.tensor([7, 8, 9]))
+        assert storage.request_row(pool, index)[:3].tolist() == [7, 8, 9]
+        pool.free(req)
+        pool.clear()
+    assert pool._context_rows is None and storage.row_pointers(pool) is None
+
+    req.context_program = object()
+    req.origin_input_ids = array("q", range(40))
+    index = pool.alloc([req])[0]
+    pool.write((index, slice(35, 38)), torch.tensor([11, 12, 13]))
+    assert storage.request_row(pool, index)[35:38].tolist() == [11, 12, 13]
+    assert pool.req_to_token.data_ptr() == original
+    pool.clear()
+    assert not pool._context_rows and storage.row_pointers(pool) is None
+    assert pool._context_row_pointers[index].item() == pool.req_to_token[index].data_ptr()
+    req.kv.req_pool_idx = None
+    req.context_program = None
+    reused = pool.alloc([req])[0]
+    pool.write((reused, 0), 77)
+    assert storage.request_row(pool, reused)[0] == 77
+    pool.free(req)

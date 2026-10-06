@@ -1271,18 +1271,20 @@ class PrefillAdder:
         )
         truncated = cand_extend_input_len > _rem_tokens
         new_len = min(cand_extend_input_len, _rem_tokens)
-        admission = self._fit_context_admission(
-            req,
-            _PrefillAdmission(
-                len(req.prefix_indices), new_len,
-                min(req.sampling_params.max_new_tokens, CLIP_MAX_NEW_TOKENS)
-                if not truncated else 0,
-                truncated,
-            ),
-        )
-        if isinstance(admission, AddReqResult):
-            return req
-        new_len, truncated = admission.extend_len, admission.is_chunked
+        admission = None
+        if getattr(req, "context_program", None) is not None:
+            admission = self._fit_context_admission(
+                req,
+                _PrefillAdmission(
+                    len(req.prefix_indices), new_len,
+                    min(req.sampling_params.max_new_tokens, CLIP_MAX_NEW_TOKENS)
+                    if not truncated else 0,
+                    truncated,
+                ),
+            )
+            if isinstance(admission, AddReqResult):
+                return req
+            new_len, truncated = admission.extend_len, admission.is_chunked
         req.set_extend_range(len(req.prefix_indices), len(req.prefix_indices) + new_len)
         self.can_run_list.append(req)
         self._update_prefill_budget(
@@ -1296,8 +1298,8 @@ class PrefillAdder:
             req.retracted_stain,
             mamba_gap_reserve=self._mamba_gap_budget_for_req(req),
             is_chunked_continuation=True,
-            context_extra_pages=admission.context_extra_pages,
-            context_future_pages=admission.context_future_pages,
+            context_extra_pages=admission.context_extra_pages if admission else 0,
+            context_future_pages=admission.context_future_pages if admission else 0,
             compute_charge=req.extend_range.length if self.exact_chunk_fill else None,
         )
 

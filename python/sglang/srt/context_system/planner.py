@@ -142,12 +142,10 @@ class TokenEventCompiler:
         cls,
         event_ranges: dict[int, list[tuple[int, int]]],
         query_epoch: list[int],
-        target_msg_id: int,
     ) -> TokenDropEvents:
         """Compile rule-produced absolute ranges into the generic delta wire."""
 
         delta_by_pos: dict[int, list[tuple[int, int]]] = {}
-        effective_by_pos: dict[int, bool | None] = {}
         covered_ranges: list[tuple[int, int]] = []
         for event_n in sorted(event_ranges):
             canonical = cls._canonicalize_position_ranges(event_ranges[event_n])
@@ -164,15 +162,10 @@ class TokenEventCompiler:
                     f"event={event_n}, insertion_pos={insertion_pos}, ranges={newly_effective}"
                 )
             delta_by_pos.setdefault(insertion_pos, []).extend(newly_effective)
-            is_effective = event_n < target_msg_id
-            previous = effective_by_pos.setdefault(insertion_pos, is_effective)
-            if previous != is_effective:
-                effective_by_pos[insertion_pos] = None
 
         event_positions: list[int] = []
         range_offsets: list[int] = [0]
         flat_ranges: list[tuple[int, int]] = []
-        effective_flags: list[bool | None] = []
         visible_until = torch.full(
             (len(query_epoch),),
             torch.iinfo(torch.int32).max,
@@ -184,7 +177,6 @@ class TokenEventCompiler:
             if not canonical:
                 continue
             event_positions.append(insertion_pos)
-            effective_flags.append(effective_by_pos[insertion_pos])
             flat_ranges.extend(canonical)
             range_offsets.append(len(flat_ranges))
             for start, end in canonical:
@@ -192,23 +184,6 @@ class TokenEventCompiler:
                     visible_until[start:end],
                     torch.tensor(insertion_pos, dtype=torch.int32, device="cpu"),
                 )
-        bool_flags = [flag for flag in effective_flags if flag is not None]
-        effective_event_count = sum(bool_flags)
-        if len(bool_flags) != len(effective_flags) or any(
-            bool_flags[effective_event_count:]
-        ):
-            # A template without a distinguishable target boundary can merge a
-            # current and future event. Keep the exact-mask reference available
-            # instead of guessing which ranges are effective.
-            effective_event_count = -1
-        current_ranges = cls._canonicalize_position_ranges(
-            [
-                item
-                for event, ranges in event_ranges.items()
-                if event < target_msg_id
-                for item in ranges
-            ]
-        )
         return TokenDropEvents(
             event_insert_offsets=torch.tensor(
                 event_positions, dtype=torch.int32, device="cpu"
@@ -218,8 +193,6 @@ class TokenEventCompiler:
                 flat_ranges, dtype=torch.int32, device="cpu"
             ).reshape(-1),
             full_token_visible_until=visible_until,
-            effective_event_count=effective_event_count,
-            effective_ranges=tuple(current_ranges),
         )
 
     @staticmethod
@@ -304,16 +277,7 @@ class TokenEventCompiler:
                 f"{field} for messages[{owner}] contains no complete token; "
                 "boundary-crossing tokens are kept"
             )
-        ranges: list[tuple[int, int]] = []
-        start = previous = selected[0]
-        for token_id in selected[1:]:
-            if token_id == previous + 1:
-                previous = token_id
-                continue
-            ranges.append((start, previous + 1))
-            start = previous = token_id
-        ranges.append((start, previous + 1))
-        return cls._canonicalize_position_ranges(ranges)
+        return cls._position_ranges_from_ids(selected)
 
     @classmethod
     def _position_ranges_from_ids(cls, token_ids: list[int]) -> list[tuple[int, int]]:
@@ -330,47 +294,6 @@ class TokenEventCompiler:
             start = previous = token_id
         ranges.append((start, previous + 1))
         return cls._canonicalize_position_ranges(ranges)
-
-    @staticmethod
-    def _find_owned_token_subsequence(
-        full_ids: list[int],
-        owners: list[int],
-        needle: list[int],
-        *,
-        owner: int,
-        field: str,
-    ) -> tuple[int, int]:
-        if not needle:
-            raise ValueError(
-                f"{field} for messages[{owner}] tokenizes to an empty sequence"
-            )
-        # KMP keeps the GPT-OSS Harmony fallback linear in the full token stream.
-        prefix = [0] * len(needle)
-        j = 0
-        for i in range(1, len(needle)):
-            while j and needle[i] != needle[j]:
-                j = prefix[j - 1]
-            if needle[i] == needle[j]:
-                j += 1
-                prefix[i] = j
-        matches: list[tuple[int, int]] = []
-        j = 0
-        for i, token in enumerate(full_ids):
-            while j and token != needle[j]:
-                j = prefix[j - 1]
-            if token == needle[j]:
-                j += 1
-                if j == len(needle):
-                    start = i + 1 - len(needle)
-                    end = i + 1
-                    if all(candidate == owner for candidate in owners[start:end]):
-                        matches.append((start, end))
-                    j = prefix[j - 1]
-        if len(matches) != 1:
-            raise ValueError(
-                f"Cannot map {field} for messages[{owner}] uniquely into the Harmony token stream"
-            )
-        return matches[0]
 
     @staticmethod
     def _query_epochs_from_owners(
@@ -617,22 +540,14 @@ def compile_chat_program(
     message_count = len(raw_messages)
     epochs = compiler._query_epochs_from_owners(provenance.owners, message_count)
     owner_ranges = compiler._build_owner_position_ranges(provenance.owners)
-    events = compiler._build_position_range_drop_plan({}, epochs, message_count)
+    event_ranges = {}
     if drop_rule is not None:
-
-        def no_fallback_encoding(_):
-            raise RuntimeError("Context compilation requires exact template provenance")
 
         context = DropCompileContext(
             raw_messages=raw_messages,
             owner_ranges=owner_ranges,
             provenance=provenance,
-            full_input_ids=provenance.input_ids,
-            owners=provenance.owners,
-            target_offset=0,
             normalized_message_count=message_count,
-            is_gpt_oss=False,  # Exact provenance takes precedence over fallback encoders.
-            harmony_thinking_ranges={},
             normalize_content=lambda content: _matchable_content(
                 {"content": content}, field="messages"
             ),
@@ -640,13 +555,9 @@ def compile_chat_program(
             token_ranges_for_char_spans=compiler._token_ranges_for_char_spans,
             canonicalize_ranges=compiler._canonicalize_position_ranges,
             position_ranges_from_ids=compiler._position_ranges_from_ids,
-            find_owned_subsequence=compiler._find_owned_token_subsequence,
-            encode_text=no_fallback_encoding,
-            compile_events=lambda ranges: compiler._build_position_range_drop_plan(
-                ranges, epochs, message_count
-            ),
         )
-        events = drop_rule.compile_token_drop_events(context)
+        event_ranges = drop_rule.position_events(context)
+    events = compiler._build_position_range_drop_plan(event_ranges, epochs)
     repos = resolve_reposition_token_boundaries(
         reposition, owner_ranges, {i: i for i in range(message_count)}
     )

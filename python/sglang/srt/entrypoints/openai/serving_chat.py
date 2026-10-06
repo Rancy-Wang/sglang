@@ -1316,8 +1316,6 @@ class OpenAIServingChat(OpenAIServingBase):
                 parse_drop_rule,
             )
 
-            if self.tokenizer_manager.config_value("page_size") != 1:
-                raise ValueError("Drop/Reposition requires page_size=1")
             if is_multimodal or request.input_ids is not None:
                 raise ValueError(
                     "Drop/Reposition requires text messages with template provenance"

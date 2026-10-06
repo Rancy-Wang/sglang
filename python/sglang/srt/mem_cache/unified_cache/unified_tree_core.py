@@ -1465,7 +1465,6 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         key, resident = params.key, params.context_resident
         if key.context is None or key.context_start != 0:
             raise ValueError("Context hole insertion requires a full structured key")
-        self._validate_context_key(key)
         if (
             resident.device.type != "cpu"
             or resident.dtype != torch.bool

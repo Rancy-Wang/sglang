@@ -714,3 +714,36 @@ def test_native_chatml_context_matches_original_prompt(chat, continue_final):
     assert context.prompt_ids == native.prompt_ids
     program = ContextProgram.from_wire(context.context_program, context.prompt_ids)
     assert not program.layout.keep_mask.all()
+
+
+@pytest.mark.parametrize("preserve_thinking", [False, True])
+def test_harmony_tools_share_exact_provenance(preserve_thinking):
+    pytest.importorskip("openai_harmony")
+    from sglang.srt.context_system.provenance import TemplateTokenProvenance
+    from sglang.srt.parser.gpt_oss_encoding import HarmonyEncoder
+
+    messages = [
+        {"role": "system", "content": "Answer with evidence."},
+        {"role": "user", "content": "查天气😀"},
+        {"role": "assistant", "content": "", "reasoning_content": "先查工具",
+         "tool_calls": [{"id": "call_1", "type": "function",
+                         "function": {"name": "lookup", "arguments": '{"city":"北京"}'}}]},
+        {"role": "tool", "tool_call_id": "call_1", "content": "晴天"},
+        {"role": "assistant", "content": "晴天。"},
+        {"role": "user", "content": "谢谢"},
+    ]
+    tools = [{"type": "function", "function": {
+        "name": "lookup", "description": "Look up weather",
+        "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+    }}]
+    encoder = HarmonyEncoder(preserve_thinking=preserve_thinking)
+    ids, owners, _ = encoder.render_tokens(messages, tools=tools)
+    trace = encoder.render(messages, tools=tools)
+    assert isinstance(trace, TemplateTokenProvenance)
+    assert trace.input_ids == ids and trace.owners == owners
+    assert len(trace.offsets) == len(ids)
+    assert len(trace.char_owners) == len(trace.rendered_text)
+    for owner, text in [(1, "查天气😀"), (3, "晴天"), (5, "谢谢")]:
+        start = trace.rendered_text.index(text)
+        assert trace.char_owners[start:start + len(text)] == [owner] * len(text)
+    assert ("先查工具" in trace.rendered_text) is preserve_thinking

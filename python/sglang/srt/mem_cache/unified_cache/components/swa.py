@@ -1095,18 +1095,8 @@ class SWAComponent(TreeComponent):
             # materialization of the prompt's CPU validity metadata.
             allocator.free_swa_segment(row[start:end], start_pos=start)
         else:
-            from sglang.srt.context_system.recovery import mask_ranges
-
-            valid = torch.ones(end - start, dtype=torch.bool)
-            rows = state.terminal_rows[start : min(end, len(state.terminal_rows))]
-            valid[: len(rows)] = False
-            present = rows >= 0
-            if state.swa_resident is None:
-                valid[: len(rows)] = present
-            else:
-                valid[: len(rows)][present] = state.swa_resident[rows[present]]
-            for a, b in mask_ranges(valid.numpy()):
-                allocator.free_swa_segment(row[start + a : start + b], start_pos=start + a)
+            for a, b in state.live_swa_ranges(start, end):
+                allocator.free_swa_segment(row[a:b], start_pos=a)
         req.kv.swa_evicted_seqlen = end
 
     def free_out_of_window_slots(

@@ -1763,7 +1763,11 @@ class Req(ReqDllmMixin):
         tree_cache: Optional[BasePrefixCache] = None,
         cow_mamba: Optional[bool] = None,
     ):
-        if tree_cache is not None and not self.context_prefill_started:
+        if (
+            self.context_program is not None
+            and tree_cache is not None
+            and not self.context_prefill_started
+        ):
             # A deferred admission owns no physical pages. Its previous match
             # may have been evicted; rebuild ownership from this round's match.
             self.context_state = None
@@ -1888,7 +1892,7 @@ class Req(ReqDllmMixin):
             if self.is_dllm():
                 self._update_block_offset_for_dllm()
 
-        if tree_cache is None:
+        if self.context_program is not None and tree_cache is None:
             self.advance_context_recovery_gap()
 
         if (
@@ -2164,22 +2168,23 @@ class Req(ReqDllmMixin):
         # Increment retraction count before resetting other state. We should not reset this
         # since we are tracking the total number of retractions for each request.
         self.retraction_count += 1
-        self.context_decode_reuse = None
-        self.context_source_positions = None
-        self.context_exact_prefix_len = 0
-        self.context_resident = None
-        self.context_swa_resident = None
-        self.context_swa_window = None
-        self.context_swa_query_starts = None
-        self.context_swa_source_required = None
-        self.context_recovery_plan = None
-        self.context_recovery_source = None
-        self.context_gap_prefix = None
-        self.context_recompute_program = None
-        self.context_force_miss = False
-        self.context_admission_error = None
-        if self.context_usage is not None:
-            self.context_usage.begin_recompute()
+        if self.context_program is not None:
+            self.context_decode_reuse = None
+            self.context_source_positions = None
+            self.context_exact_prefix_len = 0
+            self.context_resident = None
+            self.context_swa_resident = None
+            self.context_swa_window = None
+            self.context_swa_query_starts = None
+            self.context_swa_source_required = None
+            self.context_recovery_plan = None
+            self.context_recovery_source = None
+            self.context_gap_prefix = None
+            self.context_recompute_program = None
+            self.context_force_miss = False
+            self.context_admission_error = None
+            if self.context_usage is not None:
+                self.context_usage.begin_recompute()
 
         self.prefix_indices = torch.empty((0,), dtype=torch.int64)
         self.routed_experts = None
