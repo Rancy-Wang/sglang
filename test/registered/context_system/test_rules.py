@@ -115,7 +115,7 @@ def test_message_trigger_after_whole_message_and_reposition(context_modules):
     assert program.layout.birth_positions[boundary] == boundary - removed
     assert program.layout.next_position == len(trace.input_ids) - removed
     assert program.layout.drop_ranges.tolist() == [0, removed]
-    assert program.layout.records[program.layout.token_to_key[removed], 3] == 0
+    assert program.layout.records[program.layout.token_to_key[removed], 2] == 0
     assert trace.owners[-len("<assistant>") :] == [3] * len("<assistant>")
 
 
@@ -239,6 +239,16 @@ def test_context_program_wire_preserves_canonical_tokens(context_modules, repos)
     wire = program.to_wire()
     restored = planner.ContextProgram.from_wire(wire, trace.input_ids)
     assert restored.layout.records is program.layout.records
+    assert wire["version"] == 3
+    assert program.layout.records.shape[1] == 3
+    for old_version in (1, 2):
+        legacy = {**wire, "version": old_version}
+        with pytest.raises(ValueError, match="wire version"):
+            planner.ContextProgram.from_wire(legacy, trace.input_ids)
+    wrong_width = copy.deepcopy(wire)
+    wrong_width["layout"]["records"] = torch.zeros((len(program.layout.records), 4), dtype=torch.int32)
+    with pytest.raises(ValueError, match="three columns"):
+        planner.ContextProgram.from_wire(wrong_width, trace.input_ids)
     assert restored.visible_until is program.visible_until
     # Native PD rebootstrap carries generated prefix through HTTP JSON.
     import json
@@ -246,6 +256,7 @@ def test_context_program_wire_preserves_canonical_tokens(context_modules, repos)
     generated = [31, 32, 33]
     replay = program.with_generated(generated)
     encoded = json.loads(json.dumps(replay.to_json_wire()))
+    assert encoded["version"] == 4
     restored = planner.ContextProgram.from_wire(encoded, [*trace.input_ids, *generated])
     assert torch.equal(restored.layout.records, replay.layout.records)
     assert torch.equal(restored.layout.positions, replay.layout.positions)

@@ -219,7 +219,6 @@ auto compile_radix_reposition_layout(
     const tvm::ffi::TensorView key_to_token,
     const tvm::ffi::TensorView token_to_key,
     const tvm::ffi::TensorView positions,
-    const tvm::ffi::TensorView repos_info,
     const tvm::ffi::TensorView keep_mask,
     const tvm::ffi::TensorView materialized_stage,
     const tvm::ffi::TensorView birth_positions,
@@ -243,8 +242,8 @@ auto compile_radix_reposition_layout(
   require(is_cpu_tensor(reposition_raw_boundaries, 1, 32) &&
                          is_cpu_tensor(reposition_insert_offsets, 1, 32),
                      "Reposition inputs must be contiguous CPU int32 vectors");
-  require(is_cpu_tensor(records, 2, 32) && records.size(1) == 4,
-                     "records must be a contiguous CPU int32 [N, 4] tensor");
+  require(is_cpu_tensor(records, 2, 32) && records.size(1) == 3,
+                     "records must be a contiguous CPU int32 [N, 3] tensor");
   require(is_cpu_tensor(virtual_mask, 1, 8, kDLBool) &&
                          is_cpu_tensor(keep_mask, 1, 8, kDLBool) &&
                          is_cpu_tensor(effective_repositions, 1, 8, kDLBool) &&
@@ -256,7 +255,6 @@ auto compile_radix_reposition_layout(
                          is_cpu_tensor(status, 1, 64),
                      "mapping/status outputs must be contiguous CPU int64 vectors");
   require(is_cpu_tensor(positions, 1, 32) &&
-                         is_cpu_tensor(repos_info, 1, 32) &&
                          is_cpu_tensor(materialized_stage, 1, 32) &&
                          is_cpu_tensor(birth_positions, 1, 32) &&
                          is_cpu_tensor(birth_stages, 1, 32) &&
@@ -285,7 +283,6 @@ auto compile_radix_reposition_layout(
                      "Radix output capacity is too small");
   require(token_to_key.size(0) == token_count &&
                          positions.size(0) == token_count &&
-                         repos_info.size(0) == token_count &&
                          keep_mask.size(0) == token_count &&
                          materialized_stage.size(0) == token_count &&
                          birth_positions.size(0) == token_count &&
@@ -298,7 +295,7 @@ auto compile_radix_reposition_layout(
                          transition_offsets.size(0) >= reposition_count + 1 &&
                          transition_raw_tokens.size(0) == transition_old_positions.size(0) &&
                          transition_raw_tokens.size(0) == transition_new_positions.size(0) &&
-                         status.size(0) >= 6,
+                         status.size(0) >= 5,
                      "Reposition output lengths are inconsistent");
 
   const auto *drops = static_cast<const int32_t *>(drop_insert_offsets.data_ptr());
@@ -330,7 +327,6 @@ auto compile_radix_reposition_layout(
   }
 
   auto *position = static_cast<int32_t *>(positions.data_ptr());
-  auto *repos = static_cast<int32_t *>(repos_info.data_ptr());
   auto *kept = static_cast<bool *>(keep_mask.data_ptr());
   auto *ready = static_cast<int32_t *>(materialized_stage.data_ptr());
   auto *birth_position = static_cast<int32_t *>(birth_positions.data_ptr());
@@ -358,7 +354,6 @@ auto compile_radix_reposition_layout(
   int32_t first_noncompact = -1;
   int32_t active_count = 0;
   int32_t next_position = 0;
-  int32_t current_reposition = -1;
   int32_t stage = 0;
   int64_t drop_idx = 0;
   int64_t reposition_idx = 0;
@@ -435,10 +430,8 @@ auto compile_radix_reposition_layout(
           transition_new[transition_cursor] = new_position;
           ++transition_cursor;
           position[token] = new_position;
-          repos[token] = raw_boundaries[reposition_idx];
           ready[token] = stage;
         }
-        current_reposition = raw_boundaries[reposition_idx];
         next_position = active_count;
         first_noncompact = -1;
         transition_offset[stage] = transition_cursor;
@@ -455,7 +448,6 @@ auto compile_radix_reposition_layout(
     position[token] = next_position++;
     birth_position[token] = position[token];
     birth_stage[token] = stage;
-    repos[token] = current_reposition;
     ready[token] = stage;
     previous[token] = tail;
     if (tail < 0) {
@@ -490,12 +482,11 @@ auto compile_radix_reposition_layout(
            range_idx < drop_offsets[drop_idx + 1]; ++range_idx) {
         const int32_t start = ranges[2 * range_idx];
         const int32_t end = ranges[2 * range_idx + 1];
-        output[key_idx * 4] = kDelta;
-        output[key_idx * 4 + 1] =
+        output[key_idx * 3] = kDelta;
+        output[key_idx * 3 + 1] =
             static_cast<int32_t>(-static_cast<int64_t>(start) - 1);
-        output[key_idx * 4 + 2] =
+        output[key_idx * 3 + 2] =
             static_cast<int32_t>(-static_cast<int64_t>(end) - 1);
-        output[key_idx * 4 + 3] = -1;
         is_virtual[key_idx] = true;
         key_token[key_idx++] = -1;
       }
@@ -504,10 +495,9 @@ auto compile_radix_reposition_layout(
     if (reposition_idx < reposition_count &&
         reposition_offsets[reposition_idx] == insertion) {
       if (effective[reposition_idx]) {
-        output[key_idx * 4] = kReposition;
-        output[key_idx * 4 + 1] = raw_boundaries[reposition_idx];
-        output[key_idx * 4 + 2] = -1;
-        output[key_idx * 4 + 3] = -1;
+        output[key_idx * 3] = kReposition;
+        output[key_idx * 3 + 1] = raw_boundaries[reposition_idx];
+        output[key_idx * 3 + 2] = -1;
         is_virtual[key_idx] = true;
         key_token[key_idx++] = -1;
       }
@@ -524,10 +514,9 @@ auto compile_radix_reposition_layout(
       result_status[4] = token_id;
       return;
     }
-    output[key_idx * 4] = kToken;
-    output[key_idx * 4 + 1] = static_cast<int32_t>(token_id);
-    output[key_idx * 4 + 2] = repos[insertion];
-    output[key_idx * 4 + 3] = position[insertion];
+    output[key_idx * 3] = kToken;
+    output[key_idx * 3 + 1] = static_cast<int32_t>(token_id);
+    output[key_idx * 3 + 2] = position[insertion];
     is_virtual[key_idx] = false;
     key_token[key_idx++] = insertion;
   }
@@ -537,7 +526,6 @@ auto compile_radix_reposition_layout(
   result_status[2] = stage;
   result_status[3] = next_position;
   result_status[4] = -1;
-  result_status[5] = current_reposition;
   require(transition_cursor == transition_raw_tokens.size(0),
                      "Reposition transition count/fill passes disagree");
   (void)head;

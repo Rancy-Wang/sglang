@@ -82,7 +82,7 @@ def proven_skip_ranges(
     if len(matched_records) == 0:
         return []
     records = matched_records.numpy()
-    if records.ndim != 2 or records.shape[1] != 4:
+    if records.ndim != 2 or records.shape[1] != 3:
         return []
     real = records[:, 0] == 0
     raw_keys = np.flatnonzero(real)

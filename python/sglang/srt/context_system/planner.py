@@ -350,7 +350,7 @@ class ContextProgram:
         The tensors are immutable by convention throughout the request lifetime.
         """
         return {
-            "version": 1,
+            "version": 3,
             "layout": vars(self.layout),
             "visible_until": self.visible_until,
         }
@@ -368,7 +368,7 @@ class ContextProgram:
             }
 
         return {
-            "version": 2,
+            "version": 4,
             "layout": {
                 name: encode(value) for name, value in vars(self.layout).items()
             },
@@ -381,12 +381,12 @@ class ContextProgram:
         if (
             isinstance(wire, dict)
             and type(wire.get("version")) is int
-            and wire["version"] == 2
+            and wire["version"] == 4
         ):
             import base64
             import math
 
-            scalar = {"next_position", "current_reposition", "compile_ns"}
+            scalar = {"next_position", "compile_ns"}
             boolean = {
                 "virtual_mask",
                 "keep_mask",
@@ -432,7 +432,7 @@ class ContextProgram:
             ):
                 raise ValueError("Invalid Context JSON wire")
             wire = {
-                "version": 1,
+                "version": 3,
                 "layout": {
                     name: decode(name, value) for name, value in wire["layout"].items()
                 },
@@ -442,7 +442,7 @@ class ContextProgram:
             not isinstance(wire, dict)
             or set(wire) != {"version", "layout", "visible_until"}
             or type(wire["version"]) is not int
-            or wire["version"] != 1
+            or wire["version"] != 3
         ):
             raise ValueError("Unsupported Context program wire version")
         data = wire["layout"]
@@ -452,7 +452,7 @@ class ContextProgram:
             raise ValueError("Context layout fields do not match the wire schema")
         layout = ContextLayout(**data)
         n = len(input_ids)
-        scalar_names = {"next_position", "current_reposition", "compile_ns"}
+        scalar_names = {"next_position", "compile_ns"}
         bool_names = {
             "virtual_mask",
             "keep_mask",
@@ -462,9 +462,7 @@ class ContextProgram:
         i64_names = {"key_to_token", "token_to_key", "drop_event_to_key"}
         for name, value in data.items():
             if name in scalar_names:
-                if type(value) is not int or value < (
-                    -1 if name == "current_reposition" else 0
-                ):
+                if type(value) is not int or value < 0:
                     raise ValueError(f"Invalid Context scalar {name}")
                 continue
             dtype = (
@@ -483,12 +481,11 @@ class ContextProgram:
             ):
                 raise ValueError(f"Invalid Context tensor {name}")
         records = layout.records
-        if records.shape[1] != 4:
-            raise ValueError("Context key records must have four columns")
+        if records.shape[1] != 3:
+            raise ValueError("Context key records must have three columns")
         for name in (
             "token_to_key",
             "positions",
-            "repos_info",
             "keep_mask",
             "materialized_stage",
             "birth_positions",
@@ -517,7 +514,7 @@ class ContextProgram:
             or bool(torch.any(expiry <= torch.arange(n)))
         ):
             raise ValueError("Invalid Context visibility metadata")
-        if not torch.equal(layout.positions, records[real_keys, 3]) or bool(
+        if not torch.equal(layout.positions, records[real_keys, 2]) or bool(
             torch.any(layout.positions < 0) | torch.any(layout.birth_positions < 0)
         ):
             raise ValueError("Context positions disagree with the Radix key")

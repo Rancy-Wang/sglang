@@ -131,6 +131,11 @@ def test_pd_final_versions_holes_identity_and_usage(compiler, transfer_modules):
     row = torch.full((16,), -99, dtype=torch.int32)
     transfer.write_context_metadata(req, row)
     assert row[:7].tolist() == [-99] * 7
+    assert row[7] == 2
+    old_header = row.clone()
+    old_header[7] = 1
+    with pytest.raises(ValueError, match="identity"):
+        transfer.commit_context_metadata(req, old_header, "cpu")
     transfer.commit_context_metadata(req, row, "cpu")
     req.context_usage.record_decode(2)
     assert req.context_usage.snapshot() == usage.ContextUsageSnapshot(2, 3, 4, 5, 2)

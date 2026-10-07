@@ -122,7 +122,7 @@ def test_hole_dependency_graph(recovery):
 
 def test_drop_skip_requires_matched_ancestor_event(recovery):
     records = torch.tensor(
-        [[0, 7, -1, 0], [0, 8, -1, 1], [1, -1, -3, -1], [0, 9, -1, 2]],
+        [[0, 7, 0], [0, 8, 1], [1, -1, -3], [0, 9, 2]],
         dtype=torch.int32,
     )
     # Raw 1 was dropped but an earlier repair query still needs its KV.
