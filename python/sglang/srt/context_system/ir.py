@@ -44,7 +44,6 @@ class ContextLayout:
     key_to_token: torch.Tensor
     token_to_key: torch.Tensor
     positions: torch.Tensor
-    repos_info: torch.Tensor
     keep_mask: torch.Tensor
     materialized_stage: torch.Tensor
     birth_positions: torch.Tensor
@@ -58,7 +57,6 @@ class ContextLayout:
     effective_repositions: torch.Tensor
     ignored_repositions: torch.Tensor
     next_position: int
-    current_reposition: int
     compile_ns: int
 
     @property
@@ -86,8 +84,7 @@ def append_generated_layout(layout: ContextLayout, token_ids) -> ContextLayout:
         layout.next_position, layout.next_position + count, dtype=torch.int32
     )
     stages = torch.full((count,), len(layout.transition_offsets) - 1, dtype=torch.int32)
-    repos = torch.full((count,), layout.current_reposition, dtype=torch.int32)
-    records = torch.stack((torch.zeros_like(repos), tokens.int(), repos, positions), 1)
+    records = torch.stack((torch.zeros_like(positions), tokens.int(), positions), 1)
     return replace(
         layout,
         records=torch.cat((layout.records, records)),
@@ -99,7 +96,6 @@ def append_generated_layout(layout: ContextLayout, token_ids) -> ContextLayout:
             (layout.token_to_key, torch.arange(record_count, record_count + count))
         ),
         positions=torch.cat((layout.positions, positions)),
-        repos_info=torch.cat((layout.repos_info, repos)),
         keep_mask=torch.cat((layout.keep_mask, torch.ones(count, dtype=torch.bool))),
         materialized_stage=torch.cat((layout.materialized_stage, stages)),
         birth_positions=torch.cat((layout.birth_positions, positions)),
@@ -183,12 +179,11 @@ def compile_context_layout(
     transition_count = int(transition_counts.sum().item())
     range_count = len(drop_ranges) // 2
     capacity = token_count + range_count + reposition_count
-    records = torch.empty((capacity, 4), dtype=torch.int32, device="cpu")
+    records = torch.empty((capacity, 3), dtype=torch.int32, device="cpu")
     virtual_mask = torch.empty(capacity, dtype=torch.bool, device="cpu")
     key_to_token = torch.empty(capacity, dtype=torch.int64, device="cpu")
     token_to_key = torch.empty(token_count, dtype=torch.int64, device="cpu")
     positions = torch.empty(token_count, dtype=torch.int32, device="cpu")
-    repos_info = torch.empty(token_count, dtype=torch.int32, device="cpu")
     keep_mask = torch.empty(token_count, dtype=torch.bool, device="cpu")
     materialized_stage = torch.empty(token_count, dtype=torch.int32, device="cpu")
     birth_positions = torch.empty(token_count, dtype=torch.int32, device="cpu")
@@ -213,7 +208,7 @@ def compile_context_layout(
     )
     effective = torch.zeros(reposition_count, dtype=torch.bool, device="cpu")
     ignored = torch.zeros(reposition_count, dtype=torch.bool, device="cpu")
-    status = torch.zeros(6, dtype=torch.int64, device="cpu")
+    status = torch.zeros(5, dtype=torch.int64, device="cpu")
 
     _load_module().compile_radix_reposition_layout(
         token_ids,
@@ -227,7 +222,6 @@ def compile_context_layout(
         key_to_token,
         token_to_key,
         positions,
-        repos_info,
         keep_mask,
         materialized_stage,
         birth_positions,
@@ -263,7 +257,6 @@ def compile_context_layout(
         key_to_token=key_to_token[:key_len],
         token_to_key=token_to_key,
         positions=positions,
-        repos_info=repos_info,
         keep_mask=keep_mask,
         materialized_stage=materialized_stage,
         birth_positions=birth_positions,
@@ -277,7 +270,6 @@ def compile_context_layout(
         effective_repositions=effective,
         ignored_repositions=ignored,
         next_position=int(status[3]),
-        current_reposition=int(status[5]),
         compile_ns=time.perf_counter_ns() - compile_started_ns,
     )
 
@@ -321,7 +313,7 @@ class ContextKeyData:
 
     @classmethod
     def from_layout(cls, layout: ContextLayout) -> ContextKeyData:
-        # Bulk copies avoid boxing four integers for every raw token. The native
+        # Bulk copies avoid boxing three integers for every raw token. The native
         # compiler's outputs are CPU int32 / int64 and already range checked.
         records = array("i")
         records.frombytes(layout.records.numpy().tobytes())
@@ -330,15 +322,11 @@ class ContextKeyData:
         ids = layout.token_to_key
         raw = torch.arange(len(ids), dtype=torch.int64)
         preceding = torch.cat((torch.tensor([-1]), ids[:-1])) if len(ids) else ids
-        special = (
-            (ids != preceding + 1)
-            | (layout.repos_info != -1)
-            | (layout.positions != raw)
-        )
+        special = (ids != preceding + 1) | (layout.positions != raw)
         special_tokens = array("q")
         special_tokens.frombytes(torch.nonzero(special).flatten().numpy().tobytes())
         retry = layout.records.clone()
-        retry[ids, 2:] = 0
+        retry[ids, 2] = 0
         retry_records = array("i")
         retry_records.frombytes(retry.numpy().tobytes())
         event_tokens = array("q")
@@ -351,9 +339,7 @@ class ContextKeyData:
             records, token_map, special_tokens, retry_records, event_tokens, positions
         )
 
-    def append_tokens(
-        self, token_ids: array, *, next_position: int, current_reposition: int
-    ) -> None:
+    def append_tokens(self, token_ids: array, *, next_position: int) -> None:
         """Append decode identity without copying or recompiling the prompt.
 
         A trailing Drop is already in records and becomes the leading event of
@@ -366,22 +352,21 @@ class ContextKeyData:
         if (
             next_position < 0
             or next_position + count > 2**31
-            or not -1 <= current_reposition < 2**31
             or any(token < 0 or token >= 2**31 for token in token_ids)
         ):
             raise ValueError("Context decode tokens/positions exceed int32 range")
         for offset, token in enumerate(token_ids):
             raw = len(self.token_to_record)
-            record = len(self.records) // 4
+            record = len(self.records) // 3
             preceding = self.token_to_record[-1] + 1 if raw else 0
             position = next_position + offset
             has_event = record != preceding
             if has_event:
                 self.event_tokens.append(raw)
-            if has_event or current_reposition != -1 or position != raw:
+            if has_event or position != raw:
                 self.special_tokens.append(raw)
-            self.records.extend((TOKEN_KIND, token, current_reposition, position))
-            self.retry_records.extend((TOKEN_KIND, token, 0, 0))
+            self.records.extend((TOKEN_KIND, token, position))
+            self.retry_records.extend((TOKEN_KIND, token, 0))
             self.token_to_record.append(record)
             self.positions.append(position)
 
@@ -420,12 +405,12 @@ class ContextKeyData:
         lo, step = 0, 1
         while lo < n:
             hi = min(lo + step, n)
-            if left[4 * (a + lo) : 4 * (a + hi)] != right[4 * (b + lo) : 4 * (b + hi)]:
+            if left[3 * (a + lo) : 3 * (a + hi)] != right[3 * (b + lo) : 3 * (b + hi)]:
                 while hi - lo > 1:
                     mid = (lo + hi) // 2
                     if (
-                        left[4 * (a + lo) : 4 * (a + mid)]
-                        == right[4 * (b + lo) : 4 * (b + mid)]
+                        left[3 * (a + lo) : 3 * (a + mid)]
+                        == right[3 * (b + lo) : 3 * (b + mid)]
                     ):
                         lo = mid
                     else:
@@ -439,4 +424,4 @@ class ContextKeyData:
 
     def child_records(self, start: int, count: int) -> tuple[int, ...]:
         begin, end = self.record_span(start, count)
-        return tuple(self.records[4 * begin : 4 * end])
+        return tuple(self.records[3 * begin : 3 * end])

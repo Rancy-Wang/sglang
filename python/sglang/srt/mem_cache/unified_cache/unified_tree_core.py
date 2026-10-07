@@ -699,13 +699,13 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         for node in reversed(path):
             key = node.key
             if key.context is None:
-                plain = np.zeros((len(key), 4), dtype=np.int64)
+                plain = np.zeros((len(key), 3), dtype=np.int64)
                 # Only kind and Delta ranges matter to the proof.
                 records.append(plain)
             else:
                 start, end = key.context.record_span(key.context_start, len(key))
                 records.append(
-                    np.frombuffer(key.context.records, dtype=np.int32).reshape(-1, 4)[
+                    np.frombuffer(key.context.records, dtype=np.int32).reshape(-1, 3)[
                         start:end
                     ]
                 )
@@ -1476,7 +1476,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             return
         first, last = key.context.record_span(0, len(key))
         records = torch.from_numpy(
-            np.frombuffer(key.context.records, dtype=np.int32).reshape(-1, 4)[first:last]
+            np.frombuffer(key.context.records, dtype=np.int32).reshape(-1, 3)[first:last]
         )
         proven = np.zeros(len(records), dtype=bool)
         for start, end in proven_skip_ranges(records, resident[: len(key)]):

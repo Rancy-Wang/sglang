@@ -60,10 +60,10 @@ def oracle(tokens, drops, reposition):
     """Deliberately simple staged simulator, independent of linked-list compiler."""
     n = len(tokens)
     active = []
-    positions, birth, birth_stages, repos = [], [], [], []
+    positions, birth, birth_stages = [], [], []
     ready, effective, ignored, effective_stages = [], [], [], []
     changed, old, new, transition_offsets = [], [], [], [0]
-    stage, next_position, current = 0, 0, -1
+    stage, next_position = 0, 0
     for insertion in range(n + 1):
         for begin, end in drops.get(insertion, ()):
             active = [raw for raw in active if not begin <= raw < end]
@@ -78,12 +78,11 @@ def oracle(tokens, drops, reposition):
             effective_stages.append(stage + 1 if changes else -1)
             if changes:
                 stage += 1
-                current = insertion - 1
                 for raw, rank in changes:
                     changed.append(raw)
                     old.append(positions[raw])
                     new.append(rank)
-                    positions[raw], repos[raw], ready[raw] = rank, current, stage
+                    positions[raw], ready[raw] = rank, stage
                 transition_offsets.append(len(changed))
                 next_position = len(active)
         if insertion < n:
@@ -92,7 +91,6 @@ def oracle(tokens, drops, reposition):
             birth.append(next_position)
             birth_stages.append(stage)
             ready.append(stage)
-            repos.append(current)
             next_position += 1
     keys, virtual, key_raw, raw_key, drop_key = [], [], [], [], []
     effective_by_boundary = dict(zip(reposition, effective))
@@ -100,16 +98,16 @@ def oracle(tokens, drops, reposition):
         if insertion in drops:
             drop_key.append(len(keys))
         for begin, end in drops.get(insertion, ()):
-            keys.append([1, -begin - 1, -end - 1, -1])
+            keys.append([1, -begin - 1, -end - 1])
             virtual.append(True)
             key_raw.append(-1)
         if effective_by_boundary.get(insertion - 1, False):
-            keys.append([2, insertion - 1, -1, -1])
+            keys.append([2, insertion - 1, -1])
             virtual.append(True)
             key_raw.append(-1)
         if insertion < n:
             raw_key.append(len(keys))
-            keys.append([0, tokens[insertion], repos[insertion], positions[insertion]])
+            keys.append([0, tokens[insertion], positions[insertion]])
             virtual.append(False)
             key_raw.append(insertion)
     return {
@@ -118,7 +116,6 @@ def oracle(tokens, drops, reposition):
         "key_to_token": key_raw,
         "token_to_key": raw_key,
         "positions": positions,
-        "repos_info": repos,
         "keep_mask": [raw in active for raw in range(n)],
         "materialized_stage": ready,
         "birth_positions": birth,
@@ -132,7 +129,6 @@ def oracle(tokens, drops, reposition):
         "effective_repositions": effective,
         "ignored_repositions": ignored,
         "next_position": next_position,
-        "current_reposition": current,
     }
 
 
@@ -160,6 +156,9 @@ def cases():
 @pytest.mark.parametrize("tokens,drops,reposition", list(cases()))
 def test_staged_event_oracle(compiler, tokens, drops, reposition):
     actual = compiler(*args(tokens, drops, reposition))
+    assert actual.records.shape[1] == 3
+    assert "repos_info" not in vars(actual)
+    assert "current_reposition" not in vars(actual)
     for name, expected in oracle(tokens, drops, reposition).items():
         value = getattr(actual, name)
         assert (
@@ -216,6 +215,11 @@ def test_fixed_mini_compiler_differential(compiler):
             if field.name == "compile_ns":
                 continue
             left, right = getattr(actual, field.name), getattr(expected, field.name)
+            if field.name == "records":
+                compact = right[:, :3].clone()
+                real = right[:, 0] == 0
+                compact[real, 2] = right[real, 3]
+                right = compact
             assert (
                 torch.equal(left, right)
                 if isinstance(left, torch.Tensor)

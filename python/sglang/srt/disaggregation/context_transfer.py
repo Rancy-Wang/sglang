@@ -83,7 +83,7 @@ class ContextTransferPlan:
         return int(begin), int(end), cursor
 
     def header(self):
-        return (1, self.active_count, self.decode.next_position, *self.signature)
+        return (2, self.active_count, self.decode.next_position, *self.signature)
 
 
 def transfer_plan(req, device):

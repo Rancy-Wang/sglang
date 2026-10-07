@@ -297,7 +297,7 @@ class RadixKey:
             raw = self.context_start + offset
             start = self.context.record_start(raw)
             end = self.context.token_to_record[raw]
-            events = tuple(self.context.records[4 * start : 4 * end])
+            events = tuple(self.context.records[3 * start : 3 * end])
         return self.extra_key, self.cache_salt, self.token_ids[offset], events
 
     def child_key(self, page_size: int = 1):
@@ -329,7 +329,7 @@ class RadixKey:
             self.context_start + offset, 1
         ) < 1:
             plain = (
-                "context-v1",
+                "context-v2",
                 self.context.child_records(self.context_start + offset, 1),
             )
         if self.cache_salt is not None:
@@ -349,7 +349,7 @@ class RadixKey:
             records = self.context.child_records(
                 self.context_start + start, end - start
             )
-            digest = hashlib.sha256(b"sglang-context-key-v1")
+            digest = hashlib.sha256(b"sglang-context-key-v2")
             if prior_hash is not None:
                 digest.update(bytes.fromhex(prior_hash))
             digest.update(struct.pack(f"<{len(records)}i", *records))

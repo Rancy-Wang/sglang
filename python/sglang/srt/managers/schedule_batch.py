@@ -1562,7 +1562,6 @@ class Req(ReqDllmMixin):
                 data.append_tokens(
                     token_ids[existing:required],
                     next_position=layout.next_position + existing - len(layout.positions),
-                    current_reposition=layout.current_reposition,
                 )
             # Freeze this key's length even if the backing request ID array grows.
             limit = required

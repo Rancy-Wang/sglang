@@ -133,13 +133,31 @@ def test_retry_preserves_events_and_ignores_only_token_positions(compiler, key_t
         right = units(compiler(*args(tokens, drops, [])))
         for sequence in (left, right):
             for unit in sequence:
-                unit[-1][2:] = [0, 0]
+                unit[-1][2] = 0
         assert target.match_at(plain_repos, 0, context_retry=True) == prefix(
             left, right
         )
         assert (
             target.context_retry_child_key() == plain_repos.context_retry_child_key()
         ) == (prefix(left, right) > 0)
+
+
+def test_retry_keeps_delta_endpoints_and_reposition_boundaries(compiler, key_types):
+    tokens = [7] * 10
+    left = make_key(key_types, compiler(*args(tokens, {4: [(0, 1)]}, [])))
+    right = make_key(key_types, compiler(*args(tokens, {4: [(0, 2)]}, [])))
+    assert left.match_at(right, 0, context_retry=True) == 4
+    assert left[4:].context_retry_child_key() != right[4:].context_retry_child_key()
+    early = make_key(key_types, compiler(*args(tokens, {4: [(0, 1)]}, [5])))
+    late = make_key(key_types, compiler(*args(tokens, {4: [(0, 1)]}, [6])))
+    assert early.match_at(late, 0, context_retry=True) == 6
+    assert early[6:].context_retry_child_key() != late[6:].context_retry_child_key()
+    for key in (left, right, early, late):
+        records = torch.tensor(key.context.records).reshape(-1, 3)
+        retry = torch.tensor(key.context.retry_records).reshape(-1, 3)
+        virtual = records[:, 0] != 0
+        assert torch.equal(records[virtual], retry[virtual])
+        assert torch.count_nonzero(retry[~virtual, 2]) == 0
 
 
 @pytest.mark.parametrize("page_size", [4, 16, 64])
@@ -180,7 +198,6 @@ def test_decode_suffix_matches_full_compiler_and_preserves_published_edges(
             data.append_tokens(
                 array("q", [token]),
                 next_position=layout.next_position + i,
-                current_reposition=layout.current_reposition,
             )
         oracle = compiler(*args(tokens + list(suffix), drops, reposition))
         extended = Key(array("q", tokens) + suffix, context=data)
@@ -201,5 +218,84 @@ def test_invalid_decode_suffix_is_atomic(compiler, key_types):
     before = tuple(bytes(value) for value in vars(data).values())
     for suffix, pos in [(array("q", [4, -1]), 3), (array("q", [4, 5]), 2**31 - 1)]:
         with pytest.raises(ValueError, match="int32"):
-            data.append_tokens(suffix, next_position=pos, current_reposition=-1)
+            data.append_tokens(suffix, next_position=pos)
         assert tuple(bytes(value) for value in vars(data).values()) == before
+
+
+def _attention_dependencies(tokens, drops, reposition):
+    """Two-layer causal dependency fingerprints, independent of Radix records.
+
+    Each layer's K/V content depends on that layer's input. RoPE attention
+    depends on relative positions; moving cached keys leaves their values and
+    hidden states intact. Include the complete visible history, even for equal
+    token IDs, so a wrong history match cannot pass by comparing text alone.
+    """
+    active, positions, inputs = [], [], []
+    next_position = 0
+    for insertion in range(len(tokens) + 1):
+        for begin, end in drops.get(insertion, ()):
+            active = [raw for raw in active if not begin <= raw < end]
+        if insertion - 1 in reposition:
+            changed = any(positions[raw] != rank for rank, raw in enumerate(active))
+            if changed:
+                for rank, raw in enumerate(active):
+                    positions[raw] = rank
+                next_position = len(active)
+        if insertion == len(tokens):
+            break
+        positions.append(next_position)
+        next_position += 1
+        hidden = str(tokens[insertion])
+        layer_inputs = []
+        for layer in range(2):
+            layer_inputs.append(hidden)
+            visible = [
+                (inputs[raw][layer], positions[raw] - positions[insertion])
+                for raw in active
+            ]
+            visible.append((hidden, 0))
+            hidden = hashlib.sha256(repr((hidden, visible)).encode()).hexdigest()
+        inputs.append(tuple(layer_inputs))
+        active.append(insertion)
+    return list(zip(inputs, positions))
+
+
+def test_three_field_matches_preserve_causal_kv_identity(compiler, key_types):
+    tokens = [7, 7, 3, 7, 3, 7, 7, 3]
+    histories = [({}, [])]
+    for insertion in range(1, len(tokens)):
+        for begin in range(insertion):
+            for boundary in range(insertion, len(tokens)):
+                histories.append(({insertion: [(begin, begin + 1)]}, [boundary]))
+    histories += [
+        (d, r)
+        for _, d, r in cases()
+        if max(d, default=0) <= len(tokens) and max(r, default=-1) < len(tokens)
+    ]
+    compiled = [
+        (
+            make_key(key_types, compiler(*args(tokens, d, r))),
+            _attention_dependencies(tokens, d, r),
+        )
+        for d, r in histories
+    ]
+    for left, identity in compiled:
+        for right, peer in compiled:
+            matched = left.match(right)
+            assert identity[:matched] == peer[:matched]
+            assert (left.child_key() == right.child_key()) == (matched > 0)
+
+
+def test_reposition_boundary_tag_does_not_split_equivalent_cached_tokens(
+    compiler, key_types
+):
+    tokens, drops = [7] * 6, {1: [(0, 1)]}
+    early = make_key(key_types, compiler(*args(tokens, drops, [2])))
+    late = make_key(key_types, compiler(*args(tokens, drops, [3])))
+    # Both histories computed raw 1/2 before repositioning and rotate them to
+    # the same positions. The actual REPOSITION event still separates raw 3.
+    assert early.match(late) == 3
+    assert _attention_dependencies(tokens, drops, [2])[:3] == _attention_dependencies(
+        tokens, drops, [3]
+    )[:3]
+    assert early[3:].child_key() != late[3:].child_key()
