@@ -142,6 +142,24 @@ def test_retry_preserves_events_and_ignores_only_token_positions(compiler, key_t
         ) == (prefix(left, right) > 0)
 
 
+def test_retry_keeps_delta_endpoints_and_reposition_boundaries(compiler, key_types):
+    tokens = [7] * 10
+    left = make_key(key_types, compiler(*args(tokens, {4: [(0, 1)]}, [])))
+    right = make_key(key_types, compiler(*args(tokens, {4: [(0, 2)]}, [])))
+    assert left.match_at(right, 0, context_retry=True) == 4
+    assert left[4:].context_retry_child_key() != right[4:].context_retry_child_key()
+    early = make_key(key_types, compiler(*args(tokens, {4: [(0, 1)]}, [5])))
+    late = make_key(key_types, compiler(*args(tokens, {4: [(0, 1)]}, [6])))
+    assert early.match_at(late, 0, context_retry=True) == 6
+    assert early[6:].context_retry_child_key() != late[6:].context_retry_child_key()
+    for key in (left, right, early, late):
+        records = torch.tensor(key.context.records).reshape(-1, 3)
+        retry = torch.tensor(key.context.retry_records).reshape(-1, 3)
+        virtual = records[:, 0] != 0
+        assert torch.equal(records[virtual], retry[virtual])
+        assert torch.count_nonzero(retry[~virtual, 2]) == 0
+
+
 @pytest.mark.parametrize("page_size", [4, 16, 64])
 def test_context_rejects_large_pages_but_native_keys_keep_them(
     compiler, key_types, page_size
