@@ -44,7 +44,7 @@ def test_context_prebuilt_preserves_restored_ownership(native_cache, compiler, h
         patch("sglang.srt.disaggregation.decode.ScheduleBatch.init_new") as build,
         patch("sglang.srt.disaggregation.decode.set_time_batch"),
     ):
-        batch = SchedulerDisaggregationDecodeMixin._get_new_prebuilt_batch(
+        batch = SchedulerDisaggregationDecodeMixin.get_new_prebuilt_batch(
             scheduler, SimpleNamespace(batch_size=lambda: 0)
         )
     assert req.context_state is state and req.context_decode_layout is layout
@@ -596,14 +596,18 @@ def test_minimax_context_geometry_admission(geometry, accepted):
 def test_ordinary_chunk_continuation_skips_context_admission(factory):
     from unittest.mock import patch
 
-    adder = factory.create_shared_adder()
-    req = factory.create_shared_req("ordinary", max_new_tokens=80)
-    req.context_program = None
+    from sglang.srt.managers.schedule_batch import Req
+    from sglang.srt.sampling.sampling_params import SamplingParams
+
+    factory.mock_token_allocator.available_size.return_value = 4096
+    adder = factory.create_adder(factory.create_running_batch(), rem_chunk_tokens=8, page_size=4)
+    req = Req("ordinary", "", array("q", range(32)), SamplingParams(max_new_tokens=80))
+    req.init_next_round_input()
     with patch.object(adder, "_fit_context_admission", side_effect=AssertionError("ordinary admission")):
         assert adder.add_chunked_req(req) is req
     assert req.extend_range.length == 8
     assert adder.rem_total_token_offset == 12
-    assert adder.rem_swa_token_offset == 12
+    assert adder.cur_rem_token_offset == 12
 
 
 def test_ordinary_request_round_and_retract_skip_context_recovery():
