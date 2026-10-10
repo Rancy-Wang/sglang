@@ -2510,7 +2510,7 @@ class Scheduler(
     def init_req_max_new_tokens(self, req):
         input_len = len(req.origin_input_ids)
         position_limit = self.max_req_len - input_len - 1
-        if req.context_program is not None:
+        if getattr(req, "context_program", None) is not None:
             position_limit = (
                 self.model_config.context_len - req.context_program.layout.next_position
             )
