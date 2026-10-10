@@ -929,12 +929,6 @@ class PrefillAdder:
         """
         if getattr(req, "context_program", None) is None:
             return admission
-        from sglang.srt.mem_cache.prefill_budget import (
-            SharedSWAPrefillBudget,
-            SWAPrefillBudget,
-        )
-
-        budget = self.memory_budget
         from sglang.srt.context_system.request_storage import prefill_progress_reserve
 
         if not getattr(self, "_context_decode_reserved", False):
@@ -942,7 +936,7 @@ class PrefillAdder:
             # decoders to finish. Native's probabilistic output estimate can
             # fall below even one overlap step near the end of a request.
             if self.running_batch is not None:
-                budget.total_offset += sum(
+                self.rem_total_token_offset += sum(
                     max(0, r.sampling_params.max_new_tokens - len(r.output_ids))
                     + 1 - self._get_running_request_total_token_offset(r)
                     for r in self.running_batch.reqs
@@ -952,7 +946,7 @@ class PrefillAdder:
             raise ValueError("Context admission requires page_size=1 autoregression")
         if req.host_hit_length or req.swa_host_hit_length:
             raise ValueError("Context admission cannot borrow offloaded KV")
-        if isinstance(budget, SWAPrefillBudget) and budget.req_ring:
+        if self.is_hybrid_swa and self._swa_req_ring:
             raise ValueError("Context occurrence ownership does not use SWA rings")
         length = admission.extend_len
         recovery = getattr(req, "context_recovery_plan", None)
@@ -970,20 +964,12 @@ class PrefillAdder:
             extra = req.plan_context_prefill(admission.prefix_len + length)
             progress = prefill_progress_reserve(req, admission.prefix_len + length)
             full = max(length + extra + max_new, progress) + self.page_size
-            fits = full < budget.remaining_total and (
-                length + extra + self.page_size <= budget.remaining_current
+            fits = full < self.rem_total_tokens and (
+                length + extra + self.page_size <= self.cur_rem_tokens
             )
-            if isinstance(budget, SWAPrefillBudget):
-                swa = budget.swa_tokens(length, max_new, chunk_limit=length) + extra
-                if isinstance(budget, SharedSWAPrefillBudget):
-                    fits = budget.allocator.can_reserve(
-                        full + budget.total_offset,
-                        swa + budget.swa_offset,
-                        full_evictable_tokens=budget.tree_cache.full_evictable_size(),
-                        swa_evictable_tokens=budget.tree_cache.swa_evictable_size(),
-                    )
-                else:
-                    fits = fits and swa <= budget.remaining_swa
+            if self.is_hybrid_swa:
+                swa = self._swa_budget_for_req(length, max_new) + extra
+                fits = fits and swa <= self.rem_swa_tokens
             if fits:
                 return _PrefillAdmission(
                     admission.prefix_len, length, max_new, truncated, extra,
@@ -994,16 +980,16 @@ class PrefillAdder:
             length //= 2
         if (
             length > 0
-            and not isinstance(budget, SWAPrefillBudget)
-            and budget.total_offset == 0
-            and budget.current_offset == 0
+            and not self.is_hybrid_swa
+            and self.rem_total_token_offset == 0
+            and self.cur_rem_token_offset == 0
         ):
             from sglang.srt.context_system.request_storage import (
                 handle_prefill_capacity_pressure,
             )
 
             handle_prefill_capacity_pressure(
-                req, budget.allocator.size_full, full, self.tree_cache
+                req, self.token_to_kv_pool_allocator.size_full, full, self.tree_cache
             )
         req.context_window_plan = None
         return AddReqResult.NO_TOKEN
@@ -1075,12 +1061,9 @@ class PrefillAdder:
         self.cur_rem_token_offset += (
             extend_input_len + page_overhead + mamba_gap_reserve + context_extra_pages
         )
-        self.memory_budget.total_offset += context_future_pages
-        if context_extra_pages:
-            from sglang.srt.mem_cache.prefill_budget import SWAPrefillBudget
-
-            if isinstance(self.memory_budget, SWAPrefillBudget):
-                self.memory_budget.swa_offset += context_extra_pages
+        self.rem_total_token_offset += context_future_pages
+        if self.is_hybrid_swa:
+            self.rem_swa_token_offset += context_extra_pages
         # The new mamba slot also consumes one mamba-recoverable slot (gated
         # separately so full_evictable can't cover it — see __init__).
         if mamba_gap_reserve and self.rem_mamba_slots is not None:
@@ -1525,7 +1508,7 @@ class PrefillAdder:
         mamba_gap_reserve = self._mamba_gap_budget_for_req(req)
         total_tokens += mamba_gap_reserve
 
-        if total_tokens >= self.rem_total_tokens:
+        if getattr(req, "context_program", None) is None and total_tokens >= self.rem_total_tokens:
             return AddReqResult.NO_TOKEN
 
         # The temporary pin excludes this prefix from the evictable budget.
@@ -1630,7 +1613,7 @@ class PrefillAdder:
         truncation_align_size: Optional[int],
     ) -> _PrefillAdmission | AddReqResult:
         """Select a prefill shape without allocating or publishing cached KV."""
-        if total_tokens >= self.rem_total_tokens:
+        if getattr(req, "context_program", None) is None and total_tokens >= self.rem_total_tokens:
             return AddReqResult.NO_TOKEN
 
         prefix_len = len(req.prefix_indices) + host_hit_length
@@ -1649,7 +1632,7 @@ class PrefillAdder:
         # not needlessly split into a second chunk.
         chunk_fit_tokens = extend_len if self.exact_chunk_fill else input_tokens
         chunk_tokens_limit = self.rem_chunk_tokens
-        if self.is_hybrid_swa:
+        if self.is_hybrid_swa and getattr(req, "context_program", None) is None:
             verdict, chunk_tokens_limit = self._swa_admission_gate(
                 req, input_tokens, swa_host_hit_length, chunk_tokens_limit
             )
