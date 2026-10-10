@@ -177,7 +177,9 @@ def test_materialization_copy_and_attention_chain(
     """Exercise the planner's device bindings through actual copy and attention."""
     from test_planner import query_visibility
 
-    mini_copy, actual_copy = kernels
+    from test_reposition_kernel import inverse_forward
+
+    actual_copy = kernels
     actual_attention, baseline_attention = native_attention
     n, heads, kv_heads, dim = 141, 4, 2, 64
     drops, repos = {60: [(0, 16)], 100: [(20, 40)]}, [59, 99]
@@ -211,7 +213,10 @@ def test_materialization_copy_and_attention_chain(
         0.01, 1, dim // 2, device="cuda"
     )
     rope = torch.cat((theta.cos(), theta.sin()), dim=-1) * 1.37
-    mini_copy(oracle_k, oracle_v, source, destination, pairs, rope)
+    oracle_k[:, destination.long()] = inverse_forward(
+        oracle_k[:, source.long()], pairs, rope, True
+    )
+    oracle_v[:, destination.long()] = oracle_v[:, source.long()]
     actual_copy(
         torch.tensor([k[0].data_ptr()], device="cuda", dtype=torch.uint64),
         torch.tensor([v[0].data_ptr()], device="cuda", dtype=torch.uint64),

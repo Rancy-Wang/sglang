@@ -39,6 +39,7 @@ def native_attention(tmp_path_factory):
         utils.is_hip = lambda: False
         utils.is_gfx95_supported = lambda: False
         utils.is_gfx1250_supported = lambda: False
+        utils.is_gfx942_supported = lambda: False
         utils.get_device_core_count = lambda device=0: (
             torch.cuda.get_device_properties(device).multi_processor_count
         )
@@ -70,7 +71,7 @@ def native_attention(tmp_path_factory):
                     "git",
                     "show",
                     (
-                        "9d0a8d75364ea4571e05ba2e37227ec2579324f2:"
+                        "94602c9c2b7cbdb8efd5c52802dac6a1c180089e:"
                         "python/sglang/kernels/ops/attention/extend_attention.py"
                     ),
                 ],

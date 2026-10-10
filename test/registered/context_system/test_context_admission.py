@@ -311,7 +311,7 @@ def test_native_admission_charges_copies_once(factory, compiler, ignore_eos):
     assert req.extend_range.length == 64
     _, plan = req.context_window_plan
     assert plan.extra_page_count > 0
-    assert adder.memory_budget.current_offset == 64 + 1 + plan.extra_page_count
+    assert adder.cur_rem_token_offset == 64 + 1 + plan.extra_page_count
     assert adder.rem_chunk_tokens == 0
     assert adder.rem_input_tokens == 10000 - 64
 
@@ -330,11 +330,11 @@ def test_continuation_shrinks_before_allocation(factory, compiler):
     assert adder.can_run_list == [req]
     assert req.extend_range.length == 64
     _, plan = req.context_window_plan
-    assert adder.memory_budget.current_offset == (
+    assert adder.cur_rem_token_offset == (
         req.extend_range.length + plan.extra_page_count + 1
     )
-    assert adder.memory_budget.remaining_current > 0
-    assert adder.memory_budget.total_offset > adder.memory_budget.current_offset
+    assert adder.cur_rem_tokens > 0
+    assert adder.rem_total_token_offset > adder.cur_rem_token_offset
     factory.mock_token_allocator.alloc.assert_not_called()
 
 
@@ -345,7 +345,7 @@ def test_no_capacity_does_not_publish_a_plan(factory, compiler):
     assert adder.add_chunked_req(req) is req
     assert adder.can_run_list == []
     assert req.context_window_plan is None
-    assert adder.memory_budget.current_offset == 0
+    assert adder.cur_rem_token_offset == 0
 
 
 def test_retry_self_pin_releases_lease_and_rematches_cold(factory, compiler):
@@ -602,8 +602,8 @@ def test_ordinary_chunk_continuation_skips_context_admission(factory):
     with patch.object(adder, "_fit_context_admission", side_effect=AssertionError("ordinary admission")):
         assert adder.add_chunked_req(req) is req
     assert req.extend_range.length == 8
-    assert adder.memory_budget.total_offset == 12
-    assert adder.memory_budget.swa_offset == 12
+    assert adder.rem_total_token_offset == 12
+    assert adder.rem_swa_token_offset == 12
 
 
 def test_ordinary_request_round_and_retract_skip_context_recovery():
