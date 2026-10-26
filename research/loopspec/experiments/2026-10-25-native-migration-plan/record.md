@@ -1,6 +1,6 @@
 # LoopSpec → SGLang v0.5.22 迁移研究与实施计划
 
-日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；第 5 轮进行中。代码修改与验证轮次：5/5。
+日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；第 5 轮验证完成；Ouro 主路径通过，完整迁移尚未全部验收。代码修改与验证轮次：5/5；停止继续修改源码。
 
 用户请求：判断 SGLang 对 loop transformer serving 的支持，分析官方 LoopSpec 如何接入 SGLang，设计完整迁移方案与 Ouro-2.6B 单请求验证方案。
 
@@ -412,3 +412,80 @@ curl --fail-with-body --max-time 120 "http://127.0.0.1:$PORT/generate" \
 4. 标准：SM120实测TinyGEMM调用>0；bias/shape边界与graph replay数值检查；Ouro AR及单/双候选与HF固定R4逐token/stop一致；标准生命周期继续通过。默认auto行为不变。
 5. 风险：BF16累加顺序导致argmax变化、首次JIT/graphcapture兼容；选定但不可用时明确失败。不将TinyGEMM支持等同已获加速。
 6. 验证：本地compile/ruff/diff审查；仅loopspec-test提交并X5核对SHA/importpath；GPU kernel float32 oracle误差，原生AR与单/双graph HTTP差分，统计采样与模型单测回归。第5轮若失败不再改源码。Raven独立pre/post/injection、拒绝采样graph、完整模型logit诊断仍须在最终结果明确标记，不将Ouro smoke当全部验收。
+
+
+## 9. 当前原生接口与实现边界（2026-10-26）
+
+公开入口保持SGLang标准入口；请求仍是原有GenerateReqInput / sampling_params，未增加请求字段。选择 `--speculative-algorithm loopspec`；唯一新参数名是 `--speculative-draft-depth`，值为一或两个整数，例如1、2、1 2。既有 `--bf16-gemm-backend` 新增tinygemm枚举值；auto/torch不变。
+
+```bash
+python -m sglang.launch_server \
+  --model-path /home/ruoxi/models/Ouro-2.6B \
+  --host 127.0.0.1 --port 30126 \
+  --dtype bfloat16 --attention-backend triton \
+  --context-length 2048 --mem-fraction-static 0.7 \
+  --max-running-requests 1 --page-size 1 \
+  --disable-overlap-schedule --disable-radix-cache \
+  --chunked-prefill-size -1 \
+  --speculative-algorithm loopspec --speculative-draft-depth 1 2
+```
+
+单候选改为draft-depth 1或2；需要eager时使用既有disable-cuda-graph；可选既有bf16-gemm-backend tinygemm。AR移除algorithm和draft-depth两个选项。该例没有使用early exit，也未修改checkpoint的R=4。原生Python Engine可用同名snake_case构造参数。标准HTTP请求：
+
+```bash
+curl --fail-with-body http://127.0.0.1:30126/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"The capital of France is","sampling_params":{"temperature":0,"max_new_tokens":32},"return_logprob":true}'
+```
+
+| 范围 | 当前状态 |
+| --- | --- |
+| Ouro-2.6B，BF16，完整4轮AR | HF独立参考、官方AR、nativeAR单请求token/stop对齐 |
+| LoopSpec单候选d1=1/2、双候选1/2 | native V2 worker、mixed-depth batching、branch state reuse、残差验证已实现；eager/graph已验证（d1=2验证graph） |
+| 原生HTTP /generate、/v1/completions | 相同参数格式；流式、max0/1、EOS、stop、取消/后续请求、flush已验证 |
+| Sampling | 三组合成分布各100000次通过；真实模型请求通过；真实prefix分布补充统计见第5轮结果 |
+| 图捕获 | mixed-depth recurrent core和readout；prefill使用eager；没有独立拒绝采样graph |
+| 并行/缓存功能 | 当前单活跃请求、TP/PP/DP/CP=1、Triton、page1；禁用overlap/radix/chunkedprefill；不支持grammar/LoRA/PD等组合，显式校验 |
+| 监控 | cycles、reuse、restart、first/second accept、reject、graph replay写日志；原生通用spec_accept_rate的分母不适用，因此不输出该字段；尚无完整Prometheus算法指标 |
+| Raven / 其他Ouro checkpoint | Raven未迁入，其他Ouro/Thinking未加载验收；不能标记全模型完成 |
+| 官方完整内存布局 | 当前共享native AR的192逻辑KV层，branch私有request映射；没有迁成官方48物理KV层加depth timeline的紧凑pool，容量效率有差异 |
+| 性能 | 仅功能请求观察值；没有warmup后配对重复benchmark，不给加速结论 |
+
+原计划仍未完成：Raven的config/builder/tokenizer/injected状态及pre/post attention；官方分角色pre/post与rejection graphs；紧凑timeline pool；完整模型逐深度hidden/logits误差诊断、数值阈值和更广模型/请求矩阵；完整指标与配对性能。不能把上表Ouro通过项替代完整迁移验收。
+
+### 固定环境与只读参考
+
+源码测试SHA：fff1dc3c924f64ce31a61417f6ce8387de6398a6；X5/source路径核对 `/opt/sglang/bin/python`、`/workspace/sglang/python/sglang/__init__.py`。GPU0 UUID GPU-449e057b-787e-b46a-7a4c-727bfe1bd515，RTX5090，driver580.178.04。模型config SHA256 `23b5c6942a9f0ca8619fb15acfaca93e02c169cdc4e03dbceb4d8a2df145697a`，tokenizer.json SHA256 `fcb808fe5e7642f5299be28aea07fc7f6d4f4364c3ac5e408e15a772cbc8fa8d`。权重未修改。
+
+官方参考使用独立容器loopspec-official-20261026，uv sync --locked --no-dev --python3.11（源目录只读），官方依赖sglang0.5.14/torch2.11.0+cu130。官方AR的请求输出与HF/native精确一致（compare退出0），结果official-ar.json；完成后停止该容器。官方仓库SHA仍41aa710ed7c9ce908cffa03597be5d1df19d7b56、clean。未把官方定制scheduler用作本项目serving入口。
+
+网络环境临时出现X5域名解析到198.18.0.204并关闭SSH；通过公共DNS核对18.25.6.221后使用 `ssh -o Hostname=18.25.6.221 -o HostKeyAlias=x5.mit.edu X5`，保留host-key校验，未改系统SSH配置。一次host侧重定向help日志因容器创建目录所有者不同而Permission denied，改在容器内写/results后成功；属于环境/记录重试，无源码变化。
+
+
+### 第 5 轮结果与最终验收状态
+
+测试源码 fff1dc3c924f64ce31a61417f6ce8387de6398a6（文档收尾提交不改源代码），本地compileall、ruff F、diff-check退出0。X5两端源码SHA与import路径一致，工作树干净。
+
+| 验证 | 命令/结果 | 退出码 |
+| --- | --- | --- |
+| 严格加载/循环KV结构 | `python test_ouro.py`，4项通过 | 0 |
+| 流水线/分支/采样 | `python test_loopspec.py`，4项通过；三组合成分布各100000次，11.206s | 0 |
+| TinyGEMM数值与graph | `python verify_tinygemm.py`，三组支持shape实际kernel执行及17-row回退均通过；graph更改输入后与eager完全一致 | 0 |
+| TinyGEMM native AR | `python serve_smoke.py --bf16-gemm-backend tinygemm --lifecycle --output /results/round-5/ar-tiny` | 0 |
+| TinyGEMM单候选graph | 同上添加 `--depths 1 --cuda-graph`，输出目录single-tiny | 0 |
+| TinyGEMM双候选graph | 同上添加 `--depths 1 2 --cuda-graph`，输出目录double-tiny | 0 |
+| 默认后端回归 | `serve_smoke.py --depths 1 2 --cuda-graph --lifecycle --output /results/round-5/double-auto` | 0 |
+| HF/官方/native token对照 | verify_ouro.py compare，官方与第4轮4份通过；第5轮HF+TinyGEMM三模式各两次共7份通过 | 0 |
+| CLI兼容 | `python -m sglang.launch_server --help`，包含LOOPSPEC、draft-depth及既有backend的新枚举tinygemm | 0 |
+
+上述脚本均位于 `/workspace/sglang/research/loopspec/experiments/2026-10-25-native-migration-plan/`，在loopspec-native-20261026容器内执行；serving使用 `SGLANG_RUST_BUILD_MODE=auto`。脚本路径的宿主源是经Git同步的只读源码。每种服务两次主要请求+生命周期，未启动通用大型benchmark。
+
+所有主要请求输出11个token `[7042,30,198,198,504,3403,2988,314,330,30,0]`，EOS=0，文本 ` Paris.\n\nThe final answer is A.`；input5token。单候选主请求cycles22/reused7/restarts3/accepted[7,0]/rejected3/graphreplays22；双候选cycles18/reused9/restarts1/accepted[7,2]/rejected1/graphreplays18。不要取server warmup请求的trace冒充主请求。
+
+TinyGEMM FP32 oracle对比：三组支持shape最大绝对误差分别0.00780272、0.01560545、0.01512432，RMSE分别0.00167549、0.00234346、0.00167909；固定容差rtol0.02/atol0.04。native三模式日志均记录SM120 TinyGEMM enabled，未发现Traceback、CUDA error或memory leak。该kernel数值检查不是全模型logits误差验收。
+
+真实前缀sampling补充：在独立HF参考环境对相同prompt做use_cache=False完整R4，保存各depth logits到X5 round-5/hf-prefix-logits.pt；通过native sampling函数生成q1/p2/p4，压缩零支持坐标后CPU双精度100000次抽样，seed11907、逐bin阈值max(5sigma,5/N)、零概率支持无泄漏。temperature0.8/topk40/topp0.9时p4退化为单点，该项只覆盖路径、不可作为强统计证据。补充temperature1/topk40/topp1非退化分布：union67、target支持41（并列cutoff保留）、gate94126次、接受首候选18084/第二候选69756/回退12160，最大频率绝对误差0.00147601，全部阈值通过。原始summary分别real-prefix-sampling.json和real-prefix-sampling-nondegenerate.json。首前缀四个depth top1为260/7042/7042/7042，top1-top2 logit margin为0.4375/2.375/3.1875/3.125。
+
+客户端E2E仅作原始观察值：tiny AR两次0.6361/0.6078s（eager），single graph0.2360/0.2240s，double graph0.2125/0.2003s；每次11输出token。AR与candidate graph条件不同、样本少且没有配对warmup重复测量，所以不能据此计算/宣称LoopSpec加速比。prefill/decode/峰值显存的完整配对指标仍未收集。
+
+本轮支持的Ouro功能项通过，但完整计划尚未完成。预算已用5/5，根据AGENTS与loopspec-code-change停止进一步源码修改；不得以新阶段名继续第6轮。剩余位置：Raven模型/配置/tokenizer与显式injection协议；loopspec graph/sampling的独立拒绝图；mem_cache紧凑timeline布局与容量；metrics接入及全模型差分harness。正式loopspec仍停留基线baa9befa，不作merge/cherry-pick/push晋升。测试容器在验证后停止，保留隔离环境供后续复现。
