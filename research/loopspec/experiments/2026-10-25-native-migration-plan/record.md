@@ -1,6 +1,6 @@
 # LoopSpec → SGLang v0.5.22 迁移研究与实施计划
 
-日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；第 5 轮验证完成；Ouro 主路径通过，完整迁移尚未全部验收。代码修改与验证轮次：5/5；停止继续修改源码。
+日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；用户已授权继续，总预算10轮；第6/10轮本地静态检查通过，X5 SSH暂时超时，GPU待验证。
 
 用户请求：判断 SGLang 对 loop transformer serving 的支持，分析官方 LoopSpec 如何接入 SGLang，设计完整迁移方案与 Ouro-2.6B 单请求验证方案。
 
@@ -489,3 +489,19 @@ TinyGEMM FP32 oracle对比：三组支持shape最大绝对误差分别0.00780272
 客户端E2E仅作原始观察值：tiny AR两次0.6361/0.6078s（eager），single graph0.2360/0.2240s，double graph0.2125/0.2003s；每次11输出token。AR与candidate graph条件不同、样本少且没有配对warmup重复测量，所以不能据此计算/宣称LoopSpec加速比。prefill/decode/峰值显存的完整配对指标仍未收集。
 
 本轮支持的Ouro功能项通过，但完整计划尚未完成。预算已用5/5，根据AGENTS与loopspec-code-change停止进一步源码修改；不得以新阶段名继续第6轮。剩余位置：Raven模型/配置/tokenizer与显式injection协议；loopspec graph/sampling的独立拒绝图；mem_cache紧凑timeline布局与容量；metrics接入及全模型差分harness。正式loopspec仍停留基线baa9befa，不作merge/cherry-pick/push晋升。测试容器在验证后停止，保留隔离环境供后续复现。
+
+
+## 10. 继续授权：2026-10-26
+
+用户明确要求“继续修改直到全部完成”。保留累计5轮历史，不重置计数；工作区loopspec-code-change技能正文已更新为总10轮，因此本次继续第6/10轮，最多追加5轮。正式分支晋升仍未授权。范围仍为原计划，不把Raven模型未实测误写成模型验收。
+
+### 候选6/10：Raven与显式pre/core/post状态协议
+
+1. 目的：补齐官方Raven架构、tokenizer与injection语义，保持Ouro已验收路径和标准SGLang公开参数。
+2. 步骤：建立原生Raven config/model/严格权重映射；pre初始化独立hidden和injected，core持久化injection，post按depth隔离KV并预填各endpoint；通用worker保存显式injected；图分为pre/core/post角色，尊重decode graph配置；补checkpoint tokenizer修正。
+3. 范围：configs/raven.py、models/raven.py、models/recurrent/、Ouro协议方法、loopspec/worker.py与graph.py/config.py/pipeline.py、HF config/tokenizer与模型层数、research验收脚本。
+4. 成功标准：Ouro原有请求/生命周期保持通过；Raven pre-norm和OLMo post-norm小型fixture检查层索引、完整权重覆盖、injection状态、AR/单/双eager/graph一致。Raven真实checkpoint若未存在，按原计划只声明代码迁入和fixture通过，不声明真实模型验收。
+5. 风险：Raven随机hidden不能用相同seed保证与spec执行顺序一致；fixture显式使用零初始化以隔离数学与缓存验证，不改真实模型配置。post浅深前缀必须分别物化；不能复用R=4的指数存储上界到R=32。
+6. 验证：本地compile/ruff/diff；Git同步X5后检查GPU/端口与import SHA；模型fixture GPU数值/缓存与标准server请求；Ouro主请求回归。后续候选补紧凑KV布局、拒绝采样graph、指标与数值/配对性能harness，仍累计至10轮。
+
+第6轮本地compileall、ruff F、diff-check均退出0。X5域名解析198.18.0.204的SSH与公共DNS核实18.25.6.221的SSH均连续超时；只读DNS仍返回相同公网地址。已向用户询问网络/VPN状态，GPU验证明确未执行。源码候选保留并通过loopspec-test提交；下一候选可继续独立实现，但不把静态检查当GPU通过。

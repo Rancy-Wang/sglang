@@ -25,8 +25,8 @@ def handle_server_args(server_args):
 
     cfg = resolving_view(server_args)
     model = model_config_of(server_args).hf_config
-    if model.architectures != ["OuroForCausalLM"]:
-        raise ValueError("LoopSpec currently supports native OuroForCausalLM")
+    if model.architectures not in (["OuroForCausalLM"], ["RavenForCausalLM"]):
+        raise ValueError("LoopSpec requires a native Ouro or Raven model")
     depths = validate_depths(cfg.speculative_draft_depth or [1], model.total_ut_steps)
     if (cfg.tp_size, cfg.pp_size, cfg.dp_size, cfg.attn_cp_size) != (1, 1, 1, 1):
         raise ValueError("LoopSpec currently requires TP=PP=DP=CP=1")
@@ -71,7 +71,13 @@ def handle_server_args(server_args):
             "LoopSpec depths are fixed; adaptive speculative decoding is unsupported"
         )
     # Allocation reserve is an upper bound on the live binary proposal tree.
-    width = 2 ** (model.total_ut_steps // depths[0])
+    width = (
+        sum(
+            end - start
+            for _, start, end in pipeline_layout(model.total_ut_steps, depths)
+        )
+        + 2
+    )
     declare_resolution(
         server_args,
         "loopspec",
@@ -109,3 +115,24 @@ def validate_request(params, obj):
         raise ValueError(
             "LoopSpec currently requires token-only requests without sessions"
         )
+
+
+def pipeline_layout(total, depths):
+    stride = depths[0]
+    steps = total // stride
+    second = depths[1] // stride if len(depths) == 2 else None
+    births = [1]
+    for age in range(1, steps):
+        births.append(
+            births[age - 1]
+            + (births[age - second] if second is not None and age >= second else 0)
+        )
+    layout, cursor = [], 0
+    for stage, capacity in enumerate(reversed(births)):
+        layout.append((stage * stride, cursor, cursor + capacity))
+        cursor += capacity
+    if cursor > 1024:
+        raise ValueError(
+            "LoopSpec schedule exceeds 1024 live lanes; increase draft depth"
+        )
+    return layout

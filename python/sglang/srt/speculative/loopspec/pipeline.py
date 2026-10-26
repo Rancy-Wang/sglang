@@ -21,6 +21,7 @@ class Lane:
     depth: int = 0
     slot: int | None = None
     hidden: Any = None
+    injected: Any = None
     proposals: dict = field(default_factory=dict)
 
 

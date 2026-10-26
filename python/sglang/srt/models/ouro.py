@@ -160,6 +160,8 @@ class OuroModel(nn.Module):
 
 
 class OuroForCausalLM(nn.Module):
+    has_injection = False
+
     def __init__(self, config, quant_config=None, prefix=""):
         super().__init__()
         if get_parallel().pp_size != 1:
@@ -199,6 +201,17 @@ class OuroForCausalLM(nn.Module):
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
+
+    def prepare_recurrent(self, input_ids, positions, batch):
+        return self.model.embed_tokens(input_ids), None
+
+    def advance_recurrent(self, hidden, positions, groups, injected=None):
+        return self.model.advance_batch(hidden, positions, groups)
+
+    def readout_recurrent(self, hidden, positions, groups):
+        from sglang.srt.layers.quantization.unquant import bf16_gemm_dispatch
+
+        return bf16_gemm_dispatch(hidden, self.lm_head.weight, None).float()
 
     def get_embed_and_head(self):
         return self.model.embed_tokens.weight, self.lm_head.weight

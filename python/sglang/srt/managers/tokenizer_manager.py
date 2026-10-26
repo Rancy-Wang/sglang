@@ -632,6 +632,10 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
                     tokenizer_backend=get_serving().tokenizer_backend,
                 )
 
+        from sglang.srt.utils.hf_transformers.recurrent import patch_recurrent_tokenizer
+
+        patch_recurrent_tokenizer(self.model_config, self.tokenizer)
+
         # Initialize async dynamic batch tokenizer if enabled (common for both multimodal and non-multimodal)
         if (
             get_serving().enable_dynamic_batch_tokenizer

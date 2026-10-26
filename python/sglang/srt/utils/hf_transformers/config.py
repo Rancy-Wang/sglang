@@ -221,10 +221,10 @@ class HfModelConfigParser(ModelConfigParserBase):
             raw_config, _ = PretrainedConfig.get_config_dict(
                 model, revision=revision, **kwargs
             )
-            if raw_config.get("model_type") == "ouro":
+            if raw_config.get("model_type") in {"ouro", "huginn_raven"}:
                 # The checkpoint's remote config imports transformers 4.x APIs.
                 # Native serving uses our config even with trust_remote_code.
-                config = _CONFIG_REGISTRY["ouro"].from_dict(raw_config)
+                config = _CONFIG_REGISTRY[raw_config["model_type"]].from_dict(raw_config)
         if config is None:
             config = _try_load_raw_mamba_config(model, revision, **kwargs)
         if config is None:

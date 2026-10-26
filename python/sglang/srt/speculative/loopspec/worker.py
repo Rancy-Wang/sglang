@@ -93,17 +93,16 @@ class RequestExecutor:
                 lane.slot = int(allocated.item())
                 self.owned.add(lane.slot)
                 self.materialized[lane.slot] = 0
-                token = torch.tensor([lane.token], dtype=torch.long, device=self.device)
-                lane.hidden = self.model.model.embed_tokens(token)
         rows = {}
         hidden = torch.zeros(
             (self.worker.max_rows, self.model.config.hidden_size),
-            dtype=lanes[0].hidden.dtype,
+            dtype=self.model.get_input_embeddings().weight.dtype,
             device=self.device,
         )
         positions = torch.zeros(
             self.worker.max_rows, dtype=torch.int64, device=self.device
         )
+        injected = torch.zeros_like(hidden) if self.model.has_injection else None
         batches = []
         for base, start, end in self.worker.layout:
             active = [lane for lane in lanes if lane.depth == base]
@@ -115,12 +114,16 @@ class RequestExecutor:
                 if offset < len(active):
                     lane = active[offset]
                     rows[lane.uid] = row
-                    hidden[row : row + 1] = lane.hidden
                     positions[row] = len(lane.prefix)
                     chain = lane.prefix + (lane.slot,)
                     self.worker.private_pool.req_to_token[row + 1, : len(chain)] = (
                         torch.tensor(chain, dtype=torch.int32, device=self.device)
                     )
+                    if lane.hidden is None:
+                        self.prepare_lane(lane, row + 1)
+                    hidden[row : row + 1] = lane.hidden
+                    if injected is not None:
+                        injected[row : row + 1] = lane.injected
                     request_rows.append(row + 1)
                     lengths.append(len(chain))
                     slots.append(lane.slot)
@@ -159,21 +162,66 @@ class RequestExecutor:
                     )
             if self.worker.graphs:
                 hidden, logits = self.worker.graphs[micro].replay(
-                    hidden, positions, batches
+                    hidden, positions, batches, injected
                 )
                 self.worker.graph_replays += 1
             else:
                 hidden, logits = run_core(
-                    self.worker, hidden, positions, batches, micro
+                    self.worker, hidden, positions, batches, micro, injected
                 )
             for lane in lanes:
                 lane.depth += 1
                 self.materialized[lane.slot] = lane.depth
+        if self.worker.graphs:
+            _, logits = self.worker.post_graph.replay(hidden, positions, batches)
+        else:
+            _, logits = run_core(
+                self.worker, hidden, positions, batches, count - 1, role="post"
+            )
         for lane in lanes:
             row = rows[lane.uid]
             lane.hidden = hidden[row : row + 1].clone()
             if lane.depth in self.depths or lane.depth == self.total:
                 self.logits[lane.uid] = logits[row].clone()
+
+    def prepare_lane(self, lane, row):
+        from sglang.srt.model_executor.forward_context import (
+            ForwardContext,
+            forward_context,
+        )
+
+        device = self.device
+        batch = ForwardBatch(
+            forward_mode=ForwardMode.DECODE,
+            batch_size=1,
+            input_ids=torch.tensor([lane.token], dtype=torch.int64, device=device),
+            positions=torch.tensor(
+                [len(lane.prefix)], dtype=torch.int64, device=device
+            ),
+            req_pool_indices=torch.tensor([row], dtype=torch.int64, device=device),
+            seq_lens=torch.tensor(
+                [len(lane.prefix) + 1], dtype=torch.int32, device=device
+            ),
+            seq_lens_sum=len(lane.prefix) + 1,
+            out_cache_loc=torch.tensor([lane.slot], dtype=torch.int64, device=device),
+            capture_hidden_mode=CaptureHiddenMode.NULL,
+            spec_algorithm=SpeculativeAlgorithm.NONE,
+        )
+        self.translator.bind_own_plan(batch)
+        if self.worker.graphs:
+            graph = self.worker.pre_graph
+            hidden, _ = graph.replay(
+                torch.zeros_like(graph.hidden), batch.positions, [batch]
+            )
+            injected = graph.output_injected
+        else:
+            self.worker.pre_backend.init_forward_metadata(batch)
+            with forward_context(ForwardContext(self.worker.pre_backend)):
+                hidden, injected = self.model.prepare_recurrent(
+                    batch.input_ids, batch.positions, batch
+                )
+        lane.hidden = hidden.clone()
+        lane.injected = None if injected is None else injected.clone()
 
     def distribution(self, lane):
         return probabilities(
@@ -253,20 +301,14 @@ class LoopSpecWorker(BaseSpecWorker):
         self.graphs = []
         self.graph_replays = 0
         depths = get_spec().speculative_draft_depth
+        self.depths = depths
         self.stride = depths[0]
-        steps = self.model_runner.model.config.total_ut_steps // self.stride
-        second = depths[1] // self.stride if len(depths) == 2 else None
-        births = [1]
-        for age in range(1, steps):
-            births.append(
-                births[age - 1]
-                + (births[age - second] if second is not None and age >= second else 0)
-            )
-        self.layout, cursor = [], 0
-        for stage, capacity in enumerate(reversed(births)):
-            self.layout.append((stage * self.stride, cursor, cursor + capacity))
-            cursor += capacity
-        self.max_rows = cursor
+        from .config import pipeline_layout
+
+        self.layout = pipeline_layout(
+            self.model_runner.model.config.total_ut_steps, depths
+        )
+        self.max_rows = self.layout[-1][2]
 
     @property
     def draft_worker(self):
@@ -301,19 +343,22 @@ class LoopSpecWorker(BaseSpecWorker):
             for _ in range(self.model_runner.model.config.total_ut_steps)
         ]
         self.backend = self.backends[0]
+        self.pre_backend = TritonAttnBackend(runner_view)
 
     @torch.no_grad()
     def init_cuda_graphs(self):
         from sglang.srt.model_executor.cuda_graph_config import (
-            cuda_graph_fully_disabled,
+            check_cuda_graph_backend,
         )
         from .graph import RecurrentGraph
 
-        if cuda_graph_fully_disabled():
+        if check_cuda_graph_backend("decode", "disabled"):
             return
         started = time.perf_counter()
         allocated = torch.cuda.memory_allocated()
         self.graphs = [RecurrentGraph(self, micro) for micro in range(self.stride)]
+        self.pre_graph = RecurrentGraph(self, role="pre")
+        self.post_graph = RecurrentGraph(self, self.stride - 1, role="post")
         self._additional_graph_memory_usage["draft_decode"] = (
             torch.cuda.memory_allocated() - allocated
         ) / 2**30
@@ -321,7 +366,7 @@ class LoopSpecWorker(BaseSpecWorker):
             time.perf_counter() - started
         )
         logger.info(
-            "LoopSpec captured %d mixed-depth core graphs, rows=%d",
+            "LoopSpec captured pre/post and %d mixed-depth core graphs, rows=%d",
             len(self.graphs),
             self.max_rows,
         )

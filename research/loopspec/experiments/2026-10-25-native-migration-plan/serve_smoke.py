@@ -120,6 +120,7 @@ def lifecycle(url, expected):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--depths", type=int, nargs="+")
+    parser.add_argument("--model", default="/home/ruoxi/models/Ouro-2.6B")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--port", type=int, default=30126)
     parser.add_argument("--cuda-graph", action="store_true")
@@ -134,7 +135,7 @@ def main():
         "-m",
         "sglang.launch_server",
         "--model-path",
-        "/home/ruoxi/models/Ouro-2.6B",
+        args.model,
         "--host",
         "127.0.0.1",
         "--port",

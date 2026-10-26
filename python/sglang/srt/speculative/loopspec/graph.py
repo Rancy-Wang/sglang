@@ -2,8 +2,6 @@
 
 import torch
 
-from sglang.srt.layers.quantization.unquant import bf16_gemm_dispatch
-
 from sglang.srt.model_executor.forward_batch_info import (
     CaptureHiddenMode,
     ForwardBatch,
@@ -14,7 +12,7 @@ from sglang.srt.model_executor.runner_utils.capture_mode import model_capture_mo
 from sglang.srt.speculative.spec_info import SpeculativeAlgorithm
 
 
-def run_core(worker, hidden, positions, batches, micro):
+def run_core(worker, hidden, positions, batches, micro, injected=None, role="core"):
     groups = []
     for (base, start, end), batch in zip(worker.layout, batches):
         depth = base + micro
@@ -23,29 +21,47 @@ def run_core(worker, hidden, positions, batches, micro):
         groups.append((depth, start, end, batch, backend))
     model = worker.model_runner.model
     with forward_context(ForwardContext(worker.backends[0])):
-        hidden = model.model.advance_batch(hidden, positions, groups)
-        # Native Ouro is TP=1, unquantized, with no LM-head softcap/scaling.
-        logits = (
-            bf16_gemm_dispatch(hidden, model.lm_head.weight, None).float()
-            if micro == worker.stride - 1
-            else None
-        )
+        logits = None
+        if role == "core":
+            hidden = model.advance_recurrent(hidden, positions, groups, injected)
+        else:
+            endpoints = set(worker.depths) | {model.config.total_ut_steps}
+            selected = [g for g in groups if g[0] + 1 in endpoints]
+            h = torch.cat([hidden[start:end] for _, start, end, _, _ in selected])
+            pos = torch.cat([positions[start:end] for _, start, end, _, _ in selected])
+            compact, offset = [], 0
+            for depth, start, end, batch, backend in selected:
+                compact.append((depth, offset, offset + end - start, batch, backend))
+                offset += end - start
+            readout = model.readout_recurrent(h, pos, compact)
+            logits = torch.zeros(
+                (worker.max_rows, model.config.vocab_size),
+                dtype=torch.float32,
+                device=hidden.device,
+            )
+            offset = 0
+            for _, start, end, _, _ in selected:
+                logits[start:end] = readout[offset : offset + end - start]
+                offset += end - start
     return hidden, logits
 
 
 class RecurrentGraph:
-    def __init__(self, worker, micro):
+    def __init__(self, worker, micro=0, role="core"):
         self.worker, self.micro = worker, micro
+        self.role = role
         model = worker.model_runner.model
         device = worker.model_runner.device
+        rows = 1 if role == "pre" else worker.max_rows
         self.hidden = torch.zeros(
-            (worker.max_rows, model.config.hidden_size),
-            dtype=model.model.embed_tokens.weight.dtype,
+            (rows, model.config.hidden_size),
+            dtype=model.get_input_embeddings().weight.dtype,
             device=device,
         )
-        self.positions = torch.zeros(worker.max_rows, dtype=torch.int64, device=device)
+        self.injected = torch.zeros_like(self.hidden) if model.has_injection else None
+        self.positions = torch.zeros(rows, dtype=torch.int64, device=device)
         self.batches = []
-        for _, start, end in worker.layout:
+        for _, start, end in [(0, 0, 1)] if role == "pre" else worker.layout:
             size = end - start
             batch = ForwardBatch(
                 forward_mode=ForwardMode.DECODE,
@@ -74,12 +90,31 @@ class RecurrentGraph:
         torch.cuda.current_stream(device).wait_stream(stream)
 
     def run(self):
+        if self.role == "pre":
+            batch = self.batches[0]
+            self.worker.pre_backend.init_forward_metadata(batch)
+            with forward_context(ForwardContext(self.worker.pre_backend)):
+                self.output_hidden, self.output_injected = (
+                    self.worker.model_runner.model.prepare_recurrent(
+                        batch.input_ids, self.positions, batch
+                    )
+                )
+            self.output_logits = None
+            return
         self.output_hidden, self.output_logits = run_core(
-            self.worker, self.hidden, self.positions, self.batches, self.micro
+            self.worker,
+            self.hidden,
+            self.positions,
+            self.batches,
+            self.micro,
+            self.injected,
+            self.role,
         )
 
-    def replay(self, hidden, positions, batches):
+    def replay(self, hidden, positions, batches, injected=None):
         self.hidden.copy_(hidden)
+        if self.injected is not None and injected is not None:
+            self.injected.copy_(injected)
         self.positions.copy_(positions)
         for target, source in zip(self.batches, batches):
             target.input_ids.copy_(source.input_ids)
