@@ -261,6 +261,7 @@ POSITIONAL_FIELD_ORDER = (
     "enable_torch_compile_debug_mode",
     "torch_compile_max_bs",
     "speculative_algorithm",
+    "speculative_draft_depth",
     "uno_lora_path",
     "speculative_draft_model_path",
     "speculative_draft_model_revision",

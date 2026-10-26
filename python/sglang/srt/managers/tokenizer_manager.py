@@ -1568,6 +1568,10 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
         sampling_params.normalize(self.tokenizer)
         sampling_params.verify(self.model_config.vocab_size)
         _validate_watermark_request(sampling_params)
+        if get_spec().speculative_algorithm == "LOOPSPEC":
+            from sglang.srt.speculative.loopspec.config import validate_request
+
+            validate_request(sampling_params, obj)
 
         # Build return object
         if isinstance(obj, GenerateReqInput):
@@ -3143,6 +3147,11 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
         i: int,
     ) -> None:
         """Calculate speculative decoding metrics, such as acceptance rate and acceptance length metrics."""
+        if get_spec().speculative_algorithm == "LOOPSPEC":
+            # Its draft-token width reserves live branch storage, not a linear
+            # proposal block. The formula below would fabricate an acceptance
+            # denominator. The worker logs actual cycles/accepts/state reuse.
+            return
         if (
             hasattr(recv_obj, "spec_verify_ct")
             and recv_obj.spec_verify_ct[i] > 0

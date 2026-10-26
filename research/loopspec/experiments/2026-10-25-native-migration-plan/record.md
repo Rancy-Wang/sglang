@@ -1,6 +1,6 @@
 # LoopSpec → SGLang v0.5.22 迁移研究与实施计划
 
-日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；第 2 轮进行中。代码修改与验证轮次：2/5。
+日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；第 3 轮进行中。代码修改与验证轮次：3/5。
 
 用户请求：判断 SGLang 对 loop transformer serving 的支持，分析官方 LoopSpec 如何接入 SGLang，设计完整迁移方案与 Ouro-2.6B 单请求验证方案。
 
@@ -374,3 +374,16 @@ curl --fail-with-body --max-time 120 "http://127.0.0.1:$PORT/generate" \
 ### 候选 2/5：独立 reference 的无缓存验证
 
 目的：消除 checkpoint Cache API 版本耦合。步骤：只将 HF reference 改为 use_cache=False，每步完整前缀重算；不改权重/模型/R/停止条件。范围：verify_ouro.py 及记录。标准：reference 与 native 的 token IDs、stop 完全一致。风险：完整前缀重算浮点顺序可能和 cached decode 不同；若分歧需定位，不能弱化标准。验证：compile/diff-check、Git同步，X5 reference→compare；native 标准 HTTP smoke。无缓存 reference 耗时不参与性能对比。
+
+### 第 2 轮结果
+
+候选9a5cfe9aba995283376758d621a8262f489efaf0已同步 X5。HF reference(use_cache=False)退出0，token IDs与第1轮native完全相同，compare退出0；标准 `python -m sglang.launch_server` /health及 /generate 通过，HTTP结果再次与reference逐token/stop一致，compare退出0。原生 AR 的本条请求正确性基线通过。原始结果在round-2/reference.json、http.json、http-server.log。
+
+### 候选 3/5：原生 LoopSpec worker 与流水线
+
+1. 目的：标准 speculative-algorithm=loopspec，唯一新增draft-depth参数；完整深度target不变。
+2. 步骤：接入参数/enum/V2worker；持久化跨token recurrence lane；按depth隔离KV，分支引用追踪/回收；实现单候选与门控residual第二候选；每次worker返回一个已验证token，让原scheduler处理stop/stream/cancel；复用原生attention、logprob。
+3. 范围：arg_groups/fields/spec.py、field_order.py、speculative_hook.py；speculative/spec_info.py、spec_registry.py、spec_utils.py及新loopspec模块；必要的tokenizer/scheduler生命周期hooks；本任务tests/harness/记录。
+4. 标准：相同单请求单/双候选与AR逐token/stop一致；trace证明早期proposal、full-depthverify和accepted-state复用；合成分布验证q2 residual而非原p_d2；资源回收及非法组合显式拒绝。
+5. 风险：V2 scheduler水位、KV allocator ownership、未物化深度读取、top-k/p实际proposal、graph输入生命周期。首个集成候选先用eager single-request/TP1/Triton；不把eager通过声称完整graph/TinyGEMM/Raven移植。
+6. 验证：本地语法/diff；X5测试包含权重覆盖、强制拒绝/双拒绝、sampling分布；HTTP相同prompt与reference比较；后续轮次修复失败并补齐graph/生命周期验收，整个任务仍最多5轮。

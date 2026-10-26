@@ -119,6 +119,8 @@ def _resolve_speculative_algorithm_alias(
 
 def handle_speculative_decoding(server_args: ServerArgs) -> None:
     cfg = resolving_view(server_args)
+    if cfg.speculative_draft_depth is not None and (cfg.speculative_algorithm or "").upper() != "LOOPSPEC":
+        raise ValueError("--speculative-draft-depth requires --speculative-algorithm loopspec")
     if (
         cfg.speculative_draft_model_path is not None
         and cfg.speculative_draft_model_revision is None
