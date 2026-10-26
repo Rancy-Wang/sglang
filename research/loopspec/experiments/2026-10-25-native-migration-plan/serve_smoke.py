@@ -125,6 +125,8 @@ def main():
     parser.add_argument("--port", type=int, default=30126)
     parser.add_argument("--cuda-graph", action="store_true")
     parser.add_argument("--lifecycle", action="store_true")
+    parser.add_argument("--warmup", type=int, default=2)
+    parser.add_argument("--repeat", type=int, default=10)
     parser.add_argument(
         "--bf16-gemm-backend", default="auto", choices=["auto", "torch", "tinygemm"]
     )
@@ -140,6 +142,7 @@ def main():
         "127.0.0.1",
         "--port",
         str(args.port),
+        "--enable-metrics",
         "--dtype",
         "bfloat16",
         "--attention-backend",
@@ -182,12 +185,34 @@ def main():
                     if time.monotonic() > deadline:
                         raise TimeoutError("Server did not become healthy")
                     time.sleep(1)
-            for index in range(2):
+            for _ in range(args.warmup):
+                http_request(url)
+            samples = []
+            for index in range(args.repeat):
                 result = http_request(url)
                 (args.output / f"response-{index}.json").write_text(
                     json.dumps(result, indent=2)
                 )
+                samples.append(result)
                 print(json.dumps(result), flush=True)
+            (args.output / "benchmark.json").write_text(
+                json.dumps(
+                    {
+                        "command": command,
+                        "warmup": args.warmup,
+                        "samples": samples,
+                        "timing_note": "first_token_latency is service TTFT (includes scheduling); decode_throughput is native service decode throughput, not isolated GPU compute",
+                    },
+                    indent=2,
+                )
+            )
+            with request(url, "/metrics") as response:
+                metrics = response.read().decode()
+            (args.output / "metrics.txt").write_text(metrics)
+            if args.depths:
+                assert "sglang:loopspec_events_total" in metrics, metrics
+                if args.cuda_graph:
+                    assert 'role="rejection"' in metrics, metrics
             if args.lifecycle:
                 summary = lifecycle(url, result)
                 (args.output / "lifecycle.json").write_text(

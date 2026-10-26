@@ -1,6 +1,6 @@
 # LoopSpec → SGLang v0.5.22 迁移研究与实施计划
 
-日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；用户已授权继续，总预算10轮；第7/10轮本地静态检查通过，X5 SSH持续超时，第6/7轮GPU待验证。
+日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；用户已授权继续，总预算10轮；第8/10轮本地CPU/静态检查通过，X5 SSH持续超时，第6–8轮GPU待验证。
 
 用户请求：判断 SGLang 对 loop transformer serving 的支持，分析官方 LoopSpec 如何接入 SGLang，设计完整迁移方案与 Ouro-2.6B 单请求验证方案。
 
@@ -516,3 +516,14 @@ TinyGEMM FP32 oracle对比：三组支持shape最大绝对误差分别0.00780272
 6. 验证：本地compile/ruff/diff；pool在CPU/GPU上按角色深度读写隔离、延迟释放和重用；X5恢复后同SHA运行第6/7轮模型fixture与Ouro生命周期、graph/eager差分；记录physical/live槽数。
 
 第7轮compileall、ruff F、diff-check均退出0。第6轮提交23a78bf67已push；X5 SSH重试仍超时，尚未pull或执行新增GPU测试。timeline物理容量与full-depth逻辑容量分开核算，保持每role独立free list；原生AR未切换pool。
+
+### 候选8/10：拒绝图、指标与完整验收工具
+
+1. 目的：补齐独立rejection CUDA graph、原生Prometheus观测和可复现数值/配对性能证据工具，公开参数名保持不变。
+2. 步骤：增加纯张量残差验证与静态graph replay，eager作为独立oracle；worker记录proposal/accept/reject/reuse和各role replay；使用既有enable-metrics；harness收集warmup后重复请求、标准时序、token/stop及metrics；增加逐depth hidden/logits诊断。
+3. 范围：loopspec sampling/worker/metrics模块及本任务research脚本，不改官方参考仓库。
+4. 标准：固定uniforms分支oracle一致、100000次目标分布统计无零支持泄漏；graph改输入后不读旧buffer；指标分母为真实verify/proposal；所有模型回归通过后才计算相同条件配对性能。
+5. 风险：零概率/残差下溢、随机数使用顺序变化、graph输出别名、指标进程注册、短请求计时噪声；随机模式不要求相同seed序列等同AR。全模型BF16误差记录max/RMSE/argmax与margin，不能仅以文本相同代替数值诊断。
+6. 验证：本地隔离CPU环境执行采样与指标测试，compile/ruff/diff；X5恢复后同SHA跑CPU/GPU测试、Raven合成fixture、Ouro AR/单/双eager/graph、生命周期、独立HF数值对比；配对至少warmup2+测量10，每种模式同prompt/precision/graph/backend，保留raw时序。
+
+第8轮本地隔离环境/tmp/loopspec-cpu-env（Python3.13.3、Torch2.14.1、transformers5.20.2）仅执行CPU小张量，不加载模型。test_rejection_graph.py退出0：3项CPU通过（固定uniform分支oracle；三组各100000次目标分布与零支持；真实verify/proposal指标分母），1项CUDA输入变更replay明确跳过。compileall、ruff F、git diff --check退出0。新增diagnose_ouro.py用于独立HF/native AR/compact-prefill四前缀×四depth hidden/logits误差与argmax；serve_smoke默认warmup2/测量10并采集原生metrics；compare_performance严格要求graph/backend等配置相同。GPU数值、服务和性能脚本尚未执行。TTFT明确包含调度，不能称纯prefill kernel时间。

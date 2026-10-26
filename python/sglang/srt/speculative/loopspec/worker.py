@@ -15,7 +15,7 @@ from sglang.srt.model_executor.forward_batch_info import (
     ForwardBatch,
     ForwardMode,
 )
-from sglang.srt.runtime_context import get_spec
+from sglang.srt.runtime_context import get_observability, get_spec
 from sglang.srt.speculative.base_spec_worker import BaseSpecWorker
 from sglang.srt.speculative.spec_info import (
     SpecInput,
@@ -68,6 +68,8 @@ class RequestExecutor:
         self.materialized = {}  # Only transient slots; committed slots are full depth.
         self.logits = {}
         self.accepted = [0, 0]
+        self.proposed = [0, 0]
+        self.peak_slots = worker.model_runner.token_to_kv_pool.timeline.live_slots
         self.rejected = 0
         self.stop_ids = set(self.params.stop_token_ids or ()) | set(
             req.eos_token_ids or ()
@@ -167,6 +169,7 @@ class RequestExecutor:
                     hidden, positions, batches, injected
                 )
                 self.worker.graph_replays += 1
+                self.worker.role_replays["core"] += 1
             else:
                 hidden, logits = run_core(
                     self.worker, hidden, positions, batches, micro, injected
@@ -181,10 +184,14 @@ class RequestExecutor:
                 )
         if self.worker.graphs:
             _, logits = self.worker.post_graph.replay(hidden, positions, batches)
+            self.worker.role_replays["post"] += 1
         else:
             _, logits = run_core(
                 self.worker, hidden, positions, batches, count - 1, role="post"
             )
+        self.peak_slots = max(
+            self.peak_slots, self.worker.timeline.pool.timeline.live_slots
+        )
         for lane in lanes:
             row = rows[lane.uid]
             lane.hidden = hidden[row : row + 1].clone()
@@ -222,6 +229,7 @@ class RequestExecutor:
                 torch.zeros_like(graph.hidden), batch.positions, [batch]
             )
             injected = graph.output_injected
+            self.worker.role_replays["pre"] += 1
         else:
             batch, backend = self.worker.timeline.target_batch(batch, "pre", 0)
             with forward_context(ForwardContext(backend)):
@@ -243,6 +251,7 @@ class RequestExecutor:
             distribution = second_proposal(first, distribution, token)
             if distribution is None:
                 return None
+        self.proposed[self.depths.index(lane.depth)] += 1
         token = int(torch.multinomial(distribution, 1, generator=self.generator))
         return token, distribution
 
@@ -251,7 +260,11 @@ class RequestExecutor:
         second_token, second = lane.proposals.get(
             self.depths[1] if len(self.depths) == 2 else -1, (None, None)
         )
-        token, accepted = verify(
+        verifier = verify
+        if self.worker.rejection_graph is not None:
+            verifier = self.worker.rejection_graph.replay
+            self.worker.role_replays["rejection"] += 1
+        token, accepted = verifier(
             self.distribution(lane),
             first,
             first_token,
@@ -308,6 +321,13 @@ class LoopSpecWorker(BaseSpecWorker):
         self.executor = self.pipeline = None
         self.graphs = []
         self.graph_replays = 0
+        self.role_replays = dict.fromkeys(("pre", "core", "post", "rejection"), 0)
+        self.rejection_graph = None
+        self.metrics = None
+        if get_observability().enable_metrics:
+            from .metrics import LoopSpecMetrics
+
+            self.metrics = LoopSpecMetrics(server_args.served_model_name)
         depths = get_spec().speculative_draft_depth
         self.depths = depths
         self.stride = depths[0]
@@ -375,6 +395,11 @@ class LoopSpecWorker(BaseSpecWorker):
         self.graphs = [RecurrentGraph(self, micro) for micro in range(self.stride)]
         self.pre_graph = RecurrentGraph(self, role="pre")
         self.post_graph = RecurrentGraph(self, self.stride - 1, role="post")
+        from .sampling import RejectionGraph
+
+        self.rejection_graph = RejectionGraph(
+            self.model_runner.model.config.vocab_size, self.model_runner.device
+        )
         self._additional_graph_memory_usage["draft_decode"] = (
             torch.cuda.memory_allocated() - allocated
         ) / 2**30
@@ -382,7 +407,7 @@ class LoopSpecWorker(BaseSpecWorker):
             time.perf_counter() - started
         )
         logger.info(
-            "LoopSpec captured pre/post and %d mixed-depth core graphs, rows=%d",
+            "LoopSpec captured pre/post/rejection and %d mixed-depth core graphs, rows=%d",
             len(self.graphs),
             self.max_rows,
         )
@@ -404,6 +429,10 @@ class LoopSpecWorker(BaseSpecWorker):
                 self.executor.rejected,
                 self.graph_replays,
             )
+            if self.metrics is not None:
+                self.metrics.finish(
+                    self.executor, self.pipeline, self.role_replays, natural_stop
+                )
             self.clear_cache_pool()
 
     @torch.no_grad()
@@ -415,6 +444,7 @@ class LoopSpecWorker(BaseSpecWorker):
             if batch.forward_mode.is_extend():
                 self.clear_cache_pool()
                 self.graph_replays = 0
+                self.role_replays = dict.fromkeys(self.role_replays, 0)
                 result = self.target_worker.forward_batch_generation(batch)
                 result.accept_lens = torch.ones_like(batch.seq_lens, dtype=torch.int32)
                 result.new_seq_lens = batch.seq_lens
