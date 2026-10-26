@@ -26,7 +26,6 @@ def reference(model_path):
     tokens = tokenizer.encode(PROMPT)
     input_ids = torch.tensor([tokens], device="cuda")
     output_ids = []
-    cache = None
     torch.cuda.synchronize()
     start = time.perf_counter()
     prefill = None
@@ -34,7 +33,7 @@ def reference(model_path):
         for _ in range(SAMPLING["max_new_tokens"]):
             # Bypass the adaptive/mixture LM head: this is the fixed R=4 target.
             outputs, hidden_by_depth, _ = model.model(
-                input_ids=input_ids, past_key_values=cache, use_cache=True
+                input_ids=input_ids, use_cache=False
             )
             assert len(hidden_by_depth) == 4
             logits = model.lm_head(hidden_by_depth[-1][:, -1, :]).float()
@@ -43,10 +42,9 @@ def reference(model_path):
                 torch.cuda.synchronize()
                 prefill = time.perf_counter() - start
             output_ids.append(next_id)
-            cache = outputs.past_key_values
             if next_id == tokenizer.eos_token_id:
                 break
-            input_ids = torch.tensor([[next_id]], device="cuda")
+            input_ids = torch.tensor([tokens + output_ids], device="cuda")
     torch.cuda.synchronize()
     return {
         "mode": "hf_fixed_depth", "input_ids": tokens, "output_ids": output_ids,

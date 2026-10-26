@@ -1,6 +1,6 @@
 # LoopSpec → SGLang v0.5.22 迁移研究与实施计划
 
-日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；第 1 轮进行中。代码修改与验证轮次：1/5。
+日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；第 2 轮进行中。代码修改与验证轮次：2/5。
 
 用户请求：判断 SGLang 对 loop transformer serving 的支持，分析官方 LoopSpec 如何接入 SGLang，设计完整迁移方案与 Ouro-2.6B 单请求验证方案。
 
@@ -362,3 +362,15 @@ curl --fail-with-body --max-time 120 "http://127.0.0.1:$PORT/generate" \
 6. 验证：本地 compile/diff/针对性测试；X5 隔离环境核实 source SHA 与 import path；独立 reference 与 native AR 相同 prompt、BF16、32 token；保存完整日志。正确性后才讨论配对耗时。
 
 起始 HEAD：baa9befa381511cd4d56f83980951e5a45fffc6d。当前无代码测试结果。整个迁移仍共用最多五轮，后续阶段不另起预算。
+
+### 第 1 轮结果
+
+候选 f28ab9520aee8042d7c2c6b59f8e747349592f71，已 push loopspec-test 并 X5 pull 核对。compileall/diff-check 退出 0；X5 test_ouro.py 四项通过。native harness 退出 0，11 token IDs `[7042,30,198,198,504,3403,2988,314,330,30,0]`，EOS stop。这是 AR 跑通，尚非独立正确性通过。
+
+环境：容器 loopspec-native-20261026，镜像 v0.5.22-cu130 digest e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae；源码只读挂载 /workspace/sglang，PYTHONPATH=/workspace/sglang/python；Torch 2.14.1+cu130、Transformers 5.19.0、flashinfer-python0.7.1、sglang-kernel0.4.9。镜像 wheel metadata 为0.5.15.dev381+gc05c48b35，不作为源码版本证据；执行源码路径和 Git SHA 已核对。镜像默认 SGLANG_RUST_BUILD_MODE=never 导致第一次 native 失败(137)，改 auto 后构建当前源码 Rust扩展并成功。这是环境修复，无源码改动。
+
+独立参考环境 /opt/ouro-reference：Transformers4.55.0、kernels0.9.0，复用同Torch；依次遇到Torch路径缺失、kernels/hub不兼容，环境修复后仍失败(1)：checkpoint UniversalTransformerCache 对 key_cache 赋值，与其父类只读属性冲突。失败日志及成功 native.json 在 X5 /results/round-1（宿主对应实验目录）。未作性能结论。
+
+### 候选 2/5：独立 reference 的无缓存验证
+
+目的：消除 checkpoint Cache API 版本耦合。步骤：只将 HF reference 改为 use_cache=False，每步完整前缀重算；不改权重/模型/R/停止条件。范围：verify_ouro.py 及记录。标准：reference 与 native 的 token IDs、stop 完全一致。风险：完整前缀重算浮点顺序可能和 cached decode 不同；若分歧需定位，不能弱化标准。验证：compile/diff-check、Git同步，X5 reference→compare；native 标准 HTTP smoke。无缓存 reference 耗时不参与性能对比。
