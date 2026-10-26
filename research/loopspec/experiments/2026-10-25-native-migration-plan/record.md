@@ -1,6 +1,6 @@
 # LoopSpec → SGLang v0.5.22 迁移研究与实施计划
 
-日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；第 4 轮进行中。代码修改与验证轮次：4/5。
+日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；第 5 轮进行中。代码修改与验证轮次：5/5。
 
 用户请求：判断 SGLang 对 loop transformer serving 的支持，分析官方 LoopSpec 如何接入 SGLang，设计完整迁移方案与 Ouro-2.6B 单请求验证方案。
 
@@ -399,3 +399,16 @@ curl --fail-with-body --max-time 120 "http://127.0.0.1:$PORT/generate" \
 目的：标准CUDA graph开关控制原生recurrent graph，补齐服务生命周期证据。步骤：模型runner对LoopSpec使用eager prefill；worker为每个depth捕获独立静态core/readout graph并clone持久化输出，重放前更新position/seq-len/KV-slot；扩充标准HTTP harness。范围：loopspec/config.py、worker.py、新graph.py、model_runner_components/cuda_graph_setup.py、测试/记录。成功：graph单/双候选逐token与eager/AR一致，实际replay计数>0；短输出、stream、stop、cancel后可继续请求及flush无泄漏；sampling真实请求可完成。风险：静态metadata和输出别名、graph输入生命周期、graph/eager浮点差异。验证：本地语法/diff，Git同步，X5单/双graph→AR compare，生命周期脚本，必要时eager对照定位；不作尚无配对数据的性能结论。
 
 第4轮验证前范围补充：将共享层的QKV/o-proj/MLP按mixed-depth lanes合批，attention按depth分组执行；graph捕获整个合批core而非逐lane graph。新增范围 models/ouro.py、loopspec/pipeline.py。容量由原schedule的birth recurrence推导，padding不进入输出；验证增加batched eager与batched graph同AR对比。该修改仍在第4轮候选首次验证前，未消耗新轮次。
+
+### 第 4 轮结果
+
+候选 fb7e35ddc1c24a817f287da091da68c61234db4d 已同步 X5。模型四项、LoopSpec 四项测试通过；batched double eager、single graph、double graph 的 serve_smoke --lifecycle 均退出0。前两次请求全部与独立 HF R=4 token/stop一致。生命周期覆盖0/1输出上限、stop string、stream、取消后继续请求、OpenAI completions、真实模型sampling、flush_cache；无memory leak警告。single graph实际22次replay，double18次。depth=2 graph补充验证与官方0.5.14独立环境AR对照进行中。raw在round-4。未做稳定配对benchmark。
+
+### 候选 5/5：显式 TinyGEMM backend 与最终回归
+
+1. 目的：保留官方支持的BF16小batch线性优化，公开接口仍只有新增draft-depth；不得进程级替换linear方法。
+2. 步骤：在原有bf16-gemm-backend中添加tinygemm选项；初始化时检查硬件及内核；按shape/dtype/device选择，其他shape用Torch；core readout也走同一backend；扩展harness选择既有backend并做数值/graph验证；补严格不支持配置检查。
+3. 范围：arg_groups/fields/exec_.py、layers/quantization/unquant.py、新layers/quantization/tinygemm.py、loopspec/graph.py及config.py；本任务harness、GPU kernel验证脚本与记录。
+4. 标准：SM120实测TinyGEMM调用>0；bias/shape边界与graph replay数值检查；Ouro AR及单/双候选与HF固定R4逐token/stop一致；标准生命周期继续通过。默认auto行为不变。
+5. 风险：BF16累加顺序导致argmax变化、首次JIT/graphcapture兼容；选定但不可用时明确失败。不将TinyGEMM支持等同已获加速。
+6. 验证：本地compile/ruff/diff审查；仅loopspec-test提交并X5核对SHA/importpath；GPU kernel float32 oracle误差，原生AR与单/双graph HTTP差分，统计采样与模型单测回归。第5轮若失败不再改源码。Raven独立pre/post/injection、拒绝采样graph、完整模型logit诊断仍须在最终结果明确标记，不将Ouro smoke当全部验收。

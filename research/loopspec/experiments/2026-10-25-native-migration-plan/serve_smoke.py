@@ -124,6 +124,9 @@ def main():
     parser.add_argument("--port", type=int, default=30126)
     parser.add_argument("--cuda-graph", action="store_true")
     parser.add_argument("--lifecycle", action="store_true")
+    parser.add_argument(
+        "--bf16-gemm-backend", default="auto", choices=["auto", "torch", "tinygemm"]
+    )
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     command = [
@@ -156,6 +159,7 @@ def main():
     ]
     if args.cuda_graph:
         command.remove("--disable-cuda-graph")
+    command += ["--bf16-gemm-backend", args.bf16_gemm_backend]
     if args.depths:
         command += ["--speculative-algorithm", "loopspec", "--speculative-draft-depth"]
         command += list(map(str, args.depths))

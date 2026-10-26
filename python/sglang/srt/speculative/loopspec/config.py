@@ -34,6 +34,11 @@ def handle_server_args(server_args):
         raise ValueError(
             "LoopSpec currently requires CUDA and --attention-backend triton"
         )
+    if any(
+        backend not in (None, "triton")
+        for backend in (cfg.prefill_attention_backend, cfg.decode_attention_backend)
+    ):
+        raise ValueError("LoopSpec requires Triton for both prefill and decode")
     if cfg.page_size != 1 or cfg.max_running_requests != 1:
         raise ValueError(
             "LoopSpec currently requires --page-size 1 --max-running-requests 1"

@@ -2,6 +2,8 @@
 
 import torch
 
+from sglang.srt.layers.quantization.unquant import bf16_gemm_dispatch
+
 from sglang.srt.model_executor.forward_batch_info import (
     CaptureHiddenMode,
     ForwardBatch,
@@ -24,7 +26,7 @@ def run_core(worker, hidden, positions, batches, micro):
         hidden = model.model.advance_batch(hidden, positions, groups)
         # Native Ouro is TP=1, unquantized, with no LM-head softcap/scaling.
         logits = (
-            torch.nn.functional.linear(hidden, model.lm_head.weight).float()
+            bf16_gemm_dispatch(hidden, model.lm_head.weight, None).float()
             if micro == worker.stride - 1
             else None
         )
