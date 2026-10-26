@@ -96,6 +96,7 @@ from sglang.srt.configs import (
 from sglang.srt.configs.deepseek_ocr import DeepseekVLV2Config
 from sglang.srt.configs.deepseek_v41 import DEEPSEEK_V41_CONFIG_CLASSES
 from sglang.srt.configs.internvl import InternVLChatConfig
+from sglang.srt.configs.ouro import OuroConfig
 from sglang.srt.utils import get_bool_env_var, logger, lru_cache_frozenset
 from sglang.srt.utils.runai_utils import ObjectStorageModel, is_runai_obj_uri
 
@@ -115,6 +116,7 @@ from transformers import PretrainedConfig
 _CONFIG_REGISTRY: Dict[str, Type[PretrainedConfig]] = {
     cls.model_type: cls
     for cls in [
+        OuroConfig,
         AfmoeConfig,
         BailingHybridConfig,
         BailingMM2Config,

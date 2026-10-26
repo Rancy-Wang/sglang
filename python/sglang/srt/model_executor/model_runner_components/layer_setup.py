@@ -18,6 +18,8 @@ class AttentionAndMoeLayers(NamedTuple):
 
 
 def _get_loop_num(hf_config: Any) -> int:
+    if getattr(hf_config, "model_type", None) == "ouro":
+        return int(hf_config.total_ut_steps)
     # Nanbeige uses num_loops; IQuestLoopCoder uses loop_num.
     return int(getattr(hf_config, "loop_num", getattr(hf_config, "num_loops", 1)) or 1)
 
