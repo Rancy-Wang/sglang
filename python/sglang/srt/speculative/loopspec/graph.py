@@ -16,8 +16,7 @@ def run_core(worker, hidden, positions, batches, micro, injected=None, role="cor
     groups = []
     for (base, start, end), batch in zip(worker.layout, batches):
         depth = base + micro
-        backend = worker.backends[depth]
-        backend.init_forward_metadata(batch)
+        batch, backend = worker.timeline.target_batch(batch, role, depth)
         groups.append((depth, start, end, batch, backend))
     model = worker.model_runner.model
     with forward_context(ForwardContext(worker.backends[0])):
@@ -91,9 +90,10 @@ class RecurrentGraph:
 
     def run(self):
         if self.role == "pre":
-            batch = self.batches[0]
-            self.worker.pre_backend.init_forward_metadata(batch)
-            with forward_context(ForwardContext(self.worker.pre_backend)):
+            batch, backend = self.worker.timeline.target_batch(
+                self.batches[0], "pre", 0
+            )
+            with forward_context(ForwardContext(backend)):
                 self.output_hidden, self.output_injected = (
                     self.worker.model_runner.model.prepare_recurrent(
                         batch.input_ids, self.positions, batch

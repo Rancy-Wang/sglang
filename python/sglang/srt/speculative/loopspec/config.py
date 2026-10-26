@@ -70,6 +70,26 @@ def handle_server_args(server_args):
         raise ValueError(
             "LoopSpec depths are fixed; adaptive speculative decoding is unsupported"
         )
+    if (
+        any(
+            getattr(cfg, name, False)
+            for name in (
+                "enable_hierarchical_cache",
+                "enable_hisparse",
+                "enable_unified_memory",
+                "enable_unified_cache_external_linker",
+                "enable_kv_cache_sharding",
+                "enable_torch_compile",
+                "enable_memory_saver",
+            )
+        )
+        or cfg.cpu_offload_gb
+    ):
+        raise ValueError(
+            "LoopSpec timeline KV does not support host/unified caches, sharding, memory saver or torch.compile"
+        )
+    if cfg.kv_cache_dtype not in ("auto", "bf16", "bfloat16", "float16"):
+        raise ValueError("LoopSpec timeline KV requires unquantized KV storage")
     # Allocation reserve is an upper bound on the live binary proposal tree.
     width = (
         sum(

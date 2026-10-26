@@ -196,7 +196,27 @@ class OuroForCausalLM(nn.Module):
     ):
         if get_embedding:
             raise ValueError("Ouro embedding serving is not implemented")
-        hidden = self.model(input_ids, positions, forward_batch, input_embeds)
+        if hasattr(self, "timeline_runtime"):
+            from sglang.srt.model_executor.forward_context import (
+                ForwardContext,
+                forward_context,
+            )
+
+            runtime = self.timeline_runtime
+            runtime.ensure_prefill(
+                forward_batch.out_cache_loc, {self.config.total_ut_steps}
+            )
+            hidden = (
+                self.model.embed_tokens(input_ids)
+                if input_embeds is None
+                else input_embeds
+            )
+            for depth in range(self.config.total_ut_steps):
+                batch, backend = runtime.target_batch(forward_batch, "core", depth)
+                with forward_context(ForwardContext(backend)):
+                    hidden = self.model.advance_loop(hidden, positions, batch, depth)
+        else:
+            hidden = self.model(input_ids, positions, forward_batch, input_embeds)
         return self.logits_processor(input_ids, hidden, self.lm_head, forward_batch)
 
     def get_input_embeddings(self):

@@ -166,19 +166,41 @@ class RavenForCausalLM(nn.Module):
 
     @torch.no_grad()
     def forward(self, input_ids, positions, forward_batch, input_embeds=None, **kwargs):
-        hidden, injected = self.prepare_recurrent(
-            input_ids, positions, forward_batch, input_embeds
-        )
         endpoints = (
             set(get_spec().speculative_draft_depth or ())
             if get_spec().speculative_algorithm == "LOOPSPEC"
             else set()
         )
         final = self.config.mean_recurrence - 1
+        runtime = getattr(self, "timeline_runtime", None)
+        if runtime is not None:
+            runtime.ensure_prefill(forward_batch.out_cache_loc, endpoints | {final + 1})
+            batch, backend = runtime.target_batch(forward_batch, "pre", 0)
+        else:
+            batch, backend = forward_batch, None
+        with (
+            forward_context(ForwardContext(backend))
+            if backend is not None
+            else nullcontext()
+        ):
+            hidden, injected = self.prepare_recurrent(
+                input_ids, positions, batch, input_embeds
+            )
         for depth in range(final + 1):
-            groups = [(depth, 0, len(input_ids), forward_batch, None)]
+            batch, backend = (
+                runtime.target_batch(forward_batch, "core", depth)
+                if runtime is not None
+                else (forward_batch, None)
+            )
+            groups = [(depth, 0, len(input_ids), batch, backend)]
             hidden = self.advance_recurrent(hidden, positions, groups, injected)
             if depth + 1 in endpoints or depth == final:
+                batch, backend = (
+                    runtime.target_batch(forward_batch, "post", depth)
+                    if runtime is not None
+                    else (forward_batch, None)
+                )
+                groups = [(depth, 0, len(input_ids), batch, backend)]
                 post = self.post_hidden(hidden, positions, groups)
         return self.logits_processor(input_ids, post, self.lm_head, forward_batch)
 

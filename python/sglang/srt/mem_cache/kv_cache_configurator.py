@@ -2455,6 +2455,11 @@ class KVCacheConfigurator:
             pool_cls = PageInterleaveMHATokenToKVPool
             pool_kwargs["shard_spec"] = self.kv_shard_spec
             pool_kwargs["shard_group"] = self.kv_shard_group
+        if self.spec_algorithm.is_loopspec():
+            from sglang.srt.mem_cache.timeline_pool import TimelineTokenToKVPool
+
+            pool_cls = TimelineTokenToKVPool
+            pool_kwargs["recurrent_config"] = self.model_config.hf_config
         token_to_kv_pool = pool_cls(
             max_total_num_tokens,
             page_size=self.pool_page_size,
@@ -2595,7 +2600,14 @@ class KVCacheConfigurator:
                     elif (
                         get_schedule().page_size == 1 and not get_parallel().dcp_enabled
                     ):
-                        token_to_kv_pool_allocator = TokenToKVPoolAllocator(
+                        allocator_cls = TokenToKVPoolAllocator
+                        if self.spec_algorithm.is_loopspec():
+                            from sglang.srt.mem_cache.timeline_pool import (
+                                TimelineTokenAllocator,
+                            )
+
+                            allocator_cls = TimelineTokenAllocator
+                        token_to_kv_pool_allocator = allocator_cls(
                             sizes.max_total_num_tokens,
                             dtype=self.kv_cache_dtype,
                             device=self.device,

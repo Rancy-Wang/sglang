@@ -1,6 +1,5 @@
 """SGLang V2 worker for an incremental recurrent speculative pipeline."""
 
-import copy
 import logging
 import time
 
@@ -160,6 +159,9 @@ class RequestExecutor:
                     raise RuntimeError(
                         "LoopSpec attempted to read unmaterialized prefix depth"
                     )
+                self.worker.timeline.pool.timeline.ensure(
+                    [lane.slot], "core", lane.depth
+                )
             if self.worker.graphs:
                 hidden, logits = self.worker.graphs[micro].replay(
                     hidden, positions, batches, injected
@@ -172,6 +174,11 @@ class RequestExecutor:
             for lane in lanes:
                 lane.depth += 1
                 self.materialized[lane.slot] = lane.depth
+        for lane in lanes:
+            if lane.depth in self.depths or lane.depth == self.total:
+                self.worker.timeline.pool.timeline.ensure(
+                    [lane.slot], "post", lane.depth - 1
+                )
         if self.worker.graphs:
             _, logits = self.worker.post_graph.replay(hidden, positions, batches)
         else:
@@ -208,6 +215,7 @@ class RequestExecutor:
             spec_algorithm=SpeculativeAlgorithm.NONE,
         )
         self.translator.bind_own_plan(batch)
+        self.worker.timeline.pool.timeline.ensure([lane.slot], "pre", 0)
         if self.worker.graphs:
             graph = self.worker.pre_graph
             hidden, _ = graph.replay(
@@ -215,8 +223,8 @@ class RequestExecutor:
             )
             injected = graph.output_injected
         else:
-            self.worker.pre_backend.init_forward_metadata(batch)
-            with forward_context(ForwardContext(self.worker.pre_backend)):
+            batch, backend = self.worker.timeline.target_batch(batch, "pre", 0)
+            with forward_context(ForwardContext(backend)):
                 hidden, injected = self.model.prepare_recurrent(
                     batch.input_ids, batch.positions, batch
                 )
@@ -326,10 +334,8 @@ class LoopSpecWorker(BaseSpecWorker):
         )
 
     def init_attention_backends(self):
-        from sglang.srt.layers.attention.triton_backend import TritonAttnBackend
+        from sglang.srt.mem_cache.timeline_pool import TimelineRuntime
 
-        runner_view = copy.copy(self.model_runner)
-        runner_view.req_to_token_pool = self.private_pool
         self.translator = KVIndexTranslator(
             req_to_token=self.private_pool.req_to_token,
             token_to_kv_pool_allocator=self.token_to_kv_pool_allocator,
@@ -337,13 +343,23 @@ class LoopSpecWorker(BaseSpecWorker):
             page_size=1,
             device=self.model_runner.device,
         )
-        runner_view.kv_index_translator = self.translator
+        self.timeline = TimelineRuntime(
+            self.model_runner.token_to_kv_pool,
+            self.token_to_kv_pool_allocator,
+            self.private_pool,
+            self.model_runner,
+        )
+        self.model_runner.model.timeline_runtime = TimelineRuntime(
+            self.model_runner.token_to_kv_pool,
+            self.token_to_kv_pool_allocator,
+            self.req_to_token_pool,
+            self.model_runner,
+        )
         self.backends = [
-            TritonAttnBackend(runner_view)
-            for _ in range(self.model_runner.model.config.total_ut_steps)
+            self.timeline.backends[("core", depth)]
+            for depth in range(self.model_runner.model.config.total_ut_steps)
         ]
         self.backend = self.backends[0]
-        self.pre_backend = TritonAttnBackend(runner_view)
 
     @torch.no_grad()
     def init_cuda_graphs(self):

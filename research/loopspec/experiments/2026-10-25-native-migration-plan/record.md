@@ -1,6 +1,6 @@
 # LoopSpec → SGLang v0.5.22 迁移研究与实施计划
 
-日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；用户已授权继续，总预算10轮；第6/10轮本地静态检查通过，X5 SSH暂时超时，GPU待验证。
+日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；用户已授权继续，总预算10轮；第7/10轮本地静态检查通过，X5 SSH持续超时，第6/7轮GPU待验证。
 
 用户请求：判断 SGLang 对 loop transformer serving 的支持，分析官方 LoopSpec 如何接入 SGLang，设计完整迁移方案与 Ouro-2.6B 单请求验证方案。
 
@@ -505,3 +505,14 @@ TinyGEMM FP32 oracle对比：三组支持shape最大绝对误差分别0.00780272
 6. 验证：本地compile/ruff/diff；Git同步X5后检查GPU/端口与import SHA；模型fixture GPU数值/缓存与标准server请求；Ouro主请求回归。后续候选补紧凑KV布局、拒绝采样graph、指标与数值/配对性能harness，仍累计至10轮。
 
 第6轮本地compileall、ruff F、diff-check均退出0。X5域名解析198.18.0.204的SSH与公共DNS核实18.25.6.221的SSH均连续超时；只读DNS仍返回相同公网地址。已向用户询问网络/VPN状态，GPU验证明确未执行。源码候选保留并通过loopspec-test提交；下一候选可继续独立实现，但不把静态检查当GPU通过。
+
+### 候选7/10：紧凑物理KV与角色/深度timeline
+
+1. 目的：将LoopSpec的共享core KV存为物理层数个buffer，按(role,depth,logical token)映射物理槽；拒绝分支不预占未执行深度的槽，原生scheduler仍使用逻辑token ID。
+2. 步骤：原生pool factory选择TimelineTokenToKVPool；pre/core/post分别按需要的物理容量分配；逻辑allocator回收时同步释放所有timeline条目；target prefill与worker eager/graph显式绑定各depth翻译器；保持baseline原布局作独立对照。
+3. 范围：mem_cache/timeline_pool.py与kv_cache_configurator.py；loopspec worker/graph、Ouro/Raven prefill协议；allocator/model/tokenizer支持的参数约束；专用pool所有权测试。
+4. 标准：Ouro pool物理48层，core槽容量R*N，native AR仍192层；Raven物理P+C+O层、pre容量N、core/post各R*N；相同KV字节预算，scheduler保留保守N full-depth token容量；浅层只分配已物化timeline；释放后物理槽无泄漏、无重复释放；Ouro/fixture输出与此前AR一致。
+5. 风险：翻译器与graph静态buffer别名、slot0 padding、deferred free、prefix共享、同一role/depth重绑定。不开启不兼容HiCache/PD/量化KV；不将物理容量R*N冒称上下文容量扩大R倍。
+6. 验证：本地compile/ruff/diff；pool在CPU/GPU上按角色深度读写隔离、延迟释放和重用；X5恢复后同SHA运行第6/7轮模型fixture与Ouro生命周期、graph/eager差分；记录physical/live槽数。
+
+第7轮compileall、ruff F、diff-check均退出0。第6轮提交23a78bf67已push；X5 SSH重试仍超时，尚未pull或执行新增GPU测试。timeline物理容量与full-depth逻辑容量分开核算，保持每role独立free list；原生AR未切换pool。
