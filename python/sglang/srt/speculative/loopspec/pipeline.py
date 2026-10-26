@@ -38,18 +38,28 @@ class Pipeline:
         uid = self.next_uid
         self.next_uid += 1
         return Lane(
-            uid, parent.index + 1, token, parent.path + (uid,),
-            parent.prefix + (parent.slot,), parent.history + (token,),
-            parent=parent.uid, origin=origin,
+            uid,
+            parent.index + 1,
+            token,
+            parent.path + (uid,),
+            parent.prefix + (parent.slot,),
+            parent.history + (token,),
+            parent=parent.uid,
+            origin=origin,
         )
 
     def advance_until_commit(self):
         while True:
             self.cycles += 1
             following, children, final = [], [], None
+            ordered = sorted(self.lanes, key=lambda lane: -lane.depth)
+            if hasattr(self.executor, "advance_many"):
+                self.executor.advance_many(ordered, self.depths[0])
+            else:
+                for lane in ordered:
+                    self.executor.advance(lane, self.depths[0])
             # Ancestors run first, guaranteeing prefix KV exists at this depth.
-            for lane in sorted(self.lanes, key=lambda lane: -lane.depth):
-                self.executor.advance(lane, self.depths[0])
+            for lane in ordered:
                 if lane.depth == self.total:
                     if final is not None or lane.index != self.committed:
                         raise RuntimeError("LoopSpec committed out of order")
@@ -69,9 +79,16 @@ class Pipeline:
                 continue
             lane, (token, origin, logits) = final
             self.committed += 1
-            selected = next((child for child in following
-                             if child.parent == lane.uid and child.origin == origin
-                             and child.token == token), None)
+            selected = next(
+                (
+                    child
+                    for child in following
+                    if child.parent == lane.uid
+                    and child.origin == origin
+                    and child.token == token
+                ),
+                None,
+            )
             if self.committed < self.max_new_tokens:
                 if selected is None:
                     selected = self._child(lane, token, self.total)

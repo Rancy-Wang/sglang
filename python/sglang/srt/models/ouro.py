@@ -110,7 +110,10 @@ class OuroModel(nn.Module):
         )
         self.norm = _norm(config)
         self.early_exit_gate = ReplicatedLinear(
-            config.hidden_size, 1, bias=True, prefix=add_prefix("early_exit_gate", prefix)
+            config.hidden_size,
+            1,
+            bias=True,
+            prefix=add_prefix("early_exit_gate", prefix),
         )
 
     def advance_loop(self, hidden, positions, forward_batch, depth):
@@ -126,6 +129,34 @@ class OuroModel(nn.Module):
         for depth in range(self.config.total_ut_steps):
             hidden = self.advance_loop(hidden, positions, forward_batch, depth)
         return hidden
+
+    def advance_batch(self, hidden, positions, groups):
+        """One core invocation, shared projections across recurrent depths.
+
+        groups contains (depth, start, end, forward_batch, attention_backend).
+        Attention remains separate because every depth owns independent KV.
+        """
+        from sglang.srt.model_executor.forward_context import (
+            ForwardContext,
+            forward_context,
+        )
+
+        for layer in self.layers:
+            normalized = layer.input_layernorm(hidden)
+            q, k, v = layer.self_attn.forward_prepare_native(positions, normalized)
+            parts = []
+            for depth, start, end, batch, backend in groups:
+                with forward_context(ForwardContext(backend)):
+                    parts.append(
+                        layer.self_attn.attn[depth](
+                            q[start:end], k[start:end], v[start:end], batch
+                        )
+                    )
+            attention = layer.self_attn.o_proj(torch.cat(parts, dim=0))[0]
+            hidden = hidden + layer.input_layernorm_2(attention)
+            mlp = layer.mlp(layer.post_attention_layernorm(hidden))
+            hidden = hidden + layer.post_attention_layernorm_2(mlp)
+        return self.norm(hidden)
 
 
 class OuroForCausalLM(nn.Module):
@@ -153,8 +184,13 @@ class OuroForCausalLM(nn.Module):
 
     @torch.no_grad()
     def forward(
-        self, input_ids, positions, forward_batch, input_embeds=None,
-        get_embedding=False, pp_proxy_tensors=None,
+        self,
+        input_ids,
+        positions,
+        forward_batch,
+        input_embeds=None,
+        get_embedding=False,
+        pp_proxy_tensors=None,
     ):
         if get_embedding:
             raise ValueError("Ouro embedding serving is not implemented")

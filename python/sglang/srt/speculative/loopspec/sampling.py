@@ -27,6 +27,7 @@ def second_proposal(first, deeper, first_token):
 
 def verify(target, first, first_token, second, second_token, generator=None):
     """Return (committed token, accepted proposal index or None)."""
+
     def accepts(p, q, token):
         ratio = (p[token] / q[token]).clamp(max=1)
         return bool(torch.rand((), device=p.device, generator=generator) < ratio)
@@ -65,7 +66,9 @@ def probabilities(logits, params, output_ids, stop_ids):
     if params.top_k < probs.numel():
         cutoff = sorted_probs[params.top_k - 1]
     if params.top_p < 1:
-        index = torch.searchsorted(sorted_probs.cumsum(0), params.top_p).clamp(max=probs.numel() - 1)
+        index = torch.searchsorted(sorted_probs.cumsum(0), params.top_p).clamp(
+            max=probs.numel() - 1
+        )
         cutoff = torch.maximum(cutoff, sorted_probs[index])
     cutoff = torch.maximum(cutoff, sorted_probs[0] * params.min_p)
     probs = torch.where(probs >= cutoff, probs, 0)

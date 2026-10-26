@@ -2,6 +2,7 @@
 
 import copy
 import logging
+import time
 
 import torch
 
@@ -10,11 +11,18 @@ from sglang.srt.layers.logprob_processor import compute_spec_logprobs
 from sglang.srt.managers.utils import GenerationBatchResult
 from sglang.srt.mem_cache.kv_index_translator import KVIndexTranslator
 from sglang.srt.mem_cache.memory_pool import ReqToTokenPool
-from sglang.srt.model_executor.forward_batch_info import CaptureHiddenMode, ForwardBatch, ForwardMode
-from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.forward_batch_info import (
+    CaptureHiddenMode,
+    ForwardBatch,
+    ForwardMode,
+)
 from sglang.srt.runtime_context import get_spec
 from sglang.srt.speculative.base_spec_worker import BaseSpecWorker
-from sglang.srt.speculative.spec_info import SpecInput, SpecInputType, SpeculativeAlgorithm
+from sglang.srt.speculative.spec_info import (
+    SpecInput,
+    SpecInputType,
+    SpeculativeAlgorithm,
+)
 
 from .pipeline import Pipeline
 from .sampling import probabilities, second_proposal, verify
@@ -62,57 +70,115 @@ class RequestExecutor:
         self.logits = {}
         self.accepted = [0, 0]
         self.rejected = 0
-        self.stop_ids = set(self.params.stop_token_ids or ()) | set(req.eos_token_ids or ())
+        self.stop_ids = set(self.params.stop_token_ids or ()) | set(
+            req.eos_token_ids or ()
+        )
         self.stop_ids |= set(req.tokenizer.additional_stop_token_ids or ())
         if req.tokenizer.eos_token_id is not None:
             self.stop_ids.add(req.tokenizer.eos_token_id)
         self.generator = None
         if self.params.sampling_seed is not None:
-            self.generator = torch.Generator(device=self.device).manual_seed(self.params.sampling_seed)
+            self.generator = torch.Generator(device=self.device).manual_seed(
+                self.params.sampling_seed
+            )
 
-    def advance(self, lane, count):
-        if lane.slot is None:
-            allocated = self.allocator.alloc(1)
-            if allocated is None:
-                raise RuntimeError("LoopSpec KV allocation exhausted")
-            lane.slot = int(allocated.item())
-            self.owned.add(lane.slot)
-            self.materialized[lane.slot] = 0
-            token = torch.tensor([lane.token], dtype=torch.long, device=self.device)
-            lane.hidden = self.model.model.embed_tokens(token)
-        slots = lane.prefix + (lane.slot,)
-        ids = torch.tensor(slots, dtype=torch.int32, device=self.device)
-        self.worker.private_pool.req_to_token[1, :len(slots)] = ids
-        seq = torch.tensor([len(slots)], dtype=torch.int32, device=self.device)
-        batch = ForwardBatch(
-            forward_mode=ForwardMode.DECODE, batch_size=1,
-            input_ids=torch.tensor([lane.token], dtype=torch.long, device=self.device),
-            req_pool_indices=torch.tensor([1], dtype=torch.int64, device=self.device),
-            seq_lens=seq, seq_lens_sum=len(slots), seq_lens_cpu=seq.cpu(),
-            out_cache_loc=ids[-1:].to(torch.int64),
-            positions=torch.tensor([len(slots)-1], dtype=torch.int64, device=self.device),
-            capture_hidden_mode=CaptureHiddenMode.NULL,
-            spec_algorithm=SpeculativeAlgorithm.NONE,
+    def advance_many(self, lanes, count):
+        from .graph import run_core
+
+        for lane in lanes:
+            if lane.slot is None:
+                allocated = self.allocator.alloc(1)
+                if allocated is None:
+                    raise RuntimeError("LoopSpec KV allocation exhausted")
+                lane.slot = int(allocated.item())
+                self.owned.add(lane.slot)
+                self.materialized[lane.slot] = 0
+                token = torch.tensor([lane.token], dtype=torch.long, device=self.device)
+                lane.hidden = self.model.model.embed_tokens(token)
+        rows = {}
+        hidden = torch.zeros(
+            (self.worker.max_rows, self.model.config.hidden_size),
+            dtype=lanes[0].hidden.dtype,
+            device=self.device,
         )
-        self.translator.bind_own_plan(batch)
-        self.backend.init_forward_metadata(batch)
-        with forward_context(ForwardContext(self.backend)):
-            for _ in range(count):
-                if any(self.materialized.get(slot, self.total) <= lane.depth for slot in lane.prefix):
-                    raise RuntimeError("LoopSpec attempted to read unmaterialized prefix depth")
-                lane.hidden = self.model.model.advance_loop(
-                    lane.hidden, batch.positions, batch, lane.depth
+        positions = torch.zeros(
+            self.worker.max_rows, dtype=torch.int64, device=self.device
+        )
+        batches = []
+        for base, start, end in self.worker.layout:
+            active = [lane for lane in lanes if lane.depth == base]
+            if len(active) > end - start:
+                raise RuntimeError("LoopSpec exceeded its stage capacity")
+            request_rows, lengths, slots, tokens = [], [], [], []
+            for offset in range(end - start):
+                row = start + offset
+                if offset < len(active):
+                    lane = active[offset]
+                    rows[lane.uid] = row
+                    hidden[row : row + 1] = lane.hidden
+                    positions[row] = len(lane.prefix)
+                    chain = lane.prefix + (lane.slot,)
+                    self.worker.private_pool.req_to_token[row + 1, : len(chain)] = (
+                        torch.tensor(chain, dtype=torch.int32, device=self.device)
+                    )
+                    request_rows.append(row + 1)
+                    lengths.append(len(chain))
+                    slots.append(lane.slot)
+                    tokens.append(lane.token)
+                else:
+                    request_rows.append(0)
+                    lengths.append(1)
+                    slots.append(0)
+                    tokens.append(0)
+            batch = ForwardBatch(
+                forward_mode=ForwardMode.DECODE,
+                batch_size=end - start,
+                input_ids=torch.tensor(tokens, dtype=torch.int64, device=self.device),
+                req_pool_indices=torch.tensor(
+                    request_rows, dtype=torch.int64, device=self.device
+                ),
+                seq_lens=torch.tensor(lengths, dtype=torch.int32, device=self.device),
+                seq_lens_sum=sum(lengths),
+                out_cache_loc=torch.tensor(
+                    slots, dtype=torch.int64, device=self.device
+                ),
+                positions=positions[start:end],
+                capture_hidden_mode=CaptureHiddenMode.NULL,
+                spec_algorithm=SpeculativeAlgorithm.NONE,
+            )
+            self.translator.bind_own_plan(batch)
+            batches.append(batch)
+        for micro in range(count):
+            for lane in lanes:
+                if any(
+                    self.materialized.get(slot, self.total) <= lane.depth
+                    for slot in lane.prefix
+                ):
+                    raise RuntimeError(
+                        "LoopSpec attempted to read unmaterialized prefix depth"
+                    )
+            if self.worker.graphs:
+                hidden, logits = self.worker.graphs[micro].replay(
+                    hidden, positions, batches
                 )
+                self.worker.graph_replays += 1
+            else:
+                hidden, logits = run_core(
+                    self.worker, hidden, positions, batches, micro
+                )
+            for lane in lanes:
                 lane.depth += 1
                 self.materialized[lane.slot] = lane.depth
+        for lane in lanes:
+            row = rows[lane.uid]
+            lane.hidden = hidden[row : row + 1].clone()
             if lane.depth in self.depths or lane.depth == self.total:
-                output = self.model.logits_processor(
-                    batch.input_ids, lane.hidden, self.model.lm_head, batch
-                )
-                self.logits[lane.uid] = output.next_token_logits[0]
+                self.logits[lane.uid] = logits[row].clone()
 
     def distribution(self, lane):
-        return probabilities(self.logits[lane.uid], self.params, lane.history, self.stop_ids)
+        return probabilities(
+            self.logits[lane.uid], self.params, lane.history, self.stop_ids
+        )
 
     def propose(self, lane):
         distribution = self.distribution(lane)
@@ -130,14 +196,22 @@ class RequestExecutor:
             self.depths[1] if len(self.depths) == 2 else -1, (None, None)
         )
         token, accepted = verify(
-            self.distribution(lane), first, first_token, second, second_token,
+            self.distribution(lane),
+            first,
+            first_token,
+            second,
+            second_token,
             self.generator,
         )
         if accepted is None:
             self.rejected += 1
         else:
             self.accepted[accepted] += 1
-        return token, None if accepted is None else self.depths[accepted], self.logits[lane.uid]
+        return (
+            token,
+            None if accepted is None else self.depths[accepted],
+            self.logits[lane.uid],
+        )
 
     def commit(self, lane):
         if lane.depth != self.total or lane.slot not in self.owned:
@@ -157,7 +231,9 @@ class RequestExecutor:
                 retained.add(lane.slot)
         freed = self.owned - retained
         if freed:
-            self.allocator.free(torch.tensor(sorted(freed), dtype=torch.int64, device=self.device))
+            self.allocator.free(
+                torch.tensor(sorted(freed), dtype=torch.int64, device=self.device)
+            )
         self.owned -= freed
         for slot in freed:
             self.materialized.pop(slot)
@@ -174,16 +250,37 @@ class LoopSpecWorker(BaseSpecWorker):
         self.speculative_num_draft_tokens = get_spec().speculative_num_draft_tokens
         self.adaptive_controller = None
         self.executor = self.pipeline = None
+        self.graphs = []
+        self.graph_replays = 0
+        depths = get_spec().speculative_draft_depth
+        self.stride = depths[0]
+        steps = self.model_runner.model.config.total_ut_steps // self.stride
+        second = depths[1] // self.stride if len(depths) == 2 else None
+        births = [1]
+        for age in range(1, steps):
+            births.append(
+                births[age - 1]
+                + (births[age - second] if second is not None and age >= second else 0)
+            )
+        self.layout, cursor = [], 0
+        for stage, capacity in enumerate(reversed(births)):
+            self.layout.append((stage * self.stride, cursor, cursor + capacity))
+            cursor += capacity
+        self.max_rows = cursor
 
     @property
     def draft_worker(self):
         return None
 
     def alloc_memory_pool(self, **kwargs):
-        self.req_to_token_pool, self.token_to_kv_pool_allocator = self.target_worker.get_memory_pool()
+        self.req_to_token_pool, self.token_to_kv_pool_allocator = (
+            self.target_worker.get_memory_pool()
+        )
         self.private_pool = ReqToTokenPool(
-            size=1, max_context_len=self.req_to_token_pool.max_context_len,
-            device=self.model_runner.device, enable_memory_saver=False,
+            size=self.max_rows,
+            max_context_len=self.req_to_token_pool.max_context_len,
+            device=self.model_runner.device,
+            enable_memory_saver=False,
         )
 
     def init_attention_backends(self):
@@ -195,10 +292,39 @@ class LoopSpecWorker(BaseSpecWorker):
             req_to_token=self.private_pool.req_to_token,
             token_to_kv_pool_allocator=self.token_to_kv_pool_allocator,
             token_to_kv_pool=self.model_runner.token_to_kv_pool,
-            page_size=1, device=self.model_runner.device,
+            page_size=1,
+            device=self.model_runner.device,
         )
         runner_view.kv_index_translator = self.translator
-        self.backend = TritonAttnBackend(runner_view)
+        self.backends = [
+            TritonAttnBackend(runner_view)
+            for _ in range(self.model_runner.model.config.total_ut_steps)
+        ]
+        self.backend = self.backends[0]
+
+    @torch.no_grad()
+    def init_cuda_graphs(self):
+        from sglang.srt.model_executor.cuda_graph_config import (
+            cuda_graph_fully_disabled,
+        )
+        from .graph import RecurrentGraph
+
+        if cuda_graph_fully_disabled():
+            return
+        started = time.perf_counter()
+        allocated = torch.cuda.memory_allocated()
+        self.graphs = [RecurrentGraph(self, micro) for micro in range(self.stride)]
+        self._additional_graph_memory_usage["draft_decode"] = (
+            torch.cuda.memory_allocated() - allocated
+        ) / 2**30
+        self._additional_graph_time_usage["draft_decode"] = (
+            time.perf_counter() - started
+        )
+        logger.info(
+            "LoopSpec captured %d mixed-depth core graphs, rows=%d",
+            len(self.graphs),
+            self.max_rows,
+        )
 
     def clear_cache_pool(self):
         if self.executor is not None:
@@ -208,9 +334,14 @@ class LoopSpecWorker(BaseSpecWorker):
     def note_request_finished(self, *, rid, natural_stop):
         if self.executor is not None and self.executor.req.rid == rid:
             logger.info(
-                "LoopSpec rid=%s cycles=%d reused=%d restarts=%d accepted=%s rejected=%d",
-                rid, self.pipeline.cycles, self.pipeline.reused, self.pipeline.restarts,
-                self.executor.accepted, self.executor.rejected,
+                "LoopSpec rid=%s cycles=%d reused=%d restarts=%d accepted=%s rejected=%d graph_replays=%d",
+                rid,
+                self.pipeline.cycles,
+                self.pipeline.reused,
+                self.pipeline.restarts,
+                self.executor.accepted,
+                self.executor.rejected,
+                self.graph_replays,
             )
             self.clear_cache_pool()
 
@@ -222,20 +353,26 @@ class LoopSpecWorker(BaseSpecWorker):
         try:
             if batch.forward_mode.is_extend():
                 self.clear_cache_pool()
+                self.graph_replays = 0
                 result = self.target_worker.forward_batch_generation(batch)
                 result.accept_lens = torch.ones_like(batch.seq_lens, dtype=torch.int32)
                 result.new_seq_lens = batch.seq_lens
                 result.speculative_num_draft_tokens = self.speculative_num_draft_tokens
                 result.speculative_output_stride = 1
-                result.next_draft_input = LoopSpecInput(result.next_token_ids, batch.seq_lens)
+                result.next_draft_input = LoopSpecInput(
+                    result.next_token_ids, batch.seq_lens
+                )
                 if req.sampling_params.max_new_tokens > 1:
                     row = int(batch.req_pool_indices[0])
                     length = int(batch.seq_lens[0])
                     prefix = self.req_to_token_pool.req_to_token[row, :length].tolist()
                     self.executor = RequestExecutor(self, req, row, prefix)
                     self.pipeline = Pipeline(
-                        self.executor, int(result.next_token_ids[0]), prefix,
-                        req.sampling_params.max_new_tokens, self.executor.total,
+                        self.executor,
+                        int(result.next_token_ids[0]),
+                        prefix,
+                        req.sampling_params.max_new_tokens,
+                        self.executor.total,
                         self.executor.depths,
                     )
                 return result
@@ -248,7 +385,9 @@ class LoopSpecWorker(BaseSpecWorker):
                 compute_spec_logprobs(batch, output, ids, chain_stride=1)
             new_lengths = batch.seq_lens + 1
             return GenerationBatchResult(
-                logits_output=output, next_token_ids=ids,
+                logits_output=output,
+                next_token_ids=ids,
+                can_run_cuda_graph=bool(self.graphs),
                 accept_lens=torch.ones_like(batch.seq_lens, dtype=torch.int32),
                 new_seq_lens=new_lengths,
                 next_draft_input=LoopSpecInput(ids, new_lengths),

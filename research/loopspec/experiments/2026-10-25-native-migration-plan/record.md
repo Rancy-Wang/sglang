@@ -1,6 +1,6 @@
 # LoopSpec → SGLang v0.5.22 迁移研究与实施计划
 
-日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；第 3 轮进行中。代码修改与验证轮次：3/5。
+日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；第 4 轮进行中。代码修改与验证轮次：4/5。
 
 用户请求：判断 SGLang 对 loop transformer serving 的支持，分析官方 LoopSpec 如何接入 SGLang，设计完整迁移方案与 Ouro-2.6B 单请求验证方案。
 
@@ -387,3 +387,15 @@ curl --fail-with-body --max-time 120 "http://127.0.0.1:$PORT/generate" \
 4. 标准：相同单请求单/双候选与AR逐token/stop一致；trace证明早期proposal、full-depthverify和accepted-state复用；合成分布验证q2 residual而非原p_d2；资源回收及非法组合显式拒绝。
 5. 风险：V2 scheduler水位、KV allocator ownership、未物化深度读取、top-k/p实际proposal、graph输入生命周期。首个集成候选先用eager single-request/TP1/Triton；不把eager通过声称完整graph/TinyGEMM/Raven移植。
 6. 验证：本地语法/diff；X5测试包含权重覆盖、强制拒绝/双拒绝、sampling分布；HTTP相同prompt与reference比较；后续轮次修复失败并补齐graph/生命周期验收，整个任务仍最多5轮。
+
+### 第 3 轮结果
+
+候选e142f4928f080d21e2179d8afe8eb38618c869ae。compileall/diff-check退出0；X5 test_loopspec.py四项通过(11.102s)，覆盖首候选/第二候选/全部拒绝、共享前缀保留、深度校验及三组各100000次sampling统计。single/double serve_smoke均退出0，各两次标准HTTP请求，与round-2独立HF结果全token/stop一致(compare均退出0)。single trace cycles22,reused7,restarts3,accepted[7,0],rejected3；double cycles18,reused9,restarts1,accepted[7,2],rejected1。无运行期memory-leak告警。server退出日志的SIGTERM/SIGQUIT来自harness终止自己进程组，不是请求失败。
+
+限制：当前核心按lane/depth依次调用共享权重，保留了计算状态但没有官方mixed-depth core合批；eager正确不代表速度提升。通用spec_accept_rate把存储预留宽度当proposal数，不适用，现不输出该错误指标；实际计数记日志。graph/Raven/TinyGEMM尚未完成。
+
+### 候选 4/5：recurrent CUDA graph 与生命周期
+
+目的：标准CUDA graph开关控制原生recurrent graph，补齐服务生命周期证据。步骤：模型runner对LoopSpec使用eager prefill；worker为每个depth捕获独立静态core/readout graph并clone持久化输出，重放前更新position/seq-len/KV-slot；扩充标准HTTP harness。范围：loopspec/config.py、worker.py、新graph.py、model_runner_components/cuda_graph_setup.py、测试/记录。成功：graph单/双候选逐token与eager/AR一致，实际replay计数>0；短输出、stream、stop、cancel后可继续请求及flush无泄漏；sampling真实请求可完成。风险：静态metadata和输出别名、graph输入生命周期、graph/eager浮点差异。验证：本地语法/diff，Git同步，X5单/双graph→AR compare，生命周期脚本，必要时eager对照定位；不作尚无配对数据的性能结论。
+
+第4轮验证前范围补充：将共享层的QKV/o-proj/MLP按mixed-depth lanes合批，attention按depth分组执行；graph捕获整个合批core而非逐lane graph。新增范围 models/ouro.py、loopspec/pipeline.py。容量由原schedule的birth recurrence推导，padding不进入输出；验证增加batched eager与batched graph同AR对比。该修改仍在第4轮候选首次验证前，未消耗新轮次。

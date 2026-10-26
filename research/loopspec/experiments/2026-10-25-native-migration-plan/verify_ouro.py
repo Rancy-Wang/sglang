@@ -18,10 +18,16 @@ def reference(model_path):
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained(model_path)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_path, trust_remote_code=True, torch_dtype=torch.bfloat16,
-        attn_implementation="eager",
-    ).cuda().eval()
+    model = (
+        AutoModelForCausalLM.from_pretrained(
+            model_path,
+            trust_remote_code=True,
+            torch_dtype=torch.bfloat16,
+            attn_implementation="eager",
+        )
+        .cuda()
+        .eval()
+    )
     assert model.config.total_ut_steps == 4
     tokens = tokenizer.encode(PROMPT)
     input_ids = torch.tensor([tokens], device="cuda")
@@ -47,10 +53,15 @@ def reference(model_path):
             input_ids = torch.tensor([tokens + output_ids], device="cuda")
     torch.cuda.synchronize()
     return {
-        "mode": "hf_fixed_depth", "input_ids": tokens, "output_ids": output_ids,
-        "text": tokenizer.decode(output_ids), "prefill_seconds": prefill,
+        "mode": "hf_fixed_depth",
+        "input_ids": tokens,
+        "output_ids": output_ids,
+        "text": tokenizer.decode(output_ids),
+        "prefill_seconds": prefill,
         "generation_seconds": time.perf_counter() - start,
-        "finish_reason": "stop" if output_ids[-1] == tokenizer.eos_token_id else "length",
+        "finish_reason": "stop"
+        if output_ids[-1] == tokenizer.eos_token_id
+        else "length",
     }
 
 
@@ -58,17 +69,26 @@ def native(model_path):
     import sglang as sgl
 
     engine = sgl.Engine(
-        model_path=model_path, dtype="bfloat16", attention_backend="triton",
-        max_running_requests=1, page_size=1, disable_overlap_schedule=True,
-        disable_radix_cache=True, chunked_prefill_size=-1, disable_cuda_graph=True,
-        mem_fraction_static=0.7, context_length=2048,
+        model_path=model_path,
+        dtype="bfloat16",
+        attention_backend="triton",
+        max_running_requests=1,
+        page_size=1,
+        disable_overlap_schedule=True,
+        disable_radix_cache=True,
+        chunked_prefill_size=-1,
+        disable_cuda_graph=True,
+        mem_fraction_static=0.7,
+        context_length=2048,
     )
     try:
         start = time.perf_counter()
         result = engine.generate(PROMPT, SAMPLING, return_logprob=True)
         ids = [entry[1] for entry in result["meta_info"]["output_token_logprobs"]]
         return {
-            "mode": "native_ar", "output_ids": ids, "response": result,
+            "mode": "native_ar",
+            "output_ids": ids,
+            "response": result,
             "generation_seconds": time.perf_counter() - start,
             "finish_reason": result["meta_info"]["finish_reason"]["type"],
         }
@@ -82,16 +102,26 @@ def http_request(url):
     start = time.perf_counter()
     request = urllib.request.Request(
         url + "/generate",
-        data=json.dumps({"text": PROMPT, "sampling_params": SAMPLING,
-                         "return_logprob": True, "stream": False}).encode(),
+        data=json.dumps(
+            {
+                "text": PROMPT,
+                "sampling_params": SAMPLING,
+                "return_logprob": True,
+                "stream": False,
+            }
+        ).encode(),
         headers={"Content-Type": "application/json"},
     )
     with urllib.request.urlopen(request, timeout=300) as response:
         result = json.load(response)
     ids = [entry[1] for entry in result["meta_info"]["output_token_logprobs"]]
-    return {"mode": "http", "output_ids": ids, "response": result,
-            "generation_seconds": time.perf_counter() - start,
-            "finish_reason": result["meta_info"]["finish_reason"]["type"]}
+    return {
+        "mode": "http",
+        "output_ids": ids,
+        "response": result,
+        "generation_seconds": time.perf_counter() - start,
+        "finish_reason": result["meta_info"]["finish_reason"]["type"],
+    }
 
 
 def main():
@@ -111,8 +141,13 @@ def main():
             assert actual["finish_reason"] == expected["finish_reason"]
         print(json.dumps({"matched": len(results), "tokens": expected["output_ids"]}))
         return
-    result = (http_request(args.url) if args.mode == "http" else
-              reference(args.model) if args.mode == "reference" else native(args.model))
+    result = (
+        http_request(args.url)
+        if args.mode == "http"
+        else reference(args.model)
+        if args.mode == "reference"
+        else native(args.model)
+    )
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2))
     print(json.dumps(result, ensure_ascii=False))
 
