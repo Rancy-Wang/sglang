@@ -1,6 +1,6 @@
 # LoopSpec → SGLang v0.5.22 迁移研究与实施计划
 
-日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；用户已授权继续，总预算10轮；第8/10轮本地CPU/静态检查通过，X5 SSH持续超时，第6–8轮GPU待验证。
+日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；用户已授权继续，总预算10轮；第9/10轮本地CPU/静态检查通过；X5 SSH持续超时，第6–9轮GPU待验证，完整迁移尚未验收。
 
 用户请求：判断 SGLang 对 loop transformer serving 的支持，分析官方 LoopSpec 如何接入 SGLang，设计完整迁移方案与 Ouro-2.6B 单请求验证方案。
 
@@ -527,3 +527,82 @@ TinyGEMM FP32 oracle对比：三组支持shape最大绝对误差分别0.00780272
 6. 验证：本地隔离CPU环境执行采样与指标测试，compile/ruff/diff；X5恢复后同SHA跑CPU/GPU测试、Raven合成fixture、Ouro AR/单/双eager/graph、生命周期、独立HF数值对比；配对至少warmup2+测量10，每种模式同prompt/precision/graph/backend，保留raw时序。
 
 第8轮本地隔离环境/tmp/loopspec-cpu-env（Python3.13.3、Torch2.14.1、transformers5.20.2）仅执行CPU小张量，不加载模型。test_rejection_graph.py退出0：3项CPU通过（固定uniform分支oracle；三组各100000次目标分布与零支持；真实verify/proposal指标分母），1项CUDA输入变更replay明确跳过。compileall、ruff F、git diff --check退出0。新增diagnose_ouro.py用于独立HF/native AR/compact-prefill四前缀×四depth hidden/logits误差与argmax；serve_smoke默认warmup2/测量10并采集原生metrics；compare_performance严格要求graph/backend等配置相同。GPU数值、服务和性能脚本尚未执行。TTFT明确包含调度，不能称纯prefill kernel时间。
+
+第8轮后补充只读/CPU验证：补齐隔离环境的CPU导入依赖并固定transformers5.19.0/tokenizers0.23.2后，test_loopspec.py 4项通过(10.042s)，test_raven.py 4项通过(0.009s)，test_timeline.py 2项通过(0.005s)，均退出0。此前这些脚本因orjson/IPython/torchvision/dill缺失退出1，属于本地环境导入阻塞，未修改源码绕过测试。RavenConfig独立roundtrip返回hidden256/head128/logical9/R4。CPU tests不等于Raven真实权重或CUDA验证。
+
+### 候选9/10：v0.5.22 residual构造与设备计时适配
+
+1. 目的：修复审查发现的Raven pre-norm构造问题，补齐既有GPU阶段计时覆盖。
+2. 步骤：Raven使用LlamaDecoderLayer时传stage_boundaries=False，由本模型显式执行residual；增加真实native构造回归；LoopSpec decode使用runner.device_timer的既有上下文，prefill保留原runner计时；性能harness启用既有环境开关、记录warmup前后stage指标和模型时间，继续区分TTFT与GPU区间。
+3. 范围：models/raven.py、loopspec/worker.py、本任务test_raven.py及serve_smoke/compare_performance。
+4. 标准：不依赖make_layers/layer_stack即可构造pre-norm Raven，post-norm行为保持；CPU既有tests通过；X5上AR和LoopSpec均暴露prefill/decode计时，计时开启条件相同、token/stop一致。
+5. 风险：v0.5.22 layer-boundary语义与旧参考不同；DeviceTimer不可嵌套，故仅wrap worker自有decode、不wrap调用原runner的prefill。CUDA事件测量包含stream等待/host提交空隙，不称kernel独占时间。
+6. 验证：本地CPU构造/权重/分配/采样及compile/ruff；X5恢复后完成累计6–9轮GPU矩阵与配对性能。累计预算9/10，保留最后一轮用于GPU实际失败修复；未执行项目不得标通过。
+
+
+### 第9轮本地结果与继续条件
+
+Raven真实原生模块构造CPU测试通过，pre-norm/post-norm各构造小模型、logical attention IDs均0..8、tied head共享同一Parameter，pre-norm不依赖layer_stack。test_raven.py 5项/0.030s，test_ouro.py 4项/0.002s，test_rejection_graph.py 3项CPU/0.038s+1项CUDA跳过；compileall、ruff F、git diff --check退出0。第8轮已通过且未变化的pipeline/sampling4项、timeline2项不重复无意义运行。
+
+实际TimelineTokenToKVPool CPU实例检查（不是mock）：N=8/R4，Ouro C3有3物理/12逻辑层，三个buffer形状(33,2,64)，K/V各25344字节；Raven P1/C1/O1有3物理/9逻辑层，buffer形状(9,2,64)/(33,2,64)/(33,2,64)，K/V各19200字节。分别在4个core-depth写入1/2/3/4后读取无交叉污染，release后live_slots=0，退出0。该检查未调用CUDA scatter/attention，不替代GPU验证。
+
+本轮唯一新增行为修复是Raven构造的stage_boundaries=False；性能工具启用既有SGLANG_ENABLE_METRICS_DEVICE_TIMER，LoopSpec decode接入同一runner.device_timer。保存metrics-before/after的sglang:forward_execution_seconds_total分阶段差值；先后0.2s idle让scheduler排空完成事件，GPU执行前须确认指标完整。CUDA stream区间可能包含host提交间隙；TTFT、service decode吞吐和client E2E分别报告，不混称纯kernel耗时。
+
+源码提交链：第6轮23a78bf67、第7轮b9b0963f02092eb8629006772773e7141b710eab、第8轮2e06298ab9c41a50c576956f57fb7a4211dbf641；第9轮见本记录所在修复提交。均仅loopspec-test。正式loopspec仍为baa9befa381511cd4d56f83980951e5a45fffc6d。
+
+| 验收项 | 当前代码/CPU状态 | 最新GPU证据 |
+| --- | --- | --- |
+| Ouro native AR、单/双LoopSpec、原生接口/生命周期、TinyGEMM | 保留并扩展 | 第5轮fff1dc3通过；不能代替新timeline/rejection图回归 |
+| Raven config/权重映射/tokenizer/injection/pre-core-post | 已迁入，5项CPU通过 | 未执行合成fixture；真实Raven checkpoint未验收 |
+| 紧凑KV timeline/所有权/延迟释放 | CPU所有权与实际buffer隔离通过 | 未执行CUDA attention/graph |
+| 独立rejection graph | 张量eager oracle/分布通过 | graph输入更新测试跳过 |
+| 既有metrics端点与算法指标 | 指标分母CPU通过，GPU区间接入 | 未执行server scrape验收 |
+| 全模型逐depth hidden/logits | diagnose_ouro.py已准备，阈值预声明 | 未执行 |
+| 同配置warmup2+测量10配对性能 | harness和严格配置比较已准备 | 未执行，不宣称加速 |
+
+当前外部阻塞：X5域名/公共DNS核实IP18.25.6.221的SSH多次超时，未修改host-key校验或SSH配置。已询问用户VPN/连通性，尚无恢复信息。未pull到X5、未启动GPU任务或修改远端源码。保留累计9/10，GPU验收及可能的第10轮修复仍待完成，不能把CPU通过标作全部完成。
+
+恢复后先执行（只读检查→确认无用户改动→ff-only pull）：
+
+```bash
+ssh -o Hostname=18.25.6.221 -o HostKeyAlias=x5.mit.edu X5
+cd /home/ruoxi/repo/sglang
+git status --short --branch
+git remote -v
+git rev-parse HEAD
+nvidia-smi
+ss -ltnp
+# 确认loopspec-test工作树干净、GPU/30126端口空闲后：
+git pull --ff-only origin loopspec-test
+git rev-parse HEAD
+# 启动并检查之前保留的loopspec-native-20261026容器及RO源码挂载，
+# 核实/opt/sglang/bin/python与/workspace/sglang/python/sglang/__init__.py。
+```
+
+容器内待执行验收命令（输出在/results/round-9；执行前记录SHA，失败保留日志）：
+
+```bash
+cd /workspace/sglang/research/loopspec/experiments/2026-10-25-native-migration-plan
+python test_ouro.py
+python test_loopspec.py
+python test_raven.py
+python test_timeline.py
+python test_rejection_graph.py
+python verify_tinygemm.py
+python raven_fixture.py --output /results/round-9/fixtures
+SGLANG_RUST_BUILD_MODE=auto python serve_smoke.py --output /results/round-9/ar-eager --lifecycle
+SGLANG_RUST_BUILD_MODE=auto python serve_smoke.py --output /results/round-9/ar-graph --cuda-graph --lifecycle
+SGLANG_RUST_BUILD_MODE=auto python serve_smoke.py --output /results/round-9/single-graph --cuda-graph --depths 1 --lifecycle
+SGLANG_RUST_BUILD_MODE=auto python serve_smoke.py --output /results/round-9/double-graph --cuda-graph --depths 1 2 --lifecycle
+SGLANG_RUST_BUILD_MODE=auto python serve_smoke.py --output /results/round-9/double-eager --depths 1 2 --lifecycle
+# 补d1=2 graph；TinyGEMM下AR/单/双相同graph设置；两种Raven fixture各AR/单/双eager/graph。
+# Raven fixture不使用硬编码Paris stop的--lifecycle；所有结果compare token/stop。
+env -u PYTHONPATH /opt/ouro-reference/bin/python diagnose_ouro.py reference --output /results/round-9/hf-depths.pt
+python diagnose_ouro.py native --reference /results/round-9/hf-depths.pt --output /results/round-9/native-depths.pt
+python diagnose_ouro.py native --compact --reference /results/round-9/hf-depths.pt --output /results/round-9/compact-depths.pt
+python diagnose_ouro.py compare --reference /results/round-9/hf-depths.pt --candidate /results/round-9/native-depths.pt --output /results/round-9/numeric-ar.json
+python diagnose_ouro.py compare --reference /results/round-9/hf-depths.pt --candidate /results/round-9/compact-depths.pt --output /results/round-9/numeric-compact.json
+python compare_performance.py /results/round-9/ar-graph/benchmark.json /results/round-9/single-graph/benchmark.json /results/round-9/double-graph/benchmark.json --output /results/round-9/performance.json
+```
+
+需保持原成功标准：greedy与独立HF/官方AR逐token和停止位置一致；sampling按分布验证；Raven非零随机初始hidden不要求同seed逐序列相同。最终GPU回归未通过前，不晋升正式分支、不输出性能胜出结论。

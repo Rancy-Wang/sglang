@@ -17,6 +17,7 @@ from sglang.srt.model_executor.forward_batch_info import (
 )
 from sglang.srt.runtime_context import get_observability, get_spec
 from sglang.srt.speculative.base_spec_worker import BaseSpecWorker
+from sglang.srt.utils.device_timer import device_timer_ctx
 from sglang.srt.speculative.spec_info import (
     SpecInput,
     SpecInputType,
@@ -469,7 +470,10 @@ class LoopSpecWorker(BaseSpecWorker):
                 return result
             if self.executor is None or self.executor.req.rid != req.rid:
                 raise RuntimeError("LoopSpec decode has no matching prefill state")
-            token, accepted_depth, logits = self.pipeline.advance_until_commit()
+            # Prefill is timed by the target runner. Our decode bypasses that
+            # runner, so account for its stream interval through the same timer.
+            with device_timer_ctx(self.model_runner.device_timer, "decode"):
+                token, accepted_depth, logits = self.pipeline.advance_until_commit()
             ids = torch.tensor([token], dtype=torch.int64, device=logits.device)
             output = LogitsProcessorOutput(next_token_logits=logits.unsqueeze(0))
             if batch.return_logprob:

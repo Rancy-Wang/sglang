@@ -34,6 +34,39 @@ class WeightFixture:
 
 
 class TestRaven(unittest.TestCase):
+    def test_native_constructor_without_layer_stack(self):
+        from sglang.srt.runtime_context import publish, reset_context, SpawnRanks
+        from sglang.srt.server_args import ServerArgs
+
+        reset_context()
+        self.addCleanup(reset_context)
+        publish(
+            ServerArgs(model_path="dummy", device="cpu"),
+            role="test",
+            ranks=SpawnRanks(world_rank=0),
+        )
+        for hidden in (128, 256):
+            config = RavenConfig(
+                n_embd=hidden,
+                n_heads=2,
+                n_layers=3,
+                vocab_size=128,
+                intermediate_size=hidden * 2,
+                n_layers_in_prelude=1,
+                n_layers_in_recurrent_block=1,
+                n_layers_in_coda=1,
+                mean_recurrence=4,
+                max_position_embeddings=32,
+            )
+            model = RavenForCausalLM(config)
+            ids = [
+                attn.layer_id for layer in model.layers for attn in layer.self_attn.attn
+            ]
+            self.assertEqual(ids, list(range(9)))
+            self.assertIs(model.lm_head.weight, model.embed_tokens.weight)
+            if not model.post_norm:
+                self.assertFalse(hasattr(model.core[0], "attn_boundary"))
+
     def test_config_roundtrip_and_logical_post_depths(self):
         config = RavenConfig(
             n_embd=256,

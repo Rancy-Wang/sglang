@@ -63,6 +63,9 @@ class RavenForCausalLM(nn.Module):
                     config=config,
                     layer_id=0,
                     prefix=add_prefix(f"{name}.{index}", prefix),
+                    # This model materializes residuals in _blocks; it does not
+                    # build the linear layer_stack used by the native Llama loop.
+                    **({"stage_boundaries": False} if not self.post_norm else {}),
                 )
                 original = block.self_attn.attn
                 block.self_attn.attn = nn.ModuleList(

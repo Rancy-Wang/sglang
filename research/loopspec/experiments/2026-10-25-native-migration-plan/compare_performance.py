@@ -27,6 +27,7 @@ def config(command):
 
 def summarize(record):
     assert record["warmup"] >= 2 and len(record["samples"]) >= 10
+    assert record["device_timer_enabled"]
     samples = record["samples"]
     rows = {
         "client_e2e_seconds": [],
@@ -38,7 +39,7 @@ def summarize(record):
         rows["client_e2e_seconds"].append(sample["generation_seconds"])
         rows["service_ttft_seconds"].append(meta["first_token_latency"])
         rows["service_decode_tokens_per_second"].append(meta["decode_throughput"])
-    return {
+    result = {
         key: {
             "median": statistics.median(values),
             "min": min(values),
@@ -46,6 +47,11 @@ def summarize(record):
         }
         for key, values in rows.items()
     }
+
+    result["gpu_stage_seconds_per_request"] = {
+        key: value / len(samples) for key, value in record["gpu_stage_seconds"].items()
+    }
+    return result
 
 
 def main():

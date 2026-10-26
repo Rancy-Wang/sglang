@@ -170,7 +170,11 @@ def main():
     (args.output / "command.json").write_text(json.dumps(command))
     with (args.output / "server.log").open("w") as log:
         process = subprocess.Popen(
-            command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True
+            command,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+            env={**os.environ, "SGLANG_ENABLE_METRICS_DEVICE_TIMER": "1"},
         )
         try:
             url = f"http://127.0.0.1:{args.port}"
@@ -187,6 +191,12 @@ def main():
                     time.sleep(1)
             for _ in range(args.warmup):
                 http_request(url)
+            # The idle scheduler drains pending CUDA event intervals. Keep raw
+            # metric snapshots so prefill/decode are not inferred from TTFT.
+            time.sleep(0.2)
+            with request(url, "/metrics") as response:
+                before = response.read().decode()
+            (args.output / "metrics-before.txt").write_text(before)
             samples = []
             for index in range(args.repeat):
                 result = http_request(url)
@@ -195,19 +205,44 @@ def main():
                 )
                 samples.append(result)
                 print(json.dumps(result), flush=True)
+            time.sleep(0.2)
+            with request(url, "/metrics") as response:
+                after = response.read().decode()
+            (args.output / "metrics.txt").write_text(after)
+            from prometheus_client.parser import text_string_to_metric_families
+
+            def stages(text):
+                out = {}
+                for family in text_string_to_metric_families(text):
+                    for sample in family.samples:
+                        if sample.name == "sglang:forward_execution_seconds_total":
+                            key = sample.labels["category"]
+                            out[key] = out.get(key, 0) + sample.value
+                return out
+
+            first, last = stages(before), stages(after)
+            stage_delta = {
+                key: value - first.get(key, 0) for key, value in last.items()
+            }
+            assert any("extend" in key or "prefill" in key for key in stage_delta), (
+                stage_delta
+            )
+            assert stage_delta.get("decode", 0) > 0, stage_delta
             (args.output / "benchmark.json").write_text(
                 json.dumps(
                     {
                         "command": command,
                         "warmup": args.warmup,
                         "samples": samples,
+                        "device_timer_enabled": True,
+                        "gpu_stage_seconds": stage_delta,
+                        "gpu_timing_note": "CUDA stream intervals; may include CPU submission gaps. Raw counters before/after retained; 0.2s idle allows scheduler event drain.",
                         "timing_note": "first_token_latency is service TTFT (includes scheduling); decode_throughput is native service decode throughput, not isolated GPU compute",
                     },
                     indent=2,
                 )
             )
-            with request(url, "/metrics") as response:
-                metrics = response.read().decode()
+            metrics = after
             (args.output / "metrics.txt").write_text(metrics)
             if args.depths:
                 assert "sglang:loopspec_events_total" in metrics, metrics
