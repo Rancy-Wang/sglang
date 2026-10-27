@@ -679,3 +679,14 @@ auto/tinygemm分别AR/single/double graph共6个serve_smoke全部退出0，含li
 4. 标准：HF/native trace完整生成，same-input算子对比可执行；原模型阈值保持。
 5. 风险：hook影响时序，仍只用于正确性；不能把工具退出0误标为数值通过。
 6. 验证：静态检查后本地commit/push、X5同SHA pull，重跑native trace与比较；第11轮HF数据由相同未改变的参考路径生成，可复用并核对prefix。
+
+第12轮56005b4dca6e9ae453ff6992ea237db948e71207静态检查通过；X5 native-trace及trace-compare均退出0。prefix3第一层input/norm1/Q/K/V逐位相同，首个差异在attention输出(max0.03125/RMSE0.000654878)。相同输入算子对照192个循环层：norm2/3/4全部逐位相同，norm1仅1处不同(max0.00390625)；RoPE Q/K全部不同(max0.0625/0.03125)，SiLU product全部不同(max0.03125)，attention全部不同(max0.03125)。HF RoPE先将cos/sin及各乘积舍入到BF16再相加，原生融合RoPE保持FP32缓存与融合算术；HF SiLU先舍入再乘up，原生融合SiLU乘法省略该中间舍入。原始trace与JSON在round-11/round-12，未提交张量。
+
+### 候选13/15：Ouro的HF舍入语义
+
+1. 目的：对齐已由同输入实验确认的RoPE和SiLU中间舍入，保持完整R4及原数值阈值。
+2. 步骤：Ouro专用RoPE包装器使用SGLang已有forward_native的dtype舍入路径；Ouro MLP保留原生packed gate/up及down投影，显式执行F.silu(gate)*up，避免融合激活或dual-GEMM省略中间舍入。
+3. 范围：models/ouro.py与任务记录；不修改全局RoPE/activation、Raven、attention backend或KV/pipeline。
+4. 标准：四prefix×四depth的native/compact hidden/logits通过原阈值、argmax一致；所有主要服务token/stop与参考一致，eager/graph生命周期通过。
+5. 风险：增加kernel调用和graph节点，性能可能下降；残余attention softmax累加差异仍需原阈值检验，不能预先宣称已解决。复用shared RoPE对象不改变其全局forward方法。
+6. 验证：本地compile/ruff/diff和既有权重测试；Git同步X5同SHA后先numeric native/compact，必要时读trace定位残差；通过后Ouro AR/单/双eager/graph、d1=2和TinyGEMM同配置配对、lifecycle/指标与显存采样。Raven未改，保留既有12组fixture证据。

@@ -34,6 +34,29 @@ def _norm(config):
     )
 
 
+class OuroRotaryEmbedding(nn.Module):
+    """Keep checkpoint BF16 product rounding without changing shared RoPE."""
+
+    def __init__(self, rotary):
+        super().__init__()
+        self.rotary = rotary
+
+    def forward(self, positions, query, key):
+        # The native torch path casts cos/sin and each product to input dtype.
+        # CUDA's generic fused RoPE instead keeps the cache/products in FP32.
+        return self.rotary.forward_native(positions, query, key)
+
+
+class OuroMLP(LlamaMLP):
+    def forward(self, hidden, forward_batch=None):
+        gate_up, _ = self.gate_up_proj(hidden)
+        gate, up = gate_up.chunk(2, dim=-1)
+        # HF rounds SiLU to BF16 before multiplying by up. Neither fused
+        # SiLU-and-mul nor dual-GEMM preserves that intermediate rounding.
+        product = torch.nn.functional.silu(gate) * up
+        return self.down_proj(product)[0]
+
+
 class OuroAttention(LlamaAttention):
     def __init__(self, config, layer_id, quant_config, prefix):
         super().__init__(
@@ -48,6 +71,7 @@ class OuroAttention(LlamaAttention):
             quant_config=quant_config,
             prefix=prefix,
         )
+        self.rotary_emb = OuroRotaryEmbedding(self.rotary_emb)
         self.attn = nn.ModuleList(
             RadixAttention(
                 self.num_heads,
@@ -73,7 +97,7 @@ class OuroDecoderLayer(nn.Module):
         self.self_attn = OuroAttention(
             config, layer_id, quant_config, add_prefix("self_attn", prefix)
         )
-        self.mlp = LlamaMLP(
+        self.mlp = OuroMLP(
             config.hidden_size,
             config.intermediate_size,
             config.hidden_act,
