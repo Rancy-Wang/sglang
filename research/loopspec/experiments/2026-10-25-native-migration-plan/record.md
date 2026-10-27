@@ -1,6 +1,6 @@
 # LoopSpec → SGLang v0.5.22 迁移研究与实施计划
 
-日期：2026-10-25（Asia/Shanghai）。状态：2026-10-26 用户批准实施；用户已授权继续，总预算10轮；第9/10轮本地CPU/静态检查通过；X5 SSH持续超时，第6–9轮GPU待验证，完整迁移尚未验收。
+日期：2026-10-25（Asia/Shanghai）。当前状态（2026-10-27）：用户追加5轮，累计预算15轮；第9/10轮GPU服务矩阵通过，但HF hidden数值阈值失败。第11/12轮逐层诊断已定位舍入差异；第13/15轮Ouro修复已push，本地检查通过，X5-BUS再次中断，最新修复GPU待验证。完整迁移尚未验收。历史段落保留各轮当时状态，以本行及末尾记录为准。
 
 用户请求：判断 SGLang 对 loop transformer serving 的支持，分析官方 LoopSpec 如何接入 SGLang，设计完整迁移方案与 Ouro-2.6B 单请求验证方案。
 
@@ -690,3 +690,40 @@ auto/tinygemm分别AR/single/double graph共6个serve_smoke全部退出0，含li
 4. 标准：四prefix×四depth的native/compact hidden/logits通过原阈值、argmax一致；所有主要服务token/stop与参考一致，eager/graph生命周期通过。
 5. 风险：增加kernel调用和graph节点，性能可能下降；残余attention softmax累加差异仍需原阈值检验，不能预先宣称已解决。复用shared RoPE对象不改变其全局forward方法。
 6. 验证：本地compile/ruff/diff和既有权重测试；Git同步X5同SHA后先numeric native/compact，必要时读trace定位残差；通过后Ouro AR/单/双eager/graph、d1=2和TinyGEMM同配置配对、lifecycle/指标与显存采样。Raven未改，保留既有12组fixture证据。
+
+### 第13轮本地结果与网络中断
+
+候选ed8dd1c1032d8ef991a6b96fe75eb14b8110ef8b已push loopspec-test。本地compileall、ruff F、diff-check退出0，test_ouro.py 4项通过(0.013s)。额外CPU小张量检查实际OuroRotaryEmbedding(RotaryEmbedding(128,128,64,10000,True,bfloat16))，FP32 cos/sin cache、positions[0,1,7,31]、Q宽512/K宽256，输出与checkpoint BF16逐乘积舍入公式rtol=atol=0通过。CPU检查不替代GPU。
+
+同步时X5-BUS连续SSH banner exchange超时(255)。直连X5仍被198.18.0.204关闭；已核实跳板InfiniAI-BUS可登录、getent解析x5.mit.edu为18.25.6.221，但从跳板socket.create_connection((18.25.6.221,22),10)也超时(1)。未修改网络、host-key或官方模型。已询问用户当前X5-BUS是否仍可登录。X5最后确认源码56005b4dca6e9ae453ff6992ea237db948e71207，第13轮尚未pull/验证；最后GPU快照均7/8MiB且无实验进程。native容器仍保留运行状态，因连接中断尚未停止；官方容器未启动。累计13/15，不因网络重试增加轮数，也不在无GPU证据下继续试改第14轮。
+
+### 第10轮配对测量存档（不是第13轮性能）
+
+来源round-10/performance-auto.json、performance-tinygemm.json，源码1557ec510；每组warmup2、10次相同5-token prompt/11-token completion，graph均开启，BF16/R4/Triton/page1/单请求，启用同一device timer。memory.csv为100ms采样的整个服务运行期GPU占用最大值，包含启动和lifecycle，不能称精确allocator峰值。该候选hidden阈值未通过，以下仅为该版本测量记录，不构成最新修复完成或一般性能保证。
+
+| backend/mode | E2E中位数ms [min,max] | TTFT中位数ms | decode token/s | stream extend/decode均值ms | 采样显存最大MiB |
+| --- | --- | --- | --- | --- | --- |
+| auto AR | 236.949 [236.431,237.840] | 50.580 | 53.927 | 49.300/180.812 | 22883 |
+| auto single | 235.459 [234.340,236.501] | 53.891 | 55.516 | 52.498/175.234 | 22947 |
+| auto double | 209.579 [207.551,216.655] | 53.165 | 64.445 | 51.853/150.587 | 22969 |
+| tinygemm AR | 267.492 [266.916,270.705] | 58.558 | 48.128 | 57.604/203.010 | 22883 |
+| tinygemm single | 225.972 [224.942,231.276] | 59.957 | 60.638 | 59.265/160.049 | 22883 |
+| tinygemm double | 199.438 [199.109,200.465] | 60.256 | 72.499 | 58.922/133.027 | 22905 |
+
+同backend E2E比值auto single/double=1.0063/1.1306，tinygemm single/double=1.1837/1.3412。TinyGEMM AR本例比auto AR慢，不能只报告其相对比值而隐藏基线差异。时序块顺序采集、单短请求，不外推并发吞吐；stream计时可包含host提交间隙。
+
+### 重连后的第13轮验证命令
+
+先依运行约定确认X5 loopspec-test clean、GPU/端口空闲，ff-only pull，核对含ed8dd1c10源码的HEAD与本地一致、RO挂载/import路径；保留已有HF参考。容器内执行：
+
+```bash
+mkdir -p /results/round-13
+cd /workspace/sglang/research/loopspec/experiments/2026-10-25-native-migration-plan
+python diagnose_ouro.py native --reference /results/round-10/hf-depths.pt --output /results/round-13/native-depths.pt
+python diagnose_ouro.py native --compact --reference /results/round-10/hf-depths.pt --output /results/round-13/compact-depths.pt
+python diagnose_ouro.py compare --reference /results/round-10/hf-depths.pt --candidate /results/round-13/native-depths.pt --output /results/round-13/numeric-native.json
+python diagnose_ouro.py compare --reference /results/round-10/hf-depths.pt --candidate /results/round-13/compact-depths.pt --output /results/round-13/numeric-compact.json
+# 数值通过后，沿第9/10轮命令执行eager/graph、单/双、depth2、lifecycle，
+# auto和TinyGEMM分别AR/单/双graph配对，外部100ms显存采样。
+# 数值未通过则先读取最早差异，保留原阈值，再决定第14/15轮候选。
+```
