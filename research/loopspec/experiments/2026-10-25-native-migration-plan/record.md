@@ -1,6 +1,6 @@
 # LoopSpec → SGLang v0.5.22 迁移研究与实施计划
 
-日期：2026-10-25（Asia/Shanghai）。当前状态（2026-10-27）：用户追加5轮，累计预算15轮；第9/10轮GPU服务矩阵通过，但HF hidden数值阈值失败。第11/12轮逐层诊断已定位舍入差异；第13/14轮GPU数值仍失败；第15轮针对最早RMSNorm归约差异实施，待验证。完整迁移尚未验收。历史段落保留各轮当时状态，以本行及末尾记录为准。
+日期：2026-10-25（Asia/Shanghai）。当前状态（2026-10-27）：累计15/15轮，源码0078e8a8ad501a987862d017885b3840cf63485b已在X5验证。原生AR/单/双草稿graph服务及生命周期通过，30次主请求与独立HF token/stop完全一致；但HF hidden阈值仍失败（最大误差0.25>0.125，最大RMSE0.022747414>0.02）。逐层已定位到attention softmax的BF16舍入边界。停止进一步源码/测试修改，等待新的预算授权；完整迁移尚未验收，正式loopspec分支保持上游基线。历史段落保留各轮当时状态，以本行及末尾记录为准。
 
 用户请求：判断 SGLang 对 loop transformer serving 的支持，分析官方 LoopSpec 如何接入 SGLang，设计完整迁移方案与 Ouro-2.6B 单请求验证方案。
 
@@ -757,3 +757,26 @@ python diagnose_ouro.py compare --reference /results/round-10/hf-depths.pt --can
 4. 标准：原16点hidden/logits阈值及argmax通过；随后服务token/stop、eager/graph、生命周期、指标正确。
 5. 风险：增加算子/graph节点和host调用开销；残余attention或GEMM舍入仍可能传播，不预设成功。
 6. 验证：静态检查后commit/push，X5同SHA/import核对；native和compact诊断，通过后既定Ouro服务矩阵及auto/tinygemm配对性能、显存采样。累计15/15，若仍未达标不再修改源码或测试，保留证据报告剩余问题。
+
+
+### 第15轮最终结果（未达到原数值验收标准）
+
+候选0078e8a8ad501a987862d017885b3840cf63485b：本地compile/ruff F/diff-check退出0；Git push及X5 clean ff-only pull成功，HEAD/import与本地一致，模型仍原始Ouro-2.6B BF16 R4。GPU/30126端口在运行前检查空闲。所有原始文件位于X5 `/home/ruoxi/experiments/loopspec/2026-10-25-native-migration-plan/round-15/`。
+
+- `diagnose_ouro.py native`及`native --compact`均退出0，两个compare均退出1；native/compact全部hidden/logits逐位相同。16点argmax均一致，logits最大误差0.25、最大RMSE0.041031711通过原0.5/0.1阈值。
+- hidden三处失败：(prefix0,depth3) RMSE0.020862814；(prefix3,depth3) RMSE0.022747414；(prefix3,depth4) max0.25。其余13点通过。没有改动原max0.125/RMSE0.02阈值。
+- native trace及ouro_trace.py比较均退出0。prefix3前29个物理层全部stage逐位相同，首次分歧为d00/l29/attention，max0.001953125/RMSE0.0000196331。192循环层same-input检查：所有四种norm、SiLU、Q/K RoPE均逐位相同，attention仅2处不同；该算子级改进不能替代整模型失败。
+- `test_ouro.py`(4)、`test_loopspec.py`(4，包含三组各100000次采样分布)、`test_raven.py`(5)、`test_timeline.py`(2)、`test_rejection_graph.py`(4，实际CUDA replay)、`test_ouro_attention.py`(extend/decode/dynamic graph)、`verify_tinygemm.py`全部退出0。
+- `SGLANG_RUST_BUILD_MODE=auto python serve_smoke.py --output /results/round-15/{ar,single,double}-graph --cuda-graph --lifecycle [--depths 1 / --depths 1 2]`三组退出0。每组warmup2+10主请求，30次output_ids全部与round-2独立HF reference一致，stop={type:stop,matched:0}，输出11token ` Paris.\n\nThe final answer is A.`。lifecycle的max0/1、stop、stream、cancel/after_cancel、OpenAI completions、sampling、flush均通过。
+- single测量窗口100个verified：accept1=70/residual=30、cycles220/reused70/restart30；double：accept1=70/accept2=20/residual=10、cycles180/reused90/restart10。不是退回AR的假通过，metrics标签/通用NaN语义检查通过。
+- 数值门槛未过，因此不做本轮配对性能比较、不发布加速结论。harness自然产生的延迟字段保留为原始服务日志；本轮未做新显存峰值采样。新的eager/depth2/TinyGEMM整模型矩阵尚未重新执行；不能用第9/10轮数据冒充当前版本结果。Raven真实checkpoint依然未验收，既有fixture证据及本轮结构单测不等同真实模型测试。
+
+### 只读追加定位：softmax的BF16边界
+
+没有修改源码或测试。在已保存的第15轮d00/l29张量上重算同输入HF eager：head12/query1只有两个可见key，缩放后BF16 scores=[0.11962890625,0.12353515625]。PyTorch FP32 softmax=[0.4990234673023224,0.5009765625]，转BF16=[0.5,0.5]；FP64概率=[0.4990234387417615,0.5009765612582384]，同样舍入到[0.5,0.5]。
+
+把概率手工设为[0.498046875,0.5]再执行PV，128个输出坐标与当前Triton输出逐位相同；HF概率[0.5,0.5]则有49个坐标不同、max0.001953125。固定HF概率后FP64 PV与HF PV逐位相同，FP64 softmax再BF16也与HF输出相同。因此该首处分歧可以由第一概率向下错舍入一档完全解释，优先继续检查当前tl.exp/归一化的近似精度，而非再次改norm、权重或timeline布局。
+
+建议下一候选（尚未实施，需新预算）：在ouro_attention.py对指数和归一化采用更准确且明确的浮点路径，加入上述半精度边界及多长度归约测试；仍保留两遍、分页KV、动态graph和原数值阈值。先检查此首处分歧，再完整16点native/compact，全部通过后补齐eager/depth2/TinyGEMM服务与配对性能。不得只针对固定prefix或某个head写特例。
+
+累计15/15，停止源码及测试修改。已完成修改始终保留在loopspec-test；loopspec正式分支仍baa9befa381511cd4d56f83980951e5a45fffc6d，未晋升。
