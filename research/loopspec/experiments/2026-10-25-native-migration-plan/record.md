@@ -1,6 +1,6 @@
 # LoopSpec → SGLang v0.5.22 迁移研究与实施计划
 
-日期：2026-10-25（Asia/Shanghai）。当前状态（2026-10-27）：用户追加5轮，累计预算15轮；第9/10轮GPU服务矩阵通过，但HF hidden数值阈值失败。第11/12轮逐层诊断已定位舍入差异；第13/15轮Ouro修复已push，本地检查通过，X5-BUS再次中断，最新修复GPU待验证。完整迁移尚未验收。历史段落保留各轮当时状态，以本行及末尾记录为准。
+日期：2026-10-25（Asia/Shanghai）。当前状态（2026-10-27）：用户追加5轮，累计预算15轮；第9/10轮GPU服务矩阵通过，但HF hidden数值阈值失败。第11/12轮逐层诊断已定位舍入差异；第13/14轮GPU数值仍失败；第15轮针对最早RMSNorm归约差异实施，待验证。完整迁移尚未验收。历史段落保留各轮当时状态，以本行及末尾记录为准。
 
 用户请求：判断 SGLang 对 loop transformer serving 的支持，分析官方 LoopSpec 如何接入 SGLang，设计完整迁移方案与 Ouro-2.6B 单请求验证方案。
 
@@ -741,3 +741,19 @@ python diagnose_ouro.py compare --reference /results/round-10/hf-depths.pt --can
 4. 标准：四prefix四depth native/compact hidden max<=0.125/RMSE<=0.02、logits max<=0.5/RMSE<=0.1及argmax一致；服务token/stop与独立参考一致，graph/lifecycle通过。
 5. 风险：两遍计算增加开销；不同归约实现仍可能产生误差；KV稀疏索引、GQA和graph动态长度必须验证。只作用Ouro，不替换请求Scheduler或官方runtime。
 6. 验证：本地静态检查，Git commit/push/pull同SHA及import核对；GPU随机GQA/前缀/非连续KV/graph动态长度测试、16点数值；通过后Ouro eager/graph单/双/depth2、TinyGEMM配对和生命周期。性能报告实际结果，不预设加速结论。累计14/15。
+
+
+### 第14轮结果
+
+1095183bd9540f099711a065f507f58d735b68bc在本地/X5同SHA，import路径正确。静态检查通过；test_ouro_attention.py的随机GQA、非连续KV页、分块prefix、decode及改变query/索引/长度的graph replay全部退出0。native生成退出0，compare退出1：hidden最大误差0.171875、最大RMSE0.023990724，原阈值未通过；logits和argmax均通过。第13轮trace比较命令误加compare位置参数退出2，按原CLI去掉后退出0（未修改代码）；第14轮trace生成/比较均0。
+
+第14轮prefix3逐层：第一层所有stage逐位相同，第二层Q/K/V、attention及o_proj也逐位相同，最早差异位于d00/l01/norm2.out，max0.00048828125/RMSE4.538e-6。192层same-input算子中RoPE和SiLU全部精确相同，attention只剩6处不同、最大0.001953125/RMSE2.3404e-5；norm1/2/4仍有1/3/2处不同。证明attention修复有效但不足以使递归误差达标，不能用小算子误差替代全模型验收。
+
+### 候选15/15：Ouro RMSNorm归约顺序
+
+1. 目的：修复trace已确认的最早RMSNorm归约舍入差异，不放宽阈值。
+2. 步骤：Ouro的_norm使用原生RMSNorm已有force_native=True，使FP32 pow/mean/rsqrt及BF16 cast按checkpoint顺序执行。
+3. 范围：models/ouro.py的norm构造与任务记录，不改变其他模型或全局norm。
+4. 标准：原16点hidden/logits阈值及argmax通过；随后服务token/stop、eager/graph、生命周期、指标正确。
+5. 风险：增加算子/graph节点和host调用开销；残余attention或GEMM舍入仍可能传播，不预设成功。
+6. 验证：静态检查后commit/push，X5同SHA/import核对；native和compact诊断，通过后既定Ouro服务矩阵及auto/tinygemm配对性能、显存采样。累计15/15，若仍未达标不再修改源码或测试，保留证据报告剩余问题。

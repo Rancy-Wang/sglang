@@ -31,6 +31,8 @@ def _norm(config):
         config.hidden_size,
         eps=config.rms_norm_eps,
         cast_x_before_out_mul=True,
+        # Match the checkpoint reduction order at BF16 rounding boundaries.
+        force_native=True,
     )
 
 
