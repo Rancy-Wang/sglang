@@ -606,3 +606,20 @@ python compare_performance.py /results/round-9/ar-graph/benchmark.json /results/
 ```
 
 需保持原成功标准：greedy与独立HF/官方AR逐token和停止位置一致；sampling按分布验证；Raven非零随机初始hidden不要求同seed逐序列相同。最终GPU回归未通过前，不晋升正式分支、不输出性能胜出结论。
+
+
+## 2026-10-27 恢复验证尝试与架构归属确认
+
+用户告知X5可以重新连接并要求继续修改验证，同时询问调度实现来源。当前源码仍4d2f8d3c2b1e919f12eb068352f84a4bdee55934，loopspec-test clean且与origin一致，累计9/10；本次没有源码修改，不增加轮次。
+
+实际连接结果：`ssh -o ConnectTimeout=15 X5` 返回Connection closed by 198.18.0.204 port22、退出255；`ssh -o Hostname=18.25.6.221 -o HostKeyAlias=x5.mit.edu -o ConnectTimeout=15 X5` 返回Operation timed out、退出255。公共DNS查询仍返回18.25.6.221。ssh -G确认ruoxi/x5.mit.edu/22，无ProxyJump/ProxyCommand；公网IP路由为en0默认网关。Tailscale正在运行，但没有hostname/DNSName含x5的peer；系统HTTP/SOCKS代理未开启。未改网络/host-key设置，未连接成功、未pull或运行GPU任务。已向用户询问刚才成功使用的SSH命令与VPN/跳板路径，等待补充连通方式。
+
+### 架构归属（根据当前源码调用链）
+
+- SGLang原生层：launch_server → tokenizer_manager → Scheduler → 原生speculative V2 worker接口 → BatchResultProcessor/detokenizer。请求接收、队列、逐次调度、stop/stream/cancel和结果处理仍归原生SGLang。
+- 本次新增层：SpeculativeAlgorithm.LOOPSPEC在spec_info.py::create_worker返回LoopSpecWorker(BaseSpecWorker)。worker的prefill调用原target_worker；decode调用Pipeline.advance_until_commit，每次交回一个经过完整target验证的token及GenerationBatchResult。scheduler因而可以在输出间处理原生生命周期。
+- LoopSpec算法层：persistent lane、跨token/recurrence流水线、浅depth proposal、门控第二residual proposal、完整depth验证、接受后复用/拒绝后剪枝是参考官方算法为原生worker接口重写/迁移的代码。紧凑timeline和pre/core/post/rejection图是相应原生实现，不是上游已有的通用loop-transformer调度器。
+- 计算层：复用SGLang的attention、linear/norm、ModelRunner、ForwardBatch、token allocator协议；新增Ouro/Raven模型与timeline pool。上游IQuestLoopCoder等循环支持是在model.forward中遍历loop并区分逻辑KV层，不能等同已有LoopSpec跨token流水线。
+- 官方对照：只读repo 41aa710ed7c9ce908cffa03597be5d1df19d7b56的sglang_recurrent/server/loopspec_scheduler.py::_run_scheduler_loop自己recv_pyobj，顺序调用_run_request运行整条请求；注释明确活跃请求完成前不读取其他控制消息。移植版不调用或import该scheduler，不依赖sglang_recurrent运行包。
+
+因此准确表述为“原生SGLang服务/请求调度框架 + 移植的LoopSpec算法worker”，不能表述为直接使用上游现成LoopSpec调度，也不能表述为仍由官方自写服务scheduler接管。当前单活跃请求、TP/PP/DP/CP=1等支持限制仍有效，原生接口不意味着所有SGLang调度/缓存组合已经支持。
