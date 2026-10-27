@@ -48,6 +48,7 @@ class OuroTrace:
 
             def enter(module, args, kwargs, i=i):
                 if self.active:
+                    self.current_layer = i
                     self.depths[i] = self.counts.get(i, 0)
                     self.counts[i] = self.depths[i] + 1
                     hidden = (
@@ -105,7 +106,8 @@ class OuroTrace:
                 self.handles.append(mlp.gate_up_proj.register_forward_hook(gate_up))
 
                 def rope(module, args, out, i=i):
-                    if self.active:
+                    # get_rope caches a single module shared by physical layers.
+                    if self.active and self.current_layer == i:
                         save(key(i, "q_rope"), out[0])
                         save(key(i, "k_rope"), out[1])
 

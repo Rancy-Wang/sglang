@@ -668,3 +668,14 @@ auto/tinygemm分别AR/single/double graph共6个serve_smoke全部退出0，含li
 4. 标准：可追溯到depth/layer/operator的最早分歧，区分输入误差传播与同输入算子误差；不把诊断运行当模型验收通过。
 5. 风险：hook同步及额外保存影响时序，只用于正确性定位；张量数据可能数十至数百MB，留X5，不入Git；参考和native trace形状须明确对齐。
 6. 验证：本地compile/ruff/diff后Git同步同SHA；独立HF与native在相同prefix运行，输出层级JSON及算子误差，结合源码定位下一候选修复点。不得修改权重、target R4或阈值。
+
+第11轮5ea2cf1b4def2fc79d77ef5a3968ece472922315：本地compile/ruff/diff通过，X5同SHA/clean/import路径确认；HF trace退出0，native trace退出1。原因是get_rope返回共享模块，每层附着的hook同时触发，尚未进入的layer1没有depth记录，报KeyError:1。属于诊断工具错误，生产路径未改变；原始日志round-11/native-trace.log保留。
+
+### 候选12/15：共享RoPE hook归属
+
+1. 目的：修复诊断工具对共享RoPE实例的错误归属。
+2. 步骤：层入口记录当前物理层，RoPE hook仅记录对应当前层的输出。
+3. 范围：ouro_trace.py和任务记录，不改生产代码。
+4. 标准：HF/native trace完整生成，same-input算子对比可执行；原模型阈值保持。
+5. 风险：hook影响时序，仍只用于正确性；不能把工具退出0误标为数值通过。
+6. 验证：静态检查后本地commit/push、X5同SHA pull，重跑native trace与比较；第11轮HF数据由相同未改变的参考路径生成，可复用并核对prefix。
