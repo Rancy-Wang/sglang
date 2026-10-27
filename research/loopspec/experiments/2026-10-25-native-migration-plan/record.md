@@ -727,3 +727,17 @@ python diagnose_ouro.py compare --reference /results/round-10/hf-depths.pt --can
 # auto和TinyGEMM分别AR/单/双graph配对，外部100ms显存采样。
 # 数值未通过则先读取最早差异，保留原阈值，再决定第14/15轮候选。
 ```
+
+
+### 第13轮恢复后的GPU结果
+
+直连X5恢复，clean ff-only pull至4cade66a1df44e3982ca6493b787c725d74112ee，与本地、容器import/mount核对一致。GPU0/1空闲，30126端口空闲。native/compact生成均退出0，比较均退出1；16个argmax相同，hidden最大误差均<=0.125，logits最大误差0.25、最大RMSE0.04670124通过。hidden RMSE仍有5处失败：(prefix,depth)=(0,3):0.02088499,(2,3):0.02016919,(2,4):0.02491019,(3,3):0.02471127,(3,4):0.02045178。原0.125/0.02阈值保持，原始文件在/results/round-13。服务与性能未重跑，先解决数值。
+
+### 候选14/15：Ouro attention舍入
+
+1. 目的：对齐HF eager的QK、缩放及归一化概率BF16舍入，保留原阈值。
+2. 步骤：新增Ouro专用Triton两遍attention，第一遍归一化、第二遍将归一化概率舍入后乘V；backend保留原生KV写入、prefix/decode索引，Ouro单独选择此算子。
+3. 范围：models/ouro.py、layers/attention/triton_backend.py、新kernels/ops/attention/ouro_attention.py和针对性test_ouro_attention.py。
+4. 标准：四prefix四depth native/compact hidden max<=0.125/RMSE<=0.02、logits max<=0.5/RMSE<=0.1及argmax一致；服务token/stop与独立参考一致，graph/lifecycle通过。
+5. 风险：两遍计算增加开销；不同归约实现仍可能产生误差；KV稀疏索引、GQA和graph动态长度必须验证。只作用Ouro，不替换请求Scheduler或官方runtime。
+6. 验证：本地静态检查，Git commit/push/pull同SHA及import核对；GPU随机GQA/前缀/非连续KV/graph动态长度测试、16点数值；通过后Ouro eager/graph单/双/depth2、TinyGEMM配对和生命周期。性能报告实际结果，不预设加速结论。累计14/15。

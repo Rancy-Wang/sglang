@@ -85,6 +85,9 @@ class OuroAttention(LlamaAttention):
             for depth in range(config.total_ut_steps)
         )
 
+        for attention in self.attn:
+            attention.ouro_bf16_rounding = True
+
     def forward(self, positions, hidden_states, forward_batch, depth):
         q, k, v = self.forward_prepare_native(positions, hidden_states)
         output = self.attn[depth](q, k, v, forward_batch)
