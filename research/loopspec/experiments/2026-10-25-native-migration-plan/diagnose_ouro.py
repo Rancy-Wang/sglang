@@ -15,7 +15,7 @@ import torch
 from verify_ouro import PROMPT
 
 
-def reference(model_path, steps):
+def reference(model_path, steps, trace_path=None, trace_prefix=3):
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained(model_path)
@@ -30,10 +30,15 @@ def reference(model_path, steps):
         .eval()
     )
     assert model.config.total_ut_steps == 4
+    from ouro_trace import OuroTrace
+
+    tracer = OuroTrace(model, False, trace_prefix) if trace_path else None
     ids = tokenizer.encode(PROMPT)
     records = []
     with torch.inference_mode():
-        for _ in range(steps):
+        for index in range(steps):
+            if tracer:
+                tracer.begin(index)
             _, depths, _ = model.model(
                 input_ids=torch.tensor([ids], device="cuda"), use_cache=False
             )
@@ -49,10 +54,12 @@ def reference(model_path, steps):
                 }
             )
             ids.append(int(logits[-1].argmax()))
+    if tracer:
+        tracer.finish(trace_path)
     return {"mode": "independent_hf_fixed_r4", "records": records}
 
 
-def native(model_path, inputs, compact):
+def native(model_path, inputs, compact, trace_path=None, trace_prefix=3):
     from sglang.benchmark.one_batch import load_model, _init_process_global_configs
     from sglang.srt.managers.schedule_batch import Req
     from sglang.srt.runtime_context import publish, SpawnRanks
@@ -81,6 +88,9 @@ def native(model_path, inputs, compact):
     _init_process_global_configs()
     bench, _ = load_model(args, ports, 0, 0)
     runner = bench.torch_runner
+    from ouro_trace import OuroTrace
+
+    tracer = OuroTrace(runner.model, True, trace_prefix) if trace_path else None
     if compact:
         from sglang.srt.mem_cache.timeline_pool import TimelineRuntime
 
@@ -97,6 +107,8 @@ def native(model_path, inputs, compact):
     records = []
     with torch.inference_mode():
         for index, sample in enumerate(inputs["records"]):
+            if tracer:
+                tracer.begin(index)
             bench.clear()
             captured.clear()
             ids = sample["input_ids"]
@@ -123,6 +135,8 @@ def native(model_path, inputs, compact):
                 {"input_ids": ids, "hidden": hidden.cpu(), "logits": logits.cpu()}
             )
     handle.remove()
+    if tracer:
+        tracer.finish(trace_path)
     return {
         "mode": "native_compact_prefill" if compact else "native_ar_prefill",
         "records": records,
@@ -179,6 +193,8 @@ def main():
     parser.add_argument("--candidate", type=Path)
     parser.add_argument("--steps", type=int, default=4)
     parser.add_argument("--compact", action="store_true")
+    parser.add_argument("--trace-output", type=Path)
+    parser.add_argument("--trace-prefix", type=int, default=3)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.mode == "compare":
@@ -187,12 +203,14 @@ def main():
         assert result["passed"], result
     else:
         result = (
-            reference(args.model, args.steps)
+            reference(args.model, args.steps, args.trace_output, args.trace_prefix)
             if args.mode == "reference"
             else native(
                 args.model,
                 torch.load(args.reference, weights_only=True, map_location="cpu"),
                 args.compact,
+                args.trace_output,
+                args.trace_prefix,
             )
         )
         torch.save(result, args.output)

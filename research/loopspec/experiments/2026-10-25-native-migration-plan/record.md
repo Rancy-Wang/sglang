@@ -651,3 +651,20 @@ python compare_performance.py /results/round-9/ar-graph/benchmark.json /results/
 第9轮Raven补充：raven_fixture.py生成pre/post两份合成checkpoint（零初始hidden），各AR/single/double×eager/graph共12个serve_smoke进程均退出0；每组10个主要请求均与同layout AR eager逐token/stop一致，共120次、每次32token。pre输出全为100；post包含103/104/100/106等token。仅为架构/缓存/graph fixture验收，不代表真实Raven权重质量。
 
 第10轮发布前检查：compileall、/tmp/loopspec-formatter/bin/ruff check --select F、git diff --check退出0；误用不存在的/tmp/loopspec-cpu-env/bin/ruff曾返回127，改用既有formatter工具后通过，无源码绕过。改动仅4个Python文件和任务记录，不改变模型计算、pipeline或KV路径。
+
+### 第10轮结果与追加授权
+
+源码1557ec5106e7754a13fb32bc1e6e5f533a4037de已push并在X5 clean/ff-only pull，import路径一致。数值reference/native/compact生成均退出0，M=1与服务logits的零容差断言通过；compare-native/compact均退出1。两种native布局的全部hidden/logits逐位相同，排除了本组prefill的timeline布局差异。HF对照16个depth点argmax全部相同，logits最大误差0.197265625/RMSE最大0.04274631，符合原0.5/0.1阈值；hidden在(prefix,depth)=(0,3),(2,3),(2,4),(3,3),(3,4)超阈值，最大误差0.25、最大RMSE0.024934724，未通过原0.125/0.02标准。不能将token相同替代该失败。
+
+auto/tinygemm分别AR/single/double graph共6个serve_smoke全部退出0，含lifecycle、新指标标签/NaN语义与真实计数检查；两组compare_performance退出0。auto测量区间10请求各100个verified token；single首候选接受70/残差30，double首接受70/第二接受20/残差10。原始证据保存在round-10，失败日志不删除。
+
+用户随后明确批准“追加5轮，保持原验收阈值”，累计预算扩展至15，历史不重置。正式分支仍未授权晋升。
+
+### 候选11/15：逐层数值定位
+
+1. 目的：定位HF eager与native共同计算路径的最早数值差异，保留既定阈值。
+2. 步骤：对相同固定prefix保存4个循环的层输入、四个norm、Q/K/V、attention输出、MLP gate/up/product及层输出；比较两端trace；使用相同输入检查norm、RoPE和SiLU乘法的舍入差异。
+3. 范围：diagnose_ouro.py及新ouro_trace.py测试辅助，任务记录；不改变生产模型、pool或worker。
+4. 标准：可追溯到depth/layer/operator的最早分歧，区分输入误差传播与同输入算子误差；不把诊断运行当模型验收通过。
+5. 风险：hook同步及额外保存影响时序，只用于正确性定位；张量数据可能数十至数百MB，留X5，不入Git；参考和native trace形状须明确对齐。
+6. 验证：本地compile/ruff/diff后Git同步同SHA；独立HF与native在相同prefix运行，输出层级JSON及算子误差，结合源码定位下一候选修复点。不得修改权重、target R4或阈值。
