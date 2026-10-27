@@ -623,3 +623,31 @@ python compare_performance.py /results/round-9/ar-graph/benchmark.json /results/
 - 官方对照：只读repo 41aa710ed7c9ce908cffa03597be5d1df19d7b56的sglang_recurrent/server/loopspec_scheduler.py::_run_scheduler_loop自己recv_pyobj，顺序调用_run_request运行整条请求；注释明确活跃请求完成前不读取其他控制消息。移植版不调用或import该scheduler，不依赖sglang_recurrent运行包。
 
 因此准确表述为“原生SGLang服务/请求调度框架 + 移植的LoopSpec算法worker”，不能表述为直接使用上游现成LoopSpec调度，也不能表述为仍由官方自写服务scheduler接管。当前单活跃请求、TP/PP/DP/CP=1等支持限制仍有效，原生接口不意味着所有SGLang调度/缓存组合已经支持。
+
+### X5-BUS 恢复与第9轮GPU结果（2026-10-27）
+
+用户提供已有别名X5-BUS，实际连接成功；使用既有ProxyCommand/host-key配置，未修改SSH或网络设置。远端loopspec-test clean，经ff-only pull同步至3058b7767f1779857f3b11b7e333ec2e512b4fa1（源码4d2f8d3c2b1e919f12eb068352f84a4bdee55934）。实验前GPU0/1无计算任务，端口30126/30127空闲。启动本任务已有loopspec-native-20261026容器，GPU0、RO源码/workspace/sglang、RW /results；确认/opt/sglang/bin/python及/workspace/sglang/python/sglang/__init__.py。Torch2.14.1+cu130、Transformers5.19.0、Triton3.8.0、Flashinfer0.7.1。模型config/tokenizer哈希与第5轮相同，仍Ouro-2.6B BF16完整R4。
+
+原始日志在X5 `/home/ruoxi/experiments/loopspec/2026-10-25-native-migration-plan/round-9/`。以下均通过既有脚本执行，没有远端源码修改：
+
+- test_ouro.py 4项、test_loopspec.py 4项、test_raven.py 5项、test_timeline.py 2项、test_rejection_graph.py 4项全部退出0；最后一项本次实际执行CUDA输入更新replay，未跳过。采样仍包含三组各100000次分布检验。
+- verify_tinygemm.py退出0，实际kernel三组shape与17-row回退、graph变更输入验证通过，误差与第5轮一致。
+- serve_smoke.py的Ouro AR eager/graph、single eager/graph、double eager/graph、depth2 graph共7组退出0，各warmup2+测量10并执行lifecycle。所有70个主要请求与独立HF round-2/reference.json的11个token和stop精确一致。
+- lifecycle覆盖max0/1、stop字符串、stream、abort后下一请求、OpenAI completions、sampling与flush。新compact pool日志为48物理层/192逻辑层，full-depth容量11190、core槽44760；同字节预算不宣称上下文容量扩大4倍。
+- 单候选主请求cycles22/reused7/restarts3/accepted[7,0]/rejected3，双候选cycles18/reused9/restarts1/accepted[7,2]/rejected1，depth2 cycles12/reused9/restarts1/accepted[9,0]/rejected1。pre/core/post/rejection的Prometheus实际replay计数均存在。
+- 同auto backend/graph的compare_performance.py退出0：E2E中位数AR237.262ms、single233.876ms、double208.418ms，对AR比值1.0145/1.1384。每请求GPU stream区间extend/decode分别49.734/180.803ms、51.079/175.090ms、51.482/149.872ms。单短请求、顺序测量块，不能外推吞吐或一般工作负载。
+
+诊断工具失败保留：HF reference退出0；native/compact均在最终深度重新投影与服务logits的零容差断言处退出1，25/49152坐标不同，max0.03125。工具把4个depth拼为M=4的GEMM，而服务实际M=1；不同GEMM shape的BF16舍入不能要求逐位相同。下一候选将HF/native均逐depth做M=1投影，保留与服务实际logits的零容差断言，且不改变预声明hidden/logits阈值与all-depth argmax标准。另发现LoopSpec指标标签取raw ServerArgs得到None，以及通用spec日志错误将slot预留宽度作为候选数；均需修正。此处失败不是Ouro服务token失败，也不能标记全模型数值通过。
+
+### 候选10/10：诊断shape对齐与监控语义修正
+
+1. 目的：完成第9轮GPU发现的诊断与监控适配问题，不改target深度或放宽正确性标准。
+2. 步骤：HF/native逐depth使用M=1 LM-head投影，对native实际服务logits继续rtol=atol=0；worker用get_serving解析后的模型名；通用spec块长/接受率对LoopSpec标NaN并停止错误日志和计数，真实统计仍由loopspec_events提供；harness核对标签和测量区间verify/accept/proposal事件。
+3. 范围：research/.../diagnose_ouro.py与serve_smoke.py；speculative/loopspec/worker.py；managers/scheduler_components/metrics_reporter.py。
+4. 标准：四prefix×四depth的HF/native与compact hidden/logits在原阈值内且argmax一致；native投影零容差断言通过；Ouro请求与HF token/stop一致；Raven两fixture各AR/单/双eager/graph一致；指标分母与实际验证数相符。
+5. 风险：改变诊断GEMM shape不保证消除真实模型数值差异，若阈值仍失败必须保留失败；通用spec指标NaN表示不适用，不能解读成0接受率。Raven真实checkpoint仍未验证。
+6. 验证：本地compile/ruff/diff，确认仅任务文件后commit/push loopspec-test，X5 clean/ff-only pull/同SHA/import核对；GPU数值、Ouro关键服务回归和TinyGEMM AR/单/双graph，各warmup2+测量10。外部nvidia-smi按100ms采样整段服务显存，报告采样最大值而非精确allocator峰值；auto/TinyGEMM分别配对，不混backend。第9轮未改变的Raven/所有权/采样通过项保留证据，修改涉及的服务指标再次验证。累计10/10，若失败停止继续源码修改。
+
+第9轮Raven补充：raven_fixture.py生成pre/post两份合成checkpoint（零初始hidden），各AR/single/double×eager/graph共12个serve_smoke进程均退出0；每组10个主要请求均与同layout AR eager逐token/stop一致，共120次、每次32token。pre输出全为100；post包含103/104/100/106等token。仅为架构/缓存/graph fixture验收，不代表真实Raven权重质量。
+
+第10轮发布前检查：compileall、/tmp/loopspec-formatter/bin/ruff check --select F、git diff --check退出0；误用不存在的/tmp/loopspec-cpu-env/bin/ruff曾返回127，改用既有formatter工具后通过，无源码绕过。改动仅4个Python文件和任务记录，不改变模型计算、pipeline或KV路径。

@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -246,6 +247,34 @@ def main():
             (args.output / "metrics.txt").write_text(metrics)
             if args.depths:
                 assert "sglang:loopspec_events_total" in metrics, metrics
+                def events(text, check_summary=False):
+                    counts = {}
+                    for family in text_string_to_metric_families(text):
+                        for sample in family.samples:
+                            if sample.name == "sglang:loopspec_events_total":
+                                assert sample.labels["model_name"] == args.model
+                                counts[sample.labels["event"]] = sample.value
+                            elif check_summary and sample.name in (
+                                "sglang:spec_accept_rate",
+                                "sglang:spec_accept_length",
+                            ):
+                                assert math.isnan(sample.value), sample
+                    return counts
+
+                initial, final = events(before), events(after, check_summary=True)
+                delta = {key: value - initial.get(key, 0) for key, value in final.items()}
+                assert delta["pipeline_requests"] == len(samples), delta
+                assert delta["verified_tokens"] == sum(
+                    len(sample["output_ids"]) - 1 for sample in samples
+                ), delta
+                assert delta["verified_tokens"] == (
+                    delta["accepted_first"]
+                    + delta["accepted_second"]
+                    + delta["residual_tokens"]
+                ), delta
+                assert delta["proposed_first"] >= delta["accepted_first"], delta
+                assert delta["proposed_second"] >= delta["accepted_second"], delta
+                (args.output / "events.json").write_text(json.dumps(delta, indent=2))
                 if args.cuda_graph:
                     assert 'role="rejection"' in metrics, metrics
             if args.lifecycle:

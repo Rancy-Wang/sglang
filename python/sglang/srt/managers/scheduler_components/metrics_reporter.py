@@ -525,6 +525,10 @@ class SchedulerMetricsReporter:
         num_block_accept_tokens: int = 0,
         num_cap_tokens: int = 0,
     ):
+        if self.scheduler.spec_algorithm.is_loopspec():
+            # A worker step publishes one verified token, while its draft tree
+            # persists across steps. Reserved KV width is not proposal count.
+            return
         self.spec_num_accept_tokens += num_accept_tokens
         self.spec_num_correct_drafts += num_correct_drafts
         self.spec_num_forward_ct += bs
@@ -941,7 +945,12 @@ class SchedulerMetricsReporter:
 
         spec_num_steps = 0
         spec_num_draft_tokens = 0
-        if self.scheduler.spec_algorithm.is_none():
+        if self.scheduler.spec_algorithm.is_loopspec():
+            # Block-verification metrics do not describe a recurrent pipeline.
+            # Export N/A; actual proposal/verify counts use loopspec_events.
+            spec_accept_length = spec_accept_rate = float("nan")
+            spec_cap_length = spec_block_accept_length = float("nan")
+        elif self.scheduler.spec_algorithm.is_none():
             spec_accept_length = 0
             spec_accept_rate = 0
             spec_cap_length = 0

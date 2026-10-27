@@ -38,7 +38,9 @@ def reference(model_path, steps):
                 input_ids=torch.tensor([ids], device="cuda"), use_cache=False
             )
             hidden = torch.stack([h[0, -1] for h in depths])
-            logits = model.lm_head(hidden).float()
+            # Match the serving readout's M=1 shape at each depth. Combining
+            # depths into M=4 can select a different BF16 GEMM accumulation.
+            logits = torch.cat([model.lm_head(h[None]) for h in hidden]).float()
             records.append(
                 {
                     "input_ids": ids.copy(),
@@ -110,8 +112,11 @@ def native(model_path, inputs, compact):
             _, actual_logits, _ = bench.extend([req])
             assert len(captured) == 4, len(captured)
             hidden = torch.stack(captured)
-            logits = torch.nn.functional.linear(
-                hidden, runner.model.lm_head.weight
+            logits = torch.cat(
+                [
+                    torch.nn.functional.linear(h[None], runner.model.lm_head.weight)
+                    for h in hidden
+                ]
             ).float()
             torch.testing.assert_close(logits[-1], actual_logits[0], rtol=0, atol=0)
             records.append(

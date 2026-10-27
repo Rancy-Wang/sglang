@@ -15,7 +15,7 @@ from sglang.srt.model_executor.forward_batch_info import (
     ForwardBatch,
     ForwardMode,
 )
-from sglang.srt.runtime_context import get_observability, get_spec
+from sglang.srt.runtime_context import get_observability, get_serving, get_spec
 from sglang.srt.speculative.base_spec_worker import BaseSpecWorker
 from sglang.srt.utils.device_timer import device_timer_ctx
 from sglang.srt.speculative.spec_info import (
@@ -328,7 +328,7 @@ class LoopSpecWorker(BaseSpecWorker):
         if get_observability().enable_metrics:
             from .metrics import LoopSpecMetrics
 
-            self.metrics = LoopSpecMetrics(server_args.served_model_name)
+            self.metrics = LoopSpecMetrics(get_serving().served_model_name)
         depths = get_spec().speculative_draft_depth
         self.depths = depths
         self.stride = depths[0]
