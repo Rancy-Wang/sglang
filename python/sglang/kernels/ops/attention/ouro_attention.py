@@ -10,6 +10,7 @@ request/depth indexing remain with the native backend.
 
 import triton
 import triton.language as tl
+from triton.language.extra import libdevice
 
 
 @triton.jit
@@ -94,13 +95,16 @@ def _ouro_attention(
             )
             if stage == 0:
                 next_max = tl.maximum(maximum, tl.max(scores, 1))
-                denominator = denominator * tl.exp(maximum - next_max) + tl.sum(
-                    tl.exp(scores - next_max[:, None]), 1
+                denominator = denominator * libdevice.exp(maximum - next_max) + tl.sum(
+                    libdevice.exp(scores - next_max[:, None]), 1
                 )
                 maximum = next_max
             else:
-                probability = (
-                    tl.exp(scores - maximum[:, None]) / denominator[:, None]
+                # Approximate exp2/division can cross a BF16 midpoint even
+                # for two scores (e.g. a difference of 1/256). Preserve the
+                # checkpoint softmax rounding before the PV dot product.
+                probability = tl.div_rn(
+                    libdevice.exp(scores - maximum[:, None]), denominator[:, None]
                 ).to(query.dtype)
                 values = tl.load(
                     VC + slots[:, None] * vcs + kv_head * vch + dims[None, :],

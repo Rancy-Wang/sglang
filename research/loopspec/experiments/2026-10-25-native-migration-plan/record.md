@@ -780,3 +780,14 @@ python diagnose_ouro.py compare --reference /results/round-10/hf-depths.pt --can
 建议下一候选（尚未实施，需新预算）：在ouro_attention.py对指数和归一化采用更准确且明确的浮点路径，加入上述半精度边界及多长度归约测试；仍保留两遍、分页KV、动态graph和原数值阈值。先检查此首处分歧，再完整16点native/compact，全部通过后补齐eager/depth2/TinyGEMM服务与配对性能。不得只针对固定prefix或某个head写特例。
 
 累计15/15，停止源码及测试修改。已完成修改始终保留在loopspec-test；loopspec正式分支仍baa9befa381511cd4d56f83980951e5a45fffc6d，未晋升。
+
+
+### 2026-10-28追加授权及候选16/25
+
+用户明确追加10轮，累计预算25轮，不重置历史15轮，不改变原阈值，不授权晋升正式分支。
+1. 目的：修复已复现的softmax概率在BF16边界向下错舍入问题。
+2. 步骤：Ouro kernel采用libdevice.exp和tl.div_rn，避免近似exp2及近似除法改变舍入方向；增加可独立复现该概率边界的测试。
+3. 范围：kernels/ops/attention/ouro_attention.py、test_ouro_attention.py、任务记录。
+4. 标准：边界概率与HF逐位一致，16点hidden max<=0.125/RMSE<=0.02、logits max<=0.5/RMSE<=0.1及argmax一致，后续服务token/stop通过。
+5. 风险：指数/除法开销增加；长序列归约及其他边界仍可能失败，不能预设成功。
+6. 验证：本地静态检查、Git同步同SHA；GPU kernel/prefix/graph测试、native/compact数值；通过后既定服务矩阵与auto/TinyGEMM配对性能及显存采样。累计16/25。

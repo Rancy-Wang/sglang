@@ -86,7 +86,35 @@ def run(decode, graph=False):
         check()
 
 
+def check_probability_midpoints():
+    # V selects each probability, so rounding cannot hide in the output GEMM.
+    # Covers the observed pair, sign/order changes, and neighboring BF16 gaps.
+    q = torch.zeros(1, 1, 64, device="cuda", dtype=torch.bfloat16)
+    q[..., 0] = 1
+    k = torch.zeros(2, 1, 64, device="cuda", dtype=torch.bfloat16)
+    v = torch.zeros_like(k)
+    v[0, 0, 0], v[1, 0, 1] = 1, 1
+    out = torch.empty_like(q)
+    ptr = torch.tensor([0, 2], device="cuda", dtype=torch.int32)
+    indices = torch.tensor([0, 1], device="cuda", dtype=torch.int32)
+    for first, second in (
+        (0.11962890625, 0.12353515625),
+        (0, 1 / 256),
+        (0, -1 / 256),
+        (0, 1 / 128),
+        (0, 1 / 512),
+    ):
+        for values in ((first, second), (second, first)):
+            k[:, 0, 0] = torch.tensor(values, device="cuda", dtype=k.dtype)
+            ouro_attention(
+                q, k, v, k, v, out, ptr, indices, None, 1, 1, 1.0, decode=True
+            )
+            expected = k[:, 0, 0].softmax(-1, dtype=torch.float32).bfloat16()
+            torch.testing.assert_close(out[0, 0, :2], expected, rtol=0, atol=0)
+
+
 if __name__ == "__main__":
+    check_probability_midpoints()
     run(False)
     run(True)
     run(True, graph=True)
