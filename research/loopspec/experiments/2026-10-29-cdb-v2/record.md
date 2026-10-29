@@ -525,3 +525,18 @@ graph两项实际均108次decode replay、0次prefill replay，logits与eager逐
 4. 标准：CPU生命周期回归、真实sampling/接口/lifecycle全部通过；冻结v3、严格KV和E2E≤2%均保留。
 5. 风险：合并后弱引用归属、retraction后请求历史、双depth和无graph分支；通过原生过滤/合并及GPU接口检查覆盖，不用greedy替代。
 6. 验证：CPU/AST/diff，Git同SHA；完整扩展lifecycle，pressure与8请求/bs1 profiles、10次配对；补d2/双depth/eager数值及普通AR回归。预算18/20，正式分支不变。
+
+### 第18轮最终结果（18/20，Ouro范围达到计划标准）
+
+- 生产测试SHA `9bf97cdca4f4dc8e9c9508f059ee6bf06ee0f440`，本地CPU9项、AST、diff通过；本地/origin/X5相同提交，实验源码干净。只修复每请求sampling元数据owner；保留v3阈值和全部此前失败日志。
+- 所有round18已执行程序退出0：`ls-lifecycle`、`ls-d2-http`、`ls-dual-lifecycle`、`ar-lifecycle`、`ls-pressure`、`ls-eager-no-overlap`；`ls-eager-full`、`ls-d2-full`、`ls-dual-full`、`ls-dual13-full`；bs1/8 profiles与各自analysis、bs1/8/AR-b8各10次benchmark。
+- 数值：round17 d1 graph及round18四种模式各3976位置全部通过v3，共19880位置；argmax分歧分别21/25/18/20/29，最大参考margin均0.25，高margin保护线0.5未触及。真实owner/物化/accept/reject/reorder检查通过。
+- 服务sampling带top-k40/top-p.9/temperature.8、三种penalty和min_new_tokens16；8并发独立seed，有限logprobs/正常结束；双depth日志实际出现第二proposal接受。CPU3×100000分布5σ契约独立通过。
+- 1200 KV容量、chunk32、8请求各128tokens，严格busy内存检查开启；两次真实retraction回收162/202tokens，再入队全部完成。取消prefill/decode、survivor、flush、零token、OpenAI、非overlap+eager路径均通过。
+- `ls-b1-benchmark`：2warmup+10，512tokens，重复token/stop完全一致；median6529.2309915ms（旧控制9841.986811ms），下降33.6594%；TTFT median40.528667ms（旧105.893865ms）。旧/新自由文本index228有低margin分歧，不宣称逐token跨实现完全一致。
+- `ls-b8-benchmark`：10次输出均[512,512,512,512,512,512,453,512]且重复token/stop完全一致，makespan median13531.821742ms；各题E2E median[12752.865229,13278.641738,13506.8249015,12123.8432405,11681.757696,12777.8816235,12292.095855,12888.3750405]ms。自由输出首次分歧参考margin均0.125。
+- `ar-b8-benchmark`：10次输出均[512,512,512,512,512,512,508,512]且重复一致；median18541.039071ms；各题E2E[18367.416337,18395.567108,18380.765087,18397.133513,18367.222927,18358.135628,18168.2403275,18221.041178]ms。相对已通过round12仅+0.0459%–0.0476%，满足≤2%；相对旧AR七个等长请求-15.84%至-16.25%。Q7旧AR/新LS453、新AR508，单独标注不同工作量。
+- profiles：bs1 E2E8278.970748ms，54个depth0输出各4loop、457个depth3输出各1loop，depth1/2无样本；core GPU区间中位37.5787/9.3635ms，kernel忙碌并集5173.176526ms。bs8 profile E2E19396.664677ms、kernel busy7782.142597ms；逐输出/请求/共享批次与原始trace均完整保存。准备/decision局部开销及多请求TTFT并未全部下降，报告明确保留；整体E2E达到门槛，不将fused RMSNorm收益全部归为CDB。
+- CDB实际trace证据：round12普通core2096次、mixed2048次；Q2/Q3在Q1仅完成depth1时进入；round18 LS753 step中749 mixed，最大8原生Req/32执行行。
+- 复现：GPU容器内从`/workspace/sglang`执行本目录`profile_workload.py`（bs1/8、2warmup+10；profile另`--profile --repeat 1`）、`verify_loopspec_cdb.py --reference /results/round-5/native-joint-long --tokens /results/round-2/ar-reference`（d1 eager、d2/dual graph各默认496steps）、`analyze_profile.py`。每个HTTP目录manifest含完整命令/SHA/环境，数值日志和.exit保留。结果根仍是用户指定`/home/ruoxi/repo/test/results/loopspec/2026-10-29-cdb-v2/`。
+- 达标后停止不必要源码迭代，不启动19/20。Ouro/TP1/Triton/R4范围通过，其他模型和多GPU不宣称通过。正式loopspec仍237f4d44a，不自动晋升。最终汇总见本目录results.md；后续只提交文档结果，不改变已验证运行代码。
