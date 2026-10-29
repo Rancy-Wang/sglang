@@ -38,7 +38,7 @@ def main():
     _init_process_global_configs(); bench,_=load_model(options,ports,0,0)
     runner=bench.torch_runner
     assert runner.recurrent_runner is None and runner.model.config.total_ut_steps==4
-    tokenizer=AutoTokenizer.from_pretrained(a.model)
+    tokenizer=AutoTokenizer.from_pretrained(a.model, trust_remote_code=True)
     questions=[json.loads(s) for s in a.dataset.read_text().splitlines() if s.strip()][:a.first]
     prompts=[]
     for q in questions:

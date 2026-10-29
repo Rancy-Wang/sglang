@@ -138,7 +138,7 @@ def main():
     assert len(rows) == args.first and all(isinstance(r["problem"], str) for r in rows)
     from transformers import AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
     prompt_records = []
     for row in rows:
         rendered = tokenizer.apply_chat_template([{"role": "user", "content": row["problem"]}],

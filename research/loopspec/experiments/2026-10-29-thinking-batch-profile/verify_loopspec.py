@@ -54,7 +54,7 @@ def main():
     bench, _ = load_model(options, ports, 0, 0)
     runner = bench.torch_runner
     recurrent = runner.recurrent_runner
-    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
     questions = json.loads((args.reference/'prompts.json').read_text())['prompts'][:args.first]
     tokens = json.loads((args.tokens/'cohort-0.json').read_text())['requests']
     reference = torch.load(args.reference/'tensors.pt', weights_only=True)

@@ -19,3 +19,9 @@ No formal branch promotion authorized. SSH session 60877 reused, X5 ruoxi.
 
 Hypothesis: existing serving code supports Thinking weights without production changes; existing trace metadata suffices to assign token paths and shared stages. New benchmark tooling is needed for template consistency, capacity16, repeated matrix, and linear-time trace grouping.
 Validation pending.
+
+Round 1 validation: local compileall/diff-check exit0; local/origin/X5 SHA 17b55e656d6461269ef478e4f7ddc38f6325bd2d. New container loopspec-thinking-20261029, GPU0, import /workspace/sglang/python/sglang/__init__.py. native_reference.py --output /results/native-reference-r1 --steps 64 exit0: 16 single-request references, 2048 independent B16/B64 teacher-forced positions, 10 argmax flips (0.488%), full-R ordinary KV path explicitly asserted. Calibrated per-depth bounds stored before LoopSpec evaluation. max_total_num_tokens14342. New isolated /opt/thinking-hf Transformers4.54.1 installed exit0, without changing serving environment.
+
+## Round 2/10
+
+Add checkpoint-owned HF eager spot checks (q1/q16 at prefixes0/15/63), explicit trust_remote_code for tokenizer to avoid interactive fallback, and final reproducible CSV/Markdown report generator. This extends the original validation/report scope; production unchanged. Validate HF/native on identical inputs, LoopSpec graph16 against independently calibrated native references, strict HTTP smoke1/16, then run all performance/profile cells. Full latency measurements remain pending. Default512 retained after optional clarification window.
