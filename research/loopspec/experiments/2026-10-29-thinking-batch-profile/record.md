@@ -25,3 +25,9 @@ Round 1 validation: local compileall/diff-check exit0; local/origin/X5 SHA 17b55
 ## Round 2/10
 
 Add checkpoint-owned HF eager spot checks (q1/q16 at prefixes0/15/63), explicit trust_remote_code for tokenizer to avoid interactive fallback, and final reproducible CSV/Markdown report generator. This extends the original validation/report scope; production unchanged. Validate HF/native on identical inputs, LoopSpec graph16 against independently calibrated native references, strict HTTP smoke1/16, then run all performance/profile cells. Full latency measurements remain pending. Default512 retained after optional clarification window.
+
+Round 2: SHA314f62a6da32c07607555cb1403246e2a79564cf. HF exited1 (isolated environment cannot find torch). LoopSpec actual graph/16 owners/64 positions exited1: six numerical envelope limits exceeded (depth1 maxRMSE .3362, depth2 maxabs2.5625/RMSE .5661, depth3 maxabs2.875, logits maxabs6.90625/RMSE1.00565); retain full report. This is not a performance pass.
+
+## Round 3/10
+
+Independent control omitted padded prefill: graph pads total tokens to next power-of-two, whereas native calibration used unpadded M. Extend ONLY independent native calibration to graph-equivalent prefill padding and decode M16/32/64, retaining B1 reference unchanged; then rerun unchanged LoopSpec verification against independently determined envelope. Correct HF isolation by ordered PYTHONPATH of HF site-packages then serving site-packages, without modifying serving dependencies or checkpoint. No production or algorithm changes. Preserve prior failed results.

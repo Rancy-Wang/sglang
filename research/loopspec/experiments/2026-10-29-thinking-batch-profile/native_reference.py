@@ -18,6 +18,7 @@ def main():
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--steps', type=int, default=64)
     p.add_argument('--first', type=int, default=16)
+    p.add_argument('--reuse-reference', type=Path)
     p.add_argument('--model', default='/home/ruoxi/models/Ouro-2.6B-Thinking')
     p.add_argument('--dataset', type=Path, default=Path('/home/ruoxi/repo/test/datasets/aime.jsonl'))
     a=p.parse_args(); a.output.mkdir(parents=True, exist_ok=False)
@@ -49,9 +50,18 @@ def main():
     (a.output/'prompts.json').write_text(json.dumps({'prompts':prompts,'chat_template':tokenizer.chat_template},indent=2))
     selection=[]; captured=[]
     hook=runner.model.model.norm.register_forward_hook(lambda m,i,o:captured.append(o[selection].cpu().clone()))
-    def run(indices, forced=None, padding=0):
+    def run(indices, forced=None, padding=0, padded_prefill=False):
         bench.clear(); requests=[]; offset=0; selection.clear()
-        inputs=[prompts[i]['input_ids'] for i in indices]+[[1] for _ in range(padding)]
+        inputs=[prompts[i]['input_ids'] for i in indices]
+        dummy_count = padding
+        if padded_prefill:
+            count=sum(map(len,inputs)); bucket=1 << (count-1).bit_length()
+            dummy_count=max(1,padding)
+            length,extra=divmod(bucket-count,dummy_count)
+            assert length>0
+            inputs += [[1]*(length+(i<extra)) for i in range(dummy_count)]
+        else:
+            inputs += [[1] for _ in range(padding)]
         for i,ids in enumerate(inputs):
             r=Req(rid=f'native-{i}',origin_input_text='',origin_input_ids=array('q',ids),
                 sampling_params=SamplingParams(temperature=0,max_new_tokens=a.steps))
@@ -61,7 +71,10 @@ def main():
         records=[]; tokens=[[] for _ in indices]
         for step in range(a.steps):
             captured.clear()
-            if step==0: _,logits,batch=bench.extend(requests)
+            if step==0:
+                _,logits,batch=bench.extend(requests)
+                if dummy_count != padding:
+                    batch.filter_batch(keep_indices=list(range(len(indices)+padding)))
             else:
                 selection[:]=range(len(indices))
                 chosen=[forced[i][step-1] if forced is not None else tokens[j][-1] for j,i in enumerate(indices)]
@@ -73,13 +86,21 @@ def main():
     with torch.inference_mode():
         singles=[]; reference_tokens=[]
         for q in range(a.first):
-            r,t=run([q]); singles.append(r); reference_tokens.append(t[0])
+            if a.reuse_reference:
+                if q==0:
+                    saved=torch.load(a.reuse_reference/'tensors.pt',weights_only=True)['single']
+                    saved_tokens=json.loads((a.reuse_reference/'cohort-0.json').read_text())['requests']
+                    assert prompts==json.loads((a.reuse_reference/'prompts.json').read_text())['prompts']
+                r,t=saved[q],[saved_tokens[q]['output_ids']]
+            else:
+                r,t=run([q])
+            singles.append(r); reference_tokens.append(t[0])
             print(json.dumps({'single':q+1}),flush=True)
         torch.save({'single':singles},a.output/'tensors.pt')
         (a.output/'cohort-0.json').write_text(json.dumps({'requests':[{'output_ids':t} for t in reference_tokens]}))
         errors=[]
-        for padding in [0,64-a.first]:
-            rows,_=run(list(range(a.first)),reference_tokens,padding)
+        for padding in [0,32-a.first,64-a.first]:
+            rows,_=run(list(range(a.first)),reference_tokens,padding,padded_prefill=True)
             for step,r in enumerate(rows):
                 for q in range(a.first):
                     source=singles[q][step]; x,y=source['logits'][0],r['logits'][q]
@@ -97,7 +118,7 @@ def main():
         'logits':bounds([r['logits'] for r in errors]),
         'max_argmax_flip_fraction':max(.01,len(flips)/len(errors)*1.25),
         'protected_reference_margin':max(.5,max((r['reference_margin'] for r in flips),default=0)*1.25),
-        'source':'Independent native full-R B16/B64 vs B1, same Thinking prefixes; 25% headroom on observed maxima.'}
+        'source':'Independent native full-R B16/B32/B64 with graph-equivalent power-of-two prefill padding vs B1, same Thinking prefixes; 25% headroom on observed maxima.'}
     (a.output/'numerical_envelope.json').write_text(json.dumps(limits,indent=2))
     (a.output/'calibration.json').write_text(json.dumps({'records':errors,'limits':limits,'finite':all(torch.isfinite(r['logits']).all() for ss in singles for r in ss)},default=bool,indent=2))
     print(json.dumps({'completed':True,'positions':len(errors),'flips':len(flips),'limits':limits}),flush=True)
