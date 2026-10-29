@@ -343,6 +343,9 @@ class MixedTimelineRuntime:
             write_depths = depths[token_rows]
         mapped = copy.copy(batch)
         mapped.req_pool_indices = self.rows[:count]
+        # A row plan can repeat source requests (different depths/branches).
+        # Its parent's CPU length sum is not a valid CSR allocation bound.
+        mapped.seq_lens_sum = count * self.source.shape[1]
         mapped.out_cache_loc = mapping[write_depths, batch.out_cache_loc.long()]
         translator.bind_own_plan(mapped)
         backend.init_forward_metadata(mapped)

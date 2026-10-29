@@ -364,3 +364,10 @@ graph两项实际均108次decode replay、0次prefill replay，logits与eager逐
 4. 标准：上述冻结数值包络；同一深度对应独立 KV，行重排不改变归属，重复图 replay 读取新的 request/depth/length；无隐式 target 深度变化。普通 AR 的输出/采样仍由原生接口处理。
 5. 风险：捕图固化深度或请求；padding写入有效槽；额外全表拷贝；状态被后续replay覆盖。使用 compact 活跃行视图、零槽padding和显式图输出生命周期；调用者持有状态。
 6. 验证：AST/diff及已有CPU契约；本地commit/push loopspec-test、X5 pull同SHA/import核验；空闲GPU0上顺序执行混合深度与eager/graph teacher-forced检查，结果只写round-6；下一阶段再测真实Scheduler E2E，执行器测试时间不作serving性能结论。
+
+### 第6轮结果与候选7/15
+
+- 提交 `54f43f2fa4f337dd291ef3caa90a3f13dd238fa5`，两端同SHA/import核验。AST/diff/CLI检查退出0；本地3项mixed timeline寻址契约和2项既有timeline所有权/延迟释放测试通过。
+- GPU0启动前7MiB占用、无计算进程、30126空闲。`verify_recurrent.py --reference /results/round-5/native-joint-long --tokens /results/round-2/ar-reference --output /results/round-6/eager --steps 63` 退出134，完整log保留。首prefill和常规decode推进后，混合行测试在attention期间illegal memory access；尚无数值验收结果，不记通过。
+- 代码诊断：重排/重复源请求的执行描述保留了原 `seq_lens_sum`；重复长请求后KV CSR所需容量可能大于旧汇总值，Triton backend按旧值分配而按新GPU seq_lens写入。compact view应独立确定有界索引容量，不继承父batch的长度汇总。
+- **候选7/15六项计划**：目的为修正混合视图的KV索引容量；步骤为将映射后的 `seq_lens_sum` 设置为执行行数×上下文容量（纯host已知上界，无GPU readback），再重放原测试；范围仅timeline_pool.py及本记录；标准仍为固定数值包络、原mixed重复/重排行测试，禁止删失败测试；风险为过量scratch分配，规模限于活跃行×context且graph可复用；验证为相同CPU契约、Git同步后同X5环境顺序eager/graph检查，结果写round-7。本任务已用6轮，开始7/15，Scheduler尚未接线。
