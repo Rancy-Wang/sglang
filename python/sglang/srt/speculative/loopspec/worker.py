@@ -24,6 +24,7 @@ from sglang.srt.utils.recurrent_trace import span
 from .config import pipeline_layout
 from .info import LoopSpecInput
 from .pipeline import Pipeline
+from .sampling import decide_endpoints
 from .utils import RequestContext, split_batch
 
 logger = logging.getLogger(__name__)
@@ -233,19 +234,22 @@ class LoopSpecWorker(BaseSpecWorker):
             endpoint_state = RecurrentState(state.hidden[indices])
             logits = self.executor.finish(endpoint_batch, endpoint_state, depths[indices]).next_token_logits
             self.role_replays["post"] += int(len(endpoints) in self.executor.finish_graphs)
-            decisions, distributions = [], []
-            for j, index in enumerate(endpoints):
-                context, lane = rows[index]
-                context.logits[lane.uid] = logits[j].clone()
-                decision, distribution = context.queue_decision(lane)
-                decisions.append(decision)
-                distributions.append(distribution)
-            # One dependent host read for all requests/endpoints, not one per lane.
-            decisions = torch.stack(decisions).tolist()
-            for index, decision, distribution in zip(endpoints, decisions, distributions, strict=True):
-                context, lane = rows[index]
+            # Preserve all endpoint logits with one copy before graph-pool reuse.
+            logits = logits.clone()
+            endpoint_rows = [rows[index] for index in endpoints]
+            for j, (context, lane) in enumerate(endpoint_rows):
+                context.logits[lane.uid] = logits[j]
+            decisions, distributions = decide_endpoints(logits, endpoint_rows)
+            decisions = self._read_decisions(decisions)
+            for (context, lane), decision, distribution in zip(endpoint_rows, decisions, distributions, strict=True):
                 context.decisions[lane.uid] = decision, distribution
         return used_graph
+
+    @staticmethod
+    @span("loopspec.decision_readback", gpu=False)
+    def _read_decisions(decisions):
+        # One dependent host read for the whole packet, never per endpoint.
+        return decisions.tolist()
 
     @torch.no_grad()
     @span("loopspec.step", before=_step_metadata,
