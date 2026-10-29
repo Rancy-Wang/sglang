@@ -7,7 +7,7 @@
 - 当前基线：`7df281a0e656e368c90f529d8d84305db99001f5`，分支 `loopspec-test`，制定计划前工作树干净。
 - 前次测量 SHA：`da56f8103931e5b3a2451219b4e0c4b3dcb16286`；之后仅分析和结果记录改变。实施前重新确认生产源码 diff。
 - 官方参考 SHA：`41aa710ed7c9ce908cffa03597be5d1df19d7b56`，只读。
-- 新修复任务预算：1/10。前次 benchmark 任务保持 6/10，不重置历史计数。每个源码／测试／行为配置候选的修改＋验证记一轮。
+- 新修复任务预算：2/10。前次 benchmark 任务保持 6/10，不重置历史计数。每个源码／测试／行为配置候选的修改＋验证记一轮。
 - 正式 `loopspec` 分支未获本次晋升授权。
 
 ## 1. 修改目的与证据
@@ -160,3 +160,15 @@ X5 原始结果根目录：`/home/ruoxi/repo/test/results/loopspec/2026-10-30-ba
 用户批准计划后开始。候选范围为 sampling 批量 logits/greedy/残差运算、worker endpoint 合批，以及本任务决策测试／实验驱动。先采用批量 eager 操作，保持 core/readout graph；根据独立微基准决定是否需要额外决策图。对请求所有权、有效 proposal 生命周期和已有单／双候选语义做严格检查。
 
 已复用 SSH session60877；X5 HEAD=7df281a0e，工作树干净，GPU0/1 无计算进程；现有隔离容器 image sha256:81726dc9e63a9c6778396c8176a7203716a527f28b2bbb6b0eac661a0b050afb。磁盘剩余约104GB，完整 trace 前再次核查。Mac 默认 Python 无 torch：本地做语法／diff检查，CPU和CUDA测试均在同镜像 X5 隔离环境执行，不能把未执行测试记为通过。
+
+### 用户补充的归因交付要求
+
+最终报告需要量化 LoopSpec/AR 加速比从 bs1 随 batch 增大下降的各阶段百分比。以明确的归一化损失定义进行分析，GPU kernel/CPU区间去重、重叠只计一次，保留未归因项和 profiler 扰动。决策修复的因果证据来自旧/新配对实测；attention 等未独立干预的阶段仅作时间分解/反事实估算，不冒称精确因果比例。报告每个 bs、两种到达方式，并区分 batch 增长与题目长度分布变化。
+
+第一轮当前证据：本地 compileall/diff-check exit0；local/origin/X5 c1c895cc5430cc460bdd958fdbcc852d7a82121a。28项 CPU/CUDA 测试通过（10.52s，exit0）。同前缀1024位置实际graph分支计算通过固定native-reference-r4 envelope（exit0）。首次数值命令误用了自由生成AR B16输出作强制prefix，和参考在q2/7/8/10不同，导致exit1；保留numerical失败日志。改用参考自带cohort-0 tokens，源码不变，numerical-matched-prefix通过。这是纠正实验输入，不是放宽阈值。严格HTTP smoke正在运行。
+
+### 第 2 轮 / 10（实验工具候选）
+
+新增 benchmark_decisions.py 和 paired_matrix.py，生产代码保持第一轮不变。旧版只读 detached baseline为7df281a0e，候选和baseline挂载路径分别核实。为保留每组2次预热+5次连续测量，按bs轮换AR/旧/新算法块顺序，在同一server内测两种到达方式；这是配对算法块，不声称逐重复ABBA。每项数据保存实际SHA。
+
+独立微基准使用真实checkpoint target logits并构造可控endpoint role/proposal元数据，明确不是现场draft logits回放。测试单位是整个决策packet，包括同步回读；分别报告CPU提交、回读等待、GPU stream和kernel数。性能和profile矩阵分别运行。不会在第一轮正在运行的服务期间pull改变其源码。
