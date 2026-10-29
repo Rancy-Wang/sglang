@@ -421,3 +421,21 @@ graph两项实际均108次decode replay、0次prefill replay，logits与eager逐
   6. 验证：AST/diff/CPU；Git同步同SHA；原生padding数值校准、mixed/eager/graph完整检查、小chunk/取消/logprobs，然后profile/无profiler配对。现已开始11/15；正式分支不变。
 - 第10轮profile完整导出且exit0。trace中 recurrent.core CPU中位2.196ms（第9轮12.47ms），GPU区间中位11.348ms；start CPU中位0.259ms，finish 0.136ms。说明消除读回确实去除了CPU同步，但剩余单core GPU执行和每loop结果路径仍影响E2E。当前无10次正式无profiler结果，不用预热替代性能验收。
 - 第11轮读出图仅使用已有decode捕获尺寸，不为所有可能batch额外分配图；没有匹配精确行数时回退原生读出，避免人为padding改变LM head形状。新增原生padding对照临时关闭测试进程中的CDB能力声明，断言普通KV和whole-R路径；不修改生产配置或模型文件。
+
+### 第11轮独立padding校准证据（测量中）
+
+- `verify_native_padding.py --reference /results/round-5/native-joint-long --tokens /results/round-2/ar-reference --output /results/round-11/native-padding`退出0（诊断完成）。该进程显式断言无recurrent_runner、无timeline_runtime，走普通KV与原模型完整R4；实际总prefill 791tokens，加独立dummy请求到1024，随后只teacher-force原8题×497位置。
+- 原生padding和第10轮CDB graph的**全部3976条error/argmax记录完全相同**。原生padding自身同样唯一超旧包络depth0.max.max_abs=0.578125。这是此前联合/分开prefill校准未覆盖的形状，而非CDB相对同形状计算的回归。
+- 新对照hidden max_abs按depth=[0.578125,1.61376953125,3.015625,4.671875]，P99=[0.1875,0.3125,0.52099609375,1.0234375]；max RMSE=[0.0636032,0.4059574,0.6887687,0.8429846]，P99 RMSE=[0.0252809,0.0596582,0.1185733,0.1957051]。logits P99 maxabs/RMSE=1.921875/0.3561359，max=8.625/1.5029808。28/3976翻转，max reference margin0.25。
+- 按用户“根据实际计算固定误差范围”的要求，下一候选将用原先同一校准规则（原生对照最大值约25%裕量、向上取整）补齐padding范围：hidden depth0 max_abs 0.55→0.75，depth1 max_abs2→2.1，depth3 P99 max_abs1.25→1.3；其余数值、严格逻辑、token置信度及性能标准不变。新版由独立原生控制决定，不使用CDB候选的误差去拟合门槛；旧失败日志继续保留，原包络版本在Git历史中可追溯。
+- 第11轮graph-full（含原生读出图）仍仅有上述同一已复现极值；mixed检查全零；lifecycle退出0。10次无profiler测量正在进行。
+- 为检查时间段漂移，已用Git创建只读历史基线worktree `sglang-cdb-reference@1cf83659b15eb0002f80570981b58b9581ac687e`（本地/X5各一份，detached对照，非开发分支；未修改任何源码/正式分支）。X5隔离容器 `loopspec-cdb-control-20261029` 使用完全相同image SHA与GPU0、模型/数据/结果挂载。导入和torch2.14.1+cu130/transformers5.19.0/triton3.8.0一致；控制容器内设置safe.directory以读取只读worktree SHA。只有sleep进程，尚未运行GPU对照；须等候选测量结束再开始。
+
+### 候选12/15修改前计划：复用既有HF语义融合RMSNorm
+
+1. 目的：第11轮相对原记录E2E+0.57%–0.98%已接近目标，但紧邻历史控制出现21.2–22.45s的更快结果，尚不能认定P1效率达标；进一步削减GPU小算子开销。
+2. 步骤：先按上述独立native-padding控制补齐并冻结v2包络；Ouro保留cast_x_before_out_mul=True，移除force_native=True，使原生RMSNorm选择本版本已有rmsnorm_hf融合核；不新增定制算子。其归约顺序可能改变，必须通过新包络及高margin判据后才保留。
+3. 范围：models/ouro.py的norm构造、numerical_envelope.json和实验记录。CDB执行/调度与LoopSpec算法不变；这是配套模型核优化，不能把其全部收益归因于CDB调度本身。
+4. 标准：校准v2具体三项变动如上，其余hidden/logits/argmax判据不变；严格R4、KV/owner、生命周期与E2E≤2%不变。所有判据在本候选测量前冻结。融合norm失败则撤回此候选优化，不能继续追着候选误差放宽范围。
+5. 风险：FP32归约顺序在BF16舍入边界放大；读出token分歧不能仅以same-seed解释。保留teacher-forcing、有限值/P99/极值和高margin翻转检查，greedy自由输出首次分歧另核对。
+6. 验证：本地AST/diff与CPU生命周期契约；Git同步；先3976位置eager/graph与混合深度，再小chunk/取消/logprobs、8请求profile与无profiler对照。X5历史控制完成后才启动GPU候选。不把控制诊断exit0当包络通过；正式分支保持不变。当前12/15。
