@@ -308,3 +308,31 @@ CDB 前后的主对照保留各自生产可用的 graph 路径；普通 AR 若�
 4. 标准：原hidden0.125/0.02、logits0.5/0.1及token/stop标准不变；区分对照完成与通过。graph模式只报告实际logits，不用Python hook假装读取replay内部hidden。保留每种配置独立输出。
 5. 风险：合并batch/graph状态不同导致诊断本身无效；先验证无改算子eager结果复现第3轮，再检查graph实际replay及prefill分组。提前终止或短前缀成功不能替代512token验收。
 6. 验证：本地AST/ruff F/diff-check；commit/push、同一持久SSH内ff-only pull与SHA/import核对；GPU空闲检查后在原容器执行基准与各单变量对照，结果存round-4，记录命令及退出码。当前4/5，五轮上限来自用户AGENTS.md，优先于技能正文残留的十轮描述。
+
+### 第 4/5 轮结果
+
+- 本地/origin/X5 同为 `b49eabdc69fb4a43d9cdb5a2a8c91870be218146`；AST、CLI help、diff-check退出0。本地ruff模块未安装（退出1），未把它记为lint通过。原环境、GPU0、模型R4及参考未变。
+- 在原容器依次运行 batch_numerics.py，共同参数 `--reference /results/round-2/ar-reference --output /results/round-4/<name>`。各项均退出0，每组开始保存GPU占用快照，无并发GPU实验。原始JSON/张量、各组log/exit与综合 diagnostic-summary.json 已保留。
+
+| name / 附加参数 | B1/B8 hidden max / RMSE | B1/B8 logits max / RMSE | 对原B1 token不同数（104点） |
+| --- | --- | --- | ---: |
+| native-joint / 无 | 0.640625 / 0.123415 | 0.982422 / 0.218224 | 0 |
+| native-serial / --prefill serial | 0.622314 / 0.050391 | 0.5 / 0.091615 | 1 |
+| no-reduced / --linear no-reduced | 1.046875 / 0.241290 | 2.09375 / 0.412255 | 1 |
+| linear-invariant / --linear invariant | 0.25 / 0.039501 | 0.328125 / 0.067579 | 1 |
+| serial-rowwise / --prefill serial --linear rowwise-decode | 0.3125 / 0.038308 | 0.367188 / 0.067801 | 0 |
+| graph-decode / --graph decode | 不采集graph内部hidden | 0.982422 / 0.218224 | 0 |
+| graph-all / --graph all | 不采集graph内部hidden | 0.982422 / 0.218224 | 0 |
+
+native-joint所有张量与第3轮逐位相同。native-serial复现第5题step11差异：B1的1303/588 logits同为21.625，B8为21.625/21.5。no-reduced及linear-invariant同时改变原B1数值，不能作为无回归修复。逐行投影保留原B1数值，但第6题step2/depth2开始仍有hidden差异。代码检查发现LM head走torch.matmul，未被F.linear对照替换；必须单独归因。
+
+graph两项实际均108次decode replay、0次prefill replay，logits与eager逐位相同。原因：诊断沿用chunked_prefill_size=-1，使resolved prefill bs为空；不能据名称“all”声称测过prefill图。实际旧服务resolved chunked_prefill_size=4096、prefill backend=breakable，需补测。
+
+### 候选 5/5 修改前计划：关闭剩余诊断缺口
+
+1. 目的：确认逐行投影后的剩余误差是否来自RMSNorm reduction；对读出和真正prefill graph单独验证，定位能保留原B1的数学路径。
+2. 步骤：给诊断添加独立逐行norm及匹配LM head对照、可指定prefill图预算；增加第6题step2的逐层输入/输出探针，找首个“输入相同、输出不同”的算子。保留B1/B8同前缀和原B1对照，必要时扩大同候选采样位置。
+3. 范围：仅batch_numerics.py及本记录。生产算子、Scheduler、LoopSpec和公开参数不改；逐行对照只是根因实验，不以它冒充高效多请求实现。
+4. 标准：仍为原hidden/logits阈值与token一致；graph报告实际路径，逐层差异只比较相同层/depth/token。任何短探针成功不代表完整512token或性能门槛通过。
+5. 风险：探针带同步，不能用于延迟验收；逐行对照会增多launch，不能直接进入生产；prefill图桶可能改变GEMM形状，必须与无图单变量比较。
+6. 验证：AST/CLI/diff审查；只经loopspec-test同步、同SHA核验；X5原隔离容器顺序运行原逐行对照、逐行norm、匹配head、graph+4096预算等项，保存独立round-5结果。此为5/5；若前置正确性仍未解决，按AGENTS停止代码修改，保留证据和后续建议，不擅自进入第6轮或改验收标准。
