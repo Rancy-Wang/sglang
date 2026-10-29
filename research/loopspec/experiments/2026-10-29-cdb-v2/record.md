@@ -280,3 +280,12 @@ CDB 前后的主对照保留各自生产可用的 graph 路径；普通 AR 若�
 结论：原短prompt验收不能外推到本次AIME长文本/多请求输入；先保留失败证据并定位，不修改原数值或token阈值，不把尚未实现的CDB当作分歧来源。第3轮诊断候选在测试前补充M=2/4/8与LM head对照，属于同一未验证候选，不新增轮次。
 
 第3轮诊断工具候选同时完善已有 analyze_profile.py 的归因：按每次输出汇总同一stage的多次调用（depth0有4个core调用，不能把单次core中位数误标为单token成本）；按rid导出receive、共享batch引用和结果处理事件。Scheduler在schedule stream记录的GPU events不代表overlap forward时长，明确排除这项错误归因；完整GPU忙碌时间仍来自kernel trace。此改动只分析已采集文件，不影响服务。新增输出shared-batches.json，子stage的inclusive时间不可横向求和。
+
+### 2026-10-29 04:06 UTC：连接阻塞与交接状态
+
+- 第3轮候选代码为 `47d2ceaf71540e40bb01efb7d8159c1c1cdf5c3d`（此前38e9b7145/bb319a783属于同一GPU验证前的诊断工具候选），已push origin/loopspec-test，本地clean。AST/diff-check通过；嵌套span、每输出多次core汇总、共享batch引用和N=0路径的分析fixture退出0。**batch_numerics.py GPU诊断未执行，不宣称其数值结果或正确性通过。**
+- X5最后确认的代码仍为 `1cf83659b15eb0002f80570981b58b9581ac687e`；没有在任务运行期间pull新版。待恢复后先检查远端状态，再ff-only pull并核对import/SHA。
+- 旧AR B8 profile以同一第2轮源码完成请求并进入stop_profile导出；最后成功快照为 `ar-b8-profile-TP-0.trace.json.gz` 253722624字节，服务仍在导出。随后SSH失联，**尚未核实最终status、gzip完整性和recurrent JSONL**。不得把未确认的导出标为完成。
+- X5/X5-BUS原有AICoder-Direct链路超时；直连18.25.6.221:22超时。根据用户“使用可用服务器做踏板连接尝试”的指示，已尝试经AICoder-Direct、InfiniAI-BUS、Zhangyudong-BUS、InfiniAI-BUS-2、Tengxuan-BUS-2连接X5，均SSH banner超时（exit255）。前3个跳板本身hostname命令成功；AICoder/InfiniAI-BUS解析x5.mit.edu均为18.25.6.221，向其22端口读取banner超时（timeout exit124）。经BUS尝试A10/A11/L5/X4/B200作为后续入口也未连接成功。没有修改用户SSH配置、停止他人进程或改远端源文件；本地临时SSH配置只用于排查网关的en0绑定。
+- 当前 **3/5**，基础设施阻塞不增加轮数。已采集的LS完整trace及AR10次并发负载保留于指定results目录；原基线long-context token门槛失败，数值根因仍待GPU诊断。CDB/LoopSpec V2多请求运行时代码尚未实施，正式loopspec分支未变。
+- 恢复后的首要步骤：检查原profile进程及导出，不重复覆盖；同步本候选；空闲GPU0执行 `batch_numerics.py --reference /results/round-2/ar-reference --output /results/round-3/batch-numerics`，另加`--invariant`写独立目录作诊断对照。两者只用于定位，不能静默改变生产验收配置或放宽阈值。用新版analyze_profile.py重新分析现有trace（保留原summary），然后根据实测决定下个候选。
