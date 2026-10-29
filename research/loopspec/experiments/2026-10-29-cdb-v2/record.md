@@ -439,3 +439,21 @@ graph两项实际均108次decode replay、0次prefill replay，logits与eager逐
 4. 标准：校准v2具体三项变动如上，其余hidden/logits/argmax判据不变；严格R4、KV/owner、生命周期与E2E≤2%不变。所有判据在本候选测量前冻结。融合norm失败则撤回此候选优化，不能继续追着候选误差放宽范围。
 5. 风险：FP32归约顺序在BF16舍入边界放大；读出token分歧不能仅以same-seed解释。保留teacher-forcing、有限值/P99/极值和高margin翻转检查，greedy自由输出首次分歧另核对。
 6. 验证：本地AST/diff与CPU生命周期契约；Git同步；先3976位置eager/graph与混合深度，再小chunk/取消/logprobs、8请求profile与无profiler对照。X5历史控制完成后才启动GPU候选。不把控制诊断exit0当包络通过；正式分支保持不变。当前12/15。
+
+### 第11轮配对控制及第12轮结果
+
+- 第11轮10次makespan中位22815.231ms，较紧邻的同image/模型/数据/GPU历史控制22002.862ms，各请求E2E增加3.27%–3.77%，效率失败。原时间段基线较慢，不能选它来宣称通过。控制SHA为1cf83659；结果round-11/paired-fresh-performance.json。
+- 第12轮SHA `cc54af1b761df45d5480d0cee8e0c42930b5dfa2`。CPU5项及AST/diff通过；X5 eager-full和graph-full各3976位置均通过冻结v2包络（exit0），8组mixed/重复/重排行检查全零；graph argmax18/3976翻转，没有高margin翻转。小chunk32生命周期、logprob、取消/survivor/flush和严格busy内存检查exit0。
+- `cdb-b8-benchmark --first 8 --max-new-tokens 512 --warmup 2 --repeat 10` exit0；10次重复输出一致。makespan中位18532.454ms；各题E2E中位[18358.992,18386.842,18372.028,18388.420,18358.548,18349.622,18159.641,18212.455]ms；相对紧邻历史控制分别-16.291%,-16.126%,-16.137%,-15.987%,-16.007%,-15.876%,-5.095%,-16.005%。包含既有HF融合norm优化，不将全部收益归因于CDB。
+- 自由输出长度[512,512,512,512,512,512,508,512]，控制Q7为453token；不声称文本逐token完全相等或相同工作量。相对B1首次分歧位置[53,245,23,203,11,61,173,314]，对应同前缀参考margin[.125,.125,.125,.125,0,.125,0,.125]，均属于被冻结标准允许的近tie。
+- `cdb-b8-profile --first 8 --max-new-tokens 512 --warmup 2 --repeat 1 --profile` exit0，analyze_profile exit0。profile makespan19316.836ms，GPU kernel busy union17223.127ms；2096个core step中2048个mixed-depth，单core CPU中位1.480ms/GPU区间8.994ms，finish CPU0.170ms/GPU0.153ms。完整trace、各请求阶段及E2E、shared-batches和output-paths均保留在round-12。P1在已列配置和Ouro上功能/效率通过，非TP>1或其他模型的认证。
+
+### 候选13/15修改前计划：LoopSpec V2复用普通CDB
+
+1. 目的：在已通过的普通CDB之上将独立请求的LoopSpec分支组成同一mixed-depth GPU batch，每个loop返回原生事件循环，可随时准入。
+2. 步骤：common scheduler提供非算法特定的decode continuation/prefill完成策略hook；LoopSpec worker按Req管理Pipeline/context，拆开plan/collect；分支只为执行行、不创建伪Req；common RecurrentRunner/graph和静态depth planes共同执行。V2完成结果通过FutureMap、on_publish、原生结果处理；未验证只返回进度。分支proposal/verify批量收集决策，保留实际proposal分布。
+3. 范围：scheduler_components/recurrent及invariant的私有slot观测hook；recurrent_runner图配置；LoopSpec worker/info/utils/pipeline/config/sampling及原图实现删除；原CLI验证工具和CPU/GPU验证。Eagle/Dflash仅管理方式参考，无算法代码继承/复用。原生用户接口不增加开关。
+4. 标准：保留冻结v2数值包络、R4/owner/物化/提交/回滚严格条件；d1、d2及双depth模式、多请求、取消、小chunk、logprobs、sampling正确；8请求交错及bs1 profile/10次配对，性能≤2%回归，未测项如实标记。普通CDB回归必须通过。
+5. 风险：overlap中的EOS释放/后续分支在途、分支行重排、共享图输出寿命、私有KV漏计、sampling分布残差、同请求root提交顺序、bs1读回和小算子开销。采用每请求身份表、执行行与owner分离、精确已物化frontier、提交先转owner再剪枝，私有slots纳入原生严格内存守恒。
+6. 验证：先CPU Pipeline拒绝/双proposal/跨请求ownership和sampling统计；静态/diff；commit/push/pull同SHA后X5先8请求短smoke与lifecycle，再完整输出与同前缀误差验证、bs1/多请求profile和10次配对。原始失败保存；普通CDB成功不替代LoopSpec验收。当前13/15，正式loopspec分支不改。
+- 第13轮本地8项契约通过（包含三种分支接受/全拒绝、跨请求重排、relay过滤合并、3×100000次残差采样5σ检验），AST/diff通过。增加prefill立即EOS和原生retraction的私有状态释放hook，re-prefill恢复已输出history；压力retraction尚待实测。LoopSpec CDB明确限于具备已验证common能力的Ouro，Raven CDB未认证，不继续使用旧bs1私有调度路径冒充通用CDB。

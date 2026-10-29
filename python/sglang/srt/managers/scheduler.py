@@ -2449,6 +2449,7 @@ class Scheduler(
             get_last_batch=lambda: self.last_batch,
             get_running_batch=self.running_batch_for_observation,
             get_chunked_req=lambda: self.chunked_req,
+            get_extra_owned_slots=lambda: getattr(self.model_worker, "extra_owned_slots", lambda: ())(),
             scheduler_stage_metrics=self.scheduler_stage_metrics,
         )
 
@@ -2514,6 +2515,7 @@ class Scheduler(
             ),
             get_stats=lambda: self.metrics_reporter.stats,
             get_chunked_req=lambda: self.chunked_req,
+            get_extra_owned_slots=lambda: getattr(self.model_worker, "extra_owned_slots", lambda: ())(),
             get_disagg_prefill_bootstrap_queue=lambda: (
                 self.disagg_prefill_bootstrap_queue
             ),
@@ -4385,6 +4387,9 @@ class Scheduler(
                 else None
             )
             retracted_reqs, new_token_ratio, reqs_to_abort = batch.retract_decode()
+            if isinstance(self.model_worker, BaseSpecWorker):
+                for req in retracted_reqs + reqs_to_abort:
+                    self.model_worker.note_request_retracted(rid=req.rid)
             new_available_tokens = self.token_to_kv_pool_allocator.available_size()
             new_token_gained = new_available_tokens - old_available_tokens
             mamba_num_gained = (

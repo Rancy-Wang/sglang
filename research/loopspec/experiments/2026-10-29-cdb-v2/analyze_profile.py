@@ -66,6 +66,40 @@ def main():
                                        "cpu_ms": sum(r["cpu_ms"] for r in group),
                                        "gpu_stream_ms": sum(r.get("gpu_stream_ms", 0) for r in group)}
                                        for name, group in output_stages[row["id"]].items()}})
+        # CDB spans multiple scheduler calls. Associate steps by native request
+        # and output index; shared steps remain explicit and are not summed
+        # across requests. bs=1 yields directly comparable stage totals.
+        continuations = collections.defaultdict(list)
+        for step in (row for row in rows if row["stage"] == "loopspec.step"):
+            for item in step["input"]["requests"]:
+                key = item["rid"], item["output_index"]
+                continuations[key].append((step, item))
+                if item["rid"] not in step["output"]["committed"]:
+                    continue
+                chain = continuations.pop(key)
+                before = chain[0][1]
+                depth = str(before["entry_depth"])
+                ids = {entry[0]["id"] for entry in chain}
+                groups = collections.defaultdict(list)
+                for child in rows:
+                    parent = child
+                    while parent["id"] not in ids and parent["parent"] is not None:
+                        parent = by_id[parent["parent"]]
+                    if parent["id"] in ids:
+                        groups[child["stage"]].append(child)
+                cpu = sum(entry[0]["cpu_ms"] for entry in chain)
+                gpu = sum(entry[0].get("gpu_stream_ms", 0) for entry in chain)
+                after = {"cycles": item["cycles"] + 1}
+                paths[depth].append({"input": before, "output": after, "cpu_ms": cpu})
+                for stage, group in groups.items():
+                    path_stages[depth][stage].extend(group)
+                token_rows.append({**before, **after, "new_cycles": len(chain),
+                    "cpu_ms": cpu, "gpu_stream_ms": gpu,
+                    "shared_step_ids": sorted(ids),
+                    "stages": {name: {"calls": len(group),
+                        "cpu_ms": sum(r["cpu_ms"] for r in group),
+                        "gpu_stream_ms": sum(r.get("gpu_stream_ms", 0) for r in group)}
+                        for name, group in groups.items()}})
     for rid, request in request_rows.items():
         request["rid"] = rid
         if request["shared_batch_ids"]:

@@ -69,6 +69,7 @@ class SchedulerInvariantChecker:
     # The chunked-prefill request parked between chunks is in neither batch;
     # it still owns its KV row.
     get_chunked_req: Callable = field(default=lambda: None)
+    get_extra_owned_slots: Callable = field(default=lambda: ())
     count_req_pool_leak_warnings: int = 0
     count_memory_leak_warnings: int = 0
     recent_busy_msgs: Deque[str] = field(
@@ -296,7 +297,7 @@ class SchedulerInvariantChecker:
 
     def _get_total_uncached_sizes(self) -> Tuple[int, int]:
         """(full, swa) footprint of the KV rows requests own; 0 swa off hybrid-SWA."""
-        full_uncached = 0
+        full_uncached = len(self.get_extra_owned_slots())
         swa_uncached = self.tree_cache.swa_transient_size()
         for req in self._requests_owning_rows():
             assert req.kv.cache_protected_len % self.page_size == 0
@@ -376,6 +377,9 @@ class SchedulerInvariantChecker:
         allocs = torch.as_tensor([al for _, _, al in active], device=rtt.device)
         mask = torch.arange(row_width, device=rtt.device)[None, :] < allocs[:, None]
         owner_locs = rtt[idx][mask]
+        extra = self.get_extra_owned_slots()
+        if extra:
+            owner_locs = torch.cat((owner_locs, torch.tensor(extra, device=rtt.device)))
 
         # Sub-allocators to check: a flat allocator is its own single sub; a
         # hybrid-SWA wrapper exposes full_attn_allocator + swa_attn_allocator;

@@ -2462,7 +2462,7 @@ class KVCacheConfigurator:
 
             pool_cls = TimelineTokenToKVPool
             pool_kwargs["recurrent_config"] = self.model_config.hf_config
-            pool_kwargs["fixed_depth_slots"] = self.spec_algorithm.is_none()
+            pool_kwargs["fixed_depth_slots"] = True
         token_to_kv_pool = pool_cls(
             max_total_num_tokens,
             page_size=self.pool_page_size,

@@ -7,8 +7,6 @@ never conflates accepting the first proposal with accepting the second.
 from dataclasses import dataclass, field
 from typing import Any
 
-from sglang.srt.utils.recurrent_trace import span
-
 
 @dataclass
 class Lane:
@@ -51,71 +49,61 @@ class Pipeline:
             origin=origin,
         )
 
-    @span(
-        "loopspec.output",
-        before=lambda self: {
-            "rid": self.executor.req.rid,
-            "output_index": self.committed,
-            "entry_depth": next(l.depth for l in self.lanes if l.index == self.committed),
-            "cycles": self.cycles,
-        },
-        after=lambda result, self: {
-            "token": result[0], "origin": result[1], "cycles": self.cycles,
-        },
-    )
+    def plan(self):
+        """One loop of runnable branches; CDB owns when it is executed."""
+        self.cycles += 1
+        return sorted(self.lanes, key=lambda lane: -lane.depth)
+
+    def collect(self, ordered):
+        """Consume completed endpoints; return a token only after full-R verify."""
+        following, children, final = [], [], None
+        for lane in ordered:
+            if lane.depth == self.total:
+                if final is not None or lane.index != self.committed:
+                    raise RuntimeError("LoopSpec committed out of order")
+                final = lane, self.executor.verify(lane)
+                continue
+            if lane.depth in self.depths:
+                proposal = self.executor.propose(lane)
+                if proposal is not None:
+                    token, distribution = proposal
+                    lane.proposals[lane.depth] = (token, distribution)
+                    if lane.index + 1 < self.max_new_tokens:
+                        children.append(self._child(lane, token, lane.depth))
+            following.append(lane)
+        following.extend(children)
+        if final is None:
+            self.lanes = following
+            return None
+        lane, (token, origin, logits) = final
+        self.committed += 1
+        selected = next((child for child in following if child.parent == lane.uid
+                         and child.origin == origin and child.token == token), None)
+        if self.committed < self.max_new_tokens:
+            if selected is None:
+                selected = self._child(lane, token, self.total)
+                following.append(selected)
+                self.restarts += 1
+            else:
+                self.reused += int(selected.depth > 0)
+            following = [child for child in following if selected.uid in child.path]
+        else:
+            following = []
+        self.lanes = following
+        # Transfer the verified slot to native request ownership BEFORE pruning.
+        self.executor.commit(lane)
+        self.executor.retain(following)
+        return token, origin, logits
+
     def advance_until_commit(self):
+        """Synchronous algorithm harness; serving uses plan/collect via CDB."""
         while True:
-            self.cycles += 1
-            following, children, final = [], [], None
-            ordered = sorted(self.lanes, key=lambda lane: -lane.depth)
+            ordered = self.plan()
             if hasattr(self.executor, "advance_many"):
                 self.executor.advance_many(ordered, self.depths[0])
             else:
                 for lane in ordered:
                     self.executor.advance(lane, self.depths[0])
-            # Ancestors run first, guaranteeing prefix KV exists at this depth.
-            for lane in ordered:
-                if lane.depth == self.total:
-                    if final is not None or lane.index != self.committed:
-                        raise RuntimeError("LoopSpec committed out of order")
-                    final = lane, self.executor.verify(lane)
-                    continue
-                if lane.depth in self.depths:
-                    proposal = self.executor.propose(lane)
-                    if proposal is not None:
-                        token, distribution = proposal
-                        lane.proposals[lane.depth] = (token, distribution)
-                        if lane.index + 1 < self.max_new_tokens:
-                            children.append(self._child(lane, token, lane.depth))
-                following.append(lane)
-            following.extend(children)
-            if final is None:
-                self.lanes = following
-                continue
-            lane, (token, origin, logits) = final
-            self.committed += 1
-            selected = next(
-                (
-                    child
-                    for child in following
-                    if child.parent == lane.uid
-                    and child.origin == origin
-                    and child.token == token
-                ),
-                None,
-            )
-            if self.committed < self.max_new_tokens:
-                if selected is None:
-                    selected = self._child(lane, token, self.total)
-                    following.append(selected)
-                    self.restarts += 1
-                else:
-                    self.reused += int(selected.depth > 0)
-                following = [child for child in following if selected.uid in child.path]
-            else:
-                following = []
-            self.lanes = following
-            # Ownership transfer happens before pruning shared prefix slots.
-            self.executor.commit(lane)
-            self.executor.retain(following)
-            return token, origin, logits
+            result = self.collect(ordered)
+            if result is not None:
+                return result

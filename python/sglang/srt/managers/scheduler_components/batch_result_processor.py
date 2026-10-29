@@ -377,6 +377,11 @@ class SchedulerBatchResultProcessor:
                     ):
                         req.kv.kv_committed_len += 1
                     if req.finished():
+                        if isinstance(self.draft_worker, BaseSpecWorker):
+                            self.draft_worker.note_request_finished(
+                                rid=req.rid,
+                                natural_stop=isinstance(req.finished_reason, FINISH_MATCHED_TOKEN),
+                            )
                         if discard_finish_reason is None:
                             self._maybe_collect_routed_experts(req)
                             self._maybe_collect_indexer_topk(req)

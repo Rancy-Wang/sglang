@@ -34,6 +34,7 @@ class RecurrentScheduler:
         self.runner = scheduler.tp_worker.model_runner
         self.executor = self.runner.recurrent_runner
         self.total = self.runner.model.config.total_ut_steps
+        self.policy = getattr(scheduler.model_worker, "recurrent_policy", None)
         self.pending = []
         self.completed = []
         self.chunks = deque()
@@ -82,7 +83,8 @@ class RecurrentScheduler:
         if not running.is_empty() and not running.is_prefill_only:
             decode = s.update_running_batch(running)
             if decode is not None and not decode.is_empty():
-                self.pending.append(RecurrentWork(decode))
+                batches = self.policy.split_recurrent_batch(decode) if self.policy else [decode]
+                self.pending.extend(RecurrentWork(batch) for batch in batches)
                 running = ScheduleBatch(reqs=[], batch_is_full=False)
         else:
             running.filter_batch()
@@ -91,8 +93,11 @@ class RecurrentScheduler:
         # the previous result discovers EOS. Its KV was freed by that result
         # behind the WAR fence; do not advance those rows again.
         for work in self.pending:
-            if work.forward is not None and work.batch.forward_mode.is_decode():
-                self._filter_finished(work)
+            if work.batch.forward_mode.is_decode():
+                if self.policy:
+                    work.batch.filter_batch()
+                elif work.forward is not None:
+                    self._filter_finished(work)
         self.pending = [w for w in self.pending if w.batch.reqs]
         prefills = [w for w in self.pending if w.batch.forward_mode.is_extend()]
         decodes = [w for w in self.pending if w.batch.forward_mode.is_decode()]
@@ -198,20 +203,33 @@ class RecurrentScheduler:
         outputs = []
         with s.forward_stream_ctx:
             s.forward_stream.wait_stream(s.schedule_stream)
-            used_graph = self._advance(carrier.recurrent_plan)
-            for work in carrier.recurrent_plan:
-                if work.depth != self.total:
-                    continue
-                batch = work.batch
-                depths = torch.full_like(work.forward.req_pool_indices, self.total - 1)
-                logits = self.executor.finish(work.forward, work.state, depths, token_rows=work.token_rows)
-                result = GenerationBatchResult(
-                    logits_output=logits, can_run_cuda_graph=used_graph,
-                    extend_input_len_per_req=batch.extend_lens if (batch.return_logprob or batch.return_hidden_states) else None,
-                    extend_logprob_start_len_per_req=batch.extend_logprob_start_lens if batch.return_logprob else None,
+            works = carrier.recurrent_plan
+            if self.policy and carrier.forward_mode.is_decode():
+                finished = self.policy.forward_recurrent(
+                    [work.batch for work in works],
+                    lambda batch, lengths: s.future_map.publish(batch.req_pool_indices, lengths),
                 )
-                result = s.tp_worker.sample_generation(result, work.forward)
-                s.future_map.publish(batch.req_pool_indices, batch.seq_lens + 1)
+            else:
+                used_graph = self._advance(works)
+                finished = []
+                for work in works:
+                    if work.depth != self.total:
+                        continue
+                    batch = work.batch
+                    depths = torch.full_like(work.forward.req_pool_indices, self.total - 1)
+                    logits = self.executor.finish(work.forward, work.state, depths, token_rows=work.token_rows)
+                    result = GenerationBatchResult(
+                        logits_output=logits, can_run_cuda_graph=used_graph,
+                        extend_input_len_per_req=batch.extend_lens if (batch.return_logprob or batch.return_hidden_states) else None,
+                        extend_logprob_start_len_per_req=batch.extend_logprob_start_lens if batch.return_logprob else None,
+                    )
+                    result = s.tp_worker.sample_generation(result, work.forward)
+                    if self.policy:
+                        result = self.policy.finish_recurrent_prefill(batch, result)
+                    s.future_map.publish(batch.req_pool_indices,
+                        result.new_seq_lens if self.policy else batch.seq_lens + 1)
+                    finished.append((batch, result))
+            for batch, result in finished:
                 result.copy_done = s.device_module.Event()
                 if result.delay_sample_func is None:
                     s._relay_forward_payload(batch, batch.req_pool_indices, result)
@@ -224,8 +242,14 @@ class RecurrentScheduler:
                 batch.after_idle_gap = carrier.after_idle_gap
                 outputs.append((batch.copy(), result))
                 batch.input_ids = None
+                if self.policy:
+                    batch.spec_info = result.next_draft_input
+                    batch.spec_info.future_indices = batch.req_pool_indices
+                    batch.seq_lens = result.new_seq_lens
+                    batch.seq_lens_cpu = None
+                    batch.seq_lens_sum = None
                 self.completed.append(batch)
-                self.pending.remove(work)
+                self.pending = [work for work in self.pending if work.batch is not batch]
         # The event-loop result queue keeps completed snapshots/tensors alive;
         # partial work keeps its own state until a later loop or cancellation.
         return GenerationBatchResult(recurrent_outputs=outputs)

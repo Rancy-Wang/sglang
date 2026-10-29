@@ -31,7 +31,7 @@ def use_recurrent_execution(model, server_args):
     server_args = resolved_view(server_args)
     return (
         getattr(model, "supports_recurrent_execution", False)
-        and server_args.speculative_algorithm is None
+        and server_args.speculative_algorithm in (None, "LOOPSPEC")
         and (server_args.tp_size, server_args.pp_size, server_args.dp_size,
              server_args.attn_cp_size) == (1, 1, 1, 1)
         and server_args.attention_backend == "triton"
@@ -70,19 +70,19 @@ class RecurrentRunner:
         self.finish_graphs = {}
         self.graph_pool = None
 
-    def init_graphs(self):
+    def init_graphs(self, *, decode_sizes=None, prefill=True):
         from sglang.srt.model_executor.cuda_graph_config import check_cuda_graph_backend
         from sglang.srt.runtime_context import get_exec
 
         self.graph_pool = torch.cuda.graph_pool_handle()
         config = get_exec().graph.cuda_graph_config
-        if not check_cuda_graph_backend("prefill", "disabled"):
+        if prefill and not check_cuda_graph_backend("prefill", "disabled"):
             for tokens in sorted(config.prefill.bs):
                 self.prefill_graphs[tokens] = RecurrentCoreGraph(
                     self, self.timeline.max_rows, tokens=tokens
                 )
         if not check_cuda_graph_backend("decode", "disabled"):
-            for rows in sorted(config.decode.bs):
+            for rows in sorted(config.decode.bs if decode_sizes is None else decode_sizes):
                 if rows <= self.timeline.max_rows:
                     self.graphs[rows] = RecurrentCoreGraph(self, rows)
             # Exact row counts retain the native readout GEMM shape. A decode

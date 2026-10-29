@@ -143,10 +143,10 @@ def main():
         command.extend(["--chunked-prefill-size", str(args.chunked_prefill_size)])
     if args.eager:
         command.append("--disable-cuda-graph")
-    if args.no_overlap or args.algorithm == "loopspec":
+    if args.no_overlap:
         command.append("--disable-overlap-schedule")
     if args.algorithm == "loopspec":
-        command.extend(["--chunked-prefill-size", "-1", "--speculative-algorithm", "loopspec",
+        command.extend(["--speculative-algorithm", "loopspec",
                         "--speculative-draft-depth", *map(str, args.depths)])
     environment = dict(os.environ, SGLANG_RUST_BUILD_MODE="auto")
     if args.lifecycle:

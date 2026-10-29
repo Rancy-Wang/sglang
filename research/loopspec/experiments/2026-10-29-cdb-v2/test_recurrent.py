@@ -87,6 +87,7 @@ class TestRecurrentAdmission(unittest.TestCase):
                    ScheduleBatch(reqs=[b], forward_mode=ForwardMode.EXTEND)]
         occupancy = []
         scheduler = SimpleNamespace(
+            model_worker=SimpleNamespace(),
             tp_worker=SimpleNamespace(model_runner=SimpleNamespace(
                 recurrent_runner=object(), model=SimpleNamespace(config=SimpleNamespace(total_ut_steps=4)))),
             chunked_req=None,

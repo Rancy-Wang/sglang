@@ -25,8 +25,8 @@ def handle_server_args(server_args):
 
     cfg = resolving_view(server_args)
     model = model_config_of(server_args).hf_config
-    if model.architectures not in (["OuroForCausalLM"], ["RavenForCausalLM"]):
-        raise ValueError("LoopSpec requires a native Ouro or Raven model")
+    if model.architectures != ["OuroForCausalLM"]:
+        raise ValueError("LoopSpec CDB currently requires native Ouro; Raven CDB is unvalidated")
     depths = validate_depths(cfg.speculative_draft_depth or [1], model.total_ut_steps)
     if (cfg.tp_size, cfg.pp_size, cfg.dp_size, cfg.attn_cp_size) != (1, 1, 1, 1):
         raise ValueError("LoopSpec currently requires TP=PP=DP=CP=1")
@@ -39,18 +39,10 @@ def handle_server_args(server_args):
         for backend in (cfg.prefill_attention_backend, cfg.decode_attention_backend)
     ):
         raise ValueError("LoopSpec requires Triton for both prefill and decode")
-    if cfg.page_size != 1 or cfg.max_running_requests != 1:
-        raise ValueError(
-            "LoopSpec currently requires --page-size 1 --max-running-requests 1"
-        )
-    if (
-        not cfg.disable_overlap_schedule
-        or not cfg.disable_radix_cache
-        or cfg.chunked_prefill_size != -1
-    ):
-        raise ValueError(
-            "LoopSpec requires --disable-overlap-schedule --disable-radix-cache --chunked-prefill-size -1"
-        )
+    if cfg.page_size != 1 or not cfg.disable_radix_cache:
+        raise ValueError("LoopSpec requires --page-size 1 --disable-radix-cache")
+    if cfg.enable_priority_preemption:
+        raise ValueError("LoopSpec does not yet support priority preemption")
     if cfg.speculative_draft_model_path is not None:
         raise ValueError("LoopSpec shares target weights; do not specify a draft model")
     if (
