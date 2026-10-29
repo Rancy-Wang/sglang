@@ -108,9 +108,16 @@ def main():
         batched = run(list(range(8)))
         projection_report = []
         for depth, x in enumerate(projections):
-            single = torch.nn.functional.linear(x, projection.weight)
-            batch = torch.nn.functional.linear(x.repeat(8, 1), projection.weight)
-            projection_report.append({"depth": depth + 1, **error(single[0], batch[0])})
+            for name, value, weight in (
+                ("layer0.qkv", x, projection.weight),
+                ("lm_head", singles[4][min(11, args.steps)]["hidden"][depth].to(runner.device),
+                 runner.model.lm_head.weight),
+            ):
+                single = torch.nn.functional.linear(value, weight)
+                for width in (2, 4, 8):
+                    batch = torch.nn.functional.linear(value.repeat(width, 1), weight)
+                    projection_report.append({"operator": name, "depth": depth + 1,
+                                              "batch_width": width, **error(single[0], batch[0])})
     hook.remove()
     projection_hook.remove()
     torch.save({"single": singles, "batch": batched}, args.output / "tensors.pt")
@@ -128,7 +135,7 @@ def main():
                            "single_margin": float(a.topk(2).values.diff().abs()[0]),
                            "batch_margin": float(b.topk(2).values.diff().abs()[0])})
     result = {"invariant": args.invariant, "eager": True, "steps": args.steps,
-              "projection_same_input_m1_m8": projection_report, "records": report}
+              "projection_same_input": projection_report, "records": report}
     (args.output / "report.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps({"completed": True, "invariant": args.invariant,
                       "argmax_mismatches": sum(r["argmax_single"] != r["argmax_batch"] for r in report),
