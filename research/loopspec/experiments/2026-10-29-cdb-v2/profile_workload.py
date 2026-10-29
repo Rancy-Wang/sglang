@@ -39,7 +39,7 @@ def generate(url, problem, rid, scheduled_ns, max_tokens):
     start = time.perf_counter_ns()
     events, result = [], None
     with http(url, "/generate", {
-        "rid": rid, "text": problem, "stream": True,
+        "rid": rid, **({"input_ids": problem} if isinstance(problem, list) else {"text": problem}), "stream": True,
         "sampling_params": {"temperature": 0, "max_new_tokens": max_tokens},
     }) as response:
         for line in response:
@@ -51,7 +51,8 @@ def generate(url, problem, rid, scheduled_ns, max_tokens):
             result = json.loads(payload)
             if "error" in result:
                 raise RuntimeError(result)
-            events.append({"received_ns": time.perf_counter_ns(), "response": result})
+            events.append({"received_ns": time.perf_counter_ns(), "response": {
+                "meta_info": result["meta_info"], "output_ids": result.get("output_ids", [])}})
     end = time.perf_counter_ns()
     if result is None or result["meta_info"].get("finish_reason") is None:
         raise RuntimeError(f"Incomplete stream: {rid}: {result}")
@@ -70,7 +71,7 @@ def generate(url, problem, rid, scheduled_ns, max_tokens):
         "e2e_ms": (last - start) / 1e6, "ttft_ms": (first - start) / 1e6,
         "send_lateness_ms": (start - scheduled_ns) / 1e6,
         "output_ids": ids, "finish_reason": result["meta_info"]["finish_reason"],
-        "events": events,
+        "text": result.get("text", ""), "events": events,
     }
 
 
@@ -117,6 +118,12 @@ def main():
     p.add_argument("--chunked-prefill-size", type=int)
     p.add_argument("--lifecycle", action="store_true")
     p.add_argument("--reference", type=Path)
+    p.add_argument("--thinking", action="store_true")
+    p.add_argument("--context-length", type=int, default=2048)
+    p.add_argument("--graph-max-bs", type=int, default=8)
+    p.add_argument("--mem-fraction", type=float, default=.7)
+    p.add_argument("--report-mismatches", action="store_true",
+                   help="Retain numerical divergences as unresolved in status; do not abort the entire benchmark.")
     args = p.parse_args()
     if args.first == 1 and args.arrival_ms == [0, 10, 25, 45, 75, 120, 200, 320]:
         args.arrival_ms = [0]
@@ -132,14 +139,26 @@ def main():
     from transformers import AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    lengths = [len(tokenizer.encode(row["problem"])) for row in rows]
-    assert max(lengths) + args.max_new_tokens <= 2048
+    prompt_records = []
+    for row in rows:
+        rendered = tokenizer.apply_chat_template([{"role": "user", "content": row["problem"]}],
+            tokenize=False, enable_thinking=True, add_generation_prompt=True) if args.thinking else row["problem"]
+        ids = tokenizer.encode(rendered, add_special_tokens=not args.thinking)
+        if args.thinking:
+            assert "<think>" in rendered.split("<|im_start|>assistant")[-1]
+        prompt_records.append({"id": row["id"], "rendered": rendered, "input_ids": ids})
+        if args.thinking:
+            row["problem"] = ids
+    write_json(args.output / "prompts.json", {"chat_template": tokenizer.chat_template,
+        "thinking": args.thinking, "eos_token_id": tokenizer.eos_token_id, "prompts": prompt_records})
+    lengths = [len(r["input_ids"]) for r in prompt_records]
+    assert max(lengths) + args.max_new_tokens <= args.context_length
     command = [sys.executable, "-m", "sglang.launch_server", "--model-path", args.model,
                "--host", "127.0.0.1", "--port", str(args.port), "--dtype", "bfloat16",
                "--attention-backend", "triton", "--bf16-gemm-backend", "auto",
                "--max-running-requests", str(args.max_running_requests), "--page-size", "1",
-               "--disable-radix-cache", "--context-length", "2048", "--mem-fraction-static", "0.7",
-               "--cuda-graph-max-bs-decode", "8", "--enable-metrics", "--stream-interval", "1"]
+               "--disable-radix-cache", "--context-length", str(args.context_length), "--mem-fraction-static", str(args.mem_fraction),
+               "--cuda-graph-max-bs-decode", str(args.graph_max_bs), "--enable-metrics", "--stream-interval", "1"]
     if args.max_total_tokens is not None:
         command.extend(["--max-total-tokens", str(args.max_total_tokens)])
     if args.chunked_prefill_size is not None:
@@ -227,9 +246,9 @@ def main():
                                   min(len(actual["output_ids"]), len(expected["output_ids"])))
                     mismatches.append({"cohort": n, "question": q + 1, "first_difference": common})
         write_json(args.output / "correctness.json", {"reference": str(args.reference), "mismatches": mismatches})
-        if mismatches:
+        if mismatches and not args.report_mismatches:
             raise RuntimeError(f"Output mismatches: {mismatches}")
-        write_json(args.output / "status.json", {"success": True, "profile": args.profile})
+        write_json(args.output / "status.json", {"success": not mismatches, "execution_complete": True, "numerical_equivalence": "unresolved" if mismatches else "repeat_exact", "profile": args.profile})
     except BaseException as error:
         write_json(args.output / "status.json", {"success": False, "error": repr(error)})
         raise
