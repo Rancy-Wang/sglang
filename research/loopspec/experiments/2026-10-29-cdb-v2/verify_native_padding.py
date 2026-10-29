@@ -22,6 +22,8 @@ def main():
     parser.add_argument("--tokens", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--steps", type=int, default=496)
+    parser.add_argument("--decode-rows", type=int, choices=(8, 32), default=8)
+    parser.add_argument("--original-norm", action="store_true")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     from transformers import AutoTokenizer
@@ -37,7 +39,7 @@ def main():
     model = "/home/ruoxi/models/Ouro-2.6B"
     options = ServerArgs(
         model_path=model, dtype="bfloat16", attention_backend="triton",
-        bf16_gemm_backend="auto", max_running_requests=9, page_size=1,
+        bf16_gemm_backend="auto", max_running_requests=max(9, args.decode_rows), page_size=1,
         disable_overlap_schedule=True, disable_radix_cache=True,
         chunked_prefill_size=-1, disable_cuda_graph=True,
         context_length=2048, mem_fraction_static=.6,
@@ -49,13 +51,21 @@ def main():
     runner = bench.torch_runner
     assert runner.recurrent_runner is None
     assert not hasattr(runner.model, "timeline_runtime")
+    if args.original_norm:
+        from sglang.srt.layers.layernorm import RMSNorm
+        for module in runner.model.modules():
+            if isinstance(module, RMSNorm):
+                module._forward_method = module.forward_native
     tokenizer = AutoTokenizer.from_pretrained(model)
     rows = [json.loads(x) for x in Path("/home/ruoxi/repo/test/datasets/aime.jsonl").read_text().splitlines()][:8]
     prompts = [tokenizer.encode(r["problem"]) for r in rows]
     count = sum(map(len, prompts))
     bucket = 1 << (count - 1).bit_length()
     assert bucket > count
-    prompts.append([0] * (bucket - count))
+    dummy_rows = max(1, args.decode_rows - 8)
+    padding, remainder = divmod(bucket - count, dummy_rows)
+    assert padding > 0
+    prompts.extend([0] * (padding + int(i < remainder)) for i in range(dummy_rows))
     requests, selection, offset = [], [], 0
     for i, ids in enumerate(prompts):
         req = Req(rid=f"padding-control-{i}", origin_input_text="",
@@ -80,10 +90,10 @@ def main():
             captured.clear()
             if step == 0:
                 _, logits, batch = bench.extend(requests)
-                batch.filter_batch(keep_indices=list(range(8)))
+                batch.filter_batch(keep_indices=list(range(args.decode_rows)))
             else:
                 selection[:] = range(8)
-                forced = torch.tensor([r["output_ids"][step-1] for r in tokens], device=runner.device)
+                forced = torch.tensor([r["output_ids"][step-1] for r in tokens] + [0] * (args.decode_rows - 8), device=runner.device)
                 _, logits = bench.decode(forced, batch)
             assert len(captured) == 4
             logits = logits[:8].cpu()
@@ -100,6 +110,7 @@ def main():
     failures = check_envelope(records, limits)
     report = {"original_prefill_tokens": count, "padded_tokens": bucket,
               "native_full_depth": True, "recurrent_scheduler": False,
+              "decode_rows": args.decode_rows, "original_norm": args.original_norm,
               "steps": args.steps, "records": records, "failures": failures}
     (args.output / "report.json").write_text(json.dumps(report, indent=2)+"\n")
     print(json.dumps({k:v for k,v in report.items() if k != "records"}), flush=True)

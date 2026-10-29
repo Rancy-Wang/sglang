@@ -463,3 +463,15 @@ graph两项实际均108次decode replay、0次prefill replay，logits与eager逐
 - 第13轮SHA e9b3c447b5ac4d3c14d5acae86007114f9ede0b7，两端一致。ls-b8-smoke退出1，配置阶段读取不存在的enable_priority_preemption；实际v0.5.22用enable_priority_scheduling与disable_priority_preemption组合，未开始服务推理。独立ls-graph-full在模型/图初始化后退出1：测试直接加载的HF tokenizer缺少服务包装后的additional_stop_token_ids属性，尚未检验分支数值。两个失败日志均保留。
 - **候选14/15六项计划**：目的修复以上真实版本接口差异；步骤改用真实优先级参数组合，额外停止词采用可选属性读取；范围loopspec/config.py、utils.py及common recurrent能力门控；成功标准仍是原冻结数值/严格ownership/生命周期和≤2%性能，不能把接口修复当最终通过；风险为之后才能触及的V2运行期接线，不以本地测试代替；验证CPU/AST、Git同步同SHA、完整服务smoke/分支teacher forcing/lifecycle，随后profile与配对性能。预算14/15。
 - 独立历史控制容器在SHA1cf83659以原bs1路径运行Q1、draft-depth1、512tokens、2warmup+10测量，输出round-13/ls-b1-control；控制未运行完前不启动其他GPU作业。
+
+### 第14轮结果与候选15/15计划
+
+- SHA68475579163997ae9d8bbb5405e603f73d6ed7b7；CPU8项与diff通过。X5服务配置已通过，但worker构造先于内存池分配，读取尚不存在的ModelRunner.max_running_requests，smoke退出1，未开始请求。
+- 独立真实分支执行graph-full完成3976位置：21次argmax翻转，最大参考margin0.25；除depth0单点RMSE以外全项通过。唯一越界Q4 step302，depth0 RMSE0.1017153>0.085/maxabs0.373291；depth1/2/3 RMSE0.056584/0.026217/0.024337，最终logits maxabs0.25/RMSE0.044972，token34与参考相同，margin4.75。全部请求均实际走过接受与回滚，跨owner重排和物化检查无异常。仍保留success=false/exit1，不在此追着候选扩大包络。
+- **候选15/15六项计划**：
+  1. 目的：修复worker构造/分配生命周期，使原生V2服务实际启动；进一步解释32执行行的新形状误差。
+  2. 步骤：把max_rows计算移到alloc_memory_pool，容量以target已分配结果为准；扩充独立native-padding诊断可保留32个原生decode请求，并可选择原始native norm，断言没有CDB/LoopSpec计算。该对照只提供证据，不修改既定数值门槛。
+  3. 范围：LoopSpec worker初始化两处、verify_native_padding诊断和记录。算法、调度、采样及用户接口不变。
+  4. 标准：既定严格逻辑、冻结v2数值范围及≤2%性能回归；本轮未达不能称最终完成。普通CDB第12轮已通过的证据保持独立。
+  5. 风险：内存池后捕获的分支容量、overlap运行期接线、取消释放、hidden单点差异和bs1开销。必须实际8请求、生命周期和profile，不能仅依赖offline测试。
+  6. 验证：CPU/AST/diff，同SHA Git同步；服务短smoke，smallchunk lifecycle，完整8请求/分支数值，独立native32；可运行时做bs1及8请求profile/10次性能。第15轮结束如仍有失败或未完成项，按预算停止源码修改并报告，不启动第16轮。

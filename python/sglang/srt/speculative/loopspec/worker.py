@@ -54,7 +54,6 @@ class LoopSpecWorker(BaseSpecWorker):
         self.depths = tuple(get_spec().speculative_draft_depth)
         self.total = self.model_runner.model.config.total_ut_steps
         self.width = pipeline_layout(self.total, self.depths)[-1][2]
-        self.max_rows = self.model_runner.max_running_requests * self.width
         self.contexts = {}
         self.role_replays = dict.fromkeys(("pre", "core", "post", "rejection"), 0)
         self.metrics = None
@@ -71,6 +70,8 @@ class LoopSpecWorker(BaseSpecWorker):
         return None
 
     def alloc_memory_pool(self, **kwargs):
+        # Worker construction precedes target pool sizing in the native lifecycle.
+        self.max_rows = self.model_runner.max_running_requests * self.width
         self.req_to_token_pool, self.token_to_kv_pool_allocator = self.target_worker.get_memory_pool()
         self.private_pool = ReqToTokenPool(
             size=self.max_rows, max_context_len=self.req_to_token_pool.max_context_len,
