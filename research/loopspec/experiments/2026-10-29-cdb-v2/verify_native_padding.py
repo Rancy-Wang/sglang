@@ -1,7 +1,9 @@
 """Calibrate padding with native full-R forward, without CDB execution code.
 
-The ninth request only supplies independent padding rows during prefill. It is
-excluded from decode; each real request keeps its original positions/prefix.
+Independent dummy requests supply padding rows. For M=32 their new decode KV
+is recycled after each step, retaining their original prefill; the eight real
+requests keep their complete, growing positions/prefixes. For M=8 only prefill
+is padded.
 No production operator, model weight or decision threshold is modified.
 """
 
@@ -85,6 +87,9 @@ def main():
     reference = torch.load(args.reference / "tensors.pt", weights_only=True)
     tokens = json.loads((args.tokens / "cohort-0.json").read_text())["requests"]
     records = []
+    # Bound independent dummy history without truncating any real request.
+    required_slots = bucket + 8 * args.steps + max(0, args.decode_rows - 8)
+    assert runner.max_total_num_tokens >= required_slots, required_slots
     with torch.inference_mode():
         for step in range(args.steps + 1):
             captured.clear()
@@ -95,6 +100,22 @@ def main():
                 selection[:] = range(8)
                 forced = torch.tensor([r["output_ids"][step-1] for r in tokens] + [0] * (args.decode_rows - 8), device=runner.device)
                 _, logits = bench.decode(forced, batch)
+                if args.decode_rows > 8:
+                    dummy_slots = batch.out_cache_loc[8:]
+                    assert dummy_slots.unique().numel() == args.decode_rows - 8
+                    runner.token_to_kv_pool_allocator.free(dummy_slots)
+                    batch.req_to_token_pool.req_to_token[
+                        batch.req_pool_indices[8:], batch.seq_lens[8:] - 1
+                    ] = 0
+                    batch.seq_lens[8:] -= 1
+                    batch.seq_lens_cpu[8:] -= 1
+                    batch.orig_seq_lens[8:] -= 1
+                    batch.seq_lens_sum = None
+                    for req in batch.reqs[8:]:
+                        req.kv.kv_allocated_len -= 1
+                        req.kv.kv_committed_len -= 1
+                    assert batch.seq_lens_cpu[8:].tolist() == [len(p) for p in prompts[8:]]
+                assert batch.seq_lens_cpu[:8].tolist() == [len(p) + step for p in prompts[:8]]
             assert len(captured) == 4
             logits = logits[:8].cpu()
             for q in range(8):
@@ -111,6 +132,8 @@ def main():
     report = {"original_prefill_tokens": count, "padded_tokens": bucket,
               "native_full_depth": True, "recurrent_scheduler": False,
               "decode_rows": args.decode_rows, "original_norm": args.original_norm,
+              "dummy_history": "prefill retained; decode slot recycled each step",
+              "required_slots": required_slots,
               "steps": args.steps, "records": records, "failures": failures}
     (args.output / "report.json").write_text(json.dumps(report, indent=2)+"\n")
     print(json.dumps({k:v for k,v in report.items() if k != "records"}), flush=True)

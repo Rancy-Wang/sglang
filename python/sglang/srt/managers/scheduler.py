@@ -2515,7 +2515,6 @@ class Scheduler(
             ),
             get_stats=lambda: self.metrics_reporter.stats,
             get_chunked_req=lambda: self.chunked_req,
-            get_extra_owned_slots=lambda: getattr(self.model_worker, "extra_owned_slots", lambda: ())(),
             get_disagg_prefill_bootstrap_queue=lambda: (
                 self.disagg_prefill_bootstrap_queue
             ),

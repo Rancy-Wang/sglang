@@ -486,3 +486,14 @@ graph两项实际均108次decode replay、0次prefill replay，logits与eager逐
 - 旧bs1的紧邻控制 `round-13/ls-b1-control` exit0，10次512token，makespan中位9841.986811ms；尚无通过的新V2服务性能与之配对。
 - X5 `/home/ruoxi/repo/test/results/loopspec/2026-10-29-cdb-v2/round-15/status-summary.json` 已写明测试SHA、15/15状态、精确失败和未执行项；所有原始失败日志保留。GPU计算进程和30126已清空，只保留本任务容器sleep及SSH session60877。
 - 按AGENTS.md第43行达到授权15轮后停止源码/测试/行为配置修改。已向用户请求追加5轮(总20)；等待明确答复，时间经过不构成授权。这里只补充结果记录，不启动第16轮，不改变正式loopspec分支。
+
+### 授权追加与候选16/20计划
+
+用户明确答复“追加5轮，按上述范围继续”，总预算增至20；前15轮和失败证据保留。沿用loopspec-code-change、x5-loopspec-experiment与持久连接技能，X5 session60877已确认存活，GPU空闲。
+
+1. 目的：恢复普通/LoopSpec Scheduler启动，并完成独立native32数值控制，进入实际V2服务验收。
+2. 步骤：只删除init_load_inquirer误传实参，保留invariant_checker私有slot观测；native32对照每步释放24个独立dummy刚生成的KV并回退它们的长度，保留各自prefill。8个真实请求仍完整增长至497位置，M=32不变。
+3. 范围：scheduler.py一处接线、verify_native_padding.py诊断容量和记录；不改算法、原生模型或用户接口。
+4. 标准：严格R4/owner/物化/回滚、既定数值包络和E2E≤2%回归；仅独立原生计算可作为形状校准证据，不以候选误差扩大阈值。
+5. 风险：overlap结束/取消释放、私有KV守恒、接线尚未触达的运行期错误；dummy回收必须仅作用于最后24行且不污染真实8行。
+6. 验证：CPU8契约、AST/diff；Git同SHA同步。X5短8请求、smallchunk生命周期、独立native32及完整teacher-forcing，再做8请求完整输出、bs1/8请求profile及10次配对；普通AR也做服务回归。测试/性能失败保留，未执行项不标通过。当前16/20，正式分支不动。
