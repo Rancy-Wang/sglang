@@ -1673,6 +1673,9 @@ class TritonAttnBackend(AttentionBackend):
                         layer.v_scale,
                     )
 
+        if getattr(layer, "ouro_bf16_rounding", False):
+            return self._forward_ouro(q, k, v, o, layer, forward_batch, decode=False)
+
         logits_soft_cap = logit_capping_mod(layer.logit_capping_method, layer.logit_cap)
 
         causal = True
@@ -2209,6 +2212,27 @@ class TritonAttnBackend(AttentionBackend):
 
         return o
 
+    def _forward_ouro(self, q, k, v, o, layer, batch, *, decode):
+        from sglang.kernels.ops.attention.ouro_attention import ouro_attention
+
+        metadata = self.forward_metadata
+        ouro_attention(
+            q.view(-1, layer.tp_q_head_num, layer.qk_head_dim),
+            k.view(-1, layer.tp_k_head_num, layer.qk_head_dim),
+            v.view(-1, layer.tp_v_head_num, layer.v_head_dim),
+            self.token_to_kv_pool.get_key_buffer(layer.layer_id),
+            self.token_to_kv_pool.get_value_buffer(layer.layer_id),
+            o.view(-1, layer.tp_q_head_num, layer.v_head_dim),
+            metadata.kv_indptr,
+            metadata.kv_indices,
+            metadata.qo_indptr,
+            batch.batch_size,
+            1 if decode else metadata.max_extend_len,
+            layer.scaling,
+            decode=decode,
+        )
+        return o
+
     def forward_decode(
         self,
         q: torch.Tensor,
@@ -2268,6 +2292,9 @@ class TritonAttnBackend(AttentionBackend):
         else:
             kv_indptr = self.forward_metadata.kv_indptr
             kv_indices = self.forward_metadata.kv_indices
+
+        if getattr(layer, "ouro_bf16_rounding", False):
+            return self._forward_ouro(q, k, v, o, layer, forward_batch, decode=True)
 
         if layer.k_scale is not None and layer.v_scale is not None:
             k_descale = layer.k_scale_float

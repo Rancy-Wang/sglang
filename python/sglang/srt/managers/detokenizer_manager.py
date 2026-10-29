@@ -145,6 +145,22 @@ class DetokenizerManager(MultiHttpWorkerDetokenizerMixin):
                 revision=get_model().revision,
                 tokenizer_backend=get_serving().tokenizer_backend,
             )
+            from types import SimpleNamespace
+            from transformers import PretrainedConfig
+            from sglang.srt.utils.hf_transformers.recurrent import (
+                patch_recurrent_tokenizer,
+            )
+
+            try:
+                raw, _ = PretrainedConfig.get_config_dict(
+                    get_model().model_path, revision=get_model().revision
+                )
+            except (OSError, ValueError):
+                raw = {}
+            if raw.get("model_type") == "ouro":
+                patch_recurrent_tokenizer(
+                    SimpleNamespace(model_type="ouro"), self.tokenizer
+                )
             try:
                 self.vocab_size = len(self.tokenizer)
             except TypeError:

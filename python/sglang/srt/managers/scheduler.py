@@ -896,6 +896,10 @@ class Scheduler(
                     tokenizer_backend=get_serving().tokenizer_backend,
                 )
 
+        from sglang.srt.utils.hf_transformers.recurrent import patch_recurrent_tokenizer
+
+        patch_recurrent_tokenizer(self.model_config, self.tokenizer)
+
         # Load multimodal processor for M-RoPE fallback computation.
         self._mm_processor = None
         if (

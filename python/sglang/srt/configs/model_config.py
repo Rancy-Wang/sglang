@@ -1471,6 +1471,10 @@ class ModelConfig:
             )
         self.num_hidden_layers = self.hf_text_config.num_hidden_layers
         self.num_attention_layers = self.num_hidden_layers
+        if "RavenForCausalLM" in self.hf_config.architectures:
+            self.num_attention_layers = self.hf_text_config.logical_attention_layers
+        if "OuroForCausalLM" in self.hf_config.architectures:
+            self.num_attention_layers *= self.hf_text_config.total_ut_steps
         if "LongcatFlashForCausalLM" in self.hf_config.architectures:
             self.num_attention_layers = self.num_hidden_layers * 2
         if "IQuestLoopCoderForCausalLM" in self.hf_config.architectures:

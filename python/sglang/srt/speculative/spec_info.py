@@ -44,6 +44,7 @@ class SpeculativeAlgorithm(Enum):
     FROZEN_KV_MTP = auto()
     STANDALONE = auto()
     NGRAM = auto()
+    LOOPSPEC = auto()
     NONE = auto()
 
     @classmethod
@@ -131,6 +132,9 @@ class SpeculativeAlgorithm(Enum):
 
     def is_ngram(self) -> bool:
         return self == SpeculativeAlgorithm.NGRAM
+
+    def is_loopspec(self) -> bool:
+        return self == SpeculativeAlgorithm.LOOPSPEC
 
     def supports_target_verify_for_draft(self) -> bool:
         return self.is_dflash_family()
@@ -263,6 +267,10 @@ class SpeculativeAlgorithm(Enum):
             _handle_eagle_family(server_args)
         elif self.is_ngram():
             _handle_ngram(server_args)
+        elif self.is_loopspec():
+            from sglang.srt.speculative.loopspec.config import handle_server_args
+
+            handle_server_args(server_args)
 
     def resolve_max_speculative_num_draft_tokens(
         self, server_args: ServerArgs
@@ -307,6 +315,11 @@ class SpeculativeAlgorithm(Enum):
         assert not self.is_none(), (
             "Cannot create worker for NONE speculative algorithm."
         )
+
+        if self.is_loopspec():
+            from sglang.srt.speculative.loopspec.worker import LoopSpecWorker
+
+            return LoopSpecWorker
 
         if self.is_dflash():
             # V2 worker drives both overlap and non-overlap (scheduler runs it
@@ -373,6 +386,7 @@ class SpecInputType(IntEnum):
     DFLASH_VERIFY = auto()
     NGRAM_VERIFY = auto()
     UNO_STATE = auto()
+    LOOPSPEC_STATE = auto()
     UNO_DRAFT = auto()
     UNO_VERIFY = auto()
     # Carried between rounds under PP: the tree the last stage drafted, which

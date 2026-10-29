@@ -112,6 +112,7 @@ class Bf16GemmBackend(Enum):
     CUTEDSL = "cutedsl"
     GEMV = "gemv"
     TORCH = "torch"
+    TINYGEMM = "tinygemm"
 
     def is_auto(self) -> bool:
         return self == Bf16GemmBackend.AUTO
@@ -121,6 +122,9 @@ class Bf16GemmBackend(Enum):
 
     def is_gemv(self) -> bool:
         return self == Bf16GemmBackend.GEMV
+
+    def is_tinygemm(self) -> bool:
+        return self == Bf16GemmBackend.TINYGEMM
 
 
 _BF16_GEMM_BACKEND: Optional[Bf16GemmBackend] = None
@@ -255,7 +259,13 @@ def initialize_bf16_gemm_config() -> None:
 
     backend = Bf16GemmBackend(backend_str)
 
-    if backend.is_gemv():
+    if backend.is_tinygemm():
+        if get_exec().deterministic.enable_deterministic_inference:
+            raise ValueError("TinyGEMM does not support deterministic-inference mode")
+        from sglang.srt.layers.quantization.tinygemm import initialize
+
+        initialize()
+    elif backend.is_gemv():
         if torch.cuda.get_device_capability()[0] != 9:
             raise ValueError("--bf16-gemm-backend gemv requires SM90 (Hopper)")
 
@@ -353,7 +363,15 @@ def _bf16_gemm_dispatch_impl(
     addend: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     m = x.numel() // x.shape[-1]
-    if _enable_bf16_splitk_gemm and use_bf16_splitk_gemm(
+    if get_bf16_gemm_backend().is_tinygemm():
+        from sglang.srt.layers.quantization.tinygemm import eligible, linear
+
+        output = (
+            linear(x, weight, bias)
+            if eligible(x, weight, bias)
+            else F.linear(x, weight, bias)
+        )
+    elif _enable_bf16_splitk_gemm and use_bf16_splitk_gemm(
         m, weight.shape[0], weight.shape[1]
     ):
         output = _bf16_splitk_gemm(x, weight, bias)
@@ -517,7 +535,10 @@ class UnquantizedLinearMethod(LinearMethodBase):
             return tgemm.mm(x, layer.weight, bias, otype=x.dtype)
 
         elif (
-            get_bf16_gemm_backend().is_cutedsl()
+            (
+                get_bf16_gemm_backend().is_cutedsl()
+                or get_bf16_gemm_backend().is_tinygemm()
+            )
             and x.is_cuda
             and x.dtype == torch.bfloat16
             and layer.weight.dtype == torch.bfloat16

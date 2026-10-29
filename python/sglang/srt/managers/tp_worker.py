@@ -345,6 +345,10 @@ class TpModelWorker(BaseTpWorker):
                     revision=get_model().revision,
                     tokenizer_backend=get_serving().tokenizer_backend,
                 )
+        from sglang.srt.utils.hf_transformers.recurrent import patch_recurrent_tokenizer
+
+        patch_recurrent_tokenizer(self.model_config, self.tokenizer)
+
         self.device = self.model_runner.device
 
         # Init nccl groups
