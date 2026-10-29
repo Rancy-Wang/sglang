@@ -475,3 +475,14 @@ graph两项实际均108次decode replay、0次prefill replay，logits与eager逐
   4. 标准：既定严格逻辑、冻结v2数值范围及≤2%性能回归；本轮未达不能称最终完成。普通CDB第12轮已通过的证据保持独立。
   5. 风险：内存池后捕获的分支容量、overlap运行期接线、取消释放、hidden单点差异和bs1开销。必须实际8请求、生命周期和profile，不能仅依赖offline测试。
   6. 验证：CPU/AST/diff，同SHA Git同步；服务短smoke，smallchunk lifecycle，完整8请求/分支数值，独立native32；可运行时做bs1及8请求profile/10次性能。第15轮结束如仍有失败或未完成项，按预算停止源码修改并报告，不启动第16轮。
+
+### 第15轮结果：达到授权预算，未完成
+
+- 测试源码SHA `46411c2d0c1124864ba9df83386201120dbf2860`；CPU8项、AST、diff通过。X5同SHA干净，实验前GPU0无计算进程、30126空闲，容器源码映射未变。
+- `profile_workload.py --output /results/round-15/ls-b8-smoke --algorithm loopspec --first 8 --max-new-tokens 32 --warmup 0 --repeat 1` exit1。模型/pool/graph初始化完成后SchedulerLoadInquirer构造失败：第13轮加入的get_extra_owned_slots本应只传给SchedulerInvariantChecker，但批量替换同时把它传到了init_load_inquirer。**当前实验HEAD无法启动服务，普通CDB第12轮通过结论不能套用当前HEAD。** 这是实现接线错误，不是网络/基础设施问题。
+- 具体待修位置：scheduler.py::init_load_inquirer删除不支持的get_extra_owned_slots实参；init_invariant_checker的同名实参应保留。按轮次上限本轮不再修改源代码。
+- smallchunk lifecycle按计划在smoke成功后才运行，因此未执行；当前LoopSpec V2的8请求完整HTTP输出、bs1/8请求profile、配对性能、sampling服务验证均未完成，不标通过。第14轮offline分支数值结果仍是最完整的算法证据，唯一hidden单点越界仍保留。
+- `verify_native_padding.py ... --output /results/round-15/native32 --decode-rows 32 --original-norm` exit1：纯原生32请求的KV总需求(1024+32×496=16896 slots)超过测试pool容量9089；one_batch空树桩无evict_for_alloc。属于诊断容量配置错误，未形成完整32行校准，不能据此改数值门槛。后续应在独立控制里合理限制dummy历史或调整pool布局/容量并保持8个真实请求原计算，不修改生产模型。
+- 旧bs1的紧邻控制 `round-13/ls-b1-control` exit0，10次512token，makespan中位9841.986811ms；尚无通过的新V2服务性能与之配对。
+- X5 `/home/ruoxi/repo/test/results/loopspec/2026-10-29-cdb-v2/round-15/status-summary.json` 已写明测试SHA、15/15状态、精确失败和未执行项；所有原始失败日志保留。GPU计算进程和30126已清空，只保留本任务容器sleep及SSH session60877。
+- 按AGENTS.md第43行达到授权15轮后停止源码/测试/行为配置修改。已向用户请求追加5轮(总20)；等待明确答复，时间经过不构成授权。这里只补充结果记录，不启动第16轮，不改变正式loopspec分支。
