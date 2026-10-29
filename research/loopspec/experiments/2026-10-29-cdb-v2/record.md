@@ -383,3 +383,9 @@ graph两项实际均108次decode replay、0次prefill replay，logits与eager逐
   4. 标准：8题交错请求正常输出，无错深度/错owner/多提交；trace证明未完成R4时能重新准入；取消和chunk生命周期安全；固定包络内同前缀一致；真实性能以原负载profile/paired E2E单独判断，未达到≤2%不称效率通过。
   5. 风险：overlap的在途EOS/取消释放、partial prefill被误合并、FutureMap发布提前、hidden被图覆盖、phase公平性、graph与metadata开销。保留每token一次分配，partial状态持有tensor直到完成，使用原生stream/event屏障，显式完成列表而非伪造token。
   6. 验证：CPU结构契约与静态检查；Git同步X5；先短服务/交错/取消/小chunk测试，再原AIME8题完整profile与无profiler测量。错误/慢路径如实记录；只有普通CDB功能与性能成立后再迁移LoopSpec V2。
+
+### 第8轮结果及候选9/15
+
+- 提交 `e05ea719888f31535efdad8b5d847482162418e2`；AST/diff及4项CPU寻址/准入契约通过。本地完整tp_worker导入受缺少uvicorn阻塞，不记通过；X5容器完整依赖用于实际服务。
+- 两端同SHA；GPU无计算进程、30126空闲。`profile_workload.py --output /results/round-8/cdb-smoke --first 8 --max-new-tokens 32 --warmup 0 --repeat 1` 退出1，server初始化失败。根因：能力选择读取raw ServerArgs.device=None，而本版本解析结果在ResolvedView；未开始请求推理，不能把它作为数值/性能失败。
+- **候选9/15六项计划**：目的为正确接入本版本配置解析协议并保持构造接口兼容；步骤为能力选择统一使用resolved_view，新增SB/结果字段设为keyword-only；范围recurrent_runner.py、schedule_batch.py、utils.py和记录；标准原CLI启动原生CDB、原构造参数顺序不变、四项CPU契约及原smoke；风险是其他初始化/运行期接线问题，必须继续实际请求检查而非仅导入；验证同环境同负载，结果写round-9，仍沿用固定数值和性能门槛。当前开始9/15。

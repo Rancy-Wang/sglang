@@ -51,7 +51,7 @@ def allocate_distinct_stream(device_module, avoid_streams):
 class GenerationBatchResult:
     # A loop boundary may produce progress only. Completed native batches
     # retain their own output metadata; partial rows never receive fake tokens.
-    recurrent_outputs: Optional[List[Any]] = None
+    recurrent_outputs: Optional[List[Any]] = dataclasses.field(default=None, kw_only=True)
     logits_output: Optional[LogitsProcessorOutput] = None
     pp_hidden_states_proxy_tensors: Optional[PPProxyTensors] = None
     next_token_ids: Optional[

@@ -23,8 +23,10 @@ from sglang.srt.speculative.spec_info import SpeculativeAlgorithm
 
 def use_recurrent_execution(model, server_args):
     """Select the validated native CDB storage/execution capabilities."""
+    from sglang.srt.arg_groups.overrides import resolved_view
     from sglang.srt.environ import envs
 
+    server_args = resolved_view(server_args)
     return (
         getattr(model, "supports_recurrent_execution", False)
         and server_args.speculative_algorithm is None
