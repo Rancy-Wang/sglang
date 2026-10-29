@@ -65,4 +65,40 @@ def verify(url, rows):
             assert survived["meta_info"]["completion_tokens"] == 16
         results.append({"abort_delay_s": delay, "aborted": aborted, "survivor": survived})
         flush()
+    # Exercise the same public APIs with sampling and native stop handling.
+    with http(url, "/generate", {"text": rows[0]["problem"],
+             "sampling_params": {"temperature": 0, "max_new_tokens": 0}}) as response:
+        zero = json.load(response)
+    assert zero["meta_info"]["completion_tokens"] == 0
+    results.append({"zero_tokens": zero})
+
+    def sampled(index):
+        with http(url, "/generate", {
+            "text": rows[index]["problem"],
+            "sampling_params": {"temperature": .8, "top_k": 40, "top_p": .9,
+                "max_new_tokens": 24, "min_new_tokens": 16,
+                "frequency_penalty": .1, "presence_penalty": .05,
+                "repetition_penalty": 1.05, "sampling_seed": 101 + index},
+            "return_logprob": True, "logprob_start_len": -1,
+        }) as response:
+            return json.load(response)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        samples = list(pool.map(sampled, range(8)))
+    for output in samples:
+        meta = output["meta_info"]
+        assert 16 <= meta["completion_tokens"] <= 24
+        assert len(output["output_ids"]) == meta["completion_tokens"]
+        assert all(math.isfinite(x[0]) for x in meta["output_token_logprobs"])
+    results.append({"sampling_api": samples})
+    flush()
+    with http(url, "/v1/models") as response:
+        model_id = json.load(response)["data"][0]["id"]
+    with http(url, "/v1/completions", {"model": model_id,
+              "prompt": rows[0]["problem"], "temperature": 0,
+              "max_tokens": 16}) as response:
+        completion = json.load(response)
+    assert completion["usage"]["completion_tokens"] == 16
+    assert completion["choices"][0]["finish_reason"] == "length"
+    results.append({"openai_completion": completion})
+    flush()
     return {"passed": True, "cases": results}

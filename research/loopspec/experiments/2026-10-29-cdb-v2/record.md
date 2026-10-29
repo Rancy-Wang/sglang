@@ -497,3 +497,17 @@ graph两项实际均108次decode replay、0次prefill replay，logits与eager逐
 4. 标准：严格R4/owner/物化/回滚、既定数值包络和E2E≤2%回归；仅独立原生计算可作为形状校准证据，不以候选误差扩大阈值。
 5. 风险：overlap结束/取消释放、私有KV守恒、接线尚未触达的运行期错误；dummy回收必须仅作用于最后24行且不污染真实8行。
 6. 验证：CPU8契约、AST/diff；Git同SHA同步。X5短8请求、smallchunk生命周期、独立native32及完整teacher-forcing，再做8请求完整输出、bs1/8请求profile及10次配对；普通AR也做服务回归。测试/性能失败保留，未执行项不标通过。当前16/20，正式分支不动。
+
+### 第16轮结果与候选17/20计划
+
+- SHA77851460919b398d049bd08794aa2735c87f7a7d；本地CPU8项、AST/diff通过；X5同SHA干净，容器解释器/源码路径确认正确。
+- ls-b8-smoke exit0：原生overlap/CDB/LoopSpec V2，8题交错各32tokens成功。ls-lifecycle exit0：chunk32，两轮不等长结束+logprobs、.03/.4s取消、survivor、flush通过，严格busy KV检查无异常。
+- native32与native32-fused均完成3976位置（诊断exit0）。前者原始RMSNorm全项过v2，depth0最大RMSE0.0674779192；后者使用已有原生fused RMSNorm、普通KV、整R forward且显式禁用CDB/LoopSpec，唯一超标depth0最大RMSE0.1017152667，Q4 step302，与第14轮LoopSpec该点完全相同。由独立对照复现，不归因为分支/调度。真实8行前缀未截断，dummy每步只回收自身新slot，峰值需5016slots<9089容量。所有原始失败保留。
+
+候选17/20六项计划：
+1. 目的：依据真实原生BF16计算固定合理误差包络，并补齐服务验收覆盖。
+2. 步骤：沿用独立native校准25%余量规则，depth0最大RMSE设0.13（0.1017152667×1.25=0.1271440834，向上取两位），其余所有门槛不变；生命周期补原生sampling/penalties/min-length/OpenAI/zero-token接口；性能工具可传已有max-total-tokens参数用于内存压力测试。
+3. 范围：numerical_envelope.json、verify_lifecycle.py、profile_workload.py及记录；生产计算/调度不变，不增加LoopSpec用户参数。
+4. 标准：新包络v3冻结在后续候选测量前；仍严格R4、owner/物化/剪枝守恒和高margin不翻转；8请求/bs1服务完整输出、原生API、AR回归；E2E≤2%不变。
+5. 风险：低容量下pending分支的额外KV需求、不同depth组合/采样残差，长输出和graph共享池寿命；统计采样继续CPU解析分布/Monte Carlo验证，服务采样只证明接线和输出正常，不能替代分布检验。
+6. 验证：CPU/AST/diff后Git同SHA同步；完整d1 graph/eager、d2/双depth数值/HTTP，生命周期与低容量8请求，普通CDB回归；bs1/8请求profile和10次重复配对，保留每请求时间与共享步骤说明。预算17/20，正式分支不动。

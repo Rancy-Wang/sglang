@@ -101,6 +101,7 @@ def main():
     p.add_argument("--arrival-ms", type=float, nargs="+", default=[0, 10, 25, 45, 75, 120, 200, 320])
     p.add_argument("--max-new-tokens", type=int, default=512)
     p.add_argument("--max-running-requests", type=int, default=8)
+    p.add_argument("--max-total-tokens", type=int)
     p.add_argument("--algorithm", choices=["ar", "loopspec"], default="ar")
     p.add_argument("--depths", type=int, nargs="+", default=[1])
     p.add_argument("--serial", action="store_true")
@@ -139,6 +140,8 @@ def main():
                "--max-running-requests", str(args.max_running_requests), "--page-size", "1",
                "--disable-radix-cache", "--context-length", "2048", "--mem-fraction-static", "0.7",
                "--cuda-graph-max-bs-decode", "8", "--enable-metrics", "--stream-interval", "1"]
+    if args.max_total_tokens is not None:
+        command.extend(["--max-total-tokens", str(args.max_total_tokens)])
     if args.chunked_prefill_size is not None:
         command.extend(["--chunked-prefill-size", str(args.chunked_prefill_size)])
     if args.eager:
