@@ -7,6 +7,8 @@ never conflates accepting the first proposal with accepting the second.
 from dataclasses import dataclass, field
 from typing import Any
 
+from sglang.srt.utils.recurrent_trace import span
+
 
 @dataclass
 class Lane:
@@ -49,6 +51,18 @@ class Pipeline:
             origin=origin,
         )
 
+    @span(
+        "loopspec.output",
+        before=lambda self: {
+            "rid": self.executor.req.rid,
+            "output_index": self.committed,
+            "entry_depth": next(l.depth for l in self.lanes if l.index == self.committed),
+            "cycles": self.cycles,
+        },
+        after=lambda result, self: {
+            "token": result[0], "origin": result[1], "cycles": self.cycles,
+        },
+    )
     def advance_until_commit(self):
         while True:
             self.cycles += 1

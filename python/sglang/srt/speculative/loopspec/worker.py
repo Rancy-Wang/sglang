@@ -18,6 +18,7 @@ from sglang.srt.model_executor.forward_batch_info import (
 from sglang.srt.runtime_context import get_observability, get_serving, get_spec
 from sglang.srt.speculative.base_spec_worker import BaseSpecWorker
 from sglang.srt.utils.device_timer import device_timer_ctx
+from sglang.srt.utils.recurrent_trace import batch_metadata, span
 from sglang.srt.speculative.spec_info import (
     SpecInput,
     SpecInputType,
@@ -84,6 +85,11 @@ class RequestExecutor:
                 self.params.sampling_seed
             )
 
+    @span("loopspec.advance", before=lambda self, lanes, count: {
+        "rid": self.req.rid, "loops": count,
+        "lanes": [{"uid": l.uid, "parent": l.parent, "position": len(l.prefix),
+                   "depth": l.depth, "slot": l.slot} for l in lanes],
+    })
     def advance_many(self, lanes, count):
         from .graph import run_core
 
@@ -199,6 +205,7 @@ class RequestExecutor:
             if lane.depth in self.depths or lane.depth == self.total:
                 self.logits[lane.uid] = logits[row].clone()
 
+    @span("loopspec.prepare_lane")
     def prepare_lane(self, lane, row):
         from sglang.srt.model_executor.forward_context import (
             ForwardContext,
@@ -240,11 +247,13 @@ class RequestExecutor:
         lane.hidden = hidden.clone()
         lane.injected = None if injected is None else injected.clone()
 
+    @span("loopspec.distribution")
     def distribution(self, lane):
         return probabilities(
             self.logits[lane.uid], self.params, lane.history, self.stop_ids
         )
 
+    @span("loopspec.propose")
     def propose(self, lane):
         distribution = self.distribution(lane)
         if lane.depth != self.depths[0]:
@@ -256,6 +265,7 @@ class RequestExecutor:
         token = int(torch.multinomial(distribution, 1, generator=self.generator))
         return token, distribution
 
+    @span("loopspec.verify")
     def verify(self, lane):
         first_token, first = lane.proposals[self.depths[0]]
         second_token, second = lane.proposals.get(
@@ -283,6 +293,7 @@ class RequestExecutor:
             self.logits[lane.uid],
         )
 
+    @span("loopspec.commit")
     def commit(self, lane):
         if lane.depth != self.total or lane.slot not in self.owned:
             raise RuntimeError("LoopSpec committed a slot without full target KV")
@@ -293,6 +304,7 @@ class RequestExecutor:
         self.owned.remove(lane.slot)
         self.materialized.pop(lane.slot)
 
+    @span("loopspec.retain")
     def retain(self, lanes):
         retained = set()
         for lane in lanes:
@@ -437,6 +449,7 @@ class LoopSpecWorker(BaseSpecWorker):
             self.clear_cache_pool()
 
     @torch.no_grad()
+    @span("loopspec.worker", before=batch_metadata)
     def forward_batch_generation(self, batch, on_publish=None, pp_proxy_tensors=None):
         if len(batch.reqs) != 1 or on_publish is not None:
             raise RuntimeError("LoopSpec requires one synchronous request")

@@ -55,6 +55,8 @@ suppress_noisy_warnings()
 import psutil  # isort: skip
 import setproctitle
 import torch
+
+from sglang.srt.utils.recurrent_trace import batch_metadata, span
 import torch.distributed
 from torch.distributed import barrier
 
@@ -2821,6 +2823,9 @@ class Scheduler(
             mm_inputs.release_features()
             req.multimodal_inputs = None
 
+    @span("scheduler.receive", before=lambda self, recv_req, **kwargs: {
+        "rid": recv_req.rid,
+    }, gpu=False)
     def handle_generate_request(
         self,
         recv_req: TokenizedGenerateReqInput,
@@ -4491,6 +4496,7 @@ class Scheduler(
                 batch.sampling_info = sched_sampling_info
 
     @scheduler_stage_method(SCHEDULER_STAGE_RUN_BATCH)
+    @span("scheduler.forward", before=batch_metadata)
     def run_batch(
         self,
         batch: ScheduleBatch,
@@ -4922,6 +4928,7 @@ class Scheduler(
             batch_result.logits_output.next_token_logits = None
 
     @scheduler_stage_method(SCHEDULER_STAGE_PROCESS_BATCH_RESULT)
+    @span("scheduler.result", before=batch_metadata, gpu=False)
     def process_batch_result(
         self,
         batch: ScheduleBatch,

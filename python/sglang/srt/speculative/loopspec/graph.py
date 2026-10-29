@@ -2,6 +2,8 @@
 
 import torch
 
+from sglang.srt.utils.recurrent_trace import span
+
 from sglang.srt.model_executor.forward_batch_info import (
     CaptureHiddenMode,
     ForwardBatch,
@@ -111,6 +113,9 @@ class RecurrentGraph:
             self.role,
         )
 
+    @span("loopspec.graph", before=lambda self, *args, **kwargs: {
+        "role": self.role, "micro": self.micro, "rows": len(self.hidden),
+    })
     def replay(self, hidden, positions, batches, injected=None):
         self.hidden.copy_(hidden)
         if self.injected is not None and injected is not None:

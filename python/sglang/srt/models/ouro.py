@@ -23,6 +23,7 @@ from sglang.srt.model_loader.weight_utils import default_weight_loader
 from sglang.srt.models.llama import LlamaAttention, LlamaMLP
 from sglang.srt.runtime_context import get_parallel
 from sglang.srt.utils import add_prefix
+from sglang.srt.utils.recurrent_trace import span
 
 
 def _norm(config):
@@ -145,6 +146,9 @@ class OuroModel(nn.Module):
             prefix=add_prefix("early_exit_gate", prefix),
         )
 
+    @span("ouro.loop", before=lambda self, hidden, positions, forward_batch, depth: {
+        "depth": depth, "rows": len(hidden), "mode": forward_batch.forward_mode.name,
+    })
     def advance_loop(self, hidden, positions, forward_batch, depth):
         """Materialize one recurrence; never read KV from another depth."""
         if not 0 <= depth < self.config.total_ut_steps:
@@ -159,6 +163,9 @@ class OuroModel(nn.Module):
             hidden = self.advance_loop(hidden, positions, forward_batch, depth)
         return hidden
 
+    @span("ouro.mixed_core", before=lambda self, hidden, positions, groups: {
+        "groups": [(d, a, b) for d, a, b, _, _ in groups],
+    })
     def advance_batch(self, hidden, positions, groups):
         """One core invocation, shared projections across recurrent depths.
 

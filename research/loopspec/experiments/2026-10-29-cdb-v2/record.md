@@ -56,7 +56,7 @@
 | `OuroForCausalLM.recurrent()/recurrent_prepared()` | 复用本地 `prepare_recurrent/advance_recurrent/readout_recurrent`，将 mixed-depth runner 从 LoopSpec 私有路径提升到通用层 |
 | `SpeculativeRunner._submit_pipeline/_collect_pipeline` | 参考跨请求 state flatten/回填和允许零输出的组织方式；不照搬 greedy 单 candidate 的算法限制或其 KV 近似 |
 
-EAGLE/DFLASH 使用本项目固定 v0.5.22 的 `eagle_worker_v2.py`、`eagle_info.py`、`eagle_worker_common.py`、`dflash_worker_v2.py`、`dflash_info_v2.py`、`dflash_utils.py`。重点复用 `forward_batch_generation(..., on_publish, grammar_barrier, pp_proxy_tensors)`、`SpecInput` 的 filter/merge/idle、FutureMap 和 KVLocPlan 的职责划分。不能只采用 V2 类名却继续拒绝 on_publish 和 overlap。
+EAGLE/DFLASH 仅参考本项目固定 v0.5.22 的 worker/info/utils 职责划分和简洁管理方式，**不复制、继承或调用其算法专属实现**（用户批准时的补充要求）。直接接入 SGLang 通用 V2 协议，包括 `forward_batch_generation(..., on_publish, grammar_barrier, pp_proxy_tensors)`、`SpecInput`、FutureMap 和 KVLocPlan；这是复用公共基础设施，不是复用 EAGLE/DFLASH 实现。不能只采用 V2 类名却继续拒绝 on_publish 和 overlap。
 
 实施按以下依赖顺序进行；这些是里程碑，不是各自重新获得五轮预算。
 
@@ -139,7 +139,7 @@ EAGLE/DFLASH 使用本项目固定 v0.5.22 的 `eagle_worker_v2.py`、`eagle_inf
 
 ### 6. 五步验证与精细 profile 方案
 
-所有步骤的原始数据留 X5 `/home/ruoxi/experiments/loopspec/2026-10-29-cdb-v2/`。每轮记录本地/origin/X5 SHA、运行时文件哈希、完整命令、环境、退出码、实际请求、配置和输出；模型/dataset/大型 trace 不进 Git。
+用户批准时指定结果根目录为 X5 **`/home/ruoxi/repo/test/results/loopspec`**。本任务原始数据位于其下 `2026-10-29-cdb-v2/round-N/`，容器 `/results` 映射本任务目录，保留每个候选/模式/重复的独立子目录。每轮记录本地/origin/X5 SHA、运行时文件哈希、完整命令、环境、退出码、实际请求、配置和输出；模型/dataset/大型 trace 不进 Git。
 
 | 用户步骤 | 固定实验 | 必须产出的证据 / gate |
 | --- | --- | --- |
@@ -229,3 +229,14 @@ CDB 前后的主对照保留各自生产可用的 graph 路径；普通 AR 若�
 - 尚未执行：V1/V2 profile、新 CDB 源码、LoopSpec 多请求改造、V3/V4/V5。不能从文件可用、旧短 prompt 验收或静态检查推导 AIME 性能。
 - 新任务代码候选：**0/5**。开始实施时先记录候选 1/5 的具体文件和假设，再按 Git 同步/验证；后续每轮保留完整命令与退出码。
 - 后续 CDB/多请求代码只进入 loopspec-test；本次晋升授权不自动覆盖未来正式分支发布。
+
+## 用户批准与候选 1/5：基线 profile 工具
+
+- 用户已批准实施，并要求 EAGLE/DFLASH 仅供管理方式参考、不复用其代码，结果使用上述新目录。
+- 目的：在改变调度前建立 AIME 输出参考、B1 LoopSpec 与 B8 普通 AR 的可重放时间线。
+- 步骤：新增原生 HTTP 流式负载/标准 server 启停工具；最小 opt-in recurrent trace，挂接既有 start/stop_profile；记录 pipeline 路径和 CPU/CUDA stream 区间；输出分析。
+- 范围：本目录 profile_workload.py、analyze_profile.py；utils/recurrent_trace.py；现有 Scheduler/profiler/结果处理及 Ouro/LoopSpec 方法的观测标记，不改计算/采样/缓存语义。
+- 成功标准：512-token 上限、R4、相同 AIME 输入；独立 AR、并发 AR、LoopSpec token/stop 一致；profile 包含逐输出起始 depth、cycles、阶段与 GPU 区间；关闭观测开关时装饰器返回原方法，正式性能不带 trace。
+- 风险：捕图内插入 timing event、嵌套时间重复计算、profile 污染延迟、初始服务配置不能承载 B8。捕图期间跳过观测、仅在 stop_profile 批量同步导出，报告 inclusive interval；无 profiler 单独测量。
+- 验证：本地 AST/ruff/diff；push/pull 同 SHA；X5 GPU0/端口重新检查后，先 AR B1 串行八题参考，再 LoopSpec d1=1、AR B8 的输出与 profile/无 profile 窗口。图捕获 max batch 固定为 8（覆盖本任务最大请求数），记录全部 resolved args。若失败不得进入 CDB 算法改造。
+- 开始状态：1/5，待验证；尚未修改 CDB。
