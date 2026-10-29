@@ -6,6 +6,7 @@ the SGLang ForwardBatch plus carried hidden state and per-sequence depth, the
 equivalent of vllm-rlt's StateSpan/ExecutionBatch execution metadata.
 """
 
+import copy
 from dataclasses import dataclass
 
 import torch
@@ -66,6 +67,7 @@ class RecurrentRunner:
         )
         self.graphs = {}
         self.prefill_graphs = {}
+        self.finish_graphs = {}
         self.graph_pool = None
 
     def init_graphs(self):
@@ -83,6 +85,10 @@ class RecurrentRunner:
             for rows in sorted(config.decode.bs):
                 if rows <= self.timeline.max_rows:
                     self.graphs[rows] = RecurrentCoreGraph(self, rows)
+            # Exact row counts retain the native readout GEMM shape. A decode
+            # cohort finishing this loop can be smaller than the core batch.
+            for rows in self.graphs:
+                self.finish_graphs[rows] = RecurrentCoreGraph(self, rows, role="finish")
 
     @span("recurrent.execute_core")
     def execute_core(self, batch, state, depths, *, token_rows=None):
@@ -124,6 +130,13 @@ class RecurrentRunner:
     @span("recurrent.finish")
     def finish(self, batch, state, depths, *, token_rows=None):
         """Full target readout; keep native logprob/hidden-state semantics."""
+        graph = self.finish_graphs.get(batch.batch_size)
+        if (graph is not None and batch.forward_mode.is_decode()
+                and batch.capture_hidden_mode == CaptureHiddenMode.NULL):
+            return graph.replay(batch, state, depths)
+        return self._finish(batch, state, depths, token_rows=token_rows)
+
+    def _finish(self, batch, state, depths, *, token_rows=None):
         mapped, backend = self.timeline.target_batch(
             batch, "post", depths, token_rows
         )
@@ -156,8 +169,9 @@ class RecurrentCoreGraph:
     uses logical slot zero, which every timeline maps to the discard slot.
     """
 
-    def __init__(self, recurrent, rows, *, tokens=None):
+    def __init__(self, recurrent, rows, *, tokens=None, role="core"):
         self.recurrent, self.rows = recurrent, rows
+        self.role = role
         self.is_extend = tokens is not None
         self.tokens = tokens if self.is_extend else rows
         runner, model = recurrent.runner, recurrent.model
@@ -212,7 +226,8 @@ class RecurrentCoreGraph:
             token_rows = torch.bucketize(
                 self.token_positions, self.batch.extend_seq_lens.cumsum(0), right=True
             ).clamp_max(self.rows - 1)
-        self.output = self.recurrent.advance(
+        execute = self.recurrent.advance if self.role == "core" else self.recurrent._finish
+        self.output = execute(
             self.batch, self.state, self.depths, token_rows=token_rows
         )
 
@@ -242,4 +257,9 @@ class RecurrentCoreGraph:
             self.state.injected[:tokens].copy_(state.injected)
             self.state.injected[tokens:].zero_()
         self.graph.replay()
+        if self.role == "finish":
+            output = copy.copy(self.output)
+            # Sampling can outlive the next core replay in the shared pool.
+            output.next_token_logits = self.output.next_token_logits[:tokens].clone()
+            return output
         return RecurrentState(self.output.hidden[:tokens], state.injected)

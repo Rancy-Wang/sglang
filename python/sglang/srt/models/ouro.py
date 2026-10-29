@@ -188,7 +188,8 @@ class OuroModel(nn.Module):
                             q[start:end], k[start:end], v[start:end], batch
                         )
                     )
-            attention = layer.self_attn.o_proj(torch.cat(parts, dim=0))[0]
+            joined = parts[0] if len(parts) == 1 else torch.cat(parts, dim=0)
+            attention = layer.self_attn.o_proj(joined)[0]
             hidden = hidden + layer.input_layernorm_2(attention)
             mlp = layer.mlp(layer.post_attention_layernorm(hidden))
             hidden = hidden + layer.post_attention_layernorm_2(mlp)

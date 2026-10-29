@@ -96,6 +96,8 @@ def main():
     recurrent = RecurrentRunner(runner, max_rows=8)
     with torch.inference_mode():
         graph = RecurrentCoreGraph(recurrent, 8) if args.graph else None
+        if args.graph:
+            recurrent.finish_graphs[8] = RecurrentCoreGraph(recurrent, 8, role="finish")
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     rows = [json.loads(line) for line in args.dataset.read_text().splitlines()][:8]
     ref_tokens = json.loads((args.tokens / "cohort-0.json").read_text())["requests"]

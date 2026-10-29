@@ -405,3 +405,19 @@ graph两项实际均108次decode replay、0次prefill replay，logits与eager逐
 
 - 第9轮正式无profiler测量完成：10次 makespan 中位24124.879ms；各题E2E中位[23892.810,23979.914,23965.064,23992.638,23986.078,23975.244,21101.018,23804.873]ms，相对旧基线增加6.090%–7.305%，效率失败。输出长度全部与旧B8相同，10次重复一致；不能把稳定输出等同数值验收。paired-performance.json已保存在X5 round-9。
 - 第10轮本地5项CPU契约通过，AST/diff-check退出0；新增HTTP生命周期验证覆盖不等长结束、logprobs、partial prefill/decode取消、survivor和空闲flush，并开启原生busy严格内存检查。GPU验证待执行。
+
+### 第10轮结果与候选11/15计划
+
+- 提交 `84f04c60fab029e35b28c46af8e6566867646c59` 两端一致；CPU5项recurrent与2项原timeline契约通过，AST/diff通过。
+- `round-10/eager-full` 完整3976位置固定包络通过（exit0）；`graph-full` mixed 8组均零误差、logits/P99/argmax判据全部通过，唯一失败为depth0 hidden单点max_abs=0.578125>0.55（Q8 step234，RMSE0.0636032，logits max2.875/RMSE0.447864，top1与参考相同且margin7.375）。总体28/3976翻转，最大参考margin0.25。保留exit1，不自动放宽包络。
+- `profile_workload.py --output /results/round-10/lifecycle --chunked-prefill-size 32 --lifecycle --warmup 0 --repeat 1` exit0。两轮8请求不同长度结束及logprobs、两种时刻取消/幸存请求、每轮flush全部通过，busy严格内存检查无异常。
+- `cdb-b8-profile`已完成生成，profile makespan24088.406ms，长度仍与旧B8一致；预热makespan23355.676/23298.689ms，约3%增加，尚不能判定效率通过。trace仍在导出期间，不pull或启动并发GPU作业。
+- **候选11/15六项计划**：
+  1. 目的：消除通用mixed core退化到单组时的多余复制，以及分散完成请求的读出提交开销；核对padding的纯数值影响。
+  2. 步骤：单attention组直接传张量；复用common graph实现捕获精确decode行数的原生LogitsProcessor读出，沿用正常采样/结果路径；增加原生整R执行加独立padding请求的对照，避免用CDB自身当数值基线。
+  3. 范围：Ouro.advance_batch、recurrent_runner及本目录验证工具/记录。无EAGLE/DFLASH算法复用，无深度/采样改变，无新公开参数；未进入LoopSpec多请求阶段。
+  4. 标准：原固定包络和运行逻辑标准；padding对照只解释误差，不自动重设数值门槛；普通服务E2E仍≤2%。读出graph不得丢失logprobs或返回hidden语义（hidden捕获回退原生路径）。
+  5. 风险：共享图池导致输出被覆写、读出图改变batch形状、对照padding触碰原请求KV。精确读出行数、采样前复制输出；原生padding为独立Req并在decode前排除，真实请求的token/位置不变。
+  6. 验证：AST/diff/CPU；Git同步同SHA；原生padding数值校准、mixed/eager/graph完整检查、小chunk/取消/logprobs，然后profile/无profiler配对。现已开始11/15；正式分支不变。
+- 第10轮profile完整导出且exit0。trace中 recurrent.core CPU中位2.196ms（第9轮12.47ms），GPU区间中位11.348ms；start CPU中位0.259ms，finish 0.136ms。说明消除读回确实去除了CPU同步，但剩余单core GPU执行和每loop结果路径仍影响E2E。当前无10次正式无profiler结果，不用预热替代性能验收。
+- 第11轮读出图仅使用已有decode捕获尺寸，不为所有可能batch额外分配图；没有匹配精确行数时回退原生读出，避免人为padding改变LM head形状。新增原生padding对照临时关闭测试进程中的CDB能力声明，断言普通KV和whole-R路径；不修改生产配置或模型文件。
