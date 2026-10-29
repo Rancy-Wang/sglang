@@ -100,11 +100,17 @@ def main():
                     token_pairs.append(dict(pair=f'{first}/{second}',bs=bs,pattern=pattern,repeat=rep,question=q+1,
                         exact=u['output_ids']==v['output_ids'] and u['finish_reason']==v['finish_reason'],
                         first_difference=diff))
-    comparison=[];losses=[];contributions=[]
+    comparison=[];losses=[];contributions=[];projection_limits=[]
     def elapsed(v,b,p):return cells[(v,b,p)]['makespan_ms']
-    def projected(v,b,p,category):
+    def projected(v,b,p,category,model):
         profile=profile_map[(v,b,p)]
-        return elapsed(v,b,p)*profile['partition']['partition_ms'][category]/profile['profile_ms']
+        if model=='whole_wall':
+            return elapsed(v,b,p)*profile['partition']['partition_ms'][category]/profile['profile_ms']
+        parts=profile['partition']['resource_partition_ms']
+        busy=sum(parts['gpu'].values());host=profile['profile_ms']-busy
+        if elapsed(v,b,p)<=busy or host<=0:
+            return None
+        return parts['gpu'][category]+(parts['cpu'][category]+parts['uncovered'][category])*(elapsed(v,b,p)-busy)/host
     for pattern in PATTERNS:
         for bs in BATCHES:
             ar,old,new=(elapsed(v,bs,pattern) for v in VARIANTS)
@@ -116,19 +122,30 @@ def main():
             for v in ('old','new'):
                 ratio=elapsed(v,1,pattern)/elapsed('ar',1,pattern)
                 e[v]=elapsed(v,bs,pattern)-ratio*ar
-                parts={k:(projected(v,bs,pattern,k)-projected(v,1,pattern,k))-
-                    ratio*(projected('ar',bs,pattern,k)-projected('ar',1,pattern,k)) for k in CATEGORIES}
-                assert abs(sum(parts.values())-e[v]) < .01
-                for k,ms in parts.items():
-                    contributions.append(dict(variant=v,bs=bs,pattern=pattern,category=k,
-                        projected_contribution_ms=ms,percent_of_loss=100*ms/e[v] if e[v]>0 else None,
-                        total_loss_ms=e[v]))
+                for model in ('whole_wall','gpu_fixed'):
+                    endpoints=[(v,bs),(v,1),('ar',bs),('ar',1)]
+                    values={key:{k:projected(*key,pattern,k,model) for k in CATEGORIES} for key in endpoints}
+                    if any(x is None for group in values.values() for x in group.values()):
+                        projection_limits.append(dict(variant=v,bs=bs,pattern=pattern,projection=model,
+                            reason='Measured profile GPU occupancy exceeds unprofiled wall; GPU-fixed projection invalid.'))
+                        continue
+                    parts={k:(values[(v,bs)][k]-values[(v,1)][k])-
+                        ratio*(values[('ar',bs)][k]-values[('ar',1)][k]) for k in CATEGORIES}
+                    assert abs(sum(parts.values())-e[v]) < .01
+                    for k,ms in parts.items():
+                        contributions.append(dict(variant=v,bs=bs,pattern=pattern,projection=model,category=k,
+                            projected_contribution_ms=ms,percent_of_loss=100*ms/e[v] if e[v]>0 else None,
+                            total_loss_ms=e[v]))
+            gaps={v:elapsed('ar',1,pattern)/elapsed(v,1,pattern)-ar/elapsed(v,bs,pattern) for v in ('old','new')}
             losses.append(dict(bs=bs,pattern=pattern,old_loss_ms=e['old'],new_loss_ms=e['new'],
                 measured_loss_recovery_ms=e['old']-e['new'],
-                measured_loss_recovery_percent=100*(e['old']-e['new'])/e['old'] if e['old']>0 else None))
+                measured_loss_recovery_percent=100*(e['old']-e['new'])/e['old'] if e['old']>0 else None,
+                old_speedup_drop=gaps['old'],new_speedup_drop=gaps['new'],
+                speedup_drop_recovery_percent=100*(gaps['old']-gaps['new'])/gaps['old'] if gaps['old']>0 else None))
     for name,data in [('performance',timings),('comparison',comparison),('requests',request_rows),
                       ('depth-stages',depth_rows),('profile-summary',profiles),('token-comparison',token_pairs),
-                      ('speedup-loss',losses),('attribution-estimate',contributions),('versions',versions)]:
+                      ('speedup-loss',losses),('attribution-estimate',contributions),
+                      ('projection-limits',projection_limits),('versions',versions)]:
         write(out,name,data)
     lines=['# 批量 endpoint 决策：AR / 旧 LoopSpec / 新 LoopSpec', '',
         'Ouro-2.6B-Thinking，BF16，R=4，draft depth=1，原生 overlap / LoopSpec V2、core/readout CUDA graph。新决策为批量 eager，未新增决策 CUDA graph。', '',
@@ -156,6 +173,15 @@ def main():
         values=[fmt(s) for s in ('loopspec.prepare_rows','recurrent.execute_core','recurrent.finish','loopspec.decision','loopspec.commit','loopspec.retain')]
         lines.append(f"|{pattern}|{bs}|{depth}|{next(iter(group.values()))['outputs']}|"+'|'.join(values)+f"|{group.get('loopspec.decision_readback',{}).get('cpu_ms',0):.3f}|")
     lines+=['', '新版本的独立readback span在旧版本属于scatter余项；比较余项时须加回新readback，不应将插桩边界变化当成工作消失。计划/collect、native result handler和客户端ITL见profile-summary.json中的depths；它们是包含GPU等待的主机区间，不能再与上述GPU时间相加。','',
+        '## 实际分支计算量和readout graph覆盖','',
+        'LoopSpec并行推进未来token的depth；全接受时主要减少串行关键路径，不按同样倍数减少core行计算量。下表按共享step只计一次。graph覆盖按真实endpoint数、捕获集合和当前无hidden-state请求的精确行数路由核对。', '',
+        '|发送|版本|bs|平均core行数|每提交token的core行推进数|含padding行推进数|readout graph覆盖|',
+        '|---|---|---:|---:|---:|---:|---:|']
+    for p in profiles:
+        shape=p['partition']['execution_shapes']
+        if shape:
+            lines.append(f"|{p['pattern']}|{p['variant']}|{p['bs']}|{shape['mean_live_core_rows']:.2f}|{shape['core_row_updates_per_token']:.3f}|{shape['padded_core_row_updates_per_token']:.3f}|{shape['finish_graph_eligible_percent']:.1f}%|")
+    lines+=['',
         '## 为什么batch增大时加速比下降：实测修复收益', '',
         '定义 r=L1/A1，E_B=L_B−r·A_B。E_B表示在bs=B保持bs1加速比还需省下的LoopSpec时间。E_B≤0表示加速比没有下降；保留负值表示改善，不定义损失贡献或恢复百分比。旧、新各用自己的r；因此“恢复比例”扣除了bs1也获得的优化，不等于新旧E2E降幅。该干预包含greedy特化、合批和减少无用操作，不能单独归因于某一个算子。', '',
         '|发送|bs|旧损失s|新损失s|修复消除损失s|消除比例|',
@@ -164,14 +190,22 @@ def main():
         percent=r['measured_loss_recovery_percent']
         recovery='无下降' if percent is None else f'{percent:.1f}%'
         lines.append(f"|{r['pattern']}|{r['bs']}|{r['old_loss_ms']/1000:.3f}|{r['new_loss_ms']/1000:.3f}|{r['measured_loss_recovery_ms']/1000:.3f}|{recovery}|")
+    lines+=['','上表是额外耗时损失的恢复比例。直接比较加速比跌幅 D_B=S_1−S_B，数值不同：', '',
+        '|发送|bs|旧加速比跌幅|新加速比跌幅|跌幅收窄比例|',
+        '|---|---:|---:|---:|---:|']
+    for r in losses:
+        percent=r['speedup_drop_recovery_percent']
+        recovery='无下降' if percent is None else f'{percent:.1f}%'
+        lines.append(f"|{r['pattern']}|{r['bs']}|{r['old_speedup_drop']:.3f}|{r['new_speedup_drop']:.3f}|{recovery}|")
     lines+=['', '## 各步骤的有符号时间分解估算（不是精确因果比例）','',
-        '先将Profile时间轴分成互斥区间：GPU执行优先，CPU仅计算未被GPU覆盖的阶段，未知空隙保留未归因。然后以各区间占比缩放到无Profiler E2E。贡献 Δj=(L̂Bj−L̂1j)−r(ÂBj−Â1j)，各项之和为E_B。负数表示抵消下降，正数可能超过100%。此映射假设Profile占比能代表无Profiler运行；旧版插桩扰动更大，故百分比只作有标注的估算。', '',
-        '|发送|版本|bs|attention|模型其他计算|decision|分支/KV|prepare|主机调度等|传输|未归因|',
-        '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|']
-    for pattern,v,bs in itertools.product(PATTERNS,('old','new'),BATCHES[1:]):
-        group={r['category']:r for r in contributions if (r['pattern'],r['variant'],r['bs'])==(pattern,v,bs)}
-        values=['—' if group[k]['percent_of_loss'] is None else f"{group[k]['percent_of_loss']:.1f}%" for k in CATEGORIES]
-        lines.append(f'|{pattern}|{v}|{bs}|'+ '|'.join(values)+'|')
+        '先将Profile时间轴分成互斥区间：GPU执行优先，CPU仅计算未被GPU覆盖的阶段，未知空隙保留未归因。whole_wall以各区间占比统一缩放到无Profiler E2E；gpu_fixed保留实测GPU忙时，仅缩放CPU/空隙到剩余E2E。后者假设Profile kernel时长和工作形状能代表无Profiler，若GPU忙时已超过无Profiler E2E则拒绝估算。两种口径差异是方法敏感性，不是置信区间。', '',
+        '贡献 Δj=(L̂Bj−L̂1j)−r(ÂBj−Â1j)，各项之和为E_B；Δj/(r·L_B)之和等于加速比跌幅，因此同一版本/bs内的贡献百分比也对应其加速比跌幅。负数表示抵消下降，正数可能超过100%。阶段含其CPU提交空隙；运行时余项可包含由外层runtime提交、未细分的GPU算子。不能把占用分区称为精确因果贡献或可全部回收的优化收益。', '',
+        '|发送|版本|bs|投影口径|attention|模型其他计算|decision|分支/KV|prepare|运行时余项|传输|未归因|',
+        '|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|']
+    for pattern,v,bs,model in itertools.product(PATTERNS,('old','new'),BATCHES[1:],('whole_wall','gpu_fixed')):
+        group={r['category']:r for r in contributions if (r['pattern'],r['variant'],r['bs'],r['projection'])==(pattern,v,bs,model)}
+        values=['不可估' if k not in group else ('无下降' if group[k]['percent_of_loss'] is None else f"{group[k]['percent_of_loss']:.1f}%") for k in CATEGORIES]
+        lines.append(f'|{pattern}|{v}|{bs}|{model}|'+ '|'.join(values)+'|')
     lines+=['', 'bs16新增的题目有648/861 token长输入，而bs8最长182；这不是固定长度的纯batch扩展。attention增长包含请求数、分支行数、上下文长度、接受率和计算形状变化。没有独立attention干预实验，不能将上表称为attention优化必然可回收的收益。', '',
         '|发送|bs|AR Profile/实测|旧LS Profile/实测|新LS Profile/实测|',
         '|---|---:|---:|---:|---:|']
