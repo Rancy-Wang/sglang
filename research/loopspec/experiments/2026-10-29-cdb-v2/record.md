@@ -457,3 +457,9 @@ graph两项实际均108次decode replay、0次prefill replay，logits与eager逐
 5. 风险：overlap中的EOS释放/后续分支在途、分支行重排、共享图输出寿命、私有KV漏计、sampling分布残差、同请求root提交顺序、bs1读回和小算子开销。采用每请求身份表、执行行与owner分离、精确已物化frontier、提交先转owner再剪枝，私有slots纳入原生严格内存守恒。
 6. 验证：先CPU Pipeline拒绝/双proposal/跨请求ownership和sampling统计；静态/diff；commit/push/pull同SHA后X5先8请求短smoke与lifecycle，再完整输出与同前缀误差验证、bs1/多请求profile和10次配对。原始失败保存；普通CDB成功不替代LoopSpec验收。当前13/15，正式loopspec分支不改。
 - 第13轮本地8项契约通过（包含三种分支接受/全拒绝、跨请求重排、relay过滤合并、3×100000次残差采样5σ检验），AST/diff通过。增加prefill立即EOS和原生retraction的私有状态释放hook，re-prefill恢复已输出history；压力retraction尚待实测。LoopSpec CDB明确限于具备已验证common能力的Ouro，Raven CDB未认证，不继续使用旧bs1私有调度路径冒充通用CDB。
+
+### 第13轮结果与候选14/15计划
+
+- 第13轮SHA e9b3c447b5ac4d3c14d5acae86007114f9ede0b7，两端一致。ls-b8-smoke退出1，配置阶段读取不存在的enable_priority_preemption；实际v0.5.22用enable_priority_scheduling与disable_priority_preemption组合，未开始服务推理。独立ls-graph-full在模型/图初始化后退出1：测试直接加载的HF tokenizer缺少服务包装后的additional_stop_token_ids属性，尚未检验分支数值。两个失败日志均保留。
+- **候选14/15六项计划**：目的修复以上真实版本接口差异；步骤改用真实优先级参数组合，额外停止词采用可选属性读取；范围loopspec/config.py、utils.py及common recurrent能力门控；成功标准仍是原冻结数值/严格ownership/生命周期和≤2%性能，不能把接口修复当最终通过；风险为之后才能触及的V2运行期接线，不以本地测试代替；验证CPU/AST、Git同步同SHA、完整服务smoke/分支teacher forcing/lifecycle，随后profile与配对性能。预算14/15。
+- 独立历史控制容器在SHA1cf83659以原bs1路径运行Q1、draft-depth1、512tokens、2warmup+10测量，输出round-13/ls-b1-control；控制未运行完前不启动其他GPU作业。

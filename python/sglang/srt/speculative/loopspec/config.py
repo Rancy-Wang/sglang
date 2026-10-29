@@ -41,7 +41,7 @@ def handle_server_args(server_args):
         raise ValueError("LoopSpec requires Triton for both prefill and decode")
     if cfg.page_size != 1 or not cfg.disable_radix_cache:
         raise ValueError("LoopSpec requires --page-size 1 --disable-radix-cache")
-    if cfg.enable_priority_preemption:
+    if cfg.enable_priority_scheduling and not cfg.disable_priority_preemption:
         raise ValueError("LoopSpec does not yet support priority preemption")
     if cfg.speculative_draft_model_path is not None:
         raise ValueError("LoopSpec shares target weights; do not specify a draft model")

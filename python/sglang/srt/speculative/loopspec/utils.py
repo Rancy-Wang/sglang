@@ -44,7 +44,7 @@ class RequestContext:
         self.rejected = 0
         self.peak_slots = self.committed_length * self.total
         self.stop_ids = set(self.params.stop_token_ids or ()) | set(req.eos_token_ids or ())
-        self.stop_ids |= set(req.tokenizer.additional_stop_token_ids or ())
+        self.stop_ids |= set(getattr(req.tokenizer, "additional_stop_token_ids", ()) or ())
         if req.tokenizer.eos_token_id is not None:
             self.stop_ids.add(req.tokenizer.eos_token_id)
         self.generator = None

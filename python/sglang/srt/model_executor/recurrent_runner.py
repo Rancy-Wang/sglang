@@ -45,8 +45,9 @@ def use_recurrent_execution(model, server_args):
             "enable_hierarchical_cache", "enable_unified_memory", "enable_hisparse",
             "enable_unified_cache_external_linker", "enable_kv_cache_sharding",
             "enable_lora", "enable_two_batch_overlap", "enable_mixed_chunk",
-            "enable_priority_preemption", "enable_torch_compile", "enable_memory_saver",
+            "enable_torch_compile", "enable_memory_saver",
         ))
+        and not (server_args.enable_priority_scheduling and not server_args.disable_priority_preemption)
         and not server_args.cpu_offload_gb
         and server_args.disaggregation_mode == "null"
         and server_args.kv_cache_dtype in ("auto", "bf16", "bfloat16", "float16")
