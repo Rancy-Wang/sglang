@@ -257,3 +257,24 @@ CDB 前后的主对照保留各自生产可用的 graph 路径；普通 AR 若�
 4. 标准：输出逐题/逐步首个不同 token、hidden max/RMSE 和 logits max/RMSE，区分测量完成与正确性通过；原阈值和 token 判据不改变。固定输入避免生成分叉后无意义的数值比较。
 5. 风险：诊断 eager 与 graph 的执行路径不同，不能拿其时间作为 serving 性能；投影孤立误差不能独自证明所有整模型误差来源。报告这两项限制。
 6. 验证：AST/diff-check、Git commit/push/pull 同 SHA、X5 空闲 GPU0 上执行，原始张量和 JSON 仅写用户指定 results 目录；不改模型文件或实验输入。当前 3/5，此轮为诊断工具候选，CDB 尚未实施。
+
+### 第 2 轮已获得的实测证据（完整 AIME 负载）
+
+运行时/工具 SHA：`1cf83659b15eb0002f80570981b58b9581ac687e`。以下目录均相对于用户结果根目录下 `2026-10-29-cdb-v2/round-2/`。
+
+- `ar-reference`：`profile_workload.py --serial --first 8 --max-running-requests 1 --repeat 1 --warmup 0`，status.success=true。八题独立输出保存成功；这不是独立 HF 长文本正确性验收。
+- `ar-b8-benchmark`：`--first 8 --max-running-requests 8 --repeat 10 --warmup 2 --reference /results/round-2/ar-reference`。10 个完整 cohort 完成，但逐 token 对照失败（status.success=false），所有 80 个请求均有分歧。10 次测量的每题首次不同 index 稳定为 `[143,63,374,83,11,61,136,314]`。Q7 在 B8 输出 453 token，其余均 512；没有把不同输出长度的时间当作无损加速。
+- B8 原始 makespan median=22596.110 ms、p95=22657.614 ms。各题 E2E median(ms)：`[22521.28,22511.41,22496.81,22476.62,22446.82,22402.09,19664.53,22276.10]`；TTFT median(ms)：`[43.20,83.95,117.76,154.18,124.28,118.30,129.94,99.58]`。**正确性未通过，以上不能充当合格性能门槛结果。**
+- `loopspec-b1-profile`：`--algorithm loopspec --depths 1 --first 1 --max-running-requests 1 --profile --repeat 1 --warmup 2 --reference /results/round-2/ar-reference`。512 token 全程 trace 导出成功，但 AR token 对照在 index=228 失败；两次预热与 profile 的首次分歧一致。profile E2E=12131.102 ms，预热为9873.259/9835.083 ms；预热不是正式十次性能测量，也不能拿 profile 耗时做加速结论。
+- 完整 LS trace：112731083 字节 gzip Chrome trace、2004945 字节 recurrent JSONL；分析命令 `analyze_profile.py /results/round-2/loopspec-b1-profile` 退出0，产生 summary.json 和 output-paths.json。实际511个 decode输出（首token来自prefill）、676个core推进、457次accept、54次reject、456次carried-state复用。
+
+| 起始 depth | 样本数 | 新增 core loops | 单次输出 CPU wall median/p95 (ms) |
+| --- | ---: | ---: | ---: |
+| 0 | 55 | 4 | 62.604 / 70.404 |
+| 1 | 0 | 未出现 | 无样本 |
+| 2 | 0 | 未出现 | 无样本 |
+| 3 | 456 | 1 | 17.992 / 20.642 |
+
+上表包含 profiler 开销。单次 core graph 的 GPU stream interval median：depth0路径13.768ms、depth3路径15.461ms；不同上下文长度/路径不能直接归因于depth。post graph约0.182ms，verify GPU stream interval约0.437–0.443ms。verify CPU wall约13–14ms包含等待此前core完成，不是验证kernel耗时。整次trace kernel忙碌时间并集8051.910ms；nested GPU intervals不可相加，各lane不能重复计共享core耗时。
+
+结论：原短prompt验收不能外推到本次AIME长文本/多请求输入；先保留失败证据并定位，不修改原数值或token阈值，不把尚未实现的CDB当作分歧来源。第3轮诊断候选在测试前补充M=2/4/8与LM head对照，属于同一未验证候选，不新增轮次。
