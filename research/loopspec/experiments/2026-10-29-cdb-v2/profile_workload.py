@@ -136,7 +136,7 @@ def main():
                "--attention-backend", "triton", "--bf16-gemm-backend", "auto",
                "--max-running-requests", str(args.max_running_requests), "--page-size", "1",
                "--disable-radix-cache", "--context-length", "2048", "--mem-fraction-static", "0.7",
-               "--cuda-graph-max-bs", "8", "--enable-metrics", "--stream-interval", "1"]
+               "--cuda-graph-max-bs-decode", "8", "--enable-metrics", "--stream-interval", "1"]
     if args.eager:
         command.append("--disable-cuda-graph")
     if args.no_overlap or args.algorithm == "loopspec":

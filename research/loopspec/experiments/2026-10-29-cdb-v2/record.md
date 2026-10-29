@@ -240,3 +240,11 @@ CDB 前后的主对照保留各自生产可用的 graph 路径；普通 AR 若�
 - 风险：捕图内插入 timing event、嵌套时间重复计算、profile 污染延迟、初始服务配置不能承载 B8。捕图期间跳过观测、仅在 stop_profile 批量同步导出，报告 inclusive interval；无 profiler 单独测量。
 - 验证：本地 AST/ruff/diff；push/pull 同 SHA；X5 GPU0/端口重新检查后，先 AR B1 串行八题参考，再 LoopSpec d1=1、AR B8 的输出与 profile/无 profile 窗口。图捕获 max batch 固定为 8（覆盖本任务最大请求数），记录全部 resolved args。若失败不得进入 CDB 算法改造。
 - 开始状态：1/5，待验证；尚未修改 CDB。
+
+### 第 1/5 轮结果与候选 2/5
+
+- 第 1 轮源码 `3c07290df584996e60b3d10cbe612895eb7a3c68`，已 push/pull，同 SHA/import 已确认。环境为独立 `loopspec-cdb-20261029`，镜像 `81726dc9...`，GPU0 RTX5090 空闲、30126 空闲，Torch2.14.1+cu130/Transformers5.19.0/Triton3.8.0/FlashInfer0.7.1。
+- 本地 AST、diff-check、真实 HTTP SSE fixture 的累计/增量 token 重建检查均退出 0。远端第一次 compileall 因源码只读无法写 pyc 退出 1；改用容器内 `/tmp/cdb-pycache` 后同源码 compileall 退出 0，未修改源文件。
+- `profile_workload.py --serial --first 8 --max-running-requests 1 --repeat 1 --warmup 0` 在服务参数解析阶段失败（server 退出 2）：`--cuda-graph-max-bs` 在固定 0.5.22 中匹配 decode/prefill 两项而产生歧义。模型未开始运行，没有正确性或性能结果。完整 manifest/status/server.log 保留在用户结果目录 `2026-10-29-cdb-v2/round-1/ar-reference/`。
+- **候选 2/5 修改前计划**：仅把 profile_workload.py 的参数明确为 `--cuda-graph-max-bs-decode 8`，目的为启动已计划的基线；不改变捕获容量或测量标准。风险为其余实际运行配置的兼容性；先实际解析并检查退出码，再按第 1 轮既定基线/trace 矩阵验证。输出写 `round-2/`，不覆盖 round-1。
+- 当前 2/5；CDB 与多请求 LoopSpec 尚未实施。
