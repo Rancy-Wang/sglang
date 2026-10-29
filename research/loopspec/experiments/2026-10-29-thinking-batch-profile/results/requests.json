@@ -1,0 +1,4714 @@
+[
+  {
+    "algorithm": "ar",
+    "bs": 1,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 14031.702443,
+    "ttft_ms": 33.838128,
+    "decode_ms": 13997.466903,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 1,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 6252.01421,
+    "ttft_ms": 42.261636,
+    "decode_ms": 6209.752574,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 1,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 14058.486417,
+    "ttft_ms": 34.220738,
+    "decode_ms": 14024.47987,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 1,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 6253.470123,
+    "ttft_ms": 42.065868,
+    "decode_ms": 6211.404255,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 17584.206229,
+    "ttft_ms": 56.274024,
+    "decode_ms": 17526.543150999998,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 17598.048905,
+    "ttft_ms": 89.56985,
+    "decode_ms": 17510.038667,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 7439.387621,
+    "ttft_ms": 64.248781,
+    "decode_ms": 7375.13884,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 8054.865554,
+    "ttft_ms": 103.174348,
+    "decode_ms": 7951.691206,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 2,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 17393.557196,
+    "ttft_ms": 34.367837,
+    "decode_ms": 17359.080643,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 2,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 17422.130264,
+    "ttft_ms": 71.208384,
+    "decode_ms": 17350.743107,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 2,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 7426.146635,
+    "ttft_ms": 42.188644,
+    "decode_ms": 7383.967095,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 2,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 8050.332128,
+    "ttft_ms": 87.621206,
+    "decode_ms": 7962.954461,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 17888.321676,
+    "ttft_ms": 120.171829,
+    "decode_ms": 17782.199105,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 17888.901935,
+    "ttft_ms": 123.23321,
+    "decode_ms": 17767.970780000003,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 3,
+    "e2e_ms": 17891.304232,
+    "ttft_ms": 123.160736,
+    "decode_ms": 17769.813003,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 4,
+    "e2e_ms": 17888.524984,
+    "ttft_ms": 120.858418,
+    "decode_ms": 17767.953594,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 9462.309026,
+    "ttft_ms": 138.210837,
+    "decode_ms": 9320.484541000002,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 9905.2469,
+    "ttft_ms": 139.322722,
+    "decode_ms": 9765.924178,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 3,
+    "e2e_ms": 9524.134071,
+    "ttft_ms": 139.036228,
+    "decode_ms": 9385.097843,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 4,
+    "e2e_ms": 9017.369085,
+    "ttft_ms": 97.343696,
+    "decode_ms": 8892.349157999999,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 17758.01678,
+    "ttft_ms": 34.407683,
+    "decode_ms": 17723.609097,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 17806.965821,
+    "ttft_ms": 71.393797,
+    "decode_ms": 17736.015638,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 3,
+    "e2e_ms": 17779.417498,
+    "ttft_ms": 75.391359,
+    "decode_ms": 17704.027523,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 4,
+    "e2e_ms": 17742.378084,
+    "ttft_ms": 73.945867,
+    "decode_ms": 17668.871665,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 9291.129813,
+    "ttft_ms": 42.359983,
+    "decode_ms": 9248.858624999999,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 9907.165245,
+    "ttft_ms": 87.434042,
+    "decode_ms": 9819.405209,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 3,
+    "e2e_ms": 9454.852639,
+    "ttft_ms": 95.073755,
+    "decode_ms": 9359.778884000001,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 4,
+    "e2e_ms": 9045.077364,
+    "ttft_ms": 92.084923,
+    "decode_ms": 8952.992441,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 18661.78483,
+    "ttft_ms": 242.071115,
+    "decode_ms": 18425.860752,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 18661.169057,
+    "ttft_ms": 249.390728,
+    "decode_ms": 18419.679002,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 3,
+    "e2e_ms": 18648.524443,
+    "ttft_ms": 222.870806,
+    "decode_ms": 18495.089314,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 4,
+    "e2e_ms": 18662.29936,
+    "ttft_ms": 229.610409,
+    "decode_ms": 18425.677993999998,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 5,
+    "e2e_ms": 18662.244727,
+    "ttft_ms": 228.803897,
+    "decode_ms": 18499.173915,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 6,
+    "e2e_ms": 18666.847626,
+    "ttft_ms": 150.592951,
+    "decode_ms": 18477.307776,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 7,
+    "e2e_ms": 18663.14958,
+    "ttft_ms": 223.175367,
+    "decode_ms": 18425.486043,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 8,
+    "e2e_ms": 18661.937762,
+    "ttft_ms": 242.025036,
+    "decode_ms": 18419.912726000002,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 12305.590046,
+    "ttft_ms": 237.431708,
+    "decode_ms": 12064.198284,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 12795.012209,
+    "ttft_ms": 235.537856,
+    "decode_ms": 12559.474353,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 3,
+    "e2e_ms": 12744.856244,
+    "ttft_ms": 236.805788,
+    "decode_ms": 12509.161960000001,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 4,
+    "e2e_ms": 11930.923151,
+    "ttft_ms": 235.530655,
+    "decode_ms": 11689.332799000002,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 5,
+    "e2e_ms": 12407.726554,
+    "ttft_ms": 235.710628,
+    "decode_ms": 12172.015926,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 6,
+    "e2e_ms": 12952.881377,
+    "ttft_ms": 236.545975,
+    "decode_ms": 12703.483614,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 7,
+    "e2e_ms": 13650.664178,
+    "ttft_ms": 245.732924,
+    "decode_ms": 13413.102574,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 8,
+    "e2e_ms": 11974.631576,
+    "ttft_ms": 237.491338,
+    "decode_ms": 11737.140238,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 18549.617972,
+    "ttft_ms": 34.576837,
+    "decode_ms": 18514.892891,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 18603.921497,
+    "ttft_ms": 71.63174,
+    "decode_ms": 18532.434727,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 3,
+    "e2e_ms": 18579.879194,
+    "ttft_ms": 75.701991,
+    "decode_ms": 18504.177203,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 4,
+    "e2e_ms": 18557.175049,
+    "ttft_ms": 74.261527,
+    "decode_ms": 18482.913522000003,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 5,
+    "e2e_ms": 18531.489824,
+    "ttft_ms": 75.844047,
+    "decode_ms": 18455.515189,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 6,
+    "e2e_ms": 18506.149112,
+    "ttft_ms": 79.067805,
+    "decode_ms": 18427.081307,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 7,
+    "e2e_ms": 18479.368316,
+    "ttft_ms": 87.455093,
+    "decode_ms": 18391.786973,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 8,
+    "e2e_ms": 18443.29484,
+    "ttft_ms": 95.274589,
+    "decode_ms": 18348.083708,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 12593.575045,
+    "ttft_ms": 42.491552,
+    "decode_ms": 12550.896299,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 13081.629237,
+    "ttft_ms": 87.904454,
+    "decode_ms": 12993.593062999998,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 3,
+    "e2e_ms": 12826.078871,
+    "ttft_ms": 95.240757,
+    "decode_ms": 12730.833075999999,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 4,
+    "e2e_ms": 11802.612672,
+    "ttft_ms": 92.47195,
+    "decode_ms": 11710.778219,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 5,
+    "e2e_ms": 12385.853758,
+    "ttft_ms": 95.355952,
+    "decode_ms": 12291.295966,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 6,
+    "e2e_ms": 12682.089174,
+    "ttft_ms": 102.538592,
+    "decode_ms": 12576.734318,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 7,
+    "e2e_ms": 13201.10259,
+    "ttft_ms": 119.587249,
+    "decode_ms": 13080.093735,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 8,
+    "e2e_ms": 11771.32814,
+    "ttft_ms": 123.10354,
+    "decode_ms": 11646.086919,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 24807.778967,
+    "ttft_ms": 755.308993,
+    "decode_ms": 24041.470253,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 24739.978891,
+    "ttft_ms": 728.091181,
+    "decode_ms": 24088.65744,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 3,
+    "e2e_ms": 24742.595447,
+    "ttft_ms": 725.012593,
+    "decode_ms": 24024.483698,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 4,
+    "e2e_ms": 24753.767185,
+    "ttft_ms": 641.879737,
+    "decode_ms": 24112.965509,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 5,
+    "e2e_ms": 24788.362518,
+    "ttft_ms": 654.340363,
+    "decode_ms": 24088.838935,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 6,
+    "e2e_ms": 24807.605735,
+    "ttft_ms": 736.66856,
+    "decode_ms": 24099.461914000003,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 7,
+    "e2e_ms": 24789.767619,
+    "ttft_ms": 594.904537,
+    "decode_ms": 24024.500544,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 8,
+    "e2e_ms": 24823.449197,
+    "ttft_ms": 736.409007,
+    "decode_ms": 24099.59815,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 9,
+    "e2e_ms": 24754.650548,
+    "ttft_ms": 712.666418,
+    "decode_ms": 24042.044994999997,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 10,
+    "e2e_ms": 24789.787138,
+    "ttft_ms": 712.144159,
+    "decode_ms": 24077.642979,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 11,
+    "e2e_ms": 24753.629916,
+    "ttft_ms": 735.282942,
+    "decode_ms": 24043.623072,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 12,
+    "e2e_ms": 24755.125675,
+    "ttft_ms": 605.251969,
+    "decode_ms": 24149.873706,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 13,
+    "e2e_ms": 24755.600524,
+    "ttft_ms": 735.557428,
+    "decode_ms": 24110.250156000002,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 14,
+    "e2e_ms": 24743.192172,
+    "ttft_ms": 603.511699,
+    "decode_ms": 24150.124046,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 15,
+    "e2e_ms": 24639.915583,
+    "ttft_ms": 515.636908,
+    "decode_ms": 24204.101418000002,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 16,
+    "e2e_ms": 24787.968732,
+    "ttft_ms": 643.901112,
+    "decode_ms": 24041.186403,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 22079.663138,
+    "ttft_ms": 565.024417,
+    "decode_ms": 21383.731549,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 23244.625557,
+    "ttft_ms": 812.685671,
+    "decode_ms": 22431.939886,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 3,
+    "e2e_ms": 22782.346288,
+    "ttft_ms": 776.685741,
+    "decode_ms": 22189.338606,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 4,
+    "e2e_ms": 21136.987659,
+    "ttft_ms": 847.331469,
+    "decode_ms": 20247.084396,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 5,
+    "e2e_ms": 22218.045044,
+    "ttft_ms": 847.679816,
+    "decode_ms": 21576.990973,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 6,
+    "e2e_ms": 22863.387093,
+    "ttft_ms": 847.542418,
+    "decode_ms": 22010.940002,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 7,
+    "e2e_ms": 24210.574866,
+    "ttft_ms": 847.199548,
+    "decode_ms": 23315.565853,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 8,
+    "e2e_ms": 20956.231694,
+    "ttft_ms": 717.825141,
+    "decode_ms": 20164.400744,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 9,
+    "e2e_ms": 22433.403334,
+    "ttft_ms": 818.420595,
+    "decode_ms": 21657.733863999998,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 10,
+    "e2e_ms": 24492.013552,
+    "ttft_ms": 843.032763,
+    "decode_ms": 23648.980789,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 11,
+    "e2e_ms": 23800.089889,
+    "ttft_ms": 820.608462,
+    "decode_ms": 22910.727295999997,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 12,
+    "e2e_ms": 21502.297662,
+    "ttft_ms": 775.725004,
+    "decode_ms": 20940.371656,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 13,
+    "e2e_ms": 24728.839247,
+    "ttft_ms": 849.303779,
+    "decode_ms": 24067.216115,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 14,
+    "e2e_ms": 23066.848174,
+    "ttft_ms": 686.481682,
+    "decode_ms": 22499.968816,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 15,
+    "e2e_ms": 23418.733526,
+    "ttft_ms": 848.658721,
+    "decode_ms": 23080.255804999997,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 16,
+    "e2e_ms": 21768.335004,
+    "ttft_ms": 883.098547,
+    "decode_ms": 21052.40723,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 24232.620266,
+    "ttft_ms": 34.075814,
+    "decode_ms": 24198.544452000002,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 24331.369487,
+    "ttft_ms": 71.256938,
+    "decode_ms": 24260.127913,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 3,
+    "e2e_ms": 24330.123758,
+    "ttft_ms": 75.5784,
+    "decode_ms": 24254.805732,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 4,
+    "e2e_ms": 24327.322551,
+    "ttft_ms": 73.937011,
+    "decode_ms": 24253.388143,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 5,
+    "e2e_ms": 24323.361845,
+    "ttft_ms": 75.546432,
+    "decode_ms": 24248.532871,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 6,
+    "e2e_ms": 24318.327622,
+    "ttft_ms": 79.004334,
+    "decode_ms": 24240.564339,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 7,
+    "e2e_ms": 24312.499696,
+    "ttft_ms": 87.544012,
+    "decode_ms": 24225.991944999998,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 8,
+    "e2e_ms": 24306.040642,
+    "ttft_ms": 94.977463,
+    "decode_ms": 24212.436742,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 9,
+    "e2e_ms": 24297.824455,
+    "ttft_ms": 98.773127,
+    "decode_ms": 24199.051328,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 10,
+    "e2e_ms": 24288.85824,
+    "ttft_ms": 199.178949,
+    "decode_ms": 24089.679291,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 11,
+    "e2e_ms": 24234.914452,
+    "ttft_ms": 296.649192,
+    "decode_ms": 23938.26526,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 12,
+    "e2e_ms": 24173.136305,
+    "ttft_ms": 294.826848,
+    "decode_ms": 23878.309457,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 13,
+    "e2e_ms": 24073.227747,
+    "ttft_ms": 194.899421,
+    "decode_ms": 23878.328326000003,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 14,
+    "e2e_ms": 24010.239616,
+    "ttft_ms": 178.7071,
+    "decode_ms": 23831.532516,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 15,
+    "e2e_ms": 23946.39118,
+    "ttft_ms": 158.793658,
+    "decode_ms": 23787.597522,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 16,
+    "e2e_ms": 23878.022853,
+    "ttft_ms": 140.567785,
+    "decode_ms": 23737.455068,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 20237.112982,
+    "ttft_ms": 42.318852,
+    "decode_ms": 20194.678778999998,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 22082.126739,
+    "ttft_ms": 87.58247,
+    "decode_ms": 21994.544268999998,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 3,
+    "e2e_ms": 21267.384069,
+    "ttft_ms": 95.242024,
+    "decode_ms": 21172.142045,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 4,
+    "e2e_ms": 20517.606199,
+    "ttft_ms": 91.671206,
+    "decode_ms": 20425.193082,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 5,
+    "e2e_ms": 20182.652569,
+    "ttft_ms": 94.797843,
+    "decode_ms": 20087.854726,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 6,
+    "e2e_ms": 22759.926753,
+    "ttft_ms": 102.025449,
+    "decode_ms": 22657.877457,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 7,
+    "e2e_ms": 23806.580726,
+    "ttft_ms": 120.091618,
+    "decode_ms": 23686.890403,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 8,
+    "e2e_ms": 20687.765129,
+    "ttft_ms": 124.423912,
+    "decode_ms": 20563.499785,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 9,
+    "e2e_ms": 22033.113052,
+    "ttft_ms": 129.019998,
+    "decode_ms": 21904.427993,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 10,
+    "e2e_ms": 23427.909247,
+    "ttft_ms": 289.002599,
+    "decode_ms": 23138.906648,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 11,
+    "e2e_ms": 23378.852777,
+    "ttft_ms": 458.679048,
+    "decode_ms": 22920.173729,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 12,
+    "e2e_ms": 21673.126929,
+    "ttft_ms": 611.026098,
+    "decode_ms": 21058.805921,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 13,
+    "e2e_ms": 23974.311672,
+    "ttft_ms": 608.598972,
+    "decode_ms": 23366.085418,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 14,
+    "e2e_ms": 22544.900703,
+    "ttft_ms": 612.787318,
+    "decode_ms": 21929.320682999998,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 15,
+    "e2e_ms": 23177.138345,
+    "ttft_ms": 578.718038,
+    "decode_ms": 22598.878231,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 16,
+    "e2e_ms": 20959.537134,
+    "ttft_ms": 515.948636,
+    "decode_ms": 20441.256201999997,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "finish_reasons": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  }
+]

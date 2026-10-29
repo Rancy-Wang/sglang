@@ -1,0 +1,11 @@
+{
+  "performance_cells": 20,
+  "profile_cells": 20,
+  "profile_decode_output_coverage": "all",
+  "profile_decode_tokens": 63364,
+  "measured_requests": 620,
+  "all_inputs_match": true,
+  "full_sequence_exact_pairs": 52,
+  "full_sequence_pairs": 310,
+  "full_sequence_exact_equivalence": false
+}

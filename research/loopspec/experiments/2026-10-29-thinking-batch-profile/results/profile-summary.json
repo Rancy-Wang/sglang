@@ -1,0 +1,6710 @@
+[
+  {
+    "name": "ar-b1-simultaneous",
+    "algorithm": "ar",
+    "bs": 1,
+    "pattern": "simultaneous",
+    "profile_e2e_ms": 14509.58897,
+    "gpu_kernel_busy_union_ms": 12898.313979492188,
+    "depths": {
+      "0": {
+        "outputs": 511,
+        "new_cycles": {
+          "n": 511,
+          "median": 4,
+          "p95": 4,
+          "sum": 2044
+        },
+        "client_itl_ms": {
+          "n": 511,
+          "median": 28.900512,
+          "p95": 31.578799,
+          "sum": 14471.990416
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 511,
+          "median": 19.992534,
+          "p95": 25.489301,
+          "sum": 10464.120438
+        },
+        "native.sample_publish_copy_host_ms": {
+          "n": 511,
+          "median": 0.529104,
+          "p95": 0.780265,
+          "sum": 289.603024
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 37.598554,
+        "shared_forward_ids": [
+          1,
+          6,
+          10,
+          14
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 7.98019,
+            "gpu_stream_ms": 2.5614079964580014
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.091601,
+            "gpu_stream_ms": 31.480031967163086
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.619521,
+            "gpu_stream_ms": 0.6103039979934692
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.157599,
+            "gpu_stream_ms": 0.13699199259281158
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.1351189999999995,
+            "gpu_stream_ms": 30.794879913330078
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.311903,
+            "gpu_stream_ms": 0.15724800527095795
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "loopspec-b1-simultaneous",
+    "algorithm": "loopspec",
+    "bs": 1,
+    "pattern": "simultaneous",
+    "profile_e2e_ms": 8366.031648,
+    "gpu_kernel_busy_union_ms": 4943.557783203125,
+    "depths": {
+      "0": {
+        "outputs": 42,
+        "new_cycles": {
+          "n": 42,
+          "median": 4.0,
+          "p95": 4,
+          "sum": 168
+        },
+        "client_itl_ms": {
+          "n": 42,
+          "median": 50.326642,
+          "p95": 54.662613,
+          "sum": 2112.305626
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 42,
+          "median": 0.3092889999999997,
+          "p95": 0.489691999999998,
+          "sum": 14.777112999999984
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 42,
+          "median": 33.0335025,
+          "p95": 35.607383,
+          "sum": 1385.469746
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 42,
+          "median": 0.1375135,
+          "p95": 0.426196,
+          "sum": 8.749572
+        }
+      },
+      "3": {
+        "outputs": 469,
+        "new_cycles": {
+          "n": 469,
+          "median": 1,
+          "p95": 1,
+          "sum": 469
+        },
+        "client_itl_ms": {
+          "n": 469,
+          "median": 12.967337,
+          "p95": 15.404773,
+          "sum": 6204.022611
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 469,
+          "median": 0.16469099999999948,
+          "p95": 0.26301999999999914,
+          "sum": 92.23315800000002
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 469,
+          "median": 8.653675999999999,
+          "p95": 9.338833,
+          "sum": 4075.99608
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 469,
+          "median": 0.122516,
+          "p95": 0.385725,
+          "sum": 87.414579
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 49.703411,
+        "shared_forward_ids": [
+          1,
+          6,
+          10,
+          14
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 32.920308,
+            "gpu_stream_ms": 11.105376299237832
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 6.13233,
+            "gpu_stream_ms": 32.38409614562988
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.661984,
+            "gpu_stream_ms": 0.6531519889831543
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.175246,
+            "gpu_stream_ms": 0.15699200332164764
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 5.137162,
+            "gpu_stream_ms": 31.655712604522705
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.328118,
+            "gpu_stream_ms": 0.1573760062456131
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 25.736262,
+            "gpu_stream_ms": 0.3712320029735565
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "ar-b1-staggered",
+    "algorithm": "ar",
+    "bs": 1,
+    "pattern": "staggered",
+    "profile_e2e_ms": 14449.370183,
+    "gpu_kernel_busy_union_ms": 12882.67151953125,
+    "depths": {
+      "0": {
+        "outputs": 511,
+        "new_cycles": {
+          "n": 511,
+          "median": 4,
+          "p95": 4,
+          "sum": 2044
+        },
+        "client_itl_ms": {
+          "n": 511,
+          "median": 28.713472,
+          "p95": 31.523808,
+          "sum": 14412.302857
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 511,
+          "median": 22.749348,
+          "p95": 25.529037,
+          "sum": 11353.990992
+        },
+        "native.sample_publish_copy_host_ms": {
+          "n": 511,
+          "median": 0.43642200000000053,
+          "p95": 0.5854889999999999,
+          "sum": 238.173085
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 37.067326,
+        "shared_forward_ids": [
+          1,
+          6,
+          10,
+          14
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 7.910711,
+            "gpu_stream_ms": 2.6365440984955058
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.042541,
+            "gpu_stream_ms": 32.23033571243286
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.595925,
+            "gpu_stream_ms": 0.5870400071144104
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.151089,
+            "gpu_stream_ms": 0.12947200238704681
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.1066020000000005,
+            "gpu_stream_ms": 31.568575859069824
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.320447,
+            "gpu_stream_ms": 0.15801599621772766
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "loopspec-b1-staggered",
+    "algorithm": "loopspec",
+    "bs": 1,
+    "pattern": "staggered",
+    "profile_e2e_ms": 7873.060795,
+    "gpu_kernel_busy_union_ms": 4936.950272949219,
+    "depths": {
+      "0": {
+        "outputs": 42,
+        "new_cycles": {
+          "n": 42,
+          "median": 4.0,
+          "p95": 4,
+          "sum": 168
+        },
+        "client_itl_ms": {
+          "n": 42,
+          "median": 47.573089499999995,
+          "p95": 50.605899,
+          "sum": 2000.113063
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 42,
+          "median": 0.3013875000000006,
+          "p95": 0.4091200000000015,
+          "sum": 12.946018000000015
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 42,
+          "median": 32.565229,
+          "p95": 35.191273,
+          "sum": 1367.569353
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 42,
+          "median": 0.13297150000000002,
+          "p95": 0.280205,
+          "sum": 6.8958699999999995
+        }
+      },
+      "3": {
+        "outputs": 469,
+        "new_cycles": {
+          "n": 469,
+          "median": 1,
+          "p95": 1,
+          "sum": 469
+        },
+        "client_itl_ms": {
+          "n": 469,
+          "median": 12.544445,
+          "p95": 13.491341,
+          "sum": 5825.482716
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 469,
+          "median": 0.1600430000000017,
+          "p95": 0.18302699999999916,
+          "sum": 76.97747000000004
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 469,
+          "median": 8.596198999999999,
+          "p95": 9.264890999999999,
+          "sum": 4036.140607
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 469,
+          "median": 0.11892,
+          "p95": 0.29668,
+          "sum": 71.904171
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 47.465016,
+        "shared_forward_ids": [
+          1,
+          6,
+          10,
+          14
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 32.515944,
+            "gpu_stream_ms": 10.638624029583298
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 5.875079,
+            "gpu_stream_ms": 32.29302358627319
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.615703,
+            "gpu_stream_ms": 0.6064640283584595
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.149697,
+            "gpu_stream_ms": 0.1311040073633194
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 4.922847,
+            "gpu_stream_ms": 31.608223915100098
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.304051,
+            "gpu_stream_ms": 0.1573760062456131
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 25.798146,
+            "gpu_stream_ms": 0.15785600244998932
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "ar-b2-simultaneous",
+    "algorithm": "ar",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "profile_e2e_ms": 18012.504249,
+    "gpu_kernel_busy_union_ms": 16029.704569824218,
+    "depths": {
+      "0": {
+        "outputs": 1022,
+        "new_cycles": {
+          "n": 1022,
+          "median": 4.0,
+          "p95": 4,
+          "sum": 4088
+        },
+        "client_itl_ms": {
+          "n": 1022,
+          "median": 35.0116485,
+          "p95": 37.593617,
+          "sum": 35852.775408
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 1022,
+          "median": 12.9376915,
+          "p95": 15.145316,
+          "sum": 13289.766428
+        },
+        "native.sample_publish_copy_host_ms": {
+          "n": 1022,
+          "median": 0.815487,
+          "p95": 1.2016049999999998,
+          "sum": 875.772769
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 59.749696,
+        "shared_forward_ids": [
+          1,
+          7,
+          17,
+          25
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 8.877035,
+            "gpu_stream_ms": 2.943136001646053
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.9599400000000005,
+            "gpu_stream_ms": 32.545023918151855
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.733564,
+            "gpu_stream_ms": 0.7238399982452393
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.195226,
+            "gpu_stream_ms": 0.1562879979610443
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.847182,
+            "gpu_stream_ms": 31.740127563476562
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.318673,
+            "gpu_stream_ms": 0.15801599621772766
+          }
+        }
+      },
+      {
+        "rid": "run-0-q2",
+        "ttft_ms": 95.171599,
+        "shared_forward_ids": [
+          11,
+          21,
+          37,
+          45
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 8.965489,
+            "gpu_stream_ms": 0.0027840000111609697
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.911839,
+            "gpu_stream_ms": 43.726847648620605
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.56653,
+            "gpu_stream_ms": 0.04364800080657005
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.133322,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.894192,
+            "gpu_stream_ms": 43.65129566192627
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.384404,
+            "gpu_stream_ms": 0.16009600460529327
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "loopspec-b2-simultaneous",
+    "algorithm": "loopspec",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "profile_e2e_ms": 9977.312757,
+    "gpu_kernel_busy_union_ms": 5636.551363769531,
+    "depths": {
+      "0": {
+        "outputs": 93,
+        "new_cycles": {
+          "n": 93,
+          "median": 4,
+          "p95": 4,
+          "sum": 372
+        },
+        "client_itl_ms": {
+          "n": 93,
+          "median": 57.984669,
+          "p95": 62.54802,
+          "sum": 5393.738722
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 93,
+          "median": 0.7477710000000002,
+          "p95": 0.822929000000002,
+          "sum": 64.13304400000001
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 93,
+          "median": 36.585876999999996,
+          "p95": 39.168786000000004,
+          "sum": 3394.671251
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 93,
+          "median": 0.121244,
+          "p95": 0.28336,
+          "sum": 13.529425
+        }
+      },
+      "3": {
+        "outputs": 929,
+        "new_cycles": {
+          "n": 929,
+          "median": 1,
+          "p95": 1,
+          "sum": 929
+        },
+        "client_itl_ms": {
+          "n": 929,
+          "median": 15.436151,
+          "p95": 16.915234,
+          "sum": 14316.183105
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 929,
+          "median": 0.2660829999999983,
+          "p95": 0.29947499999999927,
+          "sum": 235.56367999999998
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 929,
+          "median": 9.273855000000001,
+          "p95": 9.961739000000001,
+          "sum": 8613.900268
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 929,
+          "median": 0.114654,
+          "p95": 0.247966,
+          "sum": 126.39235
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 116.322945,
+        "shared_forward_ids": [
+          11,
+          21,
+          41,
+          54
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 13.889366,
+            "gpu_stream_ms": 10.505823904415593
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 5.821289,
+            "gpu_stream_ms": 31.72208023071289
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.433648,
+            "gpu_stream_ms": 0.03923200070858002
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.100483,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 5.069318,
+            "gpu_stream_ms": 31.578656673431396
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.228997,
+            "gpu_stream_ms": 0.1552640050649643
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 7.372972,
+            "gpu_stream_ms": 0.12099199742078781
+          }
+        }
+      },
+      {
+        "rid": "run-0-q2",
+        "ttft_ms": 76.01181,
+        "shared_forward_ids": [
+          1,
+          7,
+          17,
+          25
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 56.952814,
+            "gpu_stream_ms": 14.014623934170231
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 5.803121,
+            "gpu_stream_ms": 45.93616008758545
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.621132,
+            "gpu_stream_ms": 0.6119999885559082
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.150518,
+            "gpu_stream_ms": 0.13247999548912048
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 4.85299,
+            "gpu_stream_ms": 45.24995231628418
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.292354,
+            "gpu_stream_ms": 0.157151997089386
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 50.292995,
+            "gpu_stream_ms": 0.1698240041732788
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "ar-b2-staggered",
+    "algorithm": "ar",
+    "bs": 2,
+    "pattern": "staggered",
+    "profile_e2e_ms": 17921.61283,
+    "gpu_kernel_busy_union_ms": 15980.464454589845,
+    "depths": {
+      "0": {
+        "outputs": 1022,
+        "new_cycles": {
+          "n": 1022,
+          "median": 4.0,
+          "p95": 4,
+          "sum": 4088
+        },
+        "client_itl_ms": {
+          "n": 1022,
+          "median": 34.770872,
+          "p95": 37.143442,
+          "sum": 35493.451931999996
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 1022,
+          "median": 28.27148,
+          "p95": 31.0922,
+          "sum": 28461.738427
+        },
+        "native.sample_publish_copy_host_ms": {
+          "n": 1022,
+          "median": 0.4817199999999999,
+          "p95": 0.7091069999999999,
+          "sum": 528.001145
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 38.431428,
+        "shared_forward_ids": [
+          1,
+          6,
+          10,
+          14
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 9.066429,
+            "gpu_stream_ms": 2.92412806104403
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.072779,
+            "gpu_stream_ms": 32.5186243057251
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.68519,
+            "gpu_stream_ms": 0.6752960085868835
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.180444,
+            "gpu_stream_ms": 0.1515199989080429
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.003709,
+            "gpu_stream_ms": 31.76428747177124
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.360737,
+            "gpu_stream_ms": 0.15801599621772766
+          }
+        }
+      },
+      {
+        "rid": "run-0-q2",
+        "ttft_ms": 79.375588,
+        "shared_forward_ids": [
+          87,
+          97,
+          105,
+          114
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 8.824922,
+            "gpu_stream_ms": 0.0015040000434964895
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.892996,
+            "gpu_stream_ms": 43.76611137390137
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.699271,
+            "gpu_stream_ms": 0.03728000074625015
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.176578,
+            "gpu_stream_ms": 0.008191999979317188
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.8227340000000005,
+            "gpu_stream_ms": 43.695295333862305
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.348529,
+            "gpu_stream_ms": 0.15731200575828552
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "loopspec-b2-staggered",
+    "algorithm": "loopspec",
+    "bs": 2,
+    "pattern": "staggered",
+    "profile_e2e_ms": 10642.938192,
+    "gpu_kernel_busy_union_ms": 6017.169923339844,
+    "depths": {
+      "0": {
+        "outputs": 103,
+        "new_cycles": {
+          "n": 103,
+          "median": 4,
+          "p95": 4,
+          "sum": 412
+        },
+        "client_itl_ms": {
+          "n": 103,
+          "median": 57.846796,
+          "p95": 63.236917,
+          "sum": 5943.020971
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 103,
+          "median": 0.767633,
+          "p95": 0.9244229999999991,
+          "sum": 72.403434
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 103,
+          "median": 36.390224,
+          "p95": 38.865018,
+          "sum": 3745.46563
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 103,
+          "median": 0.12502,
+          "p95": 0.331142,
+          "sum": 18.237901
+        }
+      },
+      "3": {
+        "outputs": 919,
+        "new_cycles": {
+          "n": 919,
+          "median": 1,
+          "p95": 1,
+          "sum": 919
+        },
+        "client_itl_ms": {
+          "n": 919,
+          "median": 15.553797,
+          "p95": 17.171673,
+          "sum": 14215.099868
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 919,
+          "median": 0.2676660000000002,
+          "p95": 0.3414079999999995,
+          "sum": 231.807525
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 919,
+          "median": 9.279463999999999,
+          "p95": 9.833544,
+          "sum": 8500.021545
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 919,
+          "median": 0.116167,
+          "p95": 0.273145,
+          "sum": 133.382611
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 48.92794,
+        "shared_forward_ids": [
+          1,
+          6,
+          10,
+          14
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 33.016642,
+            "gpu_stream_ms": 11.173727900604717
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 6.211526,
+            "gpu_stream_ms": 32.47913599014282
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.668294,
+            "gpu_stream_ms": 0.6595839858055115
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.155366,
+            "gpu_stream_ms": 0.1363839954137802
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 5.208796,
+            "gpu_stream_ms": 31.74172830581665
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.332435,
+            "gpu_stream_ms": 0.15769599378108978
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 25.743232,
+            "gpu_stream_ms": 0.3200640082359314
+          }
+        }
+      },
+      {
+        "rid": "run-0-q2",
+        "ttft_ms": 113.963006,
+        "shared_forward_ids": [
+          87,
+          106,
+          123,
+          140
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 19.240782,
+            "gpu_stream_ms": 19.397855639457703
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.340769,
+            "gpu_stream_ms": 50.728543281555176
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.725972,
+            "gpu_stream_ms": 0.7167040109634399
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.149026,
+            "gpu_stream_ms": 0.13087999820709229
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.222582,
+            "gpu_stream_ms": 49.80726432800293
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.341458,
+            "gpu_stream_ms": 0.15516799688339233
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 9.957924,
+            "gpu_stream_ms": 0.16972799599170685
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "ar-b4-simultaneous",
+    "algorithm": "ar",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "profile_e2e_ms": 18274.491671,
+    "gpu_kernel_busy_union_ms": 16301.841436523437,
+    "depths": {
+      "0": {
+        "outputs": 2044,
+        "new_cycles": {
+          "n": 2044,
+          "median": 4.0,
+          "p95": 4,
+          "sum": 8176
+        },
+        "client_itl_ms": {
+          "n": 2044,
+          "median": 35.517050999999995,
+          "p95": 37.989918,
+          "sum": 72612.203541
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 2044,
+          "median": 14.108265,
+          "p95": 15.398151,
+          "sum": 28007.665142
+        },
+        "native.sample_publish_copy_host_ms": {
+          "n": 2044,
+          "median": 0.7026645000000001,
+          "p95": 1.045395,
+          "sum": 1550.367479
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 127.279579,
+        "shared_forward_ids": [
+          13,
+          23,
+          39,
+          47
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 13.290044,
+            "gpu_stream_ms": 0.0035200000857003033
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 12.399101,
+            "gpu_stream_ms": 63.099135398864746
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.587261,
+            "gpu_stream_ms": 0.039744000881910324
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.142606,
+            "gpu_stream_ms": 0.008704000152647495
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 11.401819,
+            "gpu_stream_ms": 63.02780818939209
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.334047,
+            "gpu_stream_ms": 0.15600000321865082
+          }
+        }
+      },
+      {
+        "rid": "run-0-q2",
+        "ttft_ms": 127.857196,
+        "shared_forward_ids": [
+          13,
+          23,
+          39,
+          47
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 13.290044,
+            "gpu_stream_ms": 0.0035200000857003033
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 12.399101,
+            "gpu_stream_ms": 63.099135398864746
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.587261,
+            "gpu_stream_ms": 0.039744000881910324
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.142606,
+            "gpu_stream_ms": 0.008704000152647495
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 11.401819,
+            "gpu_stream_ms": 63.02780818939209
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.334047,
+            "gpu_stream_ms": 0.15600000321865082
+          }
+        }
+      },
+      {
+        "rid": "run-0-q3",
+        "ttft_ms": 81.730262,
+        "shared_forward_ids": [
+          1,
+          9,
+          19,
+          27
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 19.279721,
+            "gpu_stream_ms": 3.7244799807667732
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 18.293004,
+            "gpu_stream_ms": 43.77171230316162
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.905373,
+            "gpu_stream_ms": 0.8951680064201355
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.227345,
+            "gpu_stream_ms": 0.18953600525856018
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 16.964369,
+            "gpu_stream_ms": 42.78835201263428
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.330241,
+            "gpu_stream_ms": 0.15596799552440643
+          }
+        }
+      },
+      {
+        "rid": "run-0-q4",
+        "ttft_ms": 126.929668,
+        "shared_forward_ids": [
+          13,
+          23,
+          39,
+          47
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 13.290044,
+            "gpu_stream_ms": 0.0035200000857003033
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 12.399101,
+            "gpu_stream_ms": 63.099135398864746
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.587261,
+            "gpu_stream_ms": 0.039744000881910324
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.142606,
+            "gpu_stream_ms": 0.008704000152647495
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 11.401819,
+            "gpu_stream_ms": 63.02780818939209
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.334047,
+            "gpu_stream_ms": 0.15600000321865082
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "loopspec-b4-simultaneous",
+    "algorithm": "loopspec",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "profile_e2e_ms": 13503.903111,
+    "gpu_kernel_busy_union_ms": 6602.476817871094,
+    "depths": {
+      "0": {
+        "outputs": 185,
+        "new_cycles": {
+          "n": 185,
+          "median": 4,
+          "p95": 4,
+          "sum": 740
+        },
+        "client_itl_ms": {
+          "n": 185,
+          "median": 75.249145,
+          "p95": 84.776633,
+          "sum": 13986.805705
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 185,
+          "median": 1.3780490000000025,
+          "p95": 1.7640449999999994,
+          "sum": 253.421884
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 185,
+          "median": 39.171554,
+          "p95": 42.430099999999996,
+          "sum": 7264.034832
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 185,
+          "median": 0.119412,
+          "p95": 0.253565,
+          "sum": 26.431056
+        }
+      },
+      "3": {
+        "outputs": 1859,
+        "new_cycles": {
+          "n": 1859,
+          "median": 1,
+          "p95": 1,
+          "sum": 1859
+        },
+        "client_itl_ms": {
+          "n": 1859,
+          "median": 20.191272,
+          "p95": 22.380294,
+          "sum": 37078.777294
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 1859,
+          "median": 0.4474870000000024,
+          "p95": 0.5833259999999996,
+          "sum": 808.8759550000002
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 1859,
+          "median": 9.979735000000002,
+          "p95": 10.887963999999998,
+          "sum": 18594.84209
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 1859,
+          "median": 0.096116,
+          "p95": 0.238012,
+          "sum": 229.444476
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 87.89119,
+        "shared_forward_ids": [
+          1,
+          9,
+          19,
+          27
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 61.829620999999996,
+            "gpu_stream_ms": 11.044831673847511
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 14.943368,
+            "gpu_stream_ms": 32.52403163909912
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.710678,
+            "gpu_stream_ms": 0.7014719843864441
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.176077,
+            "gpu_stream_ms": 0.1531199961900711
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 13.876989,
+            "gpu_stream_ms": 31.74355173110962
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.324853,
+            "gpu_stream_ms": 0.1573760062456131
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 45.891744,
+            "gpu_stream_ms": 0.21958400309085846
+          }
+        }
+      },
+      {
+        "rid": "run-0-q2",
+        "ttft_ms": 154.515098,
+        "shared_forward_ids": [
+          13,
+          23,
+          43,
+          56
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 30.91717,
+            "gpu_stream_ms": 22.278112011379562
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 12.354669,
+            "gpu_stream_ms": 77.9453125
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.458235,
+            "gpu_stream_ms": 0.047775998711586
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.109206,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 11.545862,
+            "gpu_stream_ms": 77.78892707824707
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.310932,
+            "gpu_stream_ms": 0.15305599570274353
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 17.746973,
+            "gpu_stream_ms": 0.2147199958562851
+          }
+        }
+      },
+      {
+        "rid": "run-0-q3",
+        "ttft_ms": 154.742552,
+        "shared_forward_ids": [
+          13,
+          23,
+          43,
+          56
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 30.91717,
+            "gpu_stream_ms": 22.278112011379562
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 12.354669,
+            "gpu_stream_ms": 77.9453125
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.458235,
+            "gpu_stream_ms": 0.047775998711586
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.109206,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 11.545862,
+            "gpu_stream_ms": 77.78892707824707
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.310932,
+            "gpu_stream_ms": 0.15305599570274353
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 17.746973,
+            "gpu_stream_ms": 0.2147199958562851
+          }
+        }
+      },
+      {
+        "rid": "run-0-q4",
+        "ttft_ms": 155.033343,
+        "shared_forward_ids": [
+          13,
+          23,
+          43,
+          56
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 30.91717,
+            "gpu_stream_ms": 22.278112011379562
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 12.354669,
+            "gpu_stream_ms": 77.9453125
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.458235,
+            "gpu_stream_ms": 0.047775998711586
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.109206,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 11.545862,
+            "gpu_stream_ms": 77.78892707824707
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.310932,
+            "gpu_stream_ms": 0.15305599570274353
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 17.746973,
+            "gpu_stream_ms": 0.2147199958562851
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "ar-b4-staggered",
+    "algorithm": "ar",
+    "bs": 4,
+    "pattern": "staggered",
+    "profile_e2e_ms": 18418.171879,
+    "gpu_kernel_busy_union_ms": 16458.931567382813,
+    "depths": {
+      "0": {
+        "outputs": 2044,
+        "new_cycles": {
+          "n": 2044,
+          "median": 4.0,
+          "p95": 4,
+          "sum": 8176
+        },
+        "client_itl_ms": {
+          "n": 2044,
+          "median": 35.303015,
+          "p95": 37.783458,
+          "sum": 72289.825349
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 2044,
+          "median": 29.184323,
+          "p95": 31.624124,
+          "sum": 58487.416866
+        },
+        "native.sample_publish_copy_host_ms": {
+          "n": 2044,
+          "median": 0.46476399999999973,
+          "p95": 0.730057,
+          "sum": 1062.50875
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 38.314494,
+        "shared_forward_ids": [
+          1,
+          6,
+          10,
+          14
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 9.123971,
+            "gpu_stream_ms": 2.9974081051768735
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.173821,
+            "gpu_stream_ms": 32.589951515197754
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.762958,
+            "gpu_stream_ms": 0.7544639706611633
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.233675,
+            "gpu_stream_ms": 0.20393599569797516
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.039078,
+            "gpu_stream_ms": 31.756159782409668
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.339254,
+            "gpu_stream_ms": 0.15721599757671356
+          }
+        }
+      },
+      {
+        "rid": "run-0-q2",
+        "ttft_ms": 79.821361,
+        "shared_forward_ids": [
+          87,
+          97,
+          105,
+          114
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 8.967464,
+            "gpu_stream_ms": 0.0015040000434964895
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.894746,
+            "gpu_stream_ms": 43.76259231567383
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.67874,
+            "gpu_stream_ms": 0.03308799862861633
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.174635,
+            "gpu_stream_ms": 0.008191999979317188
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.846516,
+            "gpu_stream_ms": 43.697407722473145
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.511236,
+            "gpu_stream_ms": 0.15811200439929962
+          }
+        }
+      },
+      {
+        "rid": "run-0-q3",
+        "ttft_ms": 86.040976,
+        "shared_forward_ids": [
+          152,
+          162,
+          170,
+          179
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 8.916604,
+            "gpu_stream_ms": 0.002016000042203814
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.001107,
+            "gpu_stream_ms": 41.702975273132324
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.70517,
+            "gpu_stream_ms": 0.04137599840760231
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.175336,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.922101,
+            "gpu_stream_ms": 41.629984855651855
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.344262,
+            "gpu_stream_ms": 0.15596799552440643
+          }
+        }
+      },
+      {
+        "rid": "run-0-q4",
+        "ttft_ms": 87.226084,
+        "shared_forward_ids": [
+          217,
+          227,
+          235,
+          244
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 9.854199,
+            "gpu_stream_ms": 0.002016000042203814
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.918560000000001,
+            "gpu_stream_ms": 35.23849678039551
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.729426,
+            "gpu_stream_ms": 0.038784001022577286
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.19139,
+            "gpu_stream_ms": 0.008191999979317188
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.798391,
+            "gpu_stream_ms": 35.16678333282471
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.307256,
+            "gpu_stream_ms": 0.16009600460529327
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "loopspec-b4-staggered",
+    "algorithm": "loopspec",
+    "bs": 4,
+    "pattern": "staggered",
+    "profile_e2e_ms": 13655.372891,
+    "gpu_kernel_busy_union_ms": 6695.8804252929685,
+    "depths": {
+      "0": {
+        "outputs": 184,
+        "new_cycles": {
+          "n": 184,
+          "median": 4.0,
+          "p95": 4,
+          "sum": 736
+        },
+        "client_itl_ms": {
+          "n": 184,
+          "median": 77.14760799999999,
+          "p95": 84.555462,
+          "sum": 14068.182826
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 184,
+          "median": 1.4453725000000013,
+          "p95": 1.7997910000000026,
+          "sum": 261.69377899999995
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 184,
+          "median": 39.437975,
+          "p95": 42.75075,
+          "sum": 7253.141009
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 184,
+          "median": 0.1200275,
+          "p95": 0.250109,
+          "sum": 27.263443
+        }
+      },
+      "3": {
+        "outputs": 1860,
+        "new_cycles": {
+          "n": 1860,
+          "median": 1.0,
+          "p95": 1,
+          "sum": 1860
+        },
+        "client_itl_ms": {
+          "n": 1860,
+          "median": 20.100315000000002,
+          "p95": 22.549846,
+          "sum": 37267.131116
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 1860,
+          "median": 0.42124899999999954,
+          "p95": 0.5851270000000035,
+          "sum": 806.4047839999998
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 1860,
+          "median": 9.977472000000002,
+          "p95": 10.90159,
+          "sum": 18615.331262
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 1860,
+          "median": 0.096271,
+          "p95": 0.240044,
+          "sum": 231.118262
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 47.406264,
+        "shared_forward_ids": [
+          1,
+          6,
+          10,
+          14
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 32.761061,
+            "gpu_stream_ms": 10.969791519921273
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 6.564611,
+            "gpu_stream_ms": 32.546751976013184
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.684208,
+            "gpu_stream_ms": 0.6743999719619751
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.161656,
+            "gpu_stream_ms": 0.1409280002117157
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 5.510362,
+            "gpu_stream_ms": 31.79465627670288
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.315929,
+            "gpu_stream_ms": 0.15769599378108978
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 25.275974,
+            "gpu_stream_ms": 0.1937599927186966
+          }
+        }
+      },
+      {
+        "rid": "run-0-q2",
+        "ttft_ms": 103.024128,
+        "shared_forward_ids": [
+          87,
+          106,
+          123,
+          140
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 17.535849000000002,
+            "gpu_stream_ms": 17.773792028427124
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 6.0266649999999995,
+            "gpu_stream_ms": 49.14668846130371
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.590486,
+            "gpu_stream_ms": 0.5816320180892944
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.113602,
+            "gpu_stream_ms": 0.08531200140714645
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 5.105819,
+            "gpu_stream_ms": 48.38585567474365
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.273605,
+            "gpu_stream_ms": 0.1573439985513687
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 10.74227,
+            "gpu_stream_ms": 0.12428800016641617
+          }
+        }
+      },
+      {
+        "rid": "run-0-q3",
+        "ttft_ms": 109.416128,
+        "shared_forward_ids": [
+          162,
+          182,
+          200,
+          221
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 17.091584,
+            "gpu_stream_ms": 17.336416482925415
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 6.085525,
+            "gpu_stream_ms": 47.24947261810303
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.440749,
+            "gpu_stream_ms": 0.4323520064353943
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.102395,
+            "gpu_stream_ms": 0.08463999629020691
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 5.323277,
+            "gpu_stream_ms": 46.64128017425537
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.26385,
+            "gpu_stream_ms": 0.15833599865436554
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 10.272817,
+            "gpu_stream_ms": 0.13446399569511414
+          }
+        }
+      },
+      {
+        "rid": "run-0-q4",
+        "ttft_ms": 113.956297,
+        "shared_forward_ids": [
+          248,
+          273,
+          296,
+          322
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 15.57968,
+            "gpu_stream_ms": 15.501023530960083
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.413891,
+            "gpu_stream_ms": 36.614272117614746
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.456272,
+            "gpu_stream_ms": 0.44784000515937805
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.102636,
+            "gpu_stream_ms": 0.08460800349712372
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.6332450000000005,
+            "gpu_stream_ms": 36.00233554840088
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.257311,
+            "gpu_stream_ms": 0.15724800527095795
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 7.422844,
+            "gpu_stream_ms": 0.12915199995040894
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "ar-b8-simultaneous",
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "profile_e2e_ms": 18992.281162,
+    "gpu_kernel_busy_union_ms": 17017.096022460937,
+    "depths": {
+      "0": {
+        "outputs": 4088,
+        "new_cycles": {
+          "n": 4088,
+          "median": 4.0,
+          "p95": 4,
+          "sum": 16352
+        },
+        "client_itl_ms": {
+          "n": 4088,
+          "median": 36.781704,
+          "p95": 39.374016,
+          "sum": 150292.902122
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 4088,
+          "median": 14.130374,
+          "p95": 16.101705,
+          "sum": 57529.381906
+        },
+        "native.sample_publish_copy_host_ms": {
+          "n": 4088,
+          "median": 0.736769,
+          "p95": 1.1015030000000001,
+          "sum": 3224.874868
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 219.934457,
+        "shared_forward_ids": [
+          17,
+          27,
+          43,
+          51
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 29.450433,
+            "gpu_stream_ms": 0.003136000130325556
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 28.358558000000002,
+            "gpu_stream_ms": 130.8816680908203
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.579669,
+            "gpu_stream_ms": 0.0395519994199276
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.13217,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 27.292859999999997,
+            "gpu_stream_ms": 130.8105583190918
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.419997,
+            "gpu_stream_ms": 0.15600000321865082
+          }
+        }
+      },
+      {
+        "rid": "run-0-q2",
+        "ttft_ms": 219.568842,
+        "shared_forward_ids": [
+          17,
+          27,
+          43,
+          51
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 29.450433,
+            "gpu_stream_ms": 0.003136000130325556
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 28.358558000000002,
+            "gpu_stream_ms": 130.8816680908203
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.579669,
+            "gpu_stream_ms": 0.0395519994199276
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.13217,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 27.292859999999997,
+            "gpu_stream_ms": 130.8105583190918
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.419997,
+            "gpu_stream_ms": 0.15600000321865082
+          }
+        }
+      },
+      {
+        "rid": "run-0-q3",
+        "ttft_ms": 220.327944,
+        "shared_forward_ids": [
+          17,
+          27,
+          43,
+          51
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 29.450433,
+            "gpu_stream_ms": 0.003136000130325556
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 28.358558000000002,
+            "gpu_stream_ms": 130.8816680908203
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.579669,
+            "gpu_stream_ms": 0.0395519994199276
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.13217,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 27.292859999999997,
+            "gpu_stream_ms": 130.8105583190918
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.419997,
+            "gpu_stream_ms": 0.15600000321865082
+          }
+        }
+      },
+      {
+        "rid": "run-0-q4",
+        "ttft_ms": 219.347326,
+        "shared_forward_ids": [
+          17,
+          27,
+          43,
+          51
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 29.450433,
+            "gpu_stream_ms": 0.003136000130325556
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 28.358558000000002,
+            "gpu_stream_ms": 130.8816680908203
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.579669,
+            "gpu_stream_ms": 0.0395519994199276
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.13217,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 27.292859999999997,
+            "gpu_stream_ms": 130.8105583190918
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.419997,
+            "gpu_stream_ms": 0.15600000321865082
+          }
+        }
+      },
+      {
+        "rid": "run-0-q5",
+        "ttft_ms": 219.726381,
+        "shared_forward_ids": [
+          17,
+          27,
+          43,
+          51
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 29.450433,
+            "gpu_stream_ms": 0.003136000130325556
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 28.358558000000002,
+            "gpu_stream_ms": 130.8816680908203
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.579669,
+            "gpu_stream_ms": 0.0395519994199276
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.13217,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 27.292859999999997,
+            "gpu_stream_ms": 130.8105583190918
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.419997,
+            "gpu_stream_ms": 0.15600000321865082
+          }
+        }
+      },
+      {
+        "rid": "run-0-q6",
+        "ttft_ms": 219.469582,
+        "shared_forward_ids": [
+          17,
+          27,
+          43,
+          51
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 29.450433,
+            "gpu_stream_ms": 0.003136000130325556
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 28.358558000000002,
+            "gpu_stream_ms": 130.8816680908203
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.579669,
+            "gpu_stream_ms": 0.0395519994199276
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.13217,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 27.292859999999997,
+            "gpu_stream_ms": 130.8105583190918
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.419997,
+            "gpu_stream_ms": 0.15600000321865082
+          }
+        }
+      },
+      {
+        "rid": "run-0-q7",
+        "ttft_ms": 137.540595,
+        "shared_forward_ids": [
+          2,
+          13,
+          23,
+          31
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 20.150787,
+            "gpu_stream_ms": 3.1625600224360824
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 19.193264,
+            "gpu_stream_ms": 64.08230495452881
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.772322,
+            "gpu_stream_ms": 0.7620800137519836
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.194915,
+            "gpu_stream_ms": 0.16406400501728058
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 18.026863,
+            "gpu_stream_ms": 63.23747158050537
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.331753,
+            "gpu_stream_ms": 0.1515520066022873
+          }
+        }
+      },
+      {
+        "rid": "run-0-q8",
+        "ttft_ms": 137.102029,
+        "shared_forward_ids": [
+          2,
+          13,
+          23,
+          31
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 20.150787,
+            "gpu_stream_ms": 3.1625600224360824
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 19.193264,
+            "gpu_stream_ms": 64.08230495452881
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.772322,
+            "gpu_stream_ms": 0.7620800137519836
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.194915,
+            "gpu_stream_ms": 0.16406400501728058
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 18.026863,
+            "gpu_stream_ms": 63.23747158050537
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.331753,
+            "gpu_stream_ms": 0.1515520066022873
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "loopspec-b8-simultaneous",
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "profile_e2e_ms": 19483.239601,
+    "gpu_kernel_busy_union_ms": 7922.332576171875,
+    "depths": {
+      "0": {
+        "outputs": 404,
+        "new_cycles": {
+          "n": 404,
+          "median": 4.0,
+          "p95": 4,
+          "sum": 1616
+        },
+        "client_itl_ms": {
+          "n": 404,
+          "median": 104.9705855,
+          "p95": 122.90212,
+          "sum": 42327.471477
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 404,
+          "median": 2.8637470000000036,
+          "p95": 3.5035050000000005,
+          "sum": 1147.538443
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 404,
+          "median": 37.550858000000005,
+          "p95": 47.33484,
+          "sum": 15612.757232
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 404,
+          "median": 0.12456400000000001,
+          "p95": 0.251752,
+          "sum": 58.734501
+        }
+      },
+      "3": {
+        "outputs": 3684,
+        "new_cycles": {
+          "n": 3684,
+          "median": 1.0,
+          "p95": 1,
+          "sum": 3684
+        },
+        "client_itl_ms": {
+          "n": 3684,
+          "median": 27.372826,
+          "p95": 32.893567,
+          "sum": 100728.296921
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 3684,
+          "median": 0.7769670000000026,
+          "p95": 1.0684690000000003,
+          "sum": 3047.962117
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 3684,
+          "median": 9.888758,
+          "p95": 12.914387000000001,
+          "sum": 37194.665769
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 3684,
+          "median": 0.09288099999999999,
+          "p95": 0.252733,
+          "sum": 442.210632
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 134.736507,
+        "shared_forward_ids": [
+          1,
+          13,
+          23,
+          31
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 103.396346,
+            "gpu_stream_ms": 10.925280015100725
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 19.033889,
+            "gpu_stream_ms": 32.5480318069458
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.69226,
+            "gpu_stream_ms": 0.6826559901237488
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.166542,
+            "gpu_stream_ms": 0.1438719928264618
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 17.990796,
+            "gpu_stream_ms": 31.78774356842041
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.294297,
+            "gpu_stream_ms": 0.15769599378108978
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 83.492197,
+            "gpu_stream_ms": 0.17894400656223297
+          }
+        }
+      },
+      {
+        "rid": "run-0-q2",
+        "ttft_ms": 251.386243,
+        "shared_forward_ids": [
+          17,
+          27,
+          47,
+          60
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 58.925174,
+            "gpu_stream_ms": 45.30195327324327
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 16.234731,
+            "gpu_stream_ms": 172.10758590698242
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.499958,
+            "gpu_stream_ms": 0.04495999962091446
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114393,
+            "gpu_stream_ms": 0.0081599997356534
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 15.378783,
+            "gpu_stream_ms": 171.91958236694336
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.241847,
+            "gpu_stream_ms": 0.15324799716472626
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 41.971441,
+            "gpu_stream_ms": 0.29811200499534607
+          }
+        }
+      },
+      {
+        "rid": "run-0-q3",
+        "ttft_ms": 251.65429,
+        "shared_forward_ids": [
+          17,
+          27,
+          47,
+          60
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 58.925174,
+            "gpu_stream_ms": 45.30195327324327
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 16.234731,
+            "gpu_stream_ms": 172.10758590698242
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.499958,
+            "gpu_stream_ms": 0.04495999962091446
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114393,
+            "gpu_stream_ms": 0.0081599997356534
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 15.378783,
+            "gpu_stream_ms": 171.91958236694336
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.241847,
+            "gpu_stream_ms": 0.15324799716472626
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 41.971441,
+            "gpu_stream_ms": 0.29811200499534607
+          }
+        }
+      },
+      {
+        "rid": "run-0-q4",
+        "ttft_ms": 251.525835,
+        "shared_forward_ids": [
+          17,
+          27,
+          47,
+          60
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 58.925174,
+            "gpu_stream_ms": 45.30195327324327
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 16.234731,
+            "gpu_stream_ms": 172.10758590698242
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.499958,
+            "gpu_stream_ms": 0.04495999962091446
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114393,
+            "gpu_stream_ms": 0.0081599997356534
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 15.378783,
+            "gpu_stream_ms": 171.91958236694336
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.241847,
+            "gpu_stream_ms": 0.15324799716472626
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 41.971441,
+            "gpu_stream_ms": 0.29811200499534607
+          }
+        }
+      },
+      {
+        "rid": "run-0-q5",
+        "ttft_ms": 251.002672,
+        "shared_forward_ids": [
+          17,
+          27,
+          47,
+          60
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 58.925174,
+            "gpu_stream_ms": 45.30195327324327
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 16.234731,
+            "gpu_stream_ms": 172.10758590698242
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.499958,
+            "gpu_stream_ms": 0.04495999962091446
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114393,
+            "gpu_stream_ms": 0.0081599997356534
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 15.378783,
+            "gpu_stream_ms": 171.91958236694336
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.241847,
+            "gpu_stream_ms": 0.15324799716472626
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 41.971441,
+            "gpu_stream_ms": 0.29811200499534607
+          }
+        }
+      },
+      {
+        "rid": "run-0-q6",
+        "ttft_ms": 251.071065,
+        "shared_forward_ids": [
+          17,
+          27,
+          47,
+          60
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 58.925174,
+            "gpu_stream_ms": 45.30195327324327
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 16.234731,
+            "gpu_stream_ms": 172.10758590698242
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.499958,
+            "gpu_stream_ms": 0.04495999962091446
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114393,
+            "gpu_stream_ms": 0.0081599997356534
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 15.378783,
+            "gpu_stream_ms": 171.91958236694336
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.241847,
+            "gpu_stream_ms": 0.15324799716472626
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 41.971441,
+            "gpu_stream_ms": 0.29811200499534607
+          }
+        }
+      },
+      {
+        "rid": "run-0-q7",
+        "ttft_ms": 252.610621,
+        "shared_forward_ids": [
+          17,
+          27,
+          47,
+          60
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 58.925174,
+            "gpu_stream_ms": 45.30195327324327
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 16.234731,
+            "gpu_stream_ms": 172.10758590698242
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.499958,
+            "gpu_stream_ms": 0.04495999962091446
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114393,
+            "gpu_stream_ms": 0.0081599997356534
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 15.378783,
+            "gpu_stream_ms": 171.91958236694336
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.241847,
+            "gpu_stream_ms": 0.15324799716472626
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 41.971441,
+            "gpu_stream_ms": 0.29811200499534607
+          }
+        }
+      },
+      {
+        "rid": "run-0-q8",
+        "ttft_ms": 252.832628,
+        "shared_forward_ids": [
+          17,
+          27,
+          47,
+          60
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 58.925174,
+            "gpu_stream_ms": 45.30195327324327
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 16.234731,
+            "gpu_stream_ms": 172.10758590698242
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.499958,
+            "gpu_stream_ms": 0.04495999962091446
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114393,
+            "gpu_stream_ms": 0.0081599997356534
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 15.378783,
+            "gpu_stream_ms": 171.91958236694336
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.241847,
+            "gpu_stream_ms": 0.15324799716472626
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 41.971441,
+            "gpu_stream_ms": 0.29811200499534607
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "ar-b8-staggered",
+    "algorithm": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "profile_e2e_ms": 19618.660147,
+    "gpu_kernel_busy_union_ms": 17575.8736484375,
+    "depths": {
+      "0": {
+        "outputs": 4088,
+        "new_cycles": {
+          "n": 4088,
+          "median": 4.0,
+          "p95": 4,
+          "sum": 16352
+        },
+        "client_itl_ms": {
+          "n": 4088,
+          "median": 36.944081499999996,
+          "p95": 39.505651,
+          "sum": 151571.785981
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 4088,
+          "median": 7.511143,
+          "p95": 22.719771,
+          "sum": 37649.532227
+        },
+        "native.sample_publish_copy_host_ms": {
+          "n": 4088,
+          "median": 0.6830369999999997,
+          "p95": 0.9661380000000002,
+          "sum": 3000.748506
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 37.544868,
+        "shared_forward_ids": [
+          1,
+          6,
+          10,
+          14
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 9.16436,
+            "gpu_stream_ms": 2.8984640007838607
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.233039,
+            "gpu_stream_ms": 32.40768003463745
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.69262,
+            "gpu_stream_ms": 0.6831039786338806
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.194595,
+            "gpu_stream_ms": 0.16758400201797485
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.159831,
+            "gpu_stream_ms": 31.645535945892334
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.32972,
+            "gpu_stream_ms": 0.1573760062456131
+          }
+        }
+      },
+      {
+        "rid": "run-0-q2",
+        "ttft_ms": 78.893164,
+        "shared_forward_ids": [
+          87,
+          97,
+          105,
+          114
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 8.796842999999999,
+            "gpu_stream_ms": 0.0015360000543296337
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.906172,
+            "gpu_stream_ms": 43.74518394470215
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.643266,
+            "gpu_stream_ms": 0.037151999771595
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.162035,
+            "gpu_stream_ms": 0.008191999979317188
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.886526,
+            "gpu_stream_ms": 43.67558479309082
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.32956,
+            "gpu_stream_ms": 0.15801599621772766
+          }
+        }
+      },
+      {
+        "rid": "run-0-q3",
+        "ttft_ms": 85.35772,
+        "shared_forward_ids": [
+          152,
+          162,
+          170,
+          179
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 8.891516,
+            "gpu_stream_ms": 0.002016000042203814
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.968426,
+            "gpu_stream_ms": 41.70639991760254
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.693973,
+            "gpu_stream_ms": 0.04745600000023842
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.166562,
+            "gpu_stream_ms": 0.008191999979317188
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.897022,
+            "gpu_stream_ms": 41.62668800354004
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.339054,
+            "gpu_stream_ms": 0.1573760062456131
+          }
+        }
+      },
+      {
+        "rid": "run-0-q4",
+        "ttft_ms": 86.386921,
+        "shared_forward_ids": [
+          217,
+          227,
+          235,
+          244
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 9.891022,
+            "gpu_stream_ms": 0.0019520000205375254
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.898657,
+            "gpu_stream_ms": 35.24806499481201
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.710517,
+            "gpu_stream_ms": 0.03888000175356865
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.169377,
+            "gpu_stream_ms": 0.008191999979317188
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.7938909999999995,
+            "gpu_stream_ms": 35.176897048950195
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.312064,
+            "gpu_stream_ms": 0.1600639969110489
+          }
+        }
+      },
+      {
+        "rid": "run-0-q5",
+        "ttft_ms": 90.312386,
+        "shared_forward_ids": [
+          282,
+          292,
+          300,
+          309
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 9.824952,
+            "gpu_stream_ms": 0.002016000042203814
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.905798,
+            "gpu_stream_ms": 38.50604724884033
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.702486,
+            "gpu_stream_ms": 0.038816001266241074
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.177068,
+            "gpu_stream_ms": 0.008191999979317188
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.833731,
+            "gpu_stream_ms": 38.435072898864746
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.348739,
+            "gpu_stream_ms": 0.15622399747371674
+          }
+        }
+      },
+      {
+        "rid": "run-0-q6",
+        "ttft_ms": 96.305315,
+        "shared_forward_ids": [
+          347,
+          357,
+          365,
+          374
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 9.801427,
+            "gpu_stream_ms": 0.002048000053036958
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.820159,
+            "gpu_stream_ms": 38.46607971191406
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.71866,
+            "gpu_stream_ms": 0.03884800150990486
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.199953,
+            "gpu_stream_ms": 0.008191999979317188
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.715322,
+            "gpu_stream_ms": 38.39382362365723
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.304642,
+            "gpu_stream_ms": 0.1582079976797104
+          }
+        }
+      },
+      {
+        "rid": "run-0-q7",
+        "ttft_ms": 98.772537,
+        "shared_forward_ids": [
+          404,
+          418,
+          426,
+          434
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 8.806629,
+            "gpu_stream_ms": 0.0015040000434964895
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.869987,
+            "gpu_stream_ms": 43.051584243774414
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.568162,
+            "gpu_stream_ms": 0.044895999133586884
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.134063,
+            "gpu_stream_ms": 0.008191999979317188
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.94163,
+            "gpu_stream_ms": 42.972832679748535
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.368469,
+            "gpu_stream_ms": 0.15804800391197205
+          }
+        }
+      },
+      {
+        "rid": "run-0-q8",
+        "ttft_ms": 83.297465,
+        "shared_forward_ids": [
+          455,
+          465,
+          474,
+          486
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 9.029957,
+            "gpu_stream_ms": 0.0019840000313706696
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.121359,
+            "gpu_stream_ms": 41.746527671813965
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.618067,
+            "gpu_stream_ms": 0.04543999955058098
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.153513,
+            "gpu_stream_ms": 0.00854399986565113
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.107451,
+            "gpu_stream_ms": 41.6679048538208
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.31027,
+            "gpu_stream_ms": 0.15942400693893433
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "loopspec-b8-staggered",
+    "algorithm": "loopspec",
+    "bs": 8,
+    "pattern": "staggered",
+    "profile_e2e_ms": 20139.399669,
+    "gpu_kernel_busy_union_ms": 8202.84470751953,
+    "depths": {
+      "0": {
+        "outputs": 417,
+        "new_cycles": {
+          "n": 417,
+          "median": 4,
+          "p95": 4,
+          "sum": 1668
+        },
+        "client_itl_ms": {
+          "n": 417,
+          "median": 107.062221,
+          "p95": 123.708634,
+          "sum": 43894.542763
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 417,
+          "median": 2.8543909999999926,
+          "p95": 3.6219639999999984,
+          "sum": 1146.686425
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 417,
+          "median": 38.33637399999999,
+          "p95": 47.47813,
+          "sum": 16238.367776000001
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 417,
+          "median": 0.125581,
+          "p95": 0.319465,
+          "sum": 64.465088
+        }
+      },
+      "3": {
+        "outputs": 3671,
+        "new_cycles": {
+          "n": 3671,
+          "median": 1,
+          "p95": 1,
+          "sum": 3671
+        },
+        "client_itl_ms": {
+          "n": 3671,
+          "median": 28.202565,
+          "p95": 33.069779,
+          "sum": 102563.73948
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 3671,
+          "median": 0.8033300000000025,
+          "p95": 1.082533999999999,
+          "sum": 2928.320474
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 3671,
+          "median": 9.957457000000002,
+          "p95": 12.995544999999998,
+          "sum": 37190.056649
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 3671,
+          "median": 0.087793,
+          "p95": 0.268027,
+          "sum": 432.953818
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 48.320336,
+        "shared_forward_ids": [
+          1,
+          6,
+          10,
+          14
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 32.686738,
+            "gpu_stream_ms": 10.858976046787575
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 6.241016,
+            "gpu_stream_ms": 32.462143421173096
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.679451,
+            "gpu_stream_ms": 0.6707519888877869
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.154043,
+            "gpu_stream_ms": 0.1353919953107834
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 5.225879,
+            "gpu_stream_ms": 31.715839862823486
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.321017,
+            "gpu_stream_ms": 0.15769599378108978
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 25.558765,
+            "gpu_stream_ms": 0.16864000260829926
+          }
+        }
+      },
+      {
+        "rid": "run-0-q2",
+        "ttft_ms": 111.024553,
+        "shared_forward_ids": [
+          87,
+          106,
+          123,
+          140
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 20.291305,
+            "gpu_stream_ms": 20.481151700019836
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.770967,
+            "gpu_stream_ms": 51.90687847137451
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.881237,
+            "gpu_stream_ms": 0.8703039884567261
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.133924,
+            "gpu_stream_ms": 0.11180800199508667
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.51468,
+            "gpu_stream_ms": 50.835391998291016
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.288948,
+            "gpu_stream_ms": 0.1573439985513687
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 10.718521,
+            "gpu_stream_ms": 0.14511999487876892
+          }
+        }
+      },
+      {
+        "rid": "run-0-q3",
+        "ttft_ms": 121.943248,
+        "shared_forward_ids": [
+          162,
+          182,
+          200,
+          221
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 18.584195,
+            "gpu_stream_ms": 18.775583863258362
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.545917,
+            "gpu_stream_ms": 48.708513259887695
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.516754,
+            "gpu_stream_ms": 0.5084159970283508
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.110447,
+            "gpu_stream_ms": 0.09116800129413605
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.666041,
+            "gpu_stream_ms": 48.017760276794434
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.311412,
+            "gpu_stream_ms": 0.1563200056552887
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 10.228107,
+            "gpu_stream_ms": 0.1475840061903
+          }
+        }
+      },
+      {
+        "rid": "run-0-q4",
+        "ttft_ms": 131.818039,
+        "shared_forward_ids": [
+          248,
+          273,
+          296,
+          322
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 16.450568,
+            "gpu_stream_ms": 16.366592168807983
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.621758999999999,
+            "gpu_stream_ms": 36.8605432510376
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.55997,
+            "gpu_stream_ms": 0.5515199899673462
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.135115,
+            "gpu_stream_ms": 0.11657600104808807
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.706921,
+            "gpu_stream_ms": 36.13696002960205
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.294507,
+            "gpu_stream_ms": 0.15936000645160675
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 6.988953,
+            "gpu_stream_ms": 0.15119999647140503
+          }
+        }
+      },
+      {
+        "rid": "run-0-q5",
+        "ttft_ms": 148.771408,
+        "shared_forward_ids": [
+          354,
+          384,
+          412,
+          441
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 17.117167000000002,
+            "gpu_stream_ms": 17.041663885116577
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.406193,
+            "gpu_stream_ms": 40.08051300048828
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.56666,
+            "gpu_stream_ms": 0.5579839944839478
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.127133,
+            "gpu_stream_ms": 0.10867200046777725
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.483933,
+            "gpu_stream_ms": 39.35136032104492
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.400287,
+            "gpu_stream_ms": 0.15731200575828552
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 7.793092,
+            "gpu_stream_ms": 0.13545599579811096
+          }
+        }
+      },
+      {
+        "rid": "run-0-q6",
+        "ttft_ms": 199.889769,
+        "shared_forward_ids": [
+          473,
+          504,
+          537,
+          612
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 16.89466,
+            "gpu_stream_ms": 16.820800185203552
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.186429,
+            "gpu_stream_ms": 40.07532787322998
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.543154,
+            "gpu_stream_ms": 0.5346559882164001
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.116066,
+            "gpu_stream_ms": 0.09782399982213974
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.300556,
+            "gpu_stream_ms": 39.37142372131348
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.267175,
+            "gpu_stream_ms": 0.15936000645160675
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 7.924903,
+            "gpu_stream_ms": 0.13116799294948578
+          }
+        }
+      },
+      {
+        "rid": "run-0-q7",
+        "ttft_ms": 233.859694,
+        "shared_forward_ids": [
+          573,
+          653,
+          689,
+          762
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 19.4572,
+            "gpu_stream_ms": 19.560895681381226
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.838351,
+            "gpu_stream_ms": 50.297247886657715
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.511245,
+            "gpu_stream_ms": 0.5018560290336609
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.113252,
+            "gpu_stream_ms": 0.09561599791049957
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.9753620000000005,
+            "gpu_stream_ms": 49.620927810668945
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.254596,
+            "gpu_stream_ms": 0.1552640050649643
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 10.595364,
+            "gpu_stream_ms": 0.13631999492645264
+          }
+        }
+      },
+      {
+        "rid": "run-0-q8",
+        "ttft_ms": 250.418976,
+        "shared_forward_ids": [
+          723,
+          807,
+          850,
+          893
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 18.815195,
+            "gpu_stream_ms": 18.996896028518677
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.712621,
+            "gpu_stream_ms": 48.89689540863037
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.54049,
+            "gpu_stream_ms": 0.5319679975509644
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.120944,
+            "gpu_stream_ms": 0.09731200337409973
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.812573,
+            "gpu_stream_ms": 48.18985652923584
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.282268,
+            "gpu_stream_ms": 0.15836800634860992
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 10.255258,
+            "gpu_stream_ms": 0.15967999398708344
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "ar-b16-simultaneous",
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "profile_e2e_ms": 24808.656615,
+    "gpu_kernel_busy_union_ms": 22836.7175,
+    "depths": {
+      "0": {
+        "outputs": 8176,
+        "new_cycles": {
+          "n": 8176,
+          "median": 4.0,
+          "p95": 4,
+          "sum": 32704
+        },
+        "client_itl_ms": {
+          "n": 8176,
+          "median": 47.089106,
+          "p95": 51.075056,
+          "sum": 385880.490819
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 8176,
+          "median": 10.898109,
+          "p95": 32.129772,
+          "sum": 148226.557704
+        },
+        "native.sample_publish_copy_host_ms": {
+          "n": 8176,
+          "median": 0.6825760000000001,
+          "p95": 1.1182560000000006,
+          "sum": 6273.144402
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 746.082827,
+        "shared_forward_ids": [
+          35,
+          57,
+          73,
+          97
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 20.211114000000002,
+            "gpu_stream_ms": 0.0027840000693686306
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 19.15351,
+            "gpu_stream_ms": 353.3016662597656
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.534761,
+            "gpu_stream_ms": 0.0416640006005764
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.144239,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 18.113884,
+            "gpu_stream_ms": 353.219482421875
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.393196,
+            "gpu_stream_ms": 0.1515199989080429
+          }
+        }
+      },
+      {
+        "rid": "run-0-q2",
+        "ttft_ms": 746.618079,
+        "shared_forward_ids": [
+          35,
+          57,
+          73,
+          97
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 20.211114000000002,
+            "gpu_stream_ms": 0.0027840000693686306
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 19.15351,
+            "gpu_stream_ms": 353.3016662597656
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.534761,
+            "gpu_stream_ms": 0.0416640006005764
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.144239,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 18.113884,
+            "gpu_stream_ms": 353.219482421875
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.393196,
+            "gpu_stream_ms": 0.1515199989080429
+          }
+        }
+      },
+      {
+        "rid": "run-0-q3",
+        "ttft_ms": 746.890592,
+        "shared_forward_ids": [
+          35,
+          57,
+          73,
+          97
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 20.211114000000002,
+            "gpu_stream_ms": 0.0027840000693686306
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 19.15351,
+            "gpu_stream_ms": 353.3016662597656
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.534761,
+            "gpu_stream_ms": 0.0416640006005764
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.144239,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 18.113884,
+            "gpu_stream_ms": 353.219482421875
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.393196,
+            "gpu_stream_ms": 0.1515199989080429
+          }
+        }
+      },
+      {
+        "rid": "run-0-q4",
+        "ttft_ms": 648.317004,
+        "shared_forward_ids": [
+          25,
+          41,
+          65,
+          82
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 23.173677,
+            "gpu_stream_ms": 0.0023040000814944506
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 22.125467,
+            "gpu_stream_ms": 304.9522247314453
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.57305,
+            "gpu_stream_ms": 0.04505600035190582
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.145241,
+            "gpu_stream_ms": 0.010239999741315842
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 21.158422,
+            "gpu_stream_ms": 304.86597442626953
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.367768,
+            "gpu_stream_ms": 0.15612800419330597
+          }
+        }
+      },
+      {
+        "rid": "run-0-q5",
+        "ttft_ms": 746.095035,
+        "shared_forward_ids": [
+          35,
+          57,
+          73,
+          97
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 20.211114000000002,
+            "gpu_stream_ms": 0.0027840000693686306
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 19.15351,
+            "gpu_stream_ms": 353.3016662597656
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.534761,
+            "gpu_stream_ms": 0.0416640006005764
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.144239,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 18.113884,
+            "gpu_stream_ms": 353.219482421875
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.393196,
+            "gpu_stream_ms": 0.1515199989080429
+          }
+        }
+      },
+      {
+        "rid": "run-0-q6",
+        "ttft_ms": 745.924276,
+        "shared_forward_ids": [
+          35,
+          57,
+          73,
+          97
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 20.211114000000002,
+            "gpu_stream_ms": 0.0027840000693686306
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 19.15351,
+            "gpu_stream_ms": 353.3016662597656
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.534761,
+            "gpu_stream_ms": 0.0416640006005764
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.144239,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 18.113884,
+            "gpu_stream_ms": 353.219482421875
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.393196,
+            "gpu_stream_ms": 0.1515199989080429
+          }
+        }
+      },
+      {
+        "rid": "run-0-q7",
+        "ttft_ms": 291.652174,
+        "shared_forward_ids": [
+          1,
+          12,
+          31,
+          45
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 33.250462,
+            "gpu_stream_ms": 2.9461120364721864
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 32.301113,
+            "gpu_stream_ms": 45.501665115356445
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.79783,
+            "gpu_stream_ms": 0.7867519855499268
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.200313,
+            "gpu_stream_ms": 0.16652800142765045
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 31.114722999999998,
+            "gpu_stream_ms": 44.63254356384277
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.341568,
+            "gpu_stream_ms": 0.15532800555229187
+          }
+        }
+      },
+      {
+        "rid": "run-0-q8",
+        "ttft_ms": 648.122398,
+        "shared_forward_ids": [
+          25,
+          41,
+          65,
+          82
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 23.173677,
+            "gpu_stream_ms": 0.0023040000814944506
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 22.125467,
+            "gpu_stream_ms": 304.9522247314453
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.57305,
+            "gpu_stream_ms": 0.04505600035190582
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.145241,
+            "gpu_stream_ms": 0.010239999741315842
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 21.158422,
+            "gpu_stream_ms": 304.86597442626953
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.367768,
+            "gpu_stream_ms": 0.15612800419330597
+          }
+        }
+      },
+      {
+        "rid": "run-0-q9",
+        "ttft_ms": 647.921904,
+        "shared_forward_ids": [
+          25,
+          41,
+          65,
+          82
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 23.173677,
+            "gpu_stream_ms": 0.0023040000814944506
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 22.125467,
+            "gpu_stream_ms": 304.9522247314453
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.57305,
+            "gpu_stream_ms": 0.04505600035190582
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.145241,
+            "gpu_stream_ms": 0.010239999741315842
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 21.158422,
+            "gpu_stream_ms": 304.86597442626953
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.367768,
+            "gpu_stream_ms": 0.15612800419330597
+          }
+        }
+      },
+      {
+        "rid": "run-0-q10",
+        "ttft_ms": 745.607235,
+        "shared_forward_ids": [
+          35,
+          57,
+          73,
+          97
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 20.211114000000002,
+            "gpu_stream_ms": 0.0027840000693686306
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 19.15351,
+            "gpu_stream_ms": 353.3016662597656
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.534761,
+            "gpu_stream_ms": 0.0416640006005764
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.144239,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 18.113884,
+            "gpu_stream_ms": 353.219482421875
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.393196,
+            "gpu_stream_ms": 0.1515199989080429
+          }
+        }
+      },
+      {
+        "rid": "run-0-q11",
+        "ttft_ms": 649.065539,
+        "shared_forward_ids": [
+          25,
+          41,
+          65,
+          82
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 23.173677,
+            "gpu_stream_ms": 0.0023040000814944506
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 22.125467,
+            "gpu_stream_ms": 304.9522247314453
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.57305,
+            "gpu_stream_ms": 0.04505600035190582
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.145241,
+            "gpu_stream_ms": 0.010239999741315842
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 21.158422,
+            "gpu_stream_ms": 304.86597442626953
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.367768,
+            "gpu_stream_ms": 0.15612800419330597
+          }
+        }
+      },
+      {
+        "rid": "run-0-q12",
+        "ttft_ms": 647.794581,
+        "shared_forward_ids": [
+          25,
+          41,
+          65,
+          82
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 23.173677,
+            "gpu_stream_ms": 0.0023040000814944506
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 22.125467,
+            "gpu_stream_ms": 304.9522247314453
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.57305,
+            "gpu_stream_ms": 0.04505600035190582
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.145241,
+            "gpu_stream_ms": 0.010239999741315842
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 21.158422,
+            "gpu_stream_ms": 304.86597442626953
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.367768,
+            "gpu_stream_ms": 0.15612800419330597
+          }
+        }
+      },
+      {
+        "rid": "run-0-q13",
+        "ttft_ms": 747.007509,
+        "shared_forward_ids": [
+          35,
+          57,
+          73,
+          97
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 20.211114000000002,
+            "gpu_stream_ms": 0.0027840000693686306
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 19.15351,
+            "gpu_stream_ms": 353.3016662597656
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.534761,
+            "gpu_stream_ms": 0.0416640006005764
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.144239,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 18.113884,
+            "gpu_stream_ms": 353.219482421875
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.393196,
+            "gpu_stream_ms": 0.1515199989080429
+          }
+        }
+      },
+      {
+        "rid": "run-0-q14",
+        "ttft_ms": 648.319548,
+        "shared_forward_ids": [
+          25,
+          41,
+          65,
+          82
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 23.173677,
+            "gpu_stream_ms": 0.0023040000814944506
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 22.125467,
+            "gpu_stream_ms": 304.9522247314453
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.57305,
+            "gpu_stream_ms": 0.04505600035190582
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.145241,
+            "gpu_stream_ms": 0.010239999741315842
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 21.158422,
+            "gpu_stream_ms": 304.86597442626953
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.367768,
+            "gpu_stream_ms": 0.15612800419330597
+          }
+        }
+      },
+      {
+        "rid": "run-0-q15",
+        "ttft_ms": 744.924019,
+        "shared_forward_ids": [
+          35,
+          57,
+          73,
+          97
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 20.211114000000002,
+            "gpu_stream_ms": 0.0027840000693686306
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 19.15351,
+            "gpu_stream_ms": 353.3016662597656
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.534761,
+            "gpu_stream_ms": 0.0416640006005764
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.144239,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 18.113884,
+            "gpu_stream_ms": 353.219482421875
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.393196,
+            "gpu_stream_ms": 0.1515199989080429
+          }
+        }
+      },
+      {
+        "rid": "run-0-q16",
+        "ttft_ms": 745.707768,
+        "shared_forward_ids": [
+          35,
+          57,
+          73,
+          97
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 20.211114000000002,
+            "gpu_stream_ms": 0.0027840000693686306
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 19.15351,
+            "gpu_stream_ms": 353.3016662597656
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.534761,
+            "gpu_stream_ms": 0.0416640006005764
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.144239,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 18.113884,
+            "gpu_stream_ms": 353.219482421875
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.393196,
+            "gpu_stream_ms": 0.1515199989080429
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "loopspec-b16-simultaneous",
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "profile_e2e_ms": 36239.372326,
+    "gpu_kernel_busy_union_ms": 14263.91593701172,
+    "depths": {
+      "0": {
+        "outputs": 917,
+        "new_cycles": {
+          "n": 917,
+          "median": 4,
+          "p95": 4,
+          "sum": 3668
+        },
+        "client_itl_ms": {
+          "n": 917,
+          "median": 187.738259,
+          "p95": 223.524482,
+          "sum": 169775.16137
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 917,
+          "median": 5.707592999999996,
+          "p95": 7.0881550000000075,
+          "sum": 5259.83143
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 917,
+          "median": 64.968354,
+          "p95": 86.16152199999999,
+          "sum": 60335.725149
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 917,
+          "median": 0.127032,
+          "p95": 0.251362,
+          "sum": 128.096438
+        }
+      },
+      "3": {
+        "outputs": 7259,
+        "new_cycles": {
+          "n": 7259,
+          "median": 1,
+          "p95": 1,
+          "sum": 7259
+        },
+        "client_itl_ms": {
+          "n": 7259,
+          "median": 48.452149,
+          "p95": 57.72856,
+          "sum": 350825.116875
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 7259,
+          "median": 1.5087619999999973,
+          "p95": 1.9452190000000016,
+          "sum": 11450.543209
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 7259,
+          "median": 16.579591,
+          "p95": 21.909404,
+          "sum": 122139.356786
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 7259,
+          "median": 0.076776,
+          "p95": 0.209868,
+          "sum": 720.47379
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 688.291955,
+        "shared_forward_ids": [
+          25,
+          41,
+          74,
+          103
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 81.879757,
+            "gpu_stream_ms": 59.810561578022316
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 25.946478,
+            "gpu_stream_ms": 225.00604248046875
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.481501,
+            "gpu_stream_ms": 0.04364800080657005
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114724,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 25.041176,
+            "gpu_stream_ms": 224.85391998291016
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.28367,
+            "gpu_stream_ms": 0.15529599785804749
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 54.900822,
+            "gpu_stream_ms": 0.38649600744247437
+          }
+        }
+      },
+      {
+        "rid": "run-0-q2",
+        "ttft_ms": 688.291334,
+        "shared_forward_ids": [
+          25,
+          41,
+          74,
+          103
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 81.879757,
+            "gpu_stream_ms": 59.810561578022316
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 25.946478,
+            "gpu_stream_ms": 225.00604248046875
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.481501,
+            "gpu_stream_ms": 0.04364800080657005
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114724,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 25.041176,
+            "gpu_stream_ms": 224.85391998291016
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.28367,
+            "gpu_stream_ms": 0.15529599785804749
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 54.900822,
+            "gpu_stream_ms": 0.38649600744247437
+          }
+        }
+      },
+      {
+        "rid": "run-0-q3",
+        "ttft_ms": 789.109039,
+        "shared_forward_ids": [
+          35,
+          61,
+          87,
+          132
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 228.609901,
+            "gpu_stream_ms": 78.11308850196656
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 155.857537,
+            "gpu_stream_ms": 293.59171295166016
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.390533,
+            "gpu_stream_ms": 0.04294399917125702
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.09926,
+            "gpu_stream_ms": 0.010208000428974628
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 155.098677,
+            "gpu_stream_ms": 293.3941116333008
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.200925,
+            "gpu_stream_ms": 0.15529599785804749
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 71.932498,
+            "gpu_stream_ms": 0.32499200105667114
+          }
+        }
+      },
+      {
+        "rid": "run-0-q4",
+        "ttft_ms": 688.212725,
+        "shared_forward_ids": [
+          25,
+          41,
+          74,
+          103
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 81.879757,
+            "gpu_stream_ms": 59.810561578022316
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 25.946478,
+            "gpu_stream_ms": 225.00604248046875
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.481501,
+            "gpu_stream_ms": 0.04364800080657005
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114724,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 25.041176,
+            "gpu_stream_ms": 224.85391998291016
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.28367,
+            "gpu_stream_ms": 0.15529599785804749
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 54.900822,
+            "gpu_stream_ms": 0.38649600744247437
+          }
+        }
+      },
+      {
+        "rid": "run-0-q5",
+        "ttft_ms": 689.315618,
+        "shared_forward_ids": [
+          25,
+          41,
+          74,
+          103
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 81.879757,
+            "gpu_stream_ms": 59.810561578022316
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 25.946478,
+            "gpu_stream_ms": 225.00604248046875
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.481501,
+            "gpu_stream_ms": 0.04364800080657005
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114724,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 25.041176,
+            "gpu_stream_ms": 224.85391998291016
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.28367,
+            "gpu_stream_ms": 0.15529599785804749
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 54.900822,
+            "gpu_stream_ms": 0.38649600744247437
+          }
+        }
+      },
+      {
+        "rid": "run-0-q6",
+        "ttft_ms": 689.314526,
+        "shared_forward_ids": [
+          25,
+          41,
+          74,
+          103
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 81.879757,
+            "gpu_stream_ms": 59.810561578022316
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 25.946478,
+            "gpu_stream_ms": 225.00604248046875
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.481501,
+            "gpu_stream_ms": 0.04364800080657005
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114724,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 25.041176,
+            "gpu_stream_ms": 224.85391998291016
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.28367,
+            "gpu_stream_ms": 0.15529599785804749
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 54.900822,
+            "gpu_stream_ms": 0.38649600744247437
+          }
+        }
+      },
+      {
+        "rid": "run-0-q7",
+        "ttft_ms": 788.105958,
+        "shared_forward_ids": [
+          35,
+          61,
+          87,
+          132
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 228.609901,
+            "gpu_stream_ms": 78.11308850196656
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 155.857537,
+            "gpu_stream_ms": 293.59171295166016
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.390533,
+            "gpu_stream_ms": 0.04294399917125702
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.09926,
+            "gpu_stream_ms": 0.010208000428974628
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 155.098677,
+            "gpu_stream_ms": 293.3941116333008
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.200925,
+            "gpu_stream_ms": 0.15529599785804749
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 71.932498,
+            "gpu_stream_ms": 0.32499200105667114
+          }
+        }
+      },
+      {
+        "rid": "run-0-q8",
+        "ttft_ms": 789.229582,
+        "shared_forward_ids": [
+          35,
+          61,
+          87,
+          132
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 228.609901,
+            "gpu_stream_ms": 78.11308850196656
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 155.857537,
+            "gpu_stream_ms": 293.59171295166016
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.390533,
+            "gpu_stream_ms": 0.04294399917125702
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.09926,
+            "gpu_stream_ms": 0.010208000428974628
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 155.098677,
+            "gpu_stream_ms": 293.3941116333008
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.200925,
+            "gpu_stream_ms": 0.15529599785804749
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 71.932498,
+            "gpu_stream_ms": 0.32499200105667114
+          }
+        }
+      },
+      {
+        "rid": "run-0-q9",
+        "ttft_ms": 688.056618,
+        "shared_forward_ids": [
+          25,
+          41,
+          74,
+          103
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 81.879757,
+            "gpu_stream_ms": 59.810561578022316
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 25.946478,
+            "gpu_stream_ms": 225.00604248046875
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.481501,
+            "gpu_stream_ms": 0.04364800080657005
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114724,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 25.041176,
+            "gpu_stream_ms": 224.85391998291016
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.28367,
+            "gpu_stream_ms": 0.15529599785804749
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 54.900822,
+            "gpu_stream_ms": 0.38649600744247437
+          }
+        }
+      },
+      {
+        "rid": "run-0-q10",
+        "ttft_ms": 789.330154,
+        "shared_forward_ids": [
+          35,
+          61,
+          87,
+          132
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 228.609901,
+            "gpu_stream_ms": 78.11308850196656
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 155.857537,
+            "gpu_stream_ms": 293.59171295166016
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.390533,
+            "gpu_stream_ms": 0.04294399917125702
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.09926,
+            "gpu_stream_ms": 0.010208000428974628
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 155.098677,
+            "gpu_stream_ms": 293.3941116333008
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.200925,
+            "gpu_stream_ms": 0.15529599785804749
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 71.932498,
+            "gpu_stream_ms": 0.32499200105667114
+          }
+        }
+      },
+      {
+        "rid": "run-0-q11",
+        "ttft_ms": 366.137352,
+        "shared_forward_ids": [
+          1,
+          15,
+          31,
+          45
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 170.82342,
+            "gpu_stream_ms": 43.534560018917546
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 18.99139,
+            "gpu_stream_ms": 160.70265579223633
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.678098,
+            "gpu_stream_ms": 0.6684479713439941
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.162406,
+            "gpu_stream_ms": 0.14217600226402283
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 17.941417,
+            "gpu_stream_ms": 159.95366668701172
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.42895,
+            "gpu_stream_ms": 0.157151997089386
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 150.75609,
+            "gpu_stream_ms": 0.23740799725055695
+          }
+        }
+      },
+      {
+        "rid": "run-0-q12",
+        "ttft_ms": 689.33049,
+        "shared_forward_ids": [
+          25,
+          41,
+          74,
+          103
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 81.879757,
+            "gpu_stream_ms": 59.810561578022316
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 25.946478,
+            "gpu_stream_ms": 225.00604248046875
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.481501,
+            "gpu_stream_ms": 0.04364800080657005
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114724,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 25.041176,
+            "gpu_stream_ms": 224.85391998291016
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.28367,
+            "gpu_stream_ms": 0.15529599785804749
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 54.900822,
+            "gpu_stream_ms": 0.38649600744247437
+          }
+        }
+      },
+      {
+        "rid": "run-0-q13",
+        "ttft_ms": 688.976433,
+        "shared_forward_ids": [
+          25,
+          41,
+          74,
+          103
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 81.879757,
+            "gpu_stream_ms": 59.810561578022316
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 25.946478,
+            "gpu_stream_ms": 225.00604248046875
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.481501,
+            "gpu_stream_ms": 0.04364800080657005
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114724,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 25.041176,
+            "gpu_stream_ms": 224.85391998291016
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.28367,
+            "gpu_stream_ms": 0.15529599785804749
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 54.900822,
+            "gpu_stream_ms": 0.38649600744247437
+          }
+        }
+      },
+      {
+        "rid": "run-0-q14",
+        "ttft_ms": 689.7922,
+        "shared_forward_ids": [
+          25,
+          41,
+          74,
+          103
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 81.879757,
+            "gpu_stream_ms": 59.810561578022316
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 25.946478,
+            "gpu_stream_ms": 225.00604248046875
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.481501,
+            "gpu_stream_ms": 0.04364800080657005
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114724,
+            "gpu_stream_ms": 0.01056000031530857
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 25.041176,
+            "gpu_stream_ms": 224.85391998291016
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.28367,
+            "gpu_stream_ms": 0.15529599785804749
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 54.900822,
+            "gpu_stream_ms": 0.38649600744247437
+          }
+        }
+      },
+      {
+        "rid": "run-0-q15",
+        "ttft_ms": 788.124887,
+        "shared_forward_ids": [
+          35,
+          61,
+          87,
+          132
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 228.609901,
+            "gpu_stream_ms": 78.11308850196656
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 155.857537,
+            "gpu_stream_ms": 293.59171295166016
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.390533,
+            "gpu_stream_ms": 0.04294399917125702
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.09926,
+            "gpu_stream_ms": 0.010208000428974628
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 155.098677,
+            "gpu_stream_ms": 293.3941116333008
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.200925,
+            "gpu_stream_ms": 0.15529599785804749
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 71.932498,
+            "gpu_stream_ms": 0.32499200105667114
+          }
+        }
+      },
+      {
+        "rid": "run-0-q16",
+        "ttft_ms": 788.705117,
+        "shared_forward_ids": [
+          35,
+          61,
+          87,
+          132
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 228.609901,
+            "gpu_stream_ms": 78.11308850196656
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 155.857537,
+            "gpu_stream_ms": 293.59171295166016
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.390533,
+            "gpu_stream_ms": 0.04294399917125702
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.09926,
+            "gpu_stream_ms": 0.010208000428974628
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 155.098677,
+            "gpu_stream_ms": 293.3941116333008
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.200925,
+            "gpu_stream_ms": 0.15529599785804749
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 71.932498,
+            "gpu_stream_ms": 0.32499200105667114
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "ar-b16-staggered",
+    "algorithm": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "profile_e2e_ms": 25987.239946,
+    "gpu_kernel_busy_union_ms": 23837.968626953127,
+    "depths": {
+      "0": {
+        "outputs": 8176,
+        "new_cycles": {
+          "n": 8176,
+          "median": 4.0,
+          "p95": 4,
+          "sum": 32704
+        },
+        "client_itl_ms": {
+          "n": 8176,
+          "median": 47.693760499999996,
+          "p95": 51.506407,
+          "sum": 394276.843689
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 8176,
+          "median": 10.191377,
+          "p95": 21.35011,
+          "sum": 110691.172091
+        },
+        "native.sample_publish_copy_host_ms": {
+          "n": 8176,
+          "median": 0.8584120000000001,
+          "p95": 1.1520879999999998,
+          "sum": 7514.323556
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 36.856269,
+        "shared_forward_ids": [
+          1,
+          6,
+          10,
+          14
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 8.82849,
+            "gpu_stream_ms": 2.86537605302874
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.869115,
+            "gpu_stream_ms": 32.46358394622803
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.704178,
+            "gpu_stream_ms": 0.6944320201873779
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.168335,
+            "gpu_stream_ms": 0.1438719928264618
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.7841000000000005,
+            "gpu_stream_ms": 31.692448139190674
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.344152,
+            "gpu_stream_ms": 0.15801599621772766
+          }
+        }
+      },
+      {
+        "rid": "run-0-q2",
+        "ttft_ms": 79.071235,
+        "shared_forward_ids": [
+          87,
+          97,
+          105,
+          114
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 7.211307,
+            "gpu_stream_ms": 0.002016000042203814
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 6.484206,
+            "gpu_stream_ms": 43.76873588562012
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.451134,
+            "gpu_stream_ms": 0.0414079986512661
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.108845,
+            "gpu_stream_ms": 0.008191999979317188
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 5.706226,
+            "gpu_stream_ms": 43.69526386260986
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.285353,
+            "gpu_stream_ms": 0.15801599621772766
+          }
+        }
+      },
+      {
+        "rid": "run-0-q3",
+        "ttft_ms": 85.248564,
+        "shared_forward_ids": [
+          152,
+          162,
+          170,
+          179
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 6.546519,
+            "gpu_stream_ms": 0.0015360000543296337
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 5.709668,
+            "gpu_stream_ms": 41.703328132629395
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.454088,
+            "gpu_stream_ms": 0.04339199885725975
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.108184,
+            "gpu_stream_ms": 0.008191999979317188
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 4.942726,
+            "gpu_stream_ms": 41.62768077850342
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.298082,
+            "gpu_stream_ms": 0.15824000537395477
+          }
+        }
+      },
+      {
+        "rid": "run-0-q4",
+        "ttft_ms": 85.928675,
+        "shared_forward_ids": [
+          217,
+          227,
+          235,
+          244
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 7.296837,
+            "gpu_stream_ms": 0.0015360000543296337
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 6.596215,
+            "gpu_stream_ms": 35.225823402404785
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.478266,
+            "gpu_stream_ms": 0.03884800150990486
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114383,
+            "gpu_stream_ms": 0.008191999979317188
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 5.793676,
+            "gpu_stream_ms": 35.153886795043945
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.221987,
+            "gpu_stream_ms": 0.15801599621772766
+          }
+        }
+      },
+      {
+        "rid": "run-0-q5",
+        "ttft_ms": 90.054983,
+        "shared_forward_ids": [
+          282,
+          292,
+          300,
+          309
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 7.685867,
+            "gpu_stream_ms": 0.0015360000543296337
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 6.993436,
+            "gpu_stream_ms": 38.457247734069824
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.452477,
+            "gpu_stream_ms": 0.0395519994199276
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.109557,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.222467,
+            "gpu_stream_ms": 38.38534450531006
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.268948,
+            "gpu_stream_ms": 0.15516799688339233
+          }
+        }
+      },
+      {
+        "rid": "run-0-q6",
+        "ttft_ms": 96.394748,
+        "shared_forward_ids": [
+          347,
+          357,
+          365,
+          374
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 7.655932,
+            "gpu_stream_ms": 0.0015360000543296337
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 6.744358,
+            "gpu_stream_ms": 38.486464500427246
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.491265,
+            "gpu_stream_ms": 0.03884800150990486
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.116106,
+            "gpu_stream_ms": 0.008191999979317188
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 5.9038640000000004,
+            "gpu_stream_ms": 38.41401672363281
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.231951,
+            "gpu_stream_ms": 0.1573760062456131
+          }
+        }
+      },
+      {
+        "rid": "run-0-q7",
+        "ttft_ms": 98.581835,
+        "shared_forward_ids": [
+          404,
+          418,
+          426,
+          434
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 7.399321,
+            "gpu_stream_ms": 0.0015040000434964895
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 6.7432479999999995,
+            "gpu_stream_ms": 43.049503326416016
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.503183,
+            "gpu_stream_ms": 0.03750399872660637
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.118059,
+            "gpu_stream_ms": 0.008576000109314919
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 5.903944,
+            "gpu_stream_ms": 42.97974395751953
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.215637,
+            "gpu_stream_ms": 0.15801599621772766
+          }
+        }
+      },
+      {
+        "rid": "run-0-q8",
+        "ttft_ms": 83.454382,
+        "shared_forward_ids": [
+          455,
+          465,
+          474,
+          486
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 7.572055,
+            "gpu_stream_ms": 0.0015040000434964895
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 6.905633,
+            "gpu_stream_ms": 41.75923156738281
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.411314,
+            "gpu_stream_ms": 0.03916800022125244
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.10576,
+            "gpu_stream_ms": 0.008191999979317188
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.169127,
+            "gpu_stream_ms": 41.68735980987549
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.215247,
+            "gpu_stream_ms": 0.1600639969110489
+          }
+        }
+      },
+      {
+        "rid": "run-0-q9",
+        "ttft_ms": 83.210712,
+        "shared_forward_ids": [
+          520,
+          534,
+          542,
+          551
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 7.624973000000001,
+            "gpu_stream_ms": 0.0015360000543296337
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 6.922839,
+            "gpu_stream_ms": 39.88588905334473
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.428951,
+            "gpu_stream_ms": 0.037151999771595
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.109916,
+            "gpu_stream_ms": 0.008608000352978706
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.168846,
+            "gpu_stream_ms": 39.81615924835205
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.235437,
+            "gpu_stream_ms": 0.15919999778270721
+          }
+        }
+      },
+      {
+        "rid": "run-0-q10",
+        "ttft_ms": 186.457253,
+        "shared_forward_ids": [
+          594,
+          607,
+          615,
+          624
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 15.953766,
+            "gpu_stream_ms": 0.0015360000543296337
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 15.09286,
+            "gpu_stream_ms": 133.2839698791504
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.449432,
+            "gpu_stream_ms": 0.049695998430252075
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.110047,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 14.303393,
+            "gpu_stream_ms": 133.20185470581055
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.240134,
+            "gpu_stream_ms": 0.15699200332164764
+          }
+        }
+      },
+      {
+        "rid": "run-0-q11",
+        "ttft_ms": 307.637092,
+        "shared_forward_ids": [
+          641,
+          654,
+          663,
+          689
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 8.423775,
+            "gpu_stream_ms": 0.0015040000434964895
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.70751,
+            "gpu_stream_ms": 160.20454788208008
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.470293,
+            "gpu_stream_ms": 0.03743999823927879
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.116317,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.891281,
+            "gpu_stream_ms": 160.13484573364258
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.236889,
+            "gpu_stream_ms": 0.15731200575828552
+          }
+        }
+      },
+      {
+        "rid": "run-0-q12",
+        "ttft_ms": 353.904033,
+        "shared_forward_ids": [
+          673,
+          705,
+          739,
+          768
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 9.387069,
+            "gpu_stream_ms": 0.0015360000543296337
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.726016,
+            "gpu_stream_ms": 41.83001518249512
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.429031,
+            "gpu_stream_ms": 0.04569600149989128
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.108876,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.965111,
+            "gpu_stream_ms": 41.7511043548584
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.216759,
+            "gpu_stream_ms": 0.15731200575828552
+          }
+        }
+      },
+      {
+        "rid": "run-0-q13",
+        "ttft_ms": 335.970073,
+        "shared_forward_ids": [
+          713,
+          751,
+          785,
+          816
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 8.878184000000001,
+            "gpu_stream_ms": 0.0015360000543296337
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.97816,
+            "gpu_stream_ms": 38.50662422180176
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.432726,
+            "gpu_stream_ms": 0.03916800022125244
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.119261,
+            "gpu_stream_ms": 0.008191999979317188
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.211017,
+            "gpu_stream_ms": 38.43443202972412
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.223308,
+            "gpu_stream_ms": 0.15801599621772766
+          }
+        }
+      },
+      {
+        "rid": "run-0-q14",
+        "ttft_ms": 257.370735,
+        "shared_forward_ids": [
+          724,
+          759,
+          796,
+          834
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 7.718927,
+            "gpu_stream_ms": 0.0015360000543296337
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.037323000000001,
+            "gpu_stream_ms": 43.16201591491699
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.590345,
+            "gpu_stream_ms": 0.03948799893260002
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.110988,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.117208,
+            "gpu_stream_ms": 43.089599609375
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.217399,
+            "gpu_stream_ms": 0.1573760062456131
+          }
+        }
+      },
+      {
+        "rid": "run-0-q15",
+        "ttft_ms": 260.872656,
+        "shared_forward_ids": [
+          804,
+          849,
+          869,
+          895
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 8.115118,
+            "gpu_stream_ms": 0.0029120000544935465
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.391922,
+            "gpu_stream_ms": 38.49884796142578
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.439036,
+            "gpu_stream_ms": 0.03929600119590759
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.104328,
+            "gpu_stream_ms": 0.008511999621987343
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.624746999999999,
+            "gpu_stream_ms": 38.427103996276855
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.246253,
+            "gpu_stream_ms": 0.15596799552440643
+          }
+        }
+      },
+      {
+        "rid": "run-0-q16",
+        "ttft_ms": 202.554928,
+        "shared_forward_ids": [
+          857,
+          883,
+          907,
+          916
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 7.570571,
+            "gpu_stream_ms": 0.0023360000923275948
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 6.878182,
+            "gpu_stream_ms": 39.94387245178223
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.449162,
+            "gpu_stream_ms": 0.03929600119590759
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.112251,
+            "gpu_stream_ms": 0.00854399986565113
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.070937,
+            "gpu_stream_ms": 39.872480392456055
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.222438,
+            "gpu_stream_ms": 0.15801599621772766
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  },
+  {
+    "name": "loopspec-b16-staggered",
+    "algorithm": "loopspec",
+    "bs": 16,
+    "pattern": "staggered",
+    "profile_e2e_ms": 37543.033024,
+    "gpu_kernel_busy_union_ms": 14609.2480703125,
+    "depths": {
+      "0": {
+        "outputs": 912,
+        "new_cycles": {
+          "n": 912,
+          "median": 4.0,
+          "p95": 4,
+          "sum": 3648
+        },
+        "client_itl_ms": {
+          "n": 912,
+          "median": 191.92737649999998,
+          "p95": 227.465345,
+          "sum": 171121.090411
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 912,
+          "median": 5.867481500000004,
+          "p95": 8.141539000000002,
+          "sum": 5563.941613999999
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 912,
+          "median": 65.855627,
+          "p95": 83.994756,
+          "sum": 59693.266954
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 912,
+          "median": 0.1300175,
+          "p95": 0.294797,
+          "sum": 142.744454
+        }
+      },
+      "3": {
+        "outputs": 7264,
+        "new_cycles": {
+          "n": 7264,
+          "median": 1.0,
+          "p95": 1,
+          "sum": 7264
+        },
+        "client_itl_ms": {
+          "n": 7264,
+          "median": 49.393562,
+          "p95": 59.758904,
+          "sum": 353707.047884
+        },
+        "loopspec.plan_and_collect_host_ms": {
+          "n": 7264,
+          "median": 1.5285170000000008,
+          "p95": 2.126010000000001,
+          "sum": 11887.83268
+        },
+        "loopspec.scatter_and_decision_readback_host_ms": {
+          "n": 7264,
+          "median": 16.452998000000004,
+          "p95": 21.673086,
+          "sum": 120426.647799
+        },
+        "native.result_handler_cpu_ms": {
+          "n": 7264,
+          "median": 0.0848285,
+          "p95": 0.245812,
+          "sum": 793.456595
+        }
+      }
+    },
+    "prefill": [
+      {
+        "rid": "run-0-q1",
+        "ttft_ms": 48.713991,
+        "shared_forward_ids": [
+          1,
+          6,
+          10,
+          14
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 32.814696,
+            "gpu_stream_ms": 10.934847700875252
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 6.263942999999999,
+            "gpu_stream_ms": 32.54662466049194
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.697538,
+            "gpu_stream_ms": 0.6885120272636414
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.153082,
+            "gpu_stream_ms": 0.1340160071849823
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 5.219999,
+            "gpu_stream_ms": 31.782399654388428
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.310131,
+            "gpu_stream_ms": 0.15769599378108978
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 25.662976,
+            "gpu_stream_ms": 0.17824000120162964
+          }
+        }
+      },
+      {
+        "rid": "run-0-q2",
+        "ttft_ms": 110.436654,
+        "shared_forward_ids": [
+          87,
+          106,
+          123,
+          140
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 19.025776999999998,
+            "gpu_stream_ms": 19.23139250278473
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.14222,
+            "gpu_stream_ms": 50.5799036026001
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.725731,
+            "gpu_stream_ms": 0.716159999370575
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114954,
+            "gpu_stream_ms": 0.09622400254011154
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.026228,
+            "gpu_stream_ms": 49.64918327331543
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.335218,
+            "gpu_stream_ms": 0.15731200575828552
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 9.964174,
+            "gpu_stream_ms": 0.17881600558757782
+          }
+        }
+      },
+      {
+        "rid": "run-0-q3",
+        "ttft_ms": 120.469973,
+        "shared_forward_ids": [
+          162,
+          182,
+          200,
+          221
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 18.709389,
+            "gpu_stream_ms": 18.79859232902527
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.645657,
+            "gpu_stream_ms": 48.258015632629395
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.544206,
+            "gpu_stream_ms": 0.5353599786758423
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.123397,
+            "gpu_stream_ms": 0.10364799946546555
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.721346,
+            "gpu_stream_ms": 47.536736488342285
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.293585,
+            "gpu_stream_ms": 0.15827199816703796
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 10.250048,
+            "gpu_stream_ms": 0.1472959965467453
+          }
+        }
+      },
+      {
+        "rid": "run-0-q4",
+        "ttft_ms": 129.286115,
+        "shared_forward_ids": [
+          248,
+          273,
+          296,
+          322
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 16.406175,
+            "gpu_stream_ms": 16.332895517349243
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.582817,
+            "gpu_stream_ms": 36.83913612365723
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.572829,
+            "gpu_stream_ms": 0.5636799931526184
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.116647,
+            "gpu_stream_ms": 0.09852799773216248
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.655832,
+            "gpu_stream_ms": 36.104448318481445
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.295498,
+            "gpu_stream_ms": 0.1592639982700348
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 7.01481,
+            "gpu_stream_ms": 0.14803199470043182
+          }
+        }
+      },
+      {
+        "rid": "run-0-q5",
+        "ttft_ms": 148.01177,
+        "shared_forward_ids": [
+          354,
+          384,
+          412,
+          441
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 17.223696,
+            "gpu_stream_ms": 17.145951747894287
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.563409,
+            "gpu_stream_ms": 40.11955165863037
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.561141,
+            "gpu_stream_ms": 0.5526080131530762
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.11865,
+            "gpu_stream_ms": 0.10051199793815613
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.652797,
+            "gpu_stream_ms": 39.392160415649414
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.428971,
+            "gpu_stream_ms": 0.15936000645160675
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 7.69965,
+            "gpu_stream_ms": 0.14716799557209015
+          }
+        }
+      },
+      {
+        "rid": "run-0-q6",
+        "ttft_ms": 199.602593,
+        "shared_forward_ids": [
+          473,
+          504,
+          537,
+          612
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 17.340663,
+            "gpu_stream_ms": 17.25705599784851
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.566233,
+            "gpu_stream_ms": 40.195616722106934
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.591977,
+            "gpu_stream_ms": 0.5827199816703796
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.127684,
+            "gpu_stream_ms": 0.10761599987745285
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.6227540000000005,
+            "gpu_stream_ms": 39.43875217437744
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.272192,
+            "gpu_stream_ms": 0.15910400450229645
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 7.865771,
+            "gpu_stream_ms": 0.1422400027513504
+          }
+        }
+      },
+      {
+        "rid": "run-0-q7",
+        "ttft_ms": 233.983314,
+        "shared_forward_ids": [
+          573,
+          653,
+          689,
+          762
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 19.435159,
+            "gpu_stream_ms": 19.541919946670532
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.923548,
+            "gpu_stream_ms": 50.43225574493408
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.517925,
+            "gpu_stream_ms": 0.5034559965133667
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114113,
+            "gpu_stream_ms": 0.09619200229644775
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.056164,
+            "gpu_stream_ms": 49.74899101257324
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.251311,
+            "gpu_stream_ms": 0.15731200575828552
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 10.612717,
+            "gpu_stream_ms": 0.14611199498176575
+          }
+        }
+      },
+      {
+        "rid": "run-0-q8",
+        "ttft_ms": 367.882146,
+        "shared_forward_ids": [
+          723,
+          808,
+          897,
+          1030
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 18.659164,
+            "gpu_stream_ms": 18.857183694839478
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.580098,
+            "gpu_stream_ms": 48.78015899658203
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.521952,
+            "gpu_stream_ms": 0.5128960013389587
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.113302,
+            "gpu_stream_ms": 0.09510400146245956
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.71783,
+            "gpu_stream_ms": 48.09727954864502
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.261927,
+            "gpu_stream_ms": 0.16041600704193115
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 10.301546,
+            "gpu_stream_ms": 0.15139199793338776
+          }
+        }
+      },
+      {
+        "rid": "run-0-q9",
+        "ttft_ms": 470.874999,
+        "shared_forward_ids": [
+          851,
+          943,
+          1073,
+          1207
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 18.647344999999998,
+            "gpu_stream_ms": 18.769984006881714
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.931061000000001,
+            "gpu_stream_ms": 47.29759883880615
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.514721,
+            "gpu_stream_ms": 0.5059840083122253
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.114103,
+            "gpu_stream_ms": 0.09609600156545639
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.054541,
+            "gpu_stream_ms": 46.61523151397705
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.266134,
+            "gpu_stream_ms": 0.15936000645160675
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 9.827307,
+            "gpu_stream_ms": 0.1565759927034378
+          }
+        }
+      },
+      {
+        "rid": "run-0-q10",
+        "ttft_ms": 653.434772,
+        "shared_forward_ids": [
+          987,
+          1113,
+          1262,
+          1475
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 41.002584,
+            "gpu_stream_ms": 40.92668676376343
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.526334,
+            "gpu_stream_ms": 134.9958038330078
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.529212,
+            "gpu_stream_ms": 0.5208320021629333
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.115365,
+            "gpu_stream_ms": 0.09756799787282944
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.644054000000001,
+            "gpu_stream_ms": 134.3028450012207
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.265263,
+            "gpu_stream_ms": 0.15513600409030914
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 31.668536,
+            "gpu_stream_ms": 0.17398400604724884
+          }
+        }
+      },
+      {
+        "rid": "run-0-q11",
+        "ttft_ms": 995.678869,
+        "shared_forward_ids": [
+          1157,
+          1364,
+          1645,
+          1977
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 47.724289999999996,
+            "gpu_stream_ms": 47.64774465560913
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.542548,
+            "gpu_stream_ms": 161.61888122558594
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.542333,
+            "gpu_stream_ms": 0.532480001449585
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.132621,
+            "gpu_stream_ms": 0.11462400108575821
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.642283,
+            "gpu_stream_ms": 160.90518188476562
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.255707,
+            "gpu_stream_ms": 0.15731200575828552
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 38.309229,
+            "gpu_stream_ms": 0.20790399610996246
+          }
+        }
+      },
+      {
+        "rid": "run-0-q12",
+        "ttft_ms": 1110.881161,
+        "shared_forward_ids": [
+          1313,
+          1594,
+          1926,
+          2239
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 18.84228,
+            "gpu_stream_ms": 19.013920068740845
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.7755030000000005,
+            "gpu_stream_ms": 48.97113609313965
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.524986,
+            "gpu_stream_ms": 0.515999972820282
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.123999,
+            "gpu_stream_ms": 0.10515200346708298
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.89058,
+            "gpu_stream_ms": 48.28320026397705
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.251572,
+            "gpu_stream_ms": 0.1563200056552887
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 10.286032,
+            "gpu_stream_ms": 0.13811199367046356
+          }
+        }
+      },
+      {
+        "rid": "run-0-q13",
+        "ttft_ms": 1097.509037,
+        "shared_forward_ids": [
+          1417,
+          1750,
+          2081,
+          2346
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 17.237236,
+            "gpu_stream_ms": 17.15657663345337
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.851337000000001,
+            "gpu_stream_ms": 40.10198497772217
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.517896,
+            "gpu_stream_ms": 0.5091519951820374
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.122316,
+            "gpu_stream_ms": 0.10406400263309479
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.980265,
+            "gpu_stream_ms": 39.419424057006836
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.258011,
+            "gpu_stream_ms": 0.15520000457763672
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 7.316378,
+            "gpu_stream_ms": 0.1316159963607788
+          }
+        }
+      },
+      {
+        "rid": "run-0-q14",
+        "ttft_ms": 1097.683803,
+        "shared_forward_ids": [
+          1537,
+          1870,
+          2187,
+          2468
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 20.119138,
+            "gpu_stream_ms": 20.088064432144165
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.536781,
+            "gpu_stream_ms": 50.93654441833496
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.517495,
+            "gpu_stream_ms": 0.5087040066719055
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.119752,
+            "gpu_stream_ms": 0.10182400047779083
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.646929,
+            "gpu_stream_ms": 50.255231857299805
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.254937,
+            "gpu_stream_ms": 0.1552319973707199
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 10.582712,
+            "gpu_stream_ms": 0.14550399780273438
+          }
+        }
+      },
+      {
+        "rid": "run-0-q15",
+        "ttft_ms": 1044.357856,
+        "shared_forward_ids": [
+          1695,
+          2028,
+          2294,
+          2534
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 17.575771,
+            "gpu_stream_ms": 17.49743938446045
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 8.743653,
+            "gpu_stream_ms": 40.12950325012207
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.516954,
+            "gpu_stream_ms": 0.5083519816398621
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.117999,
+            "gpu_stream_ms": 0.10035199671983719
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 7.877469,
+            "gpu_stream_ms": 39.44819164276123
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.245813,
+            "gpu_stream_ms": 0.15919999778270721
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 7.948867,
+            "gpu_stream_ms": 0.15132799744606018
+          }
+        }
+      },
+      {
+        "rid": "run-0-q16",
+        "ttft_ms": 994.3413,
+        "shared_forward_ids": [
+          1807,
+          2133,
+          2405,
+          2594
+        ],
+        "stages": {
+          "scheduler.forward": {
+            "calls": 4,
+            "cpu_ms": 18.357595,
+            "gpu_stream_ms": 18.58182382583618
+          },
+          "recurrent.core": {
+            "calls": 4,
+            "cpu_ms": 7.778619,
+            "gpu_stream_ms": 47.11664009094238
+          },
+          "recurrent.start": {
+            "calls": 1,
+            "cpu_ms": 0.522653,
+            "gpu_stream_ms": 0.5134720206260681
+          },
+          "recurrent.prepare": {
+            "calls": 1,
+            "cpu_ms": 0.115866,
+            "gpu_stream_ms": 0.09788800030946732
+          },
+          "recurrent.execute_core": {
+            "calls": 4,
+            "cpu_ms": 6.8951590000000005,
+            "gpu_stream_ms": 46.419968605041504
+          },
+          "recurrent.finish": {
+            "calls": 1,
+            "cpu_ms": 0.238502,
+            "gpu_stream_ms": 0.15939199924468994
+          },
+          "loopspec.prefill_complete": {
+            "calls": 1,
+            "cpu_ms": 9.822229,
+            "gpu_stream_ms": 0.14099200069904327
+          }
+        }
+      }
+    ],
+    "coalesced_tokens": 0
+  }
+]

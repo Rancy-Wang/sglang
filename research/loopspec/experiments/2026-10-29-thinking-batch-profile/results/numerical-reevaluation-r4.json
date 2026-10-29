@@ -1,0 +1,6 @@
+{
+  "source": "loopspec-numerical-r2/report.json",
+  "independent_controls": "native-reference-r4/calibration.json",
+  "failures": [],
+  "success": true
+}

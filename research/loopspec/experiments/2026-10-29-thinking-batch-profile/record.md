@@ -3,7 +3,7 @@
 ## Identity and budget
 
 New user-requested benchmark task; previous CDB implementation task remains completed at 18/20.
-Baseline ee77d73ffdfbd9ca3ed2f1d79ef095268732499a; loopspec-test only. Round 1/10, in progress.
+Baseline ee77d73ffdfbd9ca3ed2f1d79ef095268732499a; loopspec-test only. Benchmark and analysis completed at round 6/10; strict full-sequence token equivalence was not achieved and is not claimed.
 No formal branch promotion authorized. SSH session 60877 reused, X5 ruoxi.
 
 ## Six-part plan
@@ -56,3 +56,27 @@ Round 5: SHA da56f8103931e5b3a2451219b4e0c4b3dcb16286. Strict smoke (AR/LS bs1/1
 6. Validation: synthetic4-loop and result-correlation cases; all20 saved profiles, no GPU rerun required for analysis-only changes. Export raw tables plus full report; retain unresolved full-sequence numerical differences. Formal branch not promoted.
 
 Round6 local validation: syntax/diff checks exit0; real saved AR B1 and LoopSpec B1 traces each map all511decode outputs and4prefill loops with no missing handlers/emissions or negative CPU remainders. Synthetic LoopSpec4-loop remainder/result test passed. An initial local read occurred while SCP was still copying and failed JSON parsing; unchanged script passed after transfer exit0, no data or validation condition changed. Extra analysis scripts have not been pulled into X5 while captures were active. All20 GPU profile captures now finished exit0 at da56f8103931e5b3a2451219b4e0c4b3dcb16286; final old analyzer is finishing before synchronization.
+
+### Round 6 final validation and delivery
+
+Capture SHA: `da56f8103931e5b3a2451219b4e0c4b3dcb16286`. Analysis SHA: `e9ea182567e1a9920f56f0baf9bc22b574b2b1a1`, synchronized only after captures and the original analyzer finished. No serving implementation changes in this benchmark task. The final results commit contains documentation and lightweight derived artifacts only.
+
+Successful final command (container working directory `/workspace/sglang`):
+
+```bash
+docker exec loopspec-thinking-20261029 sh -c \
+  '/opt/sglang/bin/python research/loopspec/experiments/2026-10-29-thinking-batch-profile/enrich_profile.py /results/profile/*-b*-*/ && /opt/sglang/bin/python research/loopspec/experiments/2026-10-29-thinking-batch-profile/finalize_report.py /results'
+```
+
+Exit 0, saved as `finalize-r6-directories.exit`. The earlier glob without trailing slash also matched metrics files and failed with NotADirectoryError; `finalize-r6.log/.exit` preserve this failure. Correcting the command's directory glob and rerunning unchanged analysis code succeeded. `performance.exit`, `profile.exit`, and `analysis.exit` are also 0.
+
+- Complete 20-cell performance matrix, two warmups and five repeats each: 620 measured requests, all ending at the 512-token length cap. Complete separate 20-cell CPU/GPU profile matrix, two warmups each. All performance/profile prompt IDs match the same checkpoint template and independent reference.
+- All 63,364 decode outputs map to depth paths, client emission intervals and actual result handlers. Each first token has four prefill loops, analyzed separately. Depth-path stages, CPU remainder groups, TTFT/decode/E2E, per-request measurements, profiler overhead and kernel busy union are reported.
+- Trace concurrency evidence: ordinary AR bs16 simultaneous/staggered both reach 16 owners, with 2,043/2,086 mixed-depth decode calls. LoopSpec bs16 both modes reach 16 owners and 64 lanes. Details are in `results/execution-shapes.json`; these are observed execution shapes, not an efficiency proof by themselves.
+- Median cohort speedup is approximately 2.24x at bs1, 1.37–1.39x at bs8, and effectively tied at bs16. At bs16, pooled median request E2E improves approximately 7.5%/8.9%, but TTFT increases. All cells, including tied results, are retained.
+- Independent numerical calibration and ownership/materialization/release checks pass as described above. Only 52/310 complete AR/LoopSpec output pairs are token-identical; this experiment does not establish strict token-lossless inference or complete AIME answer accuracy. The reproduced batch-shape rounding divergence explains one early mismatch, not every mismatch.
+- Phase times are inclusive/shared CUDA stream intervals and CPU wall intervals, not additive exclusive costs. LoopSpec profiler overhead is substantial (up to approximately 1.49x cohort time); unprofiled E2E is the performance basis. AR then LoopSpec block ordering is not ABBA; sub-1% bs16 differences are not treated as reliable speedups.
+
+Full report and lightweight CSV/JSON are saved under local `results/`. All raw traces, telemetry, model/container manifests, reference tensors and failed attempts remain at `/home/ruoxi/repo/test/results/loopspec/2026-10-29-thinking-batch-profile/`. The downloaded telemetry copy is outside Git at `/tmp/loopspec-thinking-batch-gpu-telemetry-20261029.csv`; no raw traces, model weights or datasets are committed.
+
+Owned serving and matrix jobs finished; owned telemetry PID2957828 stopped after the final profile. Final GPU compute-process inventory is empty. The task container and SSH session60877 are retained. No formal `loopspec` promotion. No further GPU rerun is needed for this results-only delivery.

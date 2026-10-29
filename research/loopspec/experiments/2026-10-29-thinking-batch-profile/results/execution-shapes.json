@@ -1,0 +1,122 @@
+[
+  {
+    "cell": "ar-b1-simultaneous",
+    "max_owners": 1,
+    "max_loopspec_lanes": 0,
+    "ar_mixed_decode_depth_calls": 0
+  },
+  {
+    "cell": "ar-b1-staggered",
+    "max_owners": 1,
+    "max_loopspec_lanes": 0,
+    "ar_mixed_decode_depth_calls": 0
+  },
+  {
+    "cell": "ar-b16-simultaneous",
+    "max_owners": 16,
+    "max_loopspec_lanes": 0,
+    "ar_mixed_decode_depth_calls": 2043
+  },
+  {
+    "cell": "ar-b16-staggered",
+    "max_owners": 16,
+    "max_loopspec_lanes": 0,
+    "ar_mixed_decode_depth_calls": 2086
+  },
+  {
+    "cell": "ar-b2-simultaneous",
+    "max_owners": 2,
+    "max_loopspec_lanes": 0,
+    "ar_mixed_decode_depth_calls": 2042
+  },
+  {
+    "cell": "ar-b2-staggered",
+    "max_owners": 2,
+    "max_loopspec_lanes": 0,
+    "ar_mixed_decode_depth_calls": 0
+  },
+  {
+    "cell": "ar-b4-simultaneous",
+    "max_owners": 4,
+    "max_loopspec_lanes": 0,
+    "ar_mixed_decode_depth_calls": 2042
+  },
+  {
+    "cell": "ar-b4-staggered",
+    "max_owners": 4,
+    "max_loopspec_lanes": 0,
+    "ar_mixed_decode_depth_calls": 0
+  },
+  {
+    "cell": "ar-b8-simultaneous",
+    "max_owners": 8,
+    "max_loopspec_lanes": 0,
+    "ar_mixed_decode_depth_calls": 2042
+  },
+  {
+    "cell": "ar-b8-staggered",
+    "max_owners": 8,
+    "max_loopspec_lanes": 0,
+    "ar_mixed_decode_depth_calls": 2044
+  },
+  {
+    "cell": "loopspec-b1-simultaneous",
+    "max_owners": 1,
+    "max_loopspec_lanes": 4,
+    "ar_mixed_decode_depth_calls": 0
+  },
+  {
+    "cell": "loopspec-b1-staggered",
+    "max_owners": 1,
+    "max_loopspec_lanes": 4,
+    "ar_mixed_decode_depth_calls": 0
+  },
+  {
+    "cell": "loopspec-b16-simultaneous",
+    "max_owners": 16,
+    "max_loopspec_lanes": 64,
+    "ar_mixed_decode_depth_calls": 0
+  },
+  {
+    "cell": "loopspec-b16-staggered",
+    "max_owners": 16,
+    "max_loopspec_lanes": 64,
+    "ar_mixed_decode_depth_calls": 0
+  },
+  {
+    "cell": "loopspec-b2-simultaneous",
+    "max_owners": 2,
+    "max_loopspec_lanes": 8,
+    "ar_mixed_decode_depth_calls": 0
+  },
+  {
+    "cell": "loopspec-b2-staggered",
+    "max_owners": 2,
+    "max_loopspec_lanes": 8,
+    "ar_mixed_decode_depth_calls": 0
+  },
+  {
+    "cell": "loopspec-b4-simultaneous",
+    "max_owners": 4,
+    "max_loopspec_lanes": 16,
+    "ar_mixed_decode_depth_calls": 0
+  },
+  {
+    "cell": "loopspec-b4-staggered",
+    "max_owners": 4,
+    "max_loopspec_lanes": 16,
+    "ar_mixed_decode_depth_calls": 0
+  },
+  {
+    "cell": "loopspec-b8-simultaneous",
+    "max_owners": 8,
+    "max_loopspec_lanes": 32,
+    "ar_mixed_decode_depth_calls": 0
+  },
+  {
+    "cell": "loopspec-b8-staggered",
+    "max_owners": 8,
+    "max_loopspec_lanes": 32,
+    "ar_mixed_decode_depth_calls": 0
+  }
+]

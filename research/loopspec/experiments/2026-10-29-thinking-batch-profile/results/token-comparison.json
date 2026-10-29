@@ -1,0 +1,3102 @@
+[
+  {
+    "bs": 1,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 1,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 1,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 1,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 1,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 1,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 1,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 1,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 1,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 1,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 2,
+    "exact": false,
+    "first_difference": 484,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 2,
+    "exact": false,
+    "first_difference": 484,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 1,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 2,
+    "exact": false,
+    "first_difference": 83,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 1,
+    "exact": false,
+    "first_difference": 63,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 2,
+    "exact": false,
+    "first_difference": 484,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 2,
+    "exact": false,
+    "first_difference": 484,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 2,
+    "exact": false,
+    "first_difference": 484,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 2,
+    "exact": false,
+    "first_difference": 484,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 2,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 2,
+    "exact": false,
+    "first_difference": 484,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 1,
+    "exact": false,
+    "first_difference": 47,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 3,
+    "exact": false,
+    "first_difference": 255,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 3,
+    "exact": false,
+    "first_difference": 89,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 1,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 2,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 3,
+    "exact": false,
+    "first_difference": 220,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 1,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 2,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 3,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 2,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 3,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 2,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 3,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 2,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 3,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 2,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 3,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 2,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 3,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 2,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 3,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 3,
+    "exact": false,
+    "first_difference": 19,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 4,
+    "exact": false,
+    "first_difference": 465,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 5,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 6,
+    "exact": false,
+    "first_difference": 281,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 7,
+    "exact": false,
+    "first_difference": 303,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 8,
+    "exact": false,
+    "first_difference": 144,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 3,
+    "exact": false,
+    "first_difference": 89,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 4,
+    "exact": false,
+    "first_difference": 147,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 5,
+    "exact": false,
+    "first_difference": 196,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 6,
+    "exact": false,
+    "first_difference": 222,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 7,
+    "exact": false,
+    "first_difference": 228,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 8,
+    "exact": false,
+    "first_difference": 364,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 1,
+    "exact": false,
+    "first_difference": 47,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 3,
+    "exact": false,
+    "first_difference": 348,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 5,
+    "exact": false,
+    "first_difference": 122,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 6,
+    "exact": false,
+    "first_difference": 162,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 7,
+    "exact": false,
+    "first_difference": 228,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 8,
+    "exact": false,
+    "first_difference": 45,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 1,
+    "exact": false,
+    "first_difference": 74,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 3,
+    "exact": false,
+    "first_difference": 255,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 5,
+    "exact": false,
+    "first_difference": 122,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 6,
+    "exact": false,
+    "first_difference": 162,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 7,
+    "exact": false,
+    "first_difference": 228,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 8,
+    "exact": false,
+    "first_difference": 45,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 3,
+    "exact": false,
+    "first_difference": 479,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 5,
+    "exact": false,
+    "first_difference": 196,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 6,
+    "exact": false,
+    "first_difference": 162,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 7,
+    "exact": false,
+    "first_difference": 250,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 8,
+    "exact": false,
+    "first_difference": 4,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 3,
+    "exact": false,
+    "first_difference": 136,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 4,
+    "exact": false,
+    "first_difference": 128,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 5,
+    "exact": false,
+    "first_difference": 422,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 6,
+    "exact": false,
+    "first_difference": 281,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 7,
+    "exact": false,
+    "first_difference": 301,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 8,
+    "exact": false,
+    "first_difference": 4,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 3,
+    "exact": false,
+    "first_difference": 89,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 4,
+    "exact": false,
+    "first_difference": 135,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 5,
+    "exact": false,
+    "first_difference": 196,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 6,
+    "exact": false,
+    "first_difference": 281,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 7,
+    "exact": false,
+    "first_difference": 54,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 8,
+    "exact": false,
+    "first_difference": 4,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 3,
+    "exact": false,
+    "first_difference": 136,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 5,
+    "exact": false,
+    "first_difference": 196,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 6,
+    "exact": false,
+    "first_difference": 311,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 7,
+    "exact": false,
+    "first_difference": 312,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 8,
+    "exact": false,
+    "first_difference": 4,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 3,
+    "exact": false,
+    "first_difference": 136,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 5,
+    "exact": false,
+    "first_difference": 196,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 6,
+    "exact": false,
+    "first_difference": 311,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 7,
+    "exact": false,
+    "first_difference": 312,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 8,
+    "exact": false,
+    "first_difference": 4,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 3,
+    "exact": false,
+    "first_difference": 136,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 5,
+    "exact": false,
+    "first_difference": 196,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 6,
+    "exact": false,
+    "first_difference": 311,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 7,
+    "exact": false,
+    "first_difference": 312,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 8,
+    "exact": false,
+    "first_difference": 4,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 1,
+    "exact": false,
+    "first_difference": 132,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 2,
+    "exact": false,
+    "first_difference": 221,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 3,
+    "exact": false,
+    "first_difference": 255,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 4,
+    "exact": false,
+    "first_difference": 465,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 5,
+    "exact": false,
+    "first_difference": 122,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 6,
+    "exact": false,
+    "first_difference": 311,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 7,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 8,
+    "exact": false,
+    "first_difference": 73,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 9,
+    "exact": false,
+    "first_difference": 94,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 10,
+    "exact": false,
+    "first_difference": 56,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 11,
+    "exact": false,
+    "first_difference": 49,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 12,
+    "exact": false,
+    "first_difference": 157,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 13,
+    "exact": false,
+    "first_difference": 80,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 14,
+    "exact": false,
+    "first_difference": 159,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 15,
+    "exact": false,
+    "first_difference": 45,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 0,
+    "question": 16,
+    "exact": false,
+    "first_difference": 268,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 1,
+    "exact": false,
+    "first_difference": 276,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 3,
+    "exact": false,
+    "first_difference": 89,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 4,
+    "exact": false,
+    "first_difference": 312,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 5,
+    "exact": false,
+    "first_difference": 268,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 6,
+    "exact": false,
+    "first_difference": 207,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 7,
+    "exact": false,
+    "first_difference": 314,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 8,
+    "exact": false,
+    "first_difference": 76,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 9,
+    "exact": false,
+    "first_difference": 94,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 10,
+    "exact": false,
+    "first_difference": 56,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 11,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 12,
+    "exact": false,
+    "first_difference": 225,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 13,
+    "exact": false,
+    "first_difference": 26,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 14,
+    "exact": false,
+    "first_difference": 90,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 15,
+    "exact": false,
+    "first_difference": 45,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 1,
+    "question": 16,
+    "exact": false,
+    "first_difference": 196,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 1,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 2,
+    "exact": false,
+    "first_difference": 89,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 3,
+    "exact": false,
+    "first_difference": 95,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 5,
+    "exact": false,
+    "first_difference": 230,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 6,
+    "exact": false,
+    "first_difference": 162,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 7,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 8,
+    "exact": false,
+    "first_difference": 4,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 9,
+    "exact": false,
+    "first_difference": 173,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 10,
+    "exact": false,
+    "first_difference": 189,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 11,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 12,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 13,
+    "exact": false,
+    "first_difference": 211,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 14,
+    "exact": false,
+    "first_difference": 280,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 15,
+    "exact": false,
+    "first_difference": 207,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 2,
+    "question": 16,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 2,
+    "exact": false,
+    "first_difference": 484,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 3,
+    "exact": false,
+    "first_difference": 89,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 5,
+    "exact": false,
+    "first_difference": 122,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 6,
+    "exact": false,
+    "first_difference": 281,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 7,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 8,
+    "exact": false,
+    "first_difference": 64,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 9,
+    "exact": false,
+    "first_difference": 94,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 10,
+    "exact": false,
+    "first_difference": 51,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 11,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 12,
+    "exact": false,
+    "first_difference": 157,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 13,
+    "exact": false,
+    "first_difference": 206,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 14,
+    "exact": false,
+    "first_difference": 241,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 15,
+    "exact": false,
+    "first_difference": 180,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 3,
+    "question": 16,
+    "exact": false,
+    "first_difference": 234,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 1,
+    "exact": false,
+    "first_difference": 47,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 2,
+    "exact": false,
+    "first_difference": 484,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 3,
+    "exact": false,
+    "first_difference": 89,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 4,
+    "exact": false,
+    "first_difference": 135,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 5,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 6,
+    "exact": false,
+    "first_difference": 162,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 7,
+    "exact": false,
+    "first_difference": 231,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 8,
+    "exact": false,
+    "first_difference": 4,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 9,
+    "exact": false,
+    "first_difference": 94,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 10,
+    "exact": false,
+    "first_difference": 56,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 11,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 12,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 13,
+    "exact": false,
+    "first_difference": 26,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 14,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 15,
+    "exact": false,
+    "first_difference": 174,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "repeat": 4,
+    "question": 16,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 3,
+    "exact": false,
+    "first_difference": 194,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 5,
+    "exact": false,
+    "first_difference": 281,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 6,
+    "exact": false,
+    "first_difference": 162,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 7,
+    "exact": false,
+    "first_difference": 152,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 8,
+    "exact": false,
+    "first_difference": 250,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 9,
+    "exact": false,
+    "first_difference": 215,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 10,
+    "exact": false,
+    "first_difference": 56,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 11,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 12,
+    "exact": false,
+    "first_difference": 225,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 13,
+    "exact": false,
+    "first_difference": 26,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 14,
+    "exact": false,
+    "first_difference": 374,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 15,
+    "exact": false,
+    "first_difference": 207,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 0,
+    "question": 16,
+    "exact": false,
+    "first_difference": 234,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 3,
+    "exact": false,
+    "first_difference": 194,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 5,
+    "exact": false,
+    "first_difference": 268,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 6,
+    "exact": false,
+    "first_difference": 162,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 7,
+    "exact": false,
+    "first_difference": 228,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 8,
+    "exact": false,
+    "first_difference": 4,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 9,
+    "exact": false,
+    "first_difference": 107,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 10,
+    "exact": false,
+    "first_difference": 51,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 11,
+    "exact": false,
+    "first_difference": 253,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 12,
+    "exact": false,
+    "first_difference": 225,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 13,
+    "exact": false,
+    "first_difference": 26,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 14,
+    "exact": false,
+    "first_difference": 374,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 15,
+    "exact": false,
+    "first_difference": 207,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 1,
+    "question": 16,
+    "exact": false,
+    "first_difference": 234,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 3,
+    "exact": false,
+    "first_difference": 194,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 5,
+    "exact": false,
+    "first_difference": 281,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 6,
+    "exact": false,
+    "first_difference": 162,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 7,
+    "exact": false,
+    "first_difference": 152,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 8,
+    "exact": false,
+    "first_difference": 250,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 9,
+    "exact": false,
+    "first_difference": 215,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 10,
+    "exact": false,
+    "first_difference": 56,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 11,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 12,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 13,
+    "exact": false,
+    "first_difference": 26,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 14,
+    "exact": false,
+    "first_difference": 374,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 15,
+    "exact": false,
+    "first_difference": 207,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 2,
+    "question": 16,
+    "exact": false,
+    "first_difference": 234,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 3,
+    "exact": false,
+    "first_difference": 194,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 5,
+    "exact": false,
+    "first_difference": 281,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 6,
+    "exact": false,
+    "first_difference": 162,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 7,
+    "exact": false,
+    "first_difference": 152,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 8,
+    "exact": false,
+    "first_difference": 250,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 9,
+    "exact": false,
+    "first_difference": 215,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 10,
+    "exact": false,
+    "first_difference": 56,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 11,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 12,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 13,
+    "exact": false,
+    "first_difference": 26,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 14,
+    "exact": false,
+    "first_difference": 374,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 15,
+    "exact": false,
+    "first_difference": 207,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 3,
+    "question": 16,
+    "exact": false,
+    "first_difference": 234,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 1,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 2,
+    "exact": false,
+    "first_difference": 42,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 3,
+    "exact": false,
+    "first_difference": 194,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 4,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 5,
+    "exact": false,
+    "first_difference": 281,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 6,
+    "exact": false,
+    "first_difference": 162,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 7,
+    "exact": false,
+    "first_difference": 152,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 8,
+    "exact": false,
+    "first_difference": 250,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 9,
+    "exact": false,
+    "first_difference": 215,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 10,
+    "exact": false,
+    "first_difference": 56,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 11,
+    "exact": false,
+    "first_difference": 2,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 12,
+    "exact": true,
+    "first_difference": null,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 13,
+    "exact": false,
+    "first_difference": 26,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 14,
+    "exact": false,
+    "first_difference": 374,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 15,
+    "exact": false,
+    "first_difference": 207,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "repeat": 4,
+    "question": 16,
+    "exact": false,
+    "first_difference": 234,
+    "ar_tokens": 512,
+    "loopspec_tokens": 512
+  }
+]
