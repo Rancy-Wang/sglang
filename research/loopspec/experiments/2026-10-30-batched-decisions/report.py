@@ -157,11 +157,13 @@ def main():
         lines.append(f"|{pattern}|{bs}|{depth}|{next(iter(group.values()))['outputs']}|"+'|'.join(values)+f"|{group.get('loopspec.decision_readback',{}).get('cpu_ms',0):.3f}|")
     lines+=['', '新版本的独立readback span在旧版本属于scatter余项；比较余项时须加回新readback，不应将插桩边界变化当成工作消失。计划/collect、native result handler和客户端ITL见profile-summary.json中的depths；它们是包含GPU等待的主机区间，不能再与上述GPU时间相加。','',
         '## 为什么batch增大时加速比下降：实测修复收益', '',
-        '定义 r=L1/A1，E_B=L_B−r·A_B。E_B表示在bs=B保持bs1加速比还需省下的LoopSpec时间。旧、新各用自己的r；因此“恢复比例”扣除了bs1也获得的优化，不等于新旧E2E降幅。该干预包含greedy特化、合批和减少无用操作，不能单独归因于某一个算子。', '',
+        '定义 r=L1/A1，E_B=L_B−r·A_B。E_B表示在bs=B保持bs1加速比还需省下的LoopSpec时间。E_B≤0表示加速比没有下降；保留负值表示改善，不定义损失贡献或恢复百分比。旧、新各用自己的r；因此“恢复比例”扣除了bs1也获得的优化，不等于新旧E2E降幅。该干预包含greedy特化、合批和减少无用操作，不能单独归因于某一个算子。', '',
         '|发送|bs|旧损失s|新损失s|修复消除损失s|消除比例|',
         '|---|---:|---:|---:|---:|---:|']
     for r in losses:
-        lines.append(f"|{r['pattern']}|{r['bs']}|{r['old_loss_ms']/1000:.3f}|{r['new_loss_ms']/1000:.3f}|{r['measured_loss_recovery_ms']/1000:.3f}|{r['measured_loss_recovery_percent']:.1f}%|")
+        percent=r['measured_loss_recovery_percent']
+        recovery='无下降' if percent is None else f'{percent:.1f}%'
+        lines.append(f"|{r['pattern']}|{r['bs']}|{r['old_loss_ms']/1000:.3f}|{r['new_loss_ms']/1000:.3f}|{r['measured_loss_recovery_ms']/1000:.3f}|{recovery}|")
     lines+=['', '## 各步骤的有符号时间分解估算（不是精确因果比例）','',
         '先将Profile时间轴分成互斥区间：GPU执行优先，CPU仅计算未被GPU覆盖的阶段，未知空隙保留未归因。然后以各区间占比缩放到无Profiler E2E。贡献 Δj=(L̂Bj−L̂1j)−r(ÂBj−Â1j)，各项之和为E_B。负数表示抵消下降，正数可能超过100%。此映射假设Profile占比能代表无Profiler运行；旧版插桩扰动更大，故百分比只作有标注的估算。', '',
         '|发送|版本|bs|attention|模型其他计算|decision|分支/KV|prepare|主机调度等|传输|未归因|',
