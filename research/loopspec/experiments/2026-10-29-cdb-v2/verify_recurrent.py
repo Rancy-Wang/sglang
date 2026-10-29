@@ -57,7 +57,7 @@ def main():
     from sglang.srt.mem_cache.kv_index_translator import KVIndexTranslator
     from sglang.srt.mem_cache.memory_pool import ReqToTokenPool
     from sglang.srt.mem_cache.timeline_pool import TimelineTokenToKVPool, TimelineTokenAllocator
-    from sglang.srt.model_executor.recurrent_runner import RecurrentRunner, RecurrentState, RecurrentDecodeGraph
+    from sglang.srt.model_executor.recurrent_runner import RecurrentRunner, RecurrentState, RecurrentCoreGraph
     from sglang.srt.runtime_context import publish, SpawnRanks
     from sglang.srt.sampling.sampling_params import SamplingParams
     from sglang.srt.server_args import ServerArgs, PortArgs
@@ -77,7 +77,7 @@ def main():
     # Isolated, native timeline pool. The production allocator selection is
     # deliberately unchanged until ordinary Scheduler integration is validated.
     runner.token_to_kv_pool = TimelineTokenToKVPool(
-        6000, recurrent_config=runner.model.config, page_size=1,
+        6000, recurrent_config=runner.model.config, fixed_depth_slots=True, page_size=1,
         dtype=runner.kv_cache_dtype, head_num=runner.model_config.get_num_kv_heads(1),
         head_dim=runner.model_config.head_dim, v_head_dim=runner.model_config.v_head_dim,
         layer_num=runner.model.config.num_hidden_layers, device=runner.device,
@@ -95,7 +95,7 @@ def main():
     runner.attn_backend = TritonAttnBackend(runner)
     recurrent = RecurrentRunner(runner, max_rows=8)
     with torch.inference_mode():
-        graph = RecurrentDecodeGraph(recurrent, 8) if args.graph else None
+        graph = RecurrentCoreGraph(recurrent, 8) if args.graph else None
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     rows = [json.loads(line) for line in args.dataset.read_text().splitlines()][:8]
     ref_tokens = json.loads((args.tokens / "cohort-0.json").read_text())["requests"]
@@ -103,6 +103,7 @@ def main():
     assert reference["questions"] == list(range(1, 9))
     assert args.steps < min(len(r["output_ids"]) for r in ref_tokens)
     saved, mixed_checks, step = [], [], [0]
+    prefill_graphs = {}
 
     @torch.inference_mode()
     def forward(batch):
@@ -119,11 +120,16 @@ def main():
             selection = torch.cumsum(batch.extend_seq_lens, 0).long() - 1
         else:
             selection = torch.arange(batch.batch_size, device=runner.device)
+        if args.graph and batch.forward_mode.is_extend():
+            size = 1 << (len(batch.input_ids) - 1).bit_length()
+            prefill_graphs[size] = RecurrentCoreGraph(recurrent, 8, tokens=size)
         state = recurrent.prepare(batch, token_rows=token_rows)
         states = [state.hidden.clone()]
         for depth in range(4):
             depths = torch.full_like(batch.req_pool_indices, depth)
-            if graph and batch.forward_mode.is_decode():
+            if args.graph and batch.forward_mode.is_extend():
+                state = prefill_graphs[size].replay(batch, state, depths)
+            elif graph and batch.forward_mode.is_decode():
                 state = graph.replay(batch, state, depths)
             else:
                 state = recurrent.advance(batch, state, depths, token_rows=token_rows)

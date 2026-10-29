@@ -2447,7 +2447,7 @@ class Scheduler(
             req_to_token_pool=self.req_to_token_pool,
             pool_stats_observer=self.pool_stats_observer,
             get_last_batch=lambda: self.last_batch,
-            get_running_batch=lambda: self.running_batch,
+            get_running_batch=self.running_batch_for_observation,
             get_chunked_req=lambda: self.chunked_req,
             scheduler_stage_metrics=self.scheduler_stage_metrics,
         )
@@ -2504,7 +2504,7 @@ class Scheduler(
             tp_worker=self.tp_worker,
             token_to_kv_pool_allocator=self.token_to_kv_pool_allocator,
             spec_algorithm=self.spec_algorithm,
-            get_running_batch=lambda: self.running_batch,
+            get_running_batch=self.running_batch_for_observation,
             get_waiting_queue=lambda: self.waiting_queue,
             waiting_queue_prefix_matched=lambda: (
                 self.policy.waiting_queue_prefix_matched(self.waiting_queue)
@@ -5196,6 +5196,11 @@ class Scheduler(
         else:
             self.metrics_reporter.record_scheduler_active(time.monotonic_ns())
 
+    def running_batch_for_observation(self):
+        if self.recurrent_scheduler is None:
+            return self.running_batch
+        return ScheduleBatch(reqs=list(self.collect_inflight_reqs()))
+
     def is_fully_idle(self, for_health_check=False, ignore_waiting=False) -> bool:
         # Health check piggybacks on running requests in process_output.
         # Only running_batch + waiting_queue guarantee active GPU processing;
@@ -5205,6 +5210,7 @@ class Scheduler(
         # Batch running status
         idle = (
             self.running_batch.is_empty()
+            and (self.recurrent_scheduler is None or not self.recurrent_scheduler.inflight_batches())
             and self.chunked_req is None
             and not self.dllm_manager.any_staging_reqs()
             and (self.last_batch is None or self.last_batch.is_empty())

@@ -113,6 +113,8 @@ def main():
     p.add_argument("--base-url", default="http://127.0.0.1:30126")
     p.add_argument("--port", type=int, default=30126)
     p.add_argument("--external-server", action="store_true")
+    p.add_argument("--chunked-prefill-size", type=int)
+    p.add_argument("--lifecycle", action="store_true")
     p.add_argument("--reference", type=Path)
     args = p.parse_args()
     if args.first == 1 and args.arrival_ms == [0, 10, 25, 45, 75, 120, 200, 320]:
@@ -137,6 +139,8 @@ def main():
                "--max-running-requests", str(args.max_running_requests), "--page-size", "1",
                "--disable-radix-cache", "--context-length", "2048", "--mem-fraction-static", "0.7",
                "--cuda-graph-max-bs-decode", "8", "--enable-metrics", "--stream-interval", "1"]
+    if args.chunked_prefill_size is not None:
+        command.extend(["--chunked-prefill-size", str(args.chunked_prefill_size)])
     if args.eager:
         command.append("--disable-cuda-graph")
     if args.no_overlap or args.algorithm == "loopspec":
@@ -145,6 +149,8 @@ def main():
         command.extend(["--chunked-prefill-size", "-1", "--speculative-algorithm", "loopspec",
                         "--speculative-draft-depth", *map(str, args.depths)])
     environment = dict(os.environ, SGLANG_RUST_BUILD_MODE="auto")
+    if args.lifecycle:
+        environment["SGLANG_ENABLE_STRICT_MEM_CHECK_DURING_BUSY"] = "1"
     if args.profile:
         environment["SGLANG_RECURRENT_TRACE"] = "1"
         environment["SGLANG_PROFILE_V2"] = "0"
@@ -182,6 +188,11 @@ def main():
             raise TimeoutError("Server readiness timeout")
         with http(args.base_url, "/get_server_info") as response:
             write_json(args.output / "server_info.json", json.load(response))
+        if args.lifecycle:
+            from verify_lifecycle import verify
+            write_json(args.output / "lifecycle.json", verify(args.base_url, rows))
+            write_json(args.output / "status.json", {"success": True, "lifecycle": True})
+            return
         for index in range(args.warmup):
             write_json(args.output / f"warmup-{index}.json", cohort(args, rows, f"warmup-{index}"))
         if args.profile:

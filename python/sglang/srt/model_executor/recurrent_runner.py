@@ -19,6 +19,7 @@ from sglang.srt.model_executor.forward_batch_info import (
 from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
 from sglang.srt.model_executor.runner_utils.capture_mode import model_capture_mode
 from sglang.srt.speculative.spec_info import SpeculativeAlgorithm
+from sglang.srt.utils.recurrent_trace import span
 
 
 def use_recurrent_execution(model, server_args):
@@ -64,24 +65,38 @@ class RecurrentRunner:
             runner, request_pool or runner.req_to_token_pool, max_rows
         )
         self.graphs = {}
+        self.prefill_graphs = {}
+        self.graph_pool = None
 
     def init_graphs(self):
         from sglang.srt.model_executor.cuda_graph_config import check_cuda_graph_backend
         from sglang.srt.runtime_context import get_exec
 
-        if check_cuda_graph_backend("decode", "disabled"):
-            return
-        for rows in get_exec().graph.cuda_graph_config.decode.bs:
-            if rows <= self.timeline.max_rows:
-                self.graphs[rows] = RecurrentDecodeGraph(self, rows)
+        self.graph_pool = torch.cuda.graph_pool_handle()
+        config = get_exec().graph.cuda_graph_config
+        if not check_cuda_graph_backend("prefill", "disabled"):
+            for tokens in sorted(config.prefill.bs):
+                self.prefill_graphs[tokens] = RecurrentCoreGraph(
+                    self, self.timeline.max_rows, tokens=tokens
+                )
+        if not check_cuda_graph_backend("decode", "disabled"):
+            for rows in sorted(config.decode.bs):
+                if rows <= self.timeline.max_rows:
+                    self.graphs[rows] = RecurrentCoreGraph(self, rows)
 
+    @span("recurrent.execute_core")
     def execute_core(self, batch, state, depths, *, token_rows=None):
         if batch.forward_mode.is_decode():
             for rows, graph in self.graphs.items():
                 if rows >= batch.batch_size:
                     return graph.replay(batch, state, depths), True
+        elif batch.forward_mode.is_extend():
+            for tokens, graph in self.prefill_graphs.items():
+                if tokens >= len(state.hidden):
+                    return graph.replay(batch, state, depths), True
         return self.advance(batch, state, depths, token_rows=token_rows), False
 
+    @span("recurrent.prepare")
     def prepare(self, batch, *, token_rows=None):
         depths = torch.zeros_like(batch.req_pool_indices)
         mapped, backend = self.timeline.target_batch(
@@ -106,6 +121,7 @@ class RecurrentRunner:
             )
         return RecurrentState(hidden, state.injected)
 
+    @span("recurrent.finish")
     def finish(self, batch, state, depths, *, token_rows=None):
         """Full target readout; keep native logprob/hidden-state semantics."""
         mapped, backend = self.timeline.target_batch(
@@ -132,22 +148,24 @@ class RecurrentRunner:
             )
 
 
-class RecurrentDecodeGraph:
-    """One core graph per row bucket; request ids and depths stay dynamic.
+class RecurrentCoreGraph:
+    """One core graph per decode-row or packed-extend token bucket.
 
     Replay outputs are borrowed until the next replay. Owners must copy live
     carried states into their own storage before reusing this graph. Padding
     uses logical slot zero, which every timeline maps to the discard slot.
     """
 
-    def __init__(self, recurrent, rows):
+    def __init__(self, recurrent, rows, *, tokens=None):
         self.recurrent, self.rows = recurrent, rows
+        self.is_extend = tokens is not None
+        self.tokens = tokens if self.is_extend else rows
         runner, model = recurrent.runner, recurrent.model
         device = runner.device
         self.depths = torch.zeros(rows, dtype=torch.int64, device=device)
         self.state = RecurrentState(
             torch.zeros(
-                (rows, model.config.hidden_size),
+                (self.tokens, model.config.hidden_size),
                 dtype=model.get_input_embeddings().weight.dtype,
                 device=device,
             )
@@ -155,17 +173,28 @@ class RecurrentDecodeGraph:
         if model.has_injection:
             self.state.injected = torch.zeros_like(self.state.hidden)
         self.batch = ForwardBatch(
-            forward_mode=ForwardMode.DECODE,
+            forward_mode=ForwardMode.EXTEND if self.is_extend else ForwardMode.DECODE,
             batch_size=rows,
-            input_ids=torch.zeros(rows, dtype=torch.int64, device=device),
+            input_ids=torch.zeros(self.tokens, dtype=torch.int64, device=device),
             req_pool_indices=torch.zeros(rows, dtype=torch.int64, device=device),
             seq_lens=torch.ones(rows, dtype=torch.int32, device=device),
             seq_lens_sum=rows * recurrent.timeline.source.shape[1],
-            out_cache_loc=torch.zeros(rows, dtype=torch.int64, device=device),
-            positions=torch.zeros(rows, dtype=torch.int64, device=device),
+            out_cache_loc=torch.zeros(self.tokens, dtype=torch.int64, device=device),
+            positions=torch.zeros(self.tokens, dtype=torch.int64, device=device),
             capture_hidden_mode=CaptureHiddenMode.NULL,
             spec_algorithm=SpeculativeAlgorithm.NONE,
         )
+        self.token_positions = None
+        if self.is_extend:
+            self.token_positions = torch.arange(self.tokens, device=device)
+            self.batch.extend_seq_lens = torch.zeros(rows, dtype=torch.int32, device=device)
+            self.batch.extend_seq_lens[0] = self.tokens
+            self.batch.extend_prefix_lens = torch.zeros_like(self.batch.extend_seq_lens)
+            self.batch.extend_start_loc = torch.zeros_like(self.batch.extend_seq_lens)
+            self.batch.extend_num_tokens = self.tokens
+            self.batch.extend_seq_lens_cpu = [self.tokens] + [0] * (rows - 1)
+            # Prefix lengths remain dynamic; use the backend's allocation bound.
+            self.batch.extend_prefix_lens_cpu = None
         stream = torch.cuda.Stream(device=device)
         stream.wait_stream(torch.cuda.current_stream(device))
         with torch.cuda.stream(stream), model_capture_mode():
@@ -173,29 +202,44 @@ class RecurrentDecodeGraph:
                 self.run()
         stream.synchronize()
         self.graph = torch.cuda.CUDAGraph()
-        with model_capture_mode(), torch.cuda.graph(self.graph, stream=stream):
+        with model_capture_mode(), torch.cuda.graph(self.graph, stream=stream, pool=recurrent.graph_pool):
             self.run()
         torch.cuda.current_stream(device).wait_stream(stream)
 
     def run(self):
-        self.output = self.recurrent.advance(self.batch, self.state, self.depths)
+        token_rows = None
+        if self.is_extend:
+            token_rows = torch.bucketize(
+                self.token_positions, self.batch.extend_seq_lens.cumsum(0), right=True
+            ).clamp_max(self.rows - 1)
+        self.output = self.recurrent.advance(
+            self.batch, self.state, self.depths, token_rows=token_rows
+        )
 
     def replay(self, batch, state, depths):
         count = batch.batch_size
-        if not batch.forward_mode.is_decode() or not 0 < count <= self.rows:
-            raise ValueError("Incompatible recurrent decode graph batch")
+        tokens = len(state.hidden)
+        if (batch.forward_mode.is_extend() != self.is_extend
+                or not 0 < count <= self.rows or tokens > self.tokens):
+            raise ValueError("Incompatible recurrent core graph batch")
         for name in ("input_ids", "req_pool_indices", "seq_lens", "out_cache_loc", "positions"):
             target, source = getattr(self.batch, name), getattr(batch, name)
-            target[:count].copy_(source)
-            target[count:].fill_(1 if name == "seq_lens" else 0)
+            size = count if name in ("req_pool_indices", "seq_lens") else tokens
+            target[:size].copy_(source)
+            target[size:].fill_(1 if name == "seq_lens" else 0)
+        if self.is_extend:
+            for name in ("extend_seq_lens", "extend_prefix_lens", "extend_start_loc"):
+                target = getattr(self.batch, name)
+                target[:count].copy_(getattr(batch, name))
+                target[count:].zero_()
         self.depths[:count].copy_(depths)
         self.depths[count:].zero_()
-        self.state.hidden[:count].copy_(state.hidden)
-        self.state.hidden[count:].zero_()
+        self.state.hidden[:tokens].copy_(state.hidden)
+        self.state.hidden[tokens:].zero_()
         if self.state.injected is not None:
             if state.injected is None:
                 raise ValueError("Recurrent model requires carried input injection")
-            self.state.injected[:count].copy_(state.injected)
-            self.state.injected[count:].zero_()
+            self.state.injected[:tokens].copy_(state.injected)
+            self.state.injected[tokens:].zero_()
         self.graph.replay()
-        return RecurrentState(self.output.hidden[:count], state.injected)
+        return RecurrentState(self.output.hidden[:tokens], state.injected)

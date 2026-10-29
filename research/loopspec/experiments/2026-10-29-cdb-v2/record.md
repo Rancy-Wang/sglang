@@ -389,3 +389,19 @@ graph两项实际均108次decode replay、0次prefill replay，logits与eager逐
 - 提交 `e05ea719888f31535efdad8b5d847482162418e2`；AST/diff及4项CPU寻址/准入契约通过。本地完整tp_worker导入受缺少uvicorn阻塞，不记通过；X5容器完整依赖用于实际服务。
 - 两端同SHA；GPU无计算进程、30126空闲。`profile_workload.py --output /results/round-8/cdb-smoke --first 8 --max-new-tokens 32 --warmup 0 --repeat 1` 退出1，server初始化失败。根因：能力选择读取raw ServerArgs.device=None，而本版本解析结果在ResolvedView；未开始请求推理，不能把它作为数值/性能失败。
 - **候选9/15六项计划**：目的为正确接入本版本配置解析协议并保持构造接口兼容；步骤为能力选择统一使用resolved_view，新增SB/结果字段设为keyword-only；范围recurrent_runner.py、schedule_batch.py、utils.py和记录；标准原CLI启动原生CDB、原构造参数顺序不变、四项CPU契约及原smoke；风险是其他初始化/运行期接线问题，必须继续实际请求检查而非仅导入；验证同环境同负载，结果写round-9，仍沿用固定数值和性能门槛。当前开始9/15。
+
+### 第9轮阶段证据与候选10/15计划
+
+- 提交 `62cf7b7cd791044e123e9596371ca78ba3a8ee21`；4项CPU契约通过，X5原生CLI已启动CDB。`round-9/cdb-smoke`退出0，8请求各32token；首次分歧只有Q3 index23、Q5 index11，属于原先校准近tie位置，尚需完整同前缀/停止等验收。
+- `round-9/cdb-b8-profile`退出0，8题完整输出长度 `[512,512,512,512,512,512,453,512]`；profile makespan 27547.512ms，不能当无profiler性能。两次无profiler预热 makespan23946.53/24043.90ms，较旧基线22596.11ms约增加6%，当前效率未通过。10次正式无profiler测量仍在X5原提交进行，不在运行中pull新代码。
+- trace保存286MiB gzip及2.5MiB recurrent JSONL。2084个loop步骤中24个prefill、2060个decode，2046个decode步骤包含多个depth。前几个core顺序为A depth0、A depth1、B/C/D depth0、A depth2，直接证明普通Scheduler的loop边界准入。profile decode core CPU中位12.47ms、GPU span中位12.85ms；CPU提交经常等待 `_start` 内槽号 `.tolist()`。
+- **候选10/15六项计划**：
+  1. 目的：消除普通AR已知全深度时多余的host timeline分配/同步，并降低分段prefill的提交开销。
+  2. 步骤：普通AR使用预先固定、互不重叠的depth KV plane地址（逻辑allocator仍唯一拥有token）；通用core图支持packed extend桶，共享图内存池；保留原生开关/eager回退；补充partial状态的观测与过滤元数据。
+  3. 范围：timeline_pool/configurator、recurrent_runner、Scheduler recurrent component及原生load/invariant观测接线；本目录图/取消/chunk验证工具。旧LoopSpec暂保留lazy timeline和分支物化校验，不改变算法。
+  4. 标准：既定包络、严格地址与row ownership契约、8请求/取消/chunk无泄漏和正常输出；每loop可准入；配对E2E≤2%，尚未运行不得标通过。
+  5. 风险：static映射不能代表已物化、图padding污染、共享graph内存输出寿命、取消后logprob元数据未过滤、忙时load少计continuation。物化仍由state/depth依赖保证，graph输出在下一replay前复制，观测去重原始Req。
+  6. 验证：CPU地址/准入契约、源码静态检查，经Git同步；等第9轮所有远端测试结束后才pull；X5先mixed/graph及小服务测试，再同负载profile/无profiler重复。第10轮开始，原阈值与正式分支均不变。
+
+- 第9轮正式无profiler测量完成：10次 makespan 中位24124.879ms；各题E2E中位[23892.810,23979.914,23965.064,23992.638,23986.078,23975.244,21101.018,23804.873]ms，相对旧基线增加6.090%–7.305%，效率失败。输出长度全部与旧B8相同，10次重复一致；不能把稳定输出等同数值验收。paired-performance.json已保存在X5 round-9。
+- 第10轮本地5项CPU契约通过，AST/diff-check退出0；新增HTTP生命周期验证覆盖不等长结束、logprobs、partial prefill/decode取消、survivor和空闲flush，并开启原生busy严格内存检查。GPU验证待执行。

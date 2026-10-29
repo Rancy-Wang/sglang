@@ -17,6 +17,7 @@ from sglang.srt.mem_cache.memory_pool import KvBufferDesc, MHATokenToKVPool
 
 
 class TimelineSlots:
+    static = False
     def __init__(self, size, repeats, roles, device):
         self.size, self.repeats, self.roles, self.device = size, repeats, roles, device
         self.maps = {
@@ -90,8 +91,39 @@ class TimelineSlots:
         return len(self.entries)
 
 
+class FixedDepthSlots:
+    """Ordinary full-depth AR reserves every plane with its logical token.
+
+    Address availability is NOT materialization. The recurrent scheduler must
+    still finish the prefix at every depth before exposing its next token.
+    Logical allocation/free remains entirely in TokenToKVPoolAllocator.
+    """
+
+    static = True
+
+    def __init__(self, size, repeats, roles, device):
+        ids = torch.arange(size + 1, dtype=torch.int64, device=device)
+        self.maps = {}
+        for role, count in roles.items():
+            if count:
+                depths = 1 if role == "pre" else repeats
+                self.maps[role] = ids[None, :] + size * torch.arange(depths, device=device)[:, None]
+                self.maps[role][:, 0] = 0
+
+    def clear(self):
+        pass
+
+    def release(self, logical_ids):
+        pass
+
+    def ensure(self, logical_ids, role, depth):
+        # No host readback or map mutation at token boundaries.
+        if role in self.maps and not 0 <= depth < len(self.maps[role]):
+            raise ValueError("Invalid fixed KV plane")
+
+
 class TimelineTokenToKVPool(MHATokenToKVPool):
-    def __init__(self, size, *, recurrent_config, **kwargs):
+    def __init__(self, size, *, recurrent_config, fixed_depth_slots=False, **kwargs):
         self.logical_size = size
         self.repeats = recurrent_config.total_ut_steps
         if recurrent_config.model_type == "ouro":
@@ -125,9 +157,10 @@ class TimelineTokenToKVPool(MHATokenToKVPool):
             kv_cache_layout="nhd",
         )
         super().__init__(size * self.repeats, **kwargs)
-        self.timeline = TimelineSlots(size, self.repeats, self.roles, self.device)
+        slots_cls = FixedDepthSlots if fixed_depth_slots else TimelineSlots
+        self.timeline = slots_cls(size, self.repeats, self.roles, self.device)
         logging.getLogger(__name__).info(
-            "LoopSpec timeline KV: physical_layers=%d logical_layers=%d full_depth_capacity=%d core_slots=%d",
+            "Recurrent timeline KV: physical_layers=%d logical_layers=%d full_depth_capacity=%d core_slots=%d",
             p + c + o,
             len(self.logical_to_physical),
             size,
@@ -244,7 +277,7 @@ class TimelineRuntime:
                 self.backends[key] = TritonAttnBackend(view)
 
     def ensure_prefill(self, slots, endpoints):
-        values = slots.tolist()
+        values = slots if self.pool.timeline.static else slots.tolist()
         self.pool.timeline.ensure(values, "pre", 0)
         for depth in range(self.pool.repeats):
             self.pool.timeline.ensure(values, "core", depth)

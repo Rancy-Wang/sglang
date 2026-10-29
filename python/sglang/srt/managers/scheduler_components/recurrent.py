@@ -125,18 +125,17 @@ class RecurrentScheduler:
             work.batch.reqs = []
             return
         indices = torch.tensor(keep, device=self.runner.device)
-        for name in ("input_ids", "req_pool_indices", "seq_lens", "positions", "out_cache_loc"):
-            setattr(work.forward, name, getattr(work.forward, name)[indices])
-        work.forward.batch_size = len(keep)
-        work.forward.seq_lens_sum = None
         work.state = RecurrentState(work.state.hidden[indices],
             work.state.injected[indices] if work.state.injected is not None else None)
         out_cache_loc = work.batch.out_cache_loc[indices]
         work.batch.filter_batch(keep_indices=keep)
         work.batch.out_cache_loc = out_cache_loc
-        # Rebuild only result/sampling metadata; the forward state/KV stays put.
-        work.forward.sampling_info = work.batch.sampling_info.copy_for_forward()
+        # Include logprob/hidden-return metadata in the filtered view, too.
+        # This builds no new token allocation and preserves carried state.
+        with self.scheduler._forward_isolation(work.batch, overlap=self.scheduler.enable_overlap):
+            work.forward = ForwardBatch.init_new(work.batch, self.runner, return_hidden_states_before_norm=False)
 
+    @span("recurrent.start")
     def _start(self, work):
         from sglang.srt.managers.overlap_utils import resolve_forward_inputs
 
@@ -146,8 +145,8 @@ class RecurrentScheduler:
             work.forward = ForwardBatch.init_new(batch, self.runner, return_hidden_states_before_norm=False)
         # Reserve once per logical token, never once per loop. Timeline maps
         # are device resident; attention never uses a different depth's KV.
-        slots = batch.out_cache_loc.tolist()
         timeline = self.runner.token_to_kv_pool.timeline
+        slots = batch.out_cache_loc if timeline.static else batch.out_cache_loc.tolist()
         timeline.ensure(slots, "pre", 0)
         for depth in range(self.total):
             timeline.ensure(slots, "core", depth)

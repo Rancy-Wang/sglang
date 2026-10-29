@@ -72,9 +72,6 @@ class TestMixedTimeline(unittest.TestCase):
         self.assertEqual(mapped.out_cache_loc.tolist(), self.slots.maps["pre"][0, [1, 2, 3, 2, 0]].tolist())
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 class TestRecurrentAdmission(unittest.TestCase):
     def test_admit_at_loop_boundary_and_do_not_reprepare_active_token(self):
         from unittest.mock import patch
@@ -113,3 +110,22 @@ class TestRecurrentAdmission(unittest.TestCase):
         self.assertEqual(seen, [(a, 0), (a, 1), (b, 0)])
         self.assertEqual(len(component.pending), 2)
         self.assertEqual(component.pending[0].depth, 2)
+
+class TestFixedPlanes(unittest.TestCase):
+    def test_distinct_planes_and_stable_logical_reuse(self):
+        from sglang.srt.mem_cache.timeline_pool import FixedDepthSlots
+        planes = FixedDepthSlots(8, 4, {"pre": 1, "core": 1, "post": 0}, "cpu")
+        core = planes.maps["core"]
+        self.assertEqual(core[:, 0].tolist(), [0, 0, 0, 0])
+        self.assertEqual(core[:, 3].tolist(), [3, 11, 19, 27])
+        self.assertEqual(len(set(core[:, 1:].flatten().tolist())), 32)
+        before = core.clone()
+        planes.release(torch.tensor([3]))
+        planes.ensure(torch.tensor([3]), "core", 2)
+        planes.clear()
+        self.assertTrue(torch.equal(before, core))
+        self.assertEqual(planes.maps["pre"].shape, (1, 9))
+
+
+if __name__ == "__main__":
+    unittest.main()
