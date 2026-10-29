@@ -289,3 +289,22 @@ CDB 前后的主对照保留各自生产可用的 graph 路径；普通 AR 若�
 - X5/X5-BUS原有AICoder-Direct链路超时；直连18.25.6.221:22超时。根据用户“使用可用服务器做踏板连接尝试”的指示，已尝试经AICoder-Direct、InfiniAI-BUS、Zhangyudong-BUS、InfiniAI-BUS-2、Tengxuan-BUS-2连接X5，均SSH banner超时（exit255）。前3个跳板本身hostname命令成功；AICoder/InfiniAI-BUS解析x5.mit.edu均为18.25.6.221，向其22端口读取banner超时（timeout exit124）。经BUS尝试A10/A11/L5/X4/B200作为后续入口也未连接成功。没有修改用户SSH配置、停止他人进程或改远端源文件；本地临时SSH配置只用于排查网关的en0绑定。
 - 当前 **3/5**，基础设施阻塞不增加轮数。已采集的LS完整trace及AR10次并发负载保留于指定results目录；原基线long-context token门槛失败，数值根因仍待GPU诊断。CDB/LoopSpec V2多请求运行时代码尚未实施，正式loopspec分支未变。
 - 恢复后的首要步骤：检查原profile进程及导出，不重复覆盖；同步本候选；空闲GPU0执行 `batch_numerics.py --reference /results/round-2/ar-reference --output /results/round-3/batch-numerics`，另加`--invariant`写独立目录作诊断对照。两者只用于定位，不能静默改变生产验收配置或放宽阈值。用新版analyze_profile.py重新分析现有trace（保留原summary），然后根据实测决定下个候选。
+
+### X5 恢复：第 3/5 轮结果
+
+- 按更新的 x5-persistent-session 技能建立单一 SSH 交互会话（本地工具 session 60877，远端 shell PID 2768178，ControlPath=/tmp/loopspec-cdb-x5-resume1-20261029.sock），后续复用。X5 ff-only 同步到 `50b42c556ad8ddd3bbeddb3318337216469c47fa`，工作树 clean，容器导入为 /workspace/sglang/python/sglang/__init__.py。两张 GPU 均空闲，使用原隔离容器 GPU0；没有更改正式分支。
+- 旧 AR B8 profile 已完整导出：trace gzip 267377228 字节，recurrent JSONL 358683 字节，gzip -t 退出0。请求 status=false 是原 token 分歧。新版 analyze_profile.py 对 AR/LS 均退出0，生成 summary/output-paths/shared-batches。LS 原汇总备份为 *.analysis-v1.json；host ruoxi 写 root-owned 结果目录失败后改由原容器写入，未修改权限。
+- 诊断命令（容器 /opt/sglang/bin/python）：`batch_numerics.py --reference /results/round-2/ar-reference --output /results/round-3/batch-numerics`，以及另加 `--invariant`、输出 batch-numerics-invariant；均退出0。默认12 decode+prefill共13位置、8题、R4、teacher-forced。退出0表示诊断完成，不表示数值验收通过。
+- 原算子 B1/B8：hidden 最大绝对误差0.640625、最大逐depth RMSE0.12341515；logits 最大绝对误差0.982421875、最大RMSE0.21822403，超原阈值。104个位置的argmax仍一致且与原B1服务一致。实际相同输入的QKV和LM head投影仅改变M=1/2/4/8也产生舍入差异，证明存在batchshape因素，但不能由此独自推断全部根因。
+- batch-invariant 对照：上述 B1/B8 hidden/logits 与孤立投影全部逐位相同；但相对原 B1 的 hidden max=0.4375、四depth合并RMSE最大0.05104308，logits max=0.7109375/RMSE=0.14225098。第5题step11输出1303，原B1为588（原B1在此top2 margin=0，invariant margin=0.125）。不能静默重设参考或改生产配置来标记通过。
+- AR trace GPU kernel busy union=20340.045ms，profile makespan=23232.148ms；各题 E2E=[23115.676,23105.776,23090.994,23071.100,23041.425,22996.619,20142.588,22912.139]ms。receive→first-forward仅0.632–1.088ms，它不包含接收前的IPC等待，不能当全部排队延迟。decode共享batch提交CPU中位约10.91ms，结果处理中位约33.61ms（包含GPU等待），不可按8题重复加总或解释为纯结果处理开销。
+- LS逐输出阶段汇总（包含profile开销）：entry_depth=0的4次core GPU stream interval之和中位55.737ms，entry_depth=3的1次core为15.461ms；prepare_lane分别0.995/0.264ms，pre0.291/0.074ms，post0.726/0.182ms，verify0.443/0.438ms，commit0.047/0.047ms。嵌套区间不能横向相加。depth1/2仍无样本。
+
+### 候选 4/5 修改前计划：分离 prefill、GEMM 与原生 graph 的影响
+
+1. 目的：定位 eager 诊断B8前13位置无argmax分歧、真实服务B8却在step11分歧的原因；评估保留原B1参考的数值修复是否可行。
+2. 步骤：扩展同一诊断工具，支持分别prefill后使用原生ScheduleBatch.merge_batch合批decode，以及原生decode/all graph开关；记录实际can_run_graph。诊断BF16禁用reduced-precision reduction、仅固定GEMM、仅decode逐行投影三种隔离变量，输出同前缀hidden/logits与原参考token。
+3. 范围：仅本目录batch_numerics.py和记录；不改生产Scheduler/模型/算法，不改权重，不提交原始张量。逐行投影是定位对照，不能作为CDB性能实现。
+4. 标准：原hidden0.125/0.02、logits0.5/0.1及token/stop标准不变；区分对照完成与通过。graph模式只报告实际logits，不用Python hook假装读取replay内部hidden。保留每种配置独立输出。
+5. 风险：合并batch/graph状态不同导致诊断本身无效；先验证无改算子eager结果复现第3轮，再检查graph实际replay及prefill分组。提前终止或短前缀成功不能替代512token验收。
+6. 验证：本地AST/ruff F/diff-check；commit/push、同一持久SSH内ff-only pull与SHA/import核对；GPU空闲检查后在原容器执行基准与各单变量对照，结果存round-4，记录命令及退出码。当前4/5，五轮上限来自用户AGENTS.md，优先于技能正文残留的十轮描述。

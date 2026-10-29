@@ -1,6 +1,6 @@
 """Teacher-forced batch-shape diagnostics using native one_batch execution.
 
-This is an eager numerical probe, never a serving latency benchmark. Every
+This is a numerical probe, never a serving latency benchmark. Every
 decode receives the same reference token, even after its own argmax diverges.
 """
 
@@ -25,10 +25,21 @@ def main():
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--steps", type=int, default=12)
     p.add_argument("--invariant", action="store_true")
+    p.add_argument("--graph", choices=("none", "decode", "all"), default="none")
+    p.add_argument("--prefill", choices=("joint", "serial"), default="joint")
+    p.add_argument("--linear", choices=("native", "no-reduced", "invariant", "rowwise-decode"),
+                   default="native")
+    p.add_argument("--questions", type=int, nargs="+", default=list(range(1, 9)))
     p.add_argument("--model", default="/home/ruoxi/models/Ouro-2.6B")
     p.add_argument("--dataset", type=Path,
                    default=Path("/home/ruoxi/repo/test/datasets/aime.jsonl"))
     args = p.parse_args()
+    if len(set(args.questions)) != len(args.questions) or not all(1 <= q <= 8 for q in args.questions):
+        p.error("questions must be distinct integers from 1 to 8")
+    if args.invariant and args.linear != "native":
+        p.error("isolate the global invariant and linear variants")
+    if args.graph != "none" and (args.invariant or args.linear != "native"):
+        p.error("graph routing is a separate diagnostic with unchanged operators")
     args.output.mkdir(parents=True, exist_ok=False)
     from transformers import AutoTokenizer
     from sglang.benchmark.one_batch import load_model, _init_process_global_configs
@@ -42,13 +53,24 @@ def main():
     prompts = [tokenizer.encode(row["problem"]) for row in rows]
     ref = json.loads((args.reference / "cohort-0.json").read_text())["requests"]
     assert len(ref) == len(prompts) == 8
+    graph_options = {}
+    if args.graph == "decode":
+        from sglang.srt.model_executor.cuda_graph_config import CudaGraphConfig, PhaseConfig
+        graph_options["cuda_graph_config"] = CudaGraphConfig(
+            decode=PhaseConfig(backend="full", max_bs=8),
+            prefill=PhaseConfig(backend="disabled"),
+        )
     options = ServerArgs(
         model_path=args.model, dtype="bfloat16", attention_backend="triton",
         bf16_gemm_backend="auto", max_running_requests=8, page_size=1,
         disable_overlap_schedule=True, disable_radix_cache=True,
-        chunked_prefill_size=-1, disable_cuda_graph=True,
+        chunked_prefill_size=-1, disable_cuda_graph=args.graph == "none",
+        cuda_graph_max_bs_decode=8,
         context_length=2048, mem_fraction_static=0.7,
+        **graph_options,
     )
+    if args.linear == "no-reduced":
+        torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = False
     ports = PortArgs.init_new(options)
     publish(options, role="scheduler", ranks=SpawnRanks(world_rank=0, gpu_id=0))
     _init_process_global_configs()
@@ -58,10 +80,33 @@ def main():
         from sglang.srt.batch_invariant_ops import enable_batch_invariant_mode
         enable_batch_invariant_mode()
     runner = bench.torch_runner
+    native_linear = torch.nn.functional.linear
+    if args.linear in ("invariant", "rowwise-decode"):
+        def diagnostic_linear(x, weight, bias=None):
+            if x.ndim == 2 and x.is_cuda and x.dtype == torch.bfloat16:
+                if args.linear == "invariant":
+                    from sglang.srt.batch_invariant_ops.batch_invariant_ops import matmul_persistent
+                    return matmul_persistent(x, weight.t(), bias=bias)
+                if 1 < len(x) <= 8:
+                    return torch.cat([native_linear(row, weight, bias) for row in x.split(1)])
+            return native_linear(x, weight, bias)
+        torch.nn.functional.linear = diagnostic_linear
+    graph_calls = []
+    native_forward = runner.forward
+
+    def observe_forward(batch, *a, **kw):
+        result = native_forward(batch, *a, **kw)
+        graph_calls.append({"mode": batch.forward_mode.name,
+                            "requests": batch.batch_size,
+                            "tokens": len(batch.input_ids),
+                            "can_run_graph": result.can_run_graph})
+        return result
+
+    runner.forward = observe_forward
     captured, selection = [], []
     hook = runner.model.model.norm.register_forward_hook(
         lambda module, inputs, output: captured.append(output[selection].detach().clone())
-    )
+    ) if args.graph == "none" else None
     projections, probe_step = [], [False]
     projection = runner.model.model.layers[0].self_attn.qkv_proj
 
@@ -69,7 +114,7 @@ def main():
         if probe_step[0]:
             projections.append(inputs[0][selection[-1]:selection[-1] + 1].detach().clone())
 
-    projection_hook = projection.register_forward_pre_hook(capture_projection)
+    projection_hook = projection.register_forward_pre_hook(capture_projection) if hook else None
 
     def run(indices):
         bench.clear()
@@ -89,28 +134,49 @@ def main():
         records = []
         for step in range(args.steps + 1):
             captured.clear()
-            probe_step[0] = indices == [4] and step == min(11, args.steps)
+            probe_step[0] = indices == [4] and step == min(11, args.steps) and not projections
             if step == 0:
-                _, logits, batch = bench.extend(reqs)
+                if args.prefill == "serial" and len(reqs) > 1:
+                    parts, states, hidden = [], [], []
+                    for req in reqs:
+                        captured.clear()
+                        selection[:] = [len(req.origin_input_ids) - 1]
+                        _, part, state = bench.extend([req])
+                        parts.append(part.detach().clone())
+                        states.append(state)
+                        if hook:
+                            assert len(captured) == 4
+                            hidden.append(torch.stack(captured))
+                    batch = states[0]
+                    for state in states[1:]:
+                        batch.merge_batch(state)
+                    logits = torch.cat(parts)
+                    if hook:
+                        captured[:] = list(torch.cat(hidden, dim=1).unbind())
+                else:
+                    _, logits, batch = bench.extend(reqs)
             else:
                 selection[:] = range(len(indices))
                 forced = torch.tensor([ref[i]["output_ids"][step - 1] for i in indices],
                                       device=runner.device, dtype=torch.int64)
                 _, logits = bench.decode(forced, batch)
-            assert len(captured) == 4
-            records.append({"hidden": torch.stack(captured).cpu(),
-                            "logits": logits.detach().cpu()})
+            record = {"logits": logits.detach().cpu().clone()}
+            if hook:
+                assert len(captured) == 4
+                record["hidden"] = torch.stack(captured).cpu()
+            records.append(record)
         probe_step[0] = False
         return records
 
     with torch.inference_mode():
-        singles = [run([i]) for i in range(8)]
-        batched = run(list(range(8)))
+        indices = [q - 1 for q in args.questions]
+        singles = [run([i]) for i in indices]
+        batched = run(indices)
         projection_report = []
         for depth, x in enumerate(projections):
             for name, value, weight in (
                 ("layer0.qkv", x, projection.weight),
-                ("lm_head", singles[4][min(11, args.steps)]["hidden"][depth].to(runner.device),
+                ("lm_head", singles[indices.index(4)][min(11, args.steps)]["hidden"][depth].to(runner.device),
                  runner.model.lm_head.weight),
             ):
                 single = torch.nn.functional.linear(value, weight)
@@ -118,23 +184,31 @@ def main():
                     batch = torch.nn.functional.linear(value.repeat(width, 1), weight)
                     projection_report.append({"operator": name, "depth": depth + 1,
                                               "batch_width": width, **error(single[0], batch[0])})
-    hook.remove()
-    projection_hook.remove()
-    torch.save({"single": singles, "batch": batched}, args.output / "tensors.pt")
+    if hook:
+        hook.remove()
+        projection_hook.remove()
+    torch.nn.functional.linear = native_linear
+    torch.save({"questions": args.questions, "single": singles, "batch": batched}, args.output / "tensors.pt")
     report = []
     for step, bat in enumerate(batched):
-        for q in range(8):
-            single = singles[q][step]
-            a, b = single["logits"][0], bat["logits"][q]
+        for row, q in enumerate(indices):
+            single = singles[row][step]
+            a, b = single["logits"][0], bat["logits"][row]
             report.append({"step": step, "question": q + 1,
-                           "hidden": [error(single["hidden"][d, 0], bat["hidden"][d, q])
-                                      for d in range(4)],
+                           "hidden": [error(single["hidden"][d, 0], bat["hidden"][d, row])
+                                      for d in range(4)] if hook else None,
                            "logits": error(a, b),
                            "argmax_single": int(a.argmax()), "argmax_batch": int(b.argmax()),
                            "reference_token": ref[q]["output_ids"][step],
+                           "single_top2": {"ids": a.topk(2).indices.tolist(), "values": a.topk(2).values.tolist()},
+                           "batch_top2": {"ids": b.topk(2).indices.tolist(), "values": b.topk(2).values.tolist()},
                            "single_margin": float(a.topk(2).values.diff().abs()[0]),
                            "batch_margin": float(b.topk(2).values.diff().abs()[0])})
-    result = {"invariant": args.invariant, "eager": True, "steps": args.steps,
+    from sglang.srt.runtime_context import get_exec
+    result = {"invariant": args.invariant, "eager": args.graph == "none", "steps": args.steps,
+              "resolved_graph": get_exec().graph.cuda_graph_config.to_dict(),
+              "graph": args.graph, "prefill": args.prefill, "linear": args.linear,
+              "questions": args.questions, "graph_calls": graph_calls,
               "projection_same_input": projection_report, "records": report}
     (args.output / "report.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps({"completed": True, "invariant": args.invariant,
