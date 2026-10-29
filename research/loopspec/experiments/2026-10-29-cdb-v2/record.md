@@ -336,3 +336,31 @@ graph两项实际均108次decode replay、0次prefill replay，logits与eager逐
 4. 标准：仍为原hidden/logits阈值与token一致；graph报告实际路径，逐层差异只比较相同层/depth/token。任何短探针成功不代表完整512token或性能门槛通过。
 5. 风险：探针带同步，不能用于延迟验收；逐行对照会增多launch，不能直接进入生产；prefill图桶可能改变GEMM形状，必须与无图单变量比较。
 6. 验证：AST/CLI/diff审查；只经loopspec-test同步、同SHA核验；X5原隔离容器顺序运行原逐行对照、逐行norm、匹配head、graph+4096预算等项，保存独立round-5结果。此为5/5；若前置正确性仍未解决，按AGENTS停止代码修改，保留证据和后续建议，不擅自进入第6轮或改验收标准。
+
+### 第 5 轮结果、追加预算及用户修订验收标准
+
+- 候选 `cd85309fd2d2681593a34f1cbf2bfc8aba8407be` 已本地提交、push、X5 pull 并核验同 SHA；生产模型、Scheduler、算子均未修改。所有以下诊断退出 0；这表示诊断完成，不代表 CDB 已实现或性能通过。
+- `round-5/serial-linear-probe`：第 6 题 step2，首个相同输入而不同输出为第二 loop 的物理 layer39 `post_attention_layernorm_2`，max abs 0.0009765625、RMSE 0.00003996339。误差经递归累积，hidden max 0.3125。
+- `serial-linear-norm`：逐行 linear+norm 后 hidden 完全相同，logits max 0.125、RMSE 0.00070745；`serial-linear-head` 只补 head 仍有 hidden 差异；`serial-all` 三者逐行后 hidden/logits 全部相同。均为 8 题×13 点，0 token 差异；逐行模式仅定位，不进入生产热路径。
+- `graph-prefill-joint`：4096 prefill 预算下真实 9 次 extend replay、108 次 decode replay；与 native joint eager logits 相同。`graph-prefill-serial`：16 次 extend replay、108 次 decode replay；复现第 5 题 step11 的近 tie token 差异。图重放不是这组差异的来源。
+- `serial-all-q1q5-long`：Q1/Q5×512 位置，共1024点，hidden/logits 完全相同，B1/B2 均与冻结 serving B1 tokens 一致。不能将这项逐行诊断的耗时作为生产性能。
+- 本地 AST、CLI help、diff-check 退出0；本地环境无 ruff，不记 lint 通过。原始结果留在 `/home/ruoxi/repo/test/results/loopspec/2026-10-29-cdb-v2/round-5/`。
+- 用户明确追加10轮，本任务总预算改为 **15轮，已用5/15**，候选6尚未开始。此前5/5及原技能文字是历史状态，不再作为本次授权后的停止点。
+- 用户随后明确要求“请根据实际计算情况固定误差范围，不要要求过于严格，主要是运行逻辑要正确”。据此修订本任务数值验收：先用**未修改的原生 BF16 基线**测量 B1/B8 同前缀长序列的误差范围，修改 CDB 前冻结带明确裕量的门槛；不再要求跨 batch 生成 token 逐位一致。保留高 margin 翻转核查、非有限值/错误位置/错误深度拒绝和输出停止语义检查。用户此项授权优先于此前严格阈值与逐 token 相等约定；不是候选失败后擅自放宽。
+- 逻辑验收仍严格：完整 R4、深度/分支 KV 隔离、每 token 只分配/提交一次、无输出步不提交、引用/取消/回收安全、LoopSpec 接受/残差分布正确。性能仍沿用预登记的配对≤2%口径，记录输出工作量差异；不同生成长度不能直接推导调度加速。
+- 同一未改变候选追加 `native-joint-long`、`native-serial-long`，各 `--steps 496`（8题共同可比较497个位置，受Q7 EOS限制），固定B1 teacher-forcing。前者已退出0，后者运行中；待两者完成后固定数值包络。此为第5轮计划内扩大采样，不新增源码候选。
+
+### 数值校准冻结（候选6之前）
+
+两组均退出0，各3976个同前缀位置（8×497）；joint/serial 的 argmax 差异为24/18，翻转时 B1 top2 margin 最大0.25/0.125。逐位置 logits 最大绝对误差的 P99 为2.027344/1.597656，逐位置 RMSE 的 P99 为0.384274/0.312777；极端最大值分别12.078125/10.652344和1.536603/1.542996。少数远离决策边界的坐标有较大差异，因此不用全词表最大值单独决定模型是否正确。
+
+按两组较大值留约25%裕量并向上取整，冻结 `numerical_envelope.json`：各深度分别检查逐位置 max-abs/RMSE 的 P99 与最大值，logits P99≤2.6/0.5、极端值≤16/2。所有值必须有限。greedy 在相同前缀上翻转比例≤1.25%，且参考 margin>0.5 时不能翻转；这比基线最大0.604%留有余量，同时保留高置信度错误拦截。此包络只校准于 Ouro-2.6B BF16/R4/AIME 本负载，不泛化到其他模型或 dtype。功能测试必须独立验证 KV 地址、depth、分支/请求归属；数值门槛不能替代逻辑证明。
+
+### 候选 6/15 修改前计划：通用 mixed-depth 执行基础
+
+1. 目的：为普通 Scheduler 提供一个 loop 的执行入口，解除物理 batch 必须共享 depth 的限制；遵循 vllm-rlt MetadataBuilder 的逐行 KV plane 选择和独立执行描述，复用 SGLang ForwardBatch/translator/模型接口。
+2. 步骤：增加按执行行选择 depth 的 compact KV view（只处理活跃行）；增加通用 pre/core/post runner 和 decode graph，depth/request/position作为图输入；用原生 AR teacher forcing 和不同 depth/行排列验证。随后才接入 Scheduler 准入/回填；本候选不宣称 serving CDB 完成。
+3. 范围：mem_cache/timeline_pool.py，新增 model_executor/recurrent_runner.py，Ouro/Raven 的最终 hidden 读出接口，本目录数值包络及定向 GPU 验证脚本。保留旧 LoopSpec 接受/拒绝语义，不复制 EAGLE/DFLASH。生产 Scheduler 接线属于后续候选。
+4. 标准：上述冻结数值包络；同一深度对应独立 KV，行重排不改变归属，重复图 replay 读取新的 request/depth/length；无隐式 target 深度变化。普通 AR 的输出/采样仍由原生接口处理。
+5. 风险：捕图固化深度或请求；padding写入有效槽；额外全表拷贝；状态被后续replay覆盖。使用 compact 活跃行视图、零槽padding和显式图输出生命周期；调用者持有状态。
+6. 验证：AST/diff及已有CPU契约；本地commit/push loopspec-test、X5 pull同SHA/import核验；空闲GPU0上顺序执行混合深度与eager/graph teacher-forced检查，结果只写round-6；下一阶段再测真实Scheduler E2E，执行器测试时间不作serving性能结论。

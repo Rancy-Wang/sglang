@@ -1,0 +1,153 @@
+"""Native one-loop execution shared by ordinary and speculative scheduling.
+
+The scheduler owns admission, logical KV slots and state lifetimes. This runner
+does not sample, commit tokens or run a private until-output loop. Its input is
+the SGLang ForwardBatch plus carried hidden state and per-sequence depth, the
+equivalent of vllm-rlt's StateSpan/ExecutionBatch execution metadata.
+"""
+
+from dataclasses import dataclass
+
+import torch
+
+from sglang.srt.mem_cache.timeline_pool import MixedTimelineRuntime
+from sglang.srt.model_executor.forward_batch_info import (
+    CaptureHiddenMode,
+    ForwardBatch,
+    ForwardMode,
+)
+from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.runner_utils.capture_mode import model_capture_mode
+from sglang.srt.speculative.spec_info import SpeculativeAlgorithm
+
+
+@dataclass
+class RecurrentState:
+    hidden: torch.Tensor
+    injected: torch.Tensor | None = None
+
+
+class RecurrentRunner:
+    def __init__(self, runner, *, max_rows, request_pool=None):
+        self.runner, self.model = runner, runner.model
+        self.timeline = MixedTimelineRuntime(
+            runner, request_pool or runner.req_to_token_pool, max_rows
+        )
+
+    def prepare(self, batch, *, token_rows=None):
+        depths = torch.zeros_like(batch.req_pool_indices)
+        mapped, backend = self.timeline.target_batch(
+            batch, "pre", depths, token_rows
+        )
+        with forward_context(ForwardContext(backend)):
+            hidden, injected = self.model.prepare_recurrent(
+                batch.input_ids, batch.positions, mapped
+            )
+        return RecurrentState(hidden, injected)
+
+    def advance(self, batch, state, depths, *, token_rows=None):
+        mapped, backend = self.timeline.target_batch(
+            batch, "core", depths, token_rows
+        )
+        # Timeline storage folds depth into token slots. Layer zero's core
+        # plane therefore works for every row, even when depths differ.
+        groups = [(0, 0, len(state.hidden), mapped, backend)]
+        with forward_context(ForwardContext(backend)):
+            hidden = self.model.advance_recurrent(
+                state.hidden, batch.positions, groups, state.injected
+            )
+        return RecurrentState(hidden, state.injected)
+
+    def finish(self, batch, state, depths, *, token_rows=None):
+        """Full target readout; keep native logprob/hidden-state semantics."""
+        mapped, backend = self.timeline.target_batch(
+            batch, "post", depths, token_rows
+        )
+        groups = [(0, 0, len(state.hidden), mapped, backend)]
+        with forward_context(ForwardContext(backend)):
+            hidden = self.model.finish_recurrent(
+                state.hidden, batch.positions, groups
+            )
+            return self.model.logits_processor(
+                batch.input_ids, hidden, self.model.lm_head, batch
+            )
+
+    def readout(self, batch, state, depths, *, token_rows=None):
+        """Draft endpoints use the same core and depth-separated post KV."""
+        mapped, backend = self.timeline.target_batch(
+            batch, "post", depths, token_rows
+        )
+        groups = [(0, 0, len(state.hidden), mapped, backend)]
+        with forward_context(ForwardContext(backend)):
+            return self.model.readout_recurrent(
+                state.hidden, batch.positions, groups
+            )
+
+
+class RecurrentDecodeGraph:
+    """One core graph per row bucket; request ids and depths stay dynamic.
+
+    Replay outputs are borrowed until the next replay. Owners must copy live
+    carried states into their own storage before reusing this graph. Padding
+    uses logical slot zero, which every timeline maps to the discard slot.
+    """
+
+    def __init__(self, recurrent, rows):
+        self.recurrent, self.rows = recurrent, rows
+        runner, model = recurrent.runner, recurrent.model
+        device = runner.device
+        self.depths = torch.zeros(rows, dtype=torch.int64, device=device)
+        self.state = RecurrentState(
+            torch.zeros(
+                (rows, model.config.hidden_size),
+                dtype=model.get_input_embeddings().weight.dtype,
+                device=device,
+            )
+        )
+        if model.has_injection:
+            self.state.injected = torch.zeros_like(self.state.hidden)
+        self.batch = ForwardBatch(
+            forward_mode=ForwardMode.DECODE,
+            batch_size=rows,
+            input_ids=torch.zeros(rows, dtype=torch.int64, device=device),
+            req_pool_indices=torch.zeros(rows, dtype=torch.int64, device=device),
+            seq_lens=torch.ones(rows, dtype=torch.int32, device=device),
+            seq_lens_sum=rows * recurrent.timeline.source.shape[1],
+            out_cache_loc=torch.zeros(rows, dtype=torch.int64, device=device),
+            positions=torch.zeros(rows, dtype=torch.int64, device=device),
+            capture_hidden_mode=CaptureHiddenMode.NULL,
+            spec_algorithm=SpeculativeAlgorithm.NONE,
+        )
+        stream = torch.cuda.Stream(device=device)
+        stream.wait_stream(torch.cuda.current_stream(device))
+        with torch.cuda.stream(stream), model_capture_mode():
+            for _ in range(3):
+                self.run()
+        stream.synchronize()
+        self.graph = torch.cuda.CUDAGraph()
+        with model_capture_mode(), torch.cuda.graph(self.graph, stream=stream):
+            self.run()
+        torch.cuda.current_stream(device).wait_stream(stream)
+
+    def run(self):
+        self.output = self.recurrent.advance(self.batch, self.state, self.depths)
+
+    def replay(self, batch, state, depths):
+        count = batch.batch_size
+        if not batch.forward_mode.is_decode() or not 0 < count <= self.rows:
+            raise ValueError("Incompatible recurrent decode graph batch")
+        for name in ("input_ids", "req_pool_indices", "seq_lens", "out_cache_loc", "positions"):
+            target, source = getattr(self.batch, name), getattr(batch, name)
+            target[:count].copy_(source)
+            target[count:].fill_(1 if name == "seq_lens" else 0)
+        self.depths[:count].copy_(depths)
+        self.depths[count:].zero_()
+        self.state.hidden[:count].copy_(state.hidden)
+        self.state.hidden[count:].zero_()
+        if self.state.injected is not None:
+            if state.injected is None:
+                raise ValueError("Recurrent model requires carried input injection")
+            self.state.injected[:count].copy_(state.injected)
+            self.state.injected[count:].zero_()
+        self.graph.replay()
+        return RecurrentState(self.output.hidden[:count], state.injected)

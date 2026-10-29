@@ -1,0 +1,15 @@
+{
+  "calibration_commit": "cd85309fd2d2681593a34f1cbf2bfc8aba8407be",
+  "calibration": ["round-5/native-joint-long", "round-5/native-serial-long"],
+  "scope": "Ouro-2.6B BF16 R4, first 8 AIME problems, 497 teacher-forced positions each",
+  "hidden": [
+    {"p99": {"max_abs": 0.24, "rmse": 0.035}, "max": {"max_abs": 0.55, "rmse": 0.085}},
+    {"p99": {"max_abs": 0.4, "rmse": 0.075}, "max": {"max_abs": 2.0, "rmse": 0.55}},
+    {"p99": {"max_abs": 0.72, "rmse": 0.16}, "max": {"max_abs": 4.25, "rmse": 1.05}},
+    {"p99": {"max_abs": 1.25, "rmse": 0.28}, "max": {"max_abs": 6.25, "rmse": 1.15}}
+  ],
+  "logits": {"p99": {"max_abs": 2.6, "rmse": 0.5}, "max": {"max_abs": 16.0, "rmse": 2.0}},
+  "max_argmax_flip_fraction": 0.0125,
+  "protected_reference_margin": 0.5,
+  "require_finite": true
+}

@@ -269,6 +269,9 @@ class OuroForCausalLM(nn.Module):
 
         return bf16_gemm_dispatch(hidden, self.lm_head.weight, None).float()
 
+    def finish_recurrent(self, hidden, positions, groups):
+        return hidden
+
     def get_embed_and_head(self):
         return self.model.embed_tokens.weight, self.lm_head.weight
 
