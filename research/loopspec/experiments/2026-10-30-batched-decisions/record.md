@@ -7,7 +7,7 @@
 - 当前基线：`7df281a0e656e368c90f529d8d84305db99001f5`，分支 `loopspec-test`，制定计划前工作树干净。
 - 前次测量 SHA：`da56f8103931e5b3a2451219b4e0c4b3dcb16286`；之后仅分析和结果记录改变。实施前重新确认生产源码 diff。
 - 官方参考 SHA：`41aa710ed7c9ce908cffa03597be5d1df19d7b56`，只读。
-- 新修复任务预算：4/5（按本对话用户提供的 AGENTS.md 五轮上限；磁盘技能仍写十轮，用户要求优先）。前次 benchmark 任务保持 6/10，不重置历史计数。每个源码／测试／行为配置候选的修改＋验证记一轮。
+- 新修复任务预算：5/5（按本对话用户提供的 AGENTS.md 五轮上限；磁盘技能仍写十轮，用户要求优先）。前次 benchmark 任务保持 6/10，不重置历史计数。每个源码／测试／行为配置候选的修改＋验证记一轮。
 - 正式 `loopspec` 分支未获本次晋升授权。
 
 ## 1. 修改目的与证据
@@ -188,3 +188,9 @@ X5 原始结果根目录：`/home/ruoxi/repo/test/results/loopspec/2026-10-30-ba
 ### 第 4 轮 / 5（配对实验分析工具）
 
 新增partition_profile.py、report.py，执行前述互斥时间分区及带符号百分比方案，复用旧token-path分析器。不改生产或负载。先检查区间重叠去重和真实trace时钟对齐，再生成全部报告。完成剩余bs2/4旧版固定前缀对照后运行原计划完整性能及Profile矩阵；各组数据记录实际提交。
+
+第四轮本地compile/diff及互斥区间验证exit0。真实历史trace检验exit1：Chrome同时含CPU user_annotation和同名GPU user_annotation，按名字选forward导致1153对641，时钟校验正确拒绝了该输入。未产生错误比例。
+
+### 第 5 轮 / 5（分析标签过滤修正，最终候选）
+
+partition_profile.py的forward时钟锚点仅选CPU user_annotation，与原生host span对应；GPU annotation不作重复锚点。其余代码不变。bs1/2/4旧版与新版全部record完全一致（64/128/256位置，含hidden/logits误差和argmax）；确认1%翻转率失败为本次修复前既有。bs8/16通过固定envelope。第5轮不改变数值标准，全部最终性能/Profile验证继续执行；如后续工具或实现需再次修改，按用户五轮上限停止并报告。

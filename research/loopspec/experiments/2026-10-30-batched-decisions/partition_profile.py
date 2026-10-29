@@ -71,7 +71,8 @@ def partition(folder):
     assert len(files) == 1, 'This experiment uses one GPU rank'
     with gzip.open(files[0], 'rt') as stream:
         events = json.load(stream)['traceEvents']
-    forwards = sorted((e for e in events if e.get('name') == 'recurrent::scheduler.forward'), key=lambda e:e['ts'])
+    forwards = sorted((e for e in events if e.get('cat') == 'user_annotation'
+                       and e.get('name') == 'recurrent::scheduler.forward'), key=lambda e:e['ts'])
     native = sorted((r for r in records if r['stage'] == 'scheduler.forward'), key=lambda r:r['start_ns'])
     assert len(forwards) == len(native) > 0
     offsets = [e['ts']-r['start_ns']/1000 for e,r in zip(forwards,native,strict=True)]
