@@ -278,3 +278,5 @@ CDB 前后的主对照保留各自生产可用的 graph 路径；普通 AR 若�
 上表包含 profiler 开销。单次 core graph 的 GPU stream interval median：depth0路径13.768ms、depth3路径15.461ms；不同上下文长度/路径不能直接归因于depth。post graph约0.182ms，verify GPU stream interval约0.437–0.443ms。verify CPU wall约13–14ms包含等待此前core完成，不是验证kernel耗时。整次trace kernel忙碌时间并集8051.910ms；nested GPU intervals不可相加，各lane不能重复计共享core耗时。
 
 结论：原短prompt验收不能外推到本次AIME长文本/多请求输入；先保留失败证据并定位，不修改原数值或token阈值，不把尚未实现的CDB当作分歧来源。第3轮诊断候选在测试前补充M=2/4/8与LM head对照，属于同一未验证候选，不新增轮次。
+
+第3轮诊断工具候选同时完善已有 analyze_profile.py 的归因：按每次输出汇总同一stage的多次调用（depth0有4个core调用，不能把单次core中位数误标为单token成本）；按rid导出receive、共享batch引用和结果处理事件。Scheduler在schedule stream记录的GPU events不代表overlap forward时长，明确排除这项错误归因；完整GPU忙碌时间仍来自kernel trace。此改动只分析已采集文件，不影响服务。新增输出shared-batches.json，子stage的inclusive时间不可横向求和。

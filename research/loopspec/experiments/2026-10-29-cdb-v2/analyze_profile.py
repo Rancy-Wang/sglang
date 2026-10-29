@@ -23,10 +23,13 @@ def main():
     runs = [json.loads(p.read_text()) for p in sorted(args.directory.glob("cohort-*.json"))]
     stages, paths = collections.defaultdict(list), collections.defaultdict(list)
     token_rows = []
+    shared_batches = []
+    request_rows = collections.defaultdict(lambda: {"shared_batch_ids": [], "results": []})
     path_stages = collections.defaultdict(lambda: collections.defaultdict(list))
     for path in sorted((args.directory / "trace").glob("*-recurrent-*.jsonl")):
         rows = [json.loads(line) for line in path.read_text().splitlines()]
         by_id = {row["id"]: row for row in rows}
+        output_stages = collections.defaultdict(lambda: collections.defaultdict(list))
         for row in rows:
             stage = row["stage"]
             if stage == "loopspec.graph":
@@ -37,11 +40,39 @@ def main():
                 parent = by_id[parent["parent"]]
             if parent["stage"] == "loopspec.output":
                 path_stages[str(parent["input"]["entry_depth"])][stage].append(row)
+                output_stages[parent["id"]][stage].append(row)
+            metadata = row.get("input", {})
+            if stage == "scheduler.receive":
+                request_rows[metadata["rid"]]["receive_ns"] = row["start_ns"]
+            if stage == "scheduler.forward":
+                batch_id = len(shared_batches)
+                shared_batches.append({"id": batch_id, **metadata,
+                                       "start_ns": row["start_ns"], "end_ns": row["end_ns"],
+                                       "cpu_ms": row["cpu_ms"]})
+                for rid in metadata["rids"]:
+                    request_rows[rid]["shared_batch_ids"].append(batch_id)
+            if stage == "scheduler.result":
+                for rid, length in zip(metadata["rids"], metadata["output_lengths"], strict=True):
+                    request_rows[rid]["results"].append({"start_ns": row["start_ns"],
+                        "end_ns": row["end_ns"], "cpu_ms": row["cpu_ms"],
+                        "output_length_before_processing": length, "mode": metadata["mode"]})
+        for row in rows:
             if row["stage"] == "loopspec.output":
                 before, after = row["input"], row["output"]
                 paths[str(before["entry_depth"])].append(row)
                 token_rows.append({**before, **after, "new_cycles": after["cycles"] - before["cycles"],
-                                   "cpu_ms": row["cpu_ms"], "gpu_stream_ms": row.get("gpu_stream_ms")})
+                                   "cpu_ms": row["cpu_ms"], "gpu_stream_ms": row.get("gpu_stream_ms"),
+                                   "stages": {name: {"calls": len(group),
+                                       "cpu_ms": sum(r["cpu_ms"] for r in group),
+                                       "gpu_stream_ms": sum(r.get("gpu_stream_ms", 0) for r in group)}
+                                       for name, group in output_stages[row["id"]].items()}})
+    for rid, request in request_rows.items():
+        request["rid"] = rid
+        if request["shared_batch_ids"]:
+            first = shared_batches[request["shared_batch_ids"][0]]["start_ns"]
+            request["first_forward_ns"] = first
+            if "receive_ns" in request:
+                request["receive_to_first_forward_ms"] = (first - request["receive_ns"]) / 1e6
     summary = {
         "note": "CPU/GPU spans are inclusive intervals; nested/shared spans must not be summed. Profile latency is diagnostic only.",
         "requests": [{"question": q + 1,
@@ -60,6 +91,19 @@ def main():
                                                 for name, group in path_stages[str(depth)].items()}}
                         for depth in range(4)},
     }
+    summary["stage_time_per_output"] = {
+        str(depth): {stage: {key: describe([row["stages"].get(stage, {}).get(key, 0)
+                                          for row in token_rows if row["entry_depth"] == depth])
+                            for key in ("calls", "cpu_ms", "gpu_stream_ms")}
+                    for stage in path_stages[str(depth)]}
+        for depth in range(4)
+    }
+    summary["server_requests"] = list(request_rows.values())
+    summary["shared_batch_note"] = (
+        "shared-batches.json contains CPU submission intervals, not GPU duration. "
+        "Scheduler GPU events recorded on a scheduling stream cannot time an overlapped forward. "
+        "Per-output stage totals sum same-name calls only; nested stages must not be added together."
+    )
     kernels = collections.defaultdict(list)
     intervals = []
     for path in sorted((args.directory / "trace").glob("*.trace.json.gz")):
@@ -79,6 +123,7 @@ def main():
                           sorted(kernels.items(), key=lambda item: -sum(item[1]))}
     (args.directory / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     (args.directory / "output-paths.json").write_text(json.dumps(token_rows, indent=2) + "\n")
+    (args.directory / "shared-batches.json").write_text(json.dumps(shared_batches, indent=2) + "\n")
     print(json.dumps(summary, indent=2))
 
 
