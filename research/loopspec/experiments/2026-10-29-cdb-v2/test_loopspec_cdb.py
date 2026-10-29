@@ -57,6 +57,43 @@ class TestCDB(unittest.TestCase):
         self.assertEqual(a.new_seq_lens.tolist(), [42, 31, 53])
         self.assertEqual(a.future_indices.tolist(), [3, 8, 7])
 
+    def test_penalizer_survives_source_batch_release_and_merge_filter(self):
+        import gc
+        import weakref
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from sglang.srt.managers.schedule_batch import Req, ScheduleBatch
+        from sglang.srt.sampling.sampling_params import SamplingParams
+        from sglang.srt.sampling.sampling_batch_info import SamplingBatchInfo
+        from sglang.srt.speculative.loopspec.utils import split_batch
+
+        reqs = [Req(rid=str(i), origin_input_text="", origin_input_ids=[1],
+                    sampling_params=SamplingParams(frequency_penalty=penalty))
+                for i, penalty in enumerate((.2, .4))]
+        batch = ScheduleBatch(reqs=reqs, device="cpu",
+            model_config=SimpleNamespace(is_encoder_decoder=False, vocab_size=16),
+            req_pool_indices=torch.tensor([1, 2]), req_pool_indices_cpu=torch.tensor([1, 2]),
+            seq_lens=torch.tensor([1, 1]), orig_seq_lens=torch.tensor([1, 1]),
+            seq_lens_cpu=torch.tensor([1, 1]))
+        config = SimpleNamespace(deterministic=SimpleNamespace(enable_deterministic_inference=False),
+            features=SimpleNamespace(enable_custom_logit_processor=False, enable_watermark=False))
+        with patch('sglang.srt.sampling.sampling_batch_info.get_exec', return_value=config):
+            batch.sampling_info = SamplingBatchInfo.from_schedule_batch(batch, 16)
+            views = split_batch(batch)
+        reference = weakref.ref(batch)
+        del batch
+        gc.collect()
+        self.assertIsNone(reference())
+        views[0].merge_batch(views[1])
+        views[0].filter_batch(keep_indices=[1])
+        penalties = views[0].sampling_info.penalizer_orchestrator
+        penalties.cumulate_output_tokens(torch.tensor([3]))
+        logits = torch.zeros(1, 16)
+        penalties.apply(logits)
+        expected = torch.zeros_like(logits)
+        expected[0, 3] = -.4
+        torch.testing.assert_close(logits, expected)
+
     def test_batched_residual_distribution(self):
         torch.manual_seed(11907)
         n = 100000

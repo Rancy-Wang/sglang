@@ -23,7 +23,7 @@ def split_batch(batch):
         view = copy.copy(batch)
         view.spec_info = copy.copy(batch.spec_info)
         view.sampling_info = SamplingBatchInfo.from_schedule_batch(
-            batch, batch.model_config.vocab_size
+            view, view.model_config.vocab_size
         )
         view.filter_batch(keep_indices=[i])
         views.append(view)

@@ -511,3 +511,17 @@ graph两项实际均108次decode replay、0次prefill replay，logits与eager逐
 4. 标准：新包络v3冻结在后续候选测量前；仍严格R4、owner/物化/剪枝守恒和高margin不翻转；8请求/bs1服务完整输出、原生API、AR回归；E2E≤2%不变。
 5. 风险：低容量下pending分支的额外KV需求、不同depth组合/采样残差，长输出和graph共享池寿命；统计采样继续CPU解析分布/Monte Carlo验证，服务采样只证明接线和输出正常，不能替代分布检验。
 6. 验证：CPU/AST/diff后Git同SHA同步；完整d1 graph/eager、d2/双depth数值/HTTP，生命周期与低容量8请求，普通CDB回归；bs1/8请求profile和10次重复配对，保留每请求时间与共享步骤说明。预算17/20，正式分支不动。
+
+### 第17轮结果与候选18/20计划
+
+- SHA c6376d3471f812e50ea3c207a3deabfa109df2d3；CPU8/AST/diff通过，同SHA同步。ls-graph-full完整3976位置通过v3，exit0，真实分支/owner/物化检查通过。
+- ls-pressure exit0：1200逻辑KV容量、chunk32、8请求各128tokens全部返回；触发两次真实retraction（回收162/202 tokens），重入成功。makespan5916.31ms仅为压力诊断，不用于性能结论。
+- ls-lifecycle exit1：此前生命周期继续成功，新增8请求sampling+penalties中出现BatchedPenalizerOrchestrator.batch弱引用已失效。split_batch在独立view里创建了新SamplingBatchInfo却仍传入旧batch；旧batch释放后filter访问None.reqs。此为确切生命周期bug，保持失败记录。后续profile队列按失败自动停止，尚未执行。
+
+候选18/20六项计划：
+1. 目的：修复每请求batch view的penalizer归属，确保原生sampling和过滤生命周期可靠。
+2. 步骤：构造SamplingBatchInfo时绑定新view；新增真实CPU原生SamplingBatchInfo/penalizer回归，删除原batch、GC后merge/filter并核对penalty值。
+3. 范围：loopspec/utils.py一处owner修正及test_loopspec_cdb.py、记录；不复用Eagle/Dflash、不改采样数学或数值门槛。
+4. 标准：CPU生命周期回归、真实sampling/接口/lifecycle全部通过；冻结v3、严格KV和E2E≤2%均保留。
+5. 风险：合并后弱引用归属、retraction后请求历史、双depth和无graph分支；通过原生过滤/合并及GPU接口检查覆盖，不用greedy替代。
+6. 验证：CPU/AST/diff，Git同SHA；完整扩展lifecycle，pressure与8请求/bs1 profiles、10次配对；补d2/双depth/eager数值及普通AR回归。预算18/20，正式分支不变。
