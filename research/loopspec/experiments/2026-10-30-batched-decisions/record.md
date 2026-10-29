@@ -206,3 +206,15 @@ partition_profile.py的forward时钟锚点仅选CPU user_annotation，与原生h
 ### 第 7 轮 / 10（归因估算的扰动敏感性）
 
 只读审查发现：旧Profile的主机插桩扰动较大，按整段墙钟比例缩放会同时缩小实测GPU kernel时间。因此单一投影不足以给出稳健阶段百分比。目的：显式报告这项不确定性，并区分加速比本身的跌幅和“保持bs1加速比所需省下的时间”。步骤：时间轴分区保留GPU/CPU/未覆盖资源；除整体比例投影外增加GPU忙时固定、仅缩放CPU/空隙的敏感性口径；加入实际branch行工作量和按endpoint数核对的readout graph覆盖。范围仅partition_profile.py/report.py及记录。成功标准：资源时间总和等于Profile E2E，两种投影各阶段有符号贡献之和等于归一化损失；无下降/不可用情形明确标识。风险：第二口径仍假设Profile kernel时长和工作形状能代表无Profiler运行，二者差异不是置信区间，更不是精确因果比例。验证：本地重叠区间检查，采集后真实trace及全部报告检查；生产源码、GPU负载和验收阈值不变。
+
+第7轮本地 compile/diff、区间资源去重、未知GPU与空隙区分、Markdown表格列数检查 exit0。分析提交208d54b27969106cca0a18f576453883558489b0已push，但X5仍冻结16ed789a493981b61f63c5d9720564b66b4e8369，待所有采集结束再pull。用户最新明确上限10轮，目前7/10。
+
+2026-10-30（X5 UTC 2026-10-29 17:41）：完整无Profiler矩阵30/30完成，performance.exit=0、status.execution_complete=true。各格2 warmup + 5 repeat，全部输出512 token/request。新版在10组配对单元中均满足 E2E ≤ old×1.02，且每格新版5次观测的最大值小于旧版5次的最小值；这是本次观测范围，不是统计置信区间。bs16同时发送 AR/old/new 中位数24.679/24.871/19.172秒，交错25.381/25.269/19.752秒。性能log已通过现有ControlMaster复制本地 results/performance.log，并生成轻量 performance-log-summary.json 和图表。Profile串行任务按计划自动开始；尚未用未完成的Profile推导归因比例。
+
+完整Profile 30/30完成，profile.exit=0；随后X5才pull至208d54b27开始离线分析，GPU已空闲。首个真实trace的时间轴对齐P95误差9.40µs、最大47.13µs，互斥时间分区/endpoint数/graph集合断言通过。分析仅使用CPU，3个独立单元并行。排队执行记录PID3129860，日志round-3/analysis.log、退出码round-3/analysis.exit。
+
+### 第 8 轮 / 10（采集配置审计）
+
+离线只读审计首次把完整cuda_graph_config作为AR/LoopSpec的公共常量，触发断言。核对cuda_graph_hook.py的既有generate_decode_cuda_graph_batch_sizes后确认：AR默认decode集合[1,2,4,8,12,16]，spec默认[1,2,3,4,5,6,7,8,10,12,14,16]，公开graph max参数仍同为16；旧新LoopSpec集合完全相同。不是本次生产改动引起，不能把它隐藏为“内部配置完全相同”。
+
+目的：把60个采集单元的配置/输入/版本审计固化并记录算法默认图集合差异。步骤：验证公共参数、到达时间、预热/重复数、数据/包版本；逐bs核对全部phase/variant的prompt IDs；单独核对AR与spec默认集合及除decode.bs外图配置一致；输出配置来源与启动内存清单。范围：新增validate_captures.py和实验记录/结果，不改生产或已有Profile分析器。成功标准：60单元全部满足公开负载契约，旧新LS完整图配置一致，实际source SHA/路径匹配冻结记录。风险：启动内存不是运行峰值，默认图集合不是严格相同的padding形状，报告明确保留。验证：本地语法/diff检查；当前离线分析结束后经Git同步X5，运行validate_captures.py，保存退出码和capture-validation.json。保持原性能/数值门槛，不重采未受影响的GPU数据。
