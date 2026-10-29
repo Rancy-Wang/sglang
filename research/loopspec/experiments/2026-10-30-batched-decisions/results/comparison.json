@@ -1,0 +1,112 @@
+[
+  {
+    "bs": 1,
+    "pattern": "simultaneous",
+    "ar_ms": 14045.121202,
+    "old_ms": 6265.539358,
+    "new_ms": 5965.561652,
+    "old_speedup": 2.2416459939824387,
+    "new_speedup": 2.3543669517339185,
+    "new_vs_old_reduction_percent": 4.7877395521740755,
+    "performance_gate": true
+  },
+  {
+    "bs": 2,
+    "pattern": "simultaneous",
+    "ar_ms": 17583.728397,
+    "old_ms": 7678.44607,
+    "new_ms": 7039.333834,
+    "old_speedup": 2.290011316964293,
+    "new_speedup": 2.4979250610434964,
+    "new_vs_old_reduction_percent": 8.323458030095921,
+    "performance_gate": true
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "ar_ms": 17896.310159,
+    "old_ms": 9892.594256,
+    "new_ms": 8536.566527,
+    "old_speedup": 1.809061374183585,
+    "new_speedup": 2.096429530818556,
+    "new_vs_old_reduction_percent": 13.707503753907114,
+    "performance_gate": true
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "ar_ms": 18760.002119,
+    "old_ms": 13452.959527,
+    "new_ms": 10918.617433,
+    "old_speedup": 1.394488854392879,
+    "new_speedup": 1.7181664468159228,
+    "new_vs_old_reduction_percent": 18.838546930239353,
+    "performance_gate": true
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "ar_ms": 24678.646747,
+    "old_ms": 24870.995551,
+    "new_ms": 19172.214003,
+    "old_speedup": 0.9922661397447652,
+    "new_speedup": 1.287209017338236,
+    "new_vs_old_reduction_percent": 22.91336322389743,
+    "performance_gate": true
+  },
+  {
+    "bs": 1,
+    "pattern": "staggered",
+    "ar_ms": 14065.565476,
+    "old_ms": 6266.705952,
+    "new_ms": 5966.415619,
+    "old_speedup": 2.244491058577755,
+    "new_speedup": 2.35745653239582,
+    "new_vs_old_reduction_percent": 4.791836976237307,
+    "performance_gate": true
+  },
+  {
+    "bs": 2,
+    "pattern": "staggered",
+    "ar_ms": 17525.720481,
+    "old_ms": 8143.500242,
+    "new_ms": 7512.039536,
+    "old_speedup": 2.152111495080619,
+    "new_speedup": 2.3330176042087327,
+    "new_vs_old_reduction_percent": 7.754168198378009,
+    "performance_gate": true
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "ar_ms": 18032.775536,
+    "old_ms": 10022.69901,
+    "new_ms": 8672.382279,
+    "old_speedup": 1.7991935623336652,
+    "new_speedup": 2.0793335620900852,
+    "new_vs_old_reduction_percent": 13.47258587385236,
+    "performance_gate": true
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "ar_ms": 19118.696986,
+    "old_ms": 13794.997753,
+    "new_ms": 11278.91331,
+    "old_speedup": 1.385915193921815,
+    "new_speedup": 1.695083246100417,
+    "new_vs_old_reduction_percent": 18.23910730578283,
+    "performance_gate": true
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "ar_ms": 25380.627499,
+    "old_ms": 25269.429191,
+    "new_ms": 19751.720099,
+    "old_speedup": 1.0044005073149656,
+    "new_speedup": 1.2849831494060602,
+    "new_vs_old_reduction_percent": 21.83551140112495,
+    "performance_gate": true
+  }
+]

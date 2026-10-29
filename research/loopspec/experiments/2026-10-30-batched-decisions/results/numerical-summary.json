@@ -1,0 +1,125 @@
+{
+  "rows": [
+    {
+      "bs": 1,
+      "source": "/home/ruoxi/repo/test/results/loopspec/2026-10-30-batched-decisions/round-3/numeric-b1/report.json",
+      "success": false,
+      "failures": [
+        "argmax flip fraction 2/64"
+      ],
+      "positions": 64,
+      "argmax_flips": 2,
+      "max_logit_rmse": 0.08896814286708832,
+      "old_new_records_identical": true,
+      "old_failures": [
+        "argmax flip fraction 2/64"
+      ]
+    },
+    {
+      "bs": 2,
+      "source": "/home/ruoxi/repo/test/results/loopspec/2026-10-30-batched-decisions/round-3/numeric-b2/report.json",
+      "success": false,
+      "failures": [
+        "argmax flip fraction 2/128"
+      ],
+      "positions": 128,
+      "argmax_flips": 2,
+      "max_logit_rmse": 0.0763019397854805,
+      "old_new_records_identical": true,
+      "old_failures": [
+        "argmax flip fraction 2/128"
+      ]
+    },
+    {
+      "bs": 4,
+      "source": "/home/ruoxi/repo/test/results/loopspec/2026-10-30-batched-decisions/round-3/numeric-b4/report.json",
+      "success": false,
+      "failures": [
+        "argmax flip fraction 3/256"
+      ],
+      "positions": 256,
+      "argmax_flips": 3,
+      "max_logit_rmse": 0.3293909430503845,
+      "old_new_records_identical": true,
+      "old_failures": [
+        "argmax flip fraction 3/256"
+      ]
+    },
+    {
+      "bs": 8,
+      "source": "/home/ruoxi/repo/test/results/loopspec/2026-10-30-batched-decisions/round-3/numeric-b8/report.json",
+      "success": true,
+      "failures": [],
+      "positions": 512,
+      "argmax_flips": 4,
+      "max_logit_rmse": 0.3907850980758667
+    },
+    {
+      "bs": 16,
+      "source": "/home/ruoxi/repo/test/results/loopspec/2026-10-30-batched-decisions/round-1/numerical-matched-prefix/report.json",
+      "success": true,
+      "failures": [],
+      "positions": 1024,
+      "argmax_flips": 5,
+      "max_logit_rmse": 1.0056489706039429
+    }
+  ],
+  "calibration": {
+    "hidden": [
+      {
+        "p99": {
+          "max_abs": 0.390625,
+          "rmse": 0.05226527340710163
+        },
+        "max": {
+          "max_abs": 0.390625,
+          "rmse": 0.05226527340710163
+        }
+      },
+      {
+        "p99": {
+          "max_abs": 1.990966796875,
+          "rmse": 0.43787624686956406
+        },
+        "max": {
+          "max_abs": 1.990966796875,
+          "rmse": 0.43787624686956406
+        }
+      },
+      {
+        "p99": {
+          "max_abs": 3.203125,
+          "rmse": 0.6991171091794968
+        },
+        "max": {
+          "max_abs": 3.203125,
+          "rmse": 0.6991171091794968
+        }
+      },
+      {
+        "p99": {
+          "max_abs": 3.59375,
+          "rmse": 0.7085438817739487
+        },
+        "max": {
+          "max_abs": 3.59375,
+          "rmse": 0.7085438817739487
+        }
+      }
+    ],
+    "logits": {
+      "p99": {
+        "max_abs": 9.23828125,
+        "rmse": 1.3188514113426208
+      },
+      "max": {
+        "max_abs": 9.23828125,
+        "rmse": 1.3188514113426208
+      }
+    },
+    "max_argmax_flip_fraction": 0.01,
+    "protected_reference_margin": 0.5,
+    "source": "Independent native full-R bs1/2/4/8/16 and branch-width4 row shapes with graph-equivalent power-of-two prefill padding vs B1, same Thinking prefixes; 25% headroom on observed maxima."
+  },
+  "note": "Existing 1% flip-fraction failures remain failures. No tolerance changed; identical old/new record arrays show no numerical regression in these probes."
+}

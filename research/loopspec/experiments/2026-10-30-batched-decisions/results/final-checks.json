@@ -1,0 +1,18 @@
+{
+  "success": true,
+  "rounds_used": 8,
+  "round_limit": 10,
+  "performance_cells": 30,
+  "profile_cells": 30,
+  "capture_cells": 60,
+  "unique_decode_outputs": 95046,
+  "attribution_groups": 32,
+  "max_partition_roundoff_ms": 6.406262400560081e-07,
+  "max_clock_alignment_p95_us": 10.966552734375,
+  "all_new_observed_max_below_old_observed_min": true,
+  "figure_medians_equal_final_cohort_report": true,
+  "markdown_tables_and_links_valid": true,
+  "report_sha256": "a41c92982d0880731910b6d273a14085c3f83b846246032f7ee61193d2ea9544",
+  "caveat": "These structural/performance checks do not override the recorded numerical failures or imply token-losslessness.",
+  "csv_values_preserved_after_lf_normalization": true
+}

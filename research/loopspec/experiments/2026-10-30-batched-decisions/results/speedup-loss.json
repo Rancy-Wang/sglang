@@ -1,0 +1,90 @@
+[
+  {
+    "bs": 2,
+    "pattern": "simultaneous",
+    "old_loss_ms": -165.66867612960323,
+    "new_loss_ms": -429.2251279112379,
+    "measured_loss_recovery_ms": 263.5564517816347,
+    "measured_loss_recovery_percent": null,
+    "old_speedup_drop": -0.04836532298185414,
+    "new_speedup_drop": -0.1435581093095779,
+    "speedup_drop_recovery_percent": null
+  },
+  {
+    "bs": 4,
+    "pattern": "simultaneous",
+    "old_loss_ms": 1909.0365457096386,
+    "new_loss_ms": 935.2407668758533,
+    "measured_loss_recovery_ms": 973.7957788337853,
+    "measured_loss_recovery_percent": 51.00980287791191,
+    "old_speedup_drop": 0.43258461979885365,
+    "new_speedup_drop": 0.25793742091536265,
+    "speedup_drop_recovery_percent": 40.3729561547287
+  },
+  {
+    "bs": 8,
+    "pattern": "simultaneous",
+    "old_loss_ms": 5084.108169845447,
+    "new_loss_ms": 2950.44488233459,
+    "measured_loss_recovery_ms": 2133.663287510857,
+    "measured_loss_recovery_percent": 41.967307071983846,
+    "old_speedup_drop": 0.8471571395895596,
+    "new_speedup_drop": 0.6362005049179957,
+    "speedup_drop_recovery_percent": 24.901712423006973
+  },
+  {
+    "bs": 16,
+    "pattern": "simultaneous",
+    "old_loss_ms": 13861.832278454596,
+    "new_loss_ms": 8690.140794817675,
+    "measured_loss_recovery_ms": 5171.6914836369215,
+    "measured_loss_recovery_percent": 37.30885917351104,
+    "old_speedup_drop": 1.2493798542376735,
+    "new_speedup_drop": 1.0671579343956825,
+    "speedup_drop_recovery_percent": 14.584989442876541
+  },
+  {
+    "bs": 2,
+    "pattern": "staggered",
+    "old_loss_ms": 335.17308737753774,
+    "new_loss_ms": 77.87468919831554,
+    "measured_loss_recovery_ms": 257.2983981792222,
+    "measured_loss_recovery_percent": 76.76582872222143,
+    "old_speedup_drop": 0.09237956349713627,
+    "new_speedup_drop": 0.02443892818708715,
+    "speedup_drop_recovery_percent": 73.5450923754963
+  },
+  {
+    "bs": 4,
+    "pattern": "staggered",
+    "old_loss_ms": 1988.460928683403,
+    "new_loss_ms": 1023.1317888228696,
+    "measured_loss_recovery_ms": 965.3291398605334,
+    "measured_loss_recovery_percent": 48.54654803299031,
+    "old_speedup_drop": 0.4452974962440899,
+    "new_speedup_drop": 0.27812297030573463,
+    "speedup_drop_recovery_percent": 37.54221107201521
+  },
+  {
+    "bs": 8,
+    "pattern": "staggered",
+    "old_loss_ms": 5276.943331293032,
+    "new_loss_ms": 3169.030169728404,
+    "measured_loss_recovery_ms": 2107.9131615646284,
+    "measured_loss_recovery_percent": 39.945722916226906,
+    "old_speedup_drop": 0.85857586465594,
+    "new_speedup_drop": 0.6623732862954028,
+    "speedup_drop_recovery_percent": 22.852095713075066
+  },
+  {
+    "bs": 16,
+    "pattern": "staggered",
+    "old_loss_ms": 13961.463671599493,
+    "new_loss_ms": 8985.61385261829,
+    "measured_loss_recovery_ms": 4975.8498189812035,
+    "measured_loss_recovery_percent": 35.639886590853024,
+    "old_speedup_drop": 1.2400905512627896,
+    "new_speedup_drop": 1.0724733829897597,
+    "speedup_drop_recovery_percent": 13.51652652319176
+  }
+]

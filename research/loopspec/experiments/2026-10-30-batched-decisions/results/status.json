@@ -1,0 +1,6 @@
+{
+  "cells": 10,
+  "all_performance_gates": true,
+  "profile_cells": 30,
+  "note": "Performance gates do not imply token-losslessness; see numerical and sequence evidence."
+}

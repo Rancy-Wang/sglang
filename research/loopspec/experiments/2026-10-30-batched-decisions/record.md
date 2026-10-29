@@ -218,3 +218,11 @@ partition_profile.py的forward时钟锚点仅选CPU user_annotation，与原生h
 离线只读审计首次把完整cuda_graph_config作为AR/LoopSpec的公共常量，触发断言。核对cuda_graph_hook.py的既有generate_decode_cuda_graph_batch_sizes后确认：AR默认decode集合[1,2,4,8,12,16]，spec默认[1,2,3,4,5,6,7,8,10,12,14,16]，公开graph max参数仍同为16；旧新LoopSpec集合完全相同。不是本次生产改动引起，不能把它隐藏为“内部配置完全相同”。
 
 目的：把60个采集单元的配置/输入/版本审计固化并记录算法默认图集合差异。步骤：验证公共参数、到达时间、预热/重复数、数据/包版本；逐bs核对全部phase/variant的prompt IDs；单独核对AR与spec默认集合及除decode.bs外图配置一致；输出配置来源与启动内存清单。范围：新增validate_captures.py和实验记录/结果，不改生产或已有Profile分析器。成功标准：60单元全部满足公开负载契约，旧新LS完整图配置一致，实际source SHA/路径匹配冻结记录。风险：启动内存不是运行峰值，默认图集合不是严格相同的padding形状，报告明确保留。验证：本地语法/diff检查；当前离线分析结束后经Git同步X5，运行validate_captures.py，保存退出码和capture-validation.json。保持原性能/数值门槛，不重采未受影响的GPU数据。
+
+第8轮完成：bc45401a243d2f4c27aabaa08d10eada4b521ede，本地py_compile/diff检查exit0；分析任务退出后X5 pull核对SHA，执行`docker exec loopspec-decisions-20261030 /opt/sglang/bin/python research/loopspec/experiments/2026-10-30-batched-decisions/validate_captures.py /results/round-3`，60单元审计通过，capture-validation.exit=0。
+
+最终结果：performance.exit/profile.exit/analysis.exit均为0。30组Profile的95046个decode输出逐条核对唯一(rid,output_index)、入口depth∈{0,3}、cycles=4−depth和完整客户端/原生结果处理覆盖，path-validation.json记录通过。时钟对齐P95误差最大10.97µs，分区总和与Profile墙钟差最大6.41e−7ms；32组有符号归因之和均等于定义的损失。独立核对图表中位数与最终cohort报表相同、Markdown表列数/链接有效，见results/final-checks.json。
+
+轻量结果通过既有ControlMaster复制回本地；完整统计/人工解读见results/report.md，验证细节见results/validation.md。数据、图表及本记录经loopspec-test同步X5后，最终镜像目录为`/home/ruoxi/repo/test/results/loopspec/2026-10-30-batched-decisions/final/`；自动生成数据仍保留在round-3/analysis，大型原始trace不入Git。
+
+结论与限制：逐endpoint决策合批目标通过逻辑测试和性能验证；所有10个场景新版E2E均改善，bs16同时/交错缩时22.9%/21.8%，相对AR为1.287×/1.285×。旧决策约贡献bs16加速比下降的39.6%–48.2%（同时）/38.5%–46.9%（交错），新决策约0.65%/0.71%–0.74%；其余阶段为注明假设的时间分解估算，保留未归因。严格数值/完整序列限制不隐藏：bs1/2/4既有1% argmax判据失败，旧新同前缀记录完全相同；自由生成旧新110/310、AR/新50/310完全一致，不宣称token无损。停在8/10轮，不再增加实现改动；正式loopspec分支未晋升。

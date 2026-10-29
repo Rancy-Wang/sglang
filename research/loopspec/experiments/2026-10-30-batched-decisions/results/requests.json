@@ -1,0 +1,6884 @@
+[
+  {
+    "variant": "ar",
+    "bs": 1,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 14045.121202,
+    "ttft_ms": 33.965402,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 1,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 6265.539358,
+    "ttft_ms": 41.179069,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 1,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 5965.561652,
+    "ttft_ms": 41.405141,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 1,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 14065.565476,
+    "ttft_ms": 33.976118,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 1,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 6266.705952,
+    "ttft_ms": 41.904459,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 1,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 5966.415619,
+    "ttft_ms": 41.772328,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 17583.376213,
+    "ttft_ms": 56.457212,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 17581.370423,
+    "ttft_ms": 89.549518,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 7678.128238,
+    "ttft_ms": 104.366946,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 7637.562441,
+    "ttft_ms": 71.07009,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 7026.837647,
+    "ttft_ms": 103.503456,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 6999.468208,
+    "ttft_ms": 71.022567,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 2,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 17397.323282,
+    "ttft_ms": 34.443043,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 2,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 17425.736292,
+    "ttft_ms": 71.495143,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 7418.458783,
+    "ttft_ms": 42.2886,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 8043.522211,
+    "ttft_ms": 87.44575,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 6807.448329,
+    "ttft_ms": 42.025481,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 7412.041015,
+    "ttft_ms": 90.752262,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 17896.21209,
+    "ttft_ms": 122.504097,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 17877.003183,
+    "ttft_ms": 121.879856,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 3,
+    "e2e_ms": 17888.583286,
+    "ttft_ms": 122.373712,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 4,
+    "e2e_ms": 17887.363515,
+    "ttft_ms": 121.8447,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 9291.918082,
+    "ttft_ms": 81.142485,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 9892.594256,
+    "ttft_ms": 137.957023,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 3,
+    "e2e_ms": 9536.243035,
+    "ttft_ms": 138.132018,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 4,
+    "e2e_ms": 9028.657879,
+    "ttft_ms": 138.153954,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 8104.222208,
+    "ttft_ms": 140.863095,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 8535.825613,
+    "ttft_ms": 141.006379,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 3,
+    "e2e_ms": 8195.981945,
+    "ttft_ms": 141.469365,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "question": 4,
+    "e2e_ms": 7708.570349,
+    "ttft_ms": 85.817252,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 17749.510605,
+    "ttft_ms": 34.046229,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 17797.731853,
+    "ttft_ms": 71.348228,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 3,
+    "e2e_ms": 17770.33657,
+    "ttft_ms": 75.728803,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 4,
+    "e2e_ms": 17732.774947,
+    "ttft_ms": 73.520362,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 9305.308816,
+    "ttft_ms": 42.300824,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 9922.709935,
+    "ttft_ms": 87.585412,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 3,
+    "e2e_ms": 9469.445307,
+    "ttft_ms": 95.171848,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 4,
+    "e2e_ms": 9059.346896,
+    "ttft_ms": 91.890452,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 7995.157474,
+    "ttft_ms": 41.98917,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 8572.385857,
+    "ttft_ms": 90.838276,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 3,
+    "e2e_ms": 8141.406135,
+    "ttft_ms": 92.469382,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "question": 4,
+    "e2e_ms": 7756.758317,
+    "ttft_ms": 82.582573,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 18750.628924,
+    "ttft_ms": 264.584271,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 18732.256583,
+    "ttft_ms": 237.579119,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 3,
+    "e2e_ms": 18750.928219,
+    "ttft_ms": 236.86094,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 4,
+    "e2e_ms": 18759.122485,
+    "ttft_ms": 282.692753,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 5,
+    "e2e_ms": 18706.229436,
+    "ttft_ms": 215.395196,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 6,
+    "e2e_ms": 18732.335282,
+    "ttft_ms": 228.886575,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 7,
+    "e2e_ms": 18685.390739,
+    "ttft_ms": 236.332194,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 8,
+    "e2e_ms": 18659.331634,
+    "ttft_ms": 221.065028,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 12207.871447,
+    "ttft_ms": 247.169581,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 12921.187822,
+    "ttft_ms": 239.291602,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 3,
+    "e2e_ms": 12726.016358,
+    "ttft_ms": 247.257374,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 4,
+    "e2e_ms": 11885.254078,
+    "ttft_ms": 256.340677,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 5,
+    "e2e_ms": 12439.932964,
+    "ttft_ms": 260.000288,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 6,
+    "e2e_ms": 12803.188712,
+    "ttft_ms": 247.820798,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 7,
+    "e2e_ms": 13452.276972,
+    "ttft_ms": 247.762821,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 8,
+    "e2e_ms": 11902.044602,
+    "ttft_ms": 247.713205,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 9521.339978,
+    "ttft_ms": 224.645633,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 10238.803543,
+    "ttft_ms": 224.53791,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 3,
+    "e2e_ms": 9984.770434,
+    "ttft_ms": 225.721135,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 4,
+    "e2e_ms": 9311.038976,
+    "ttft_ms": 224.799858,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 5,
+    "e2e_ms": 9761.561335,
+    "ttft_ms": 225.959727,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 6,
+    "e2e_ms": 10018.033953,
+    "ttft_ms": 225.014713,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 7,
+    "e2e_ms": 10917.018027,
+    "ttft_ms": 223.766973,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "question": 8,
+    "e2e_ms": 9275.245748,
+    "ttft_ms": 129.683394,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 18525.713635,
+    "ttft_ms": 34.118721,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 18581.160349,
+    "ttft_ms": 71.284503,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 3,
+    "e2e_ms": 18557.038978,
+    "ttft_ms": 75.380374,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 4,
+    "e2e_ms": 18533.102328,
+    "ttft_ms": 72.775663,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 5,
+    "e2e_ms": 18506.815974,
+    "ttft_ms": 74.000722,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 6,
+    "e2e_ms": 18481.677222,
+    "ttft_ms": 77.601704,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 7,
+    "e2e_ms": 18454.853833,
+    "ttft_ms": 85.620533,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 8,
+    "e2e_ms": 18418.698494,
+    "ttft_ms": 93.43829,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 12609.417125,
+    "ttft_ms": 42.081003,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 13078.344748,
+    "ttft_ms": 87.614731,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 3,
+    "e2e_ms": 12823.232447,
+    "ttft_ms": 95.003767,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 4,
+    "e2e_ms": 11798.078181,
+    "ttft_ms": 91.925249,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 5,
+    "e2e_ms": 12352.116131,
+    "ttft_ms": 94.857825,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 6,
+    "e2e_ms": 12696.725981,
+    "ttft_ms": 101.807083,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 7,
+    "e2e_ms": 13194.988158,
+    "ttft_ms": 119.778917,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 8,
+    "e2e_ms": 11784.497523,
+    "ttft_ms": 123.899525,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 9903.694437,
+    "ttft_ms": 42.319333,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 10361.306688,
+    "ttft_ms": 91.017989,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 3,
+    "e2e_ms": 10005.113227,
+    "ttft_ms": 93.515135,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 4,
+    "e2e_ms": 9310.373459,
+    "ttft_ms": 82.690642,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 5,
+    "e2e_ms": 9790.918854,
+    "ttft_ms": 86.438014,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 6,
+    "e2e_ms": 10041.580199,
+    "ttft_ms": 90.192859,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 7,
+    "e2e_ms": 10678.916308,
+    "ttft_ms": 102.620684,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "question": 8,
+    "e2e_ms": 9333.809207,
+    "ttft_ms": 91.854949,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 24655.662884,
+    "ttft_ms": 718.621919,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 24628.247587,
+    "ttft_ms": 678.118636,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 3,
+    "e2e_ms": 24674.936465,
+    "ttft_ms": 777.259645,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 4,
+    "e2e_ms": 24658.158573,
+    "ttft_ms": 756.121411,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 5,
+    "e2e_ms": 24627.723702,
+    "ttft_ms": 680.753925,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 6,
+    "e2e_ms": 24675.811844,
+    "ttft_ms": 774.337477,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 7,
+    "e2e_ms": 24658.129799,
+    "ttft_ms": 720.857432,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 8,
+    "e2e_ms": 24628.053312,
+    "ttft_ms": 637.428981,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 9,
+    "e2e_ms": 24666.392348,
+    "ttft_ms": 677.383509,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 10,
+    "e2e_ms": 24628.820337,
+    "ttft_ms": 756.026908,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 11,
+    "e2e_ms": 24575.596555,
+    "ttft_ms": 689.378627,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 12,
+    "e2e_ms": 24627.750693,
+    "ttft_ms": 682.83214,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 13,
+    "e2e_ms": 24667.514021,
+    "ttft_ms": 750.550929,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 14,
+    "e2e_ms": 24665.949927,
+    "ttft_ms": 775.560473,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 15,
+    "e2e_ms": 24585.807452,
+    "ttft_ms": 688.654868,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 16,
+    "e2e_ms": 24675.93417,
+    "ttft_ms": 764.493484,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 21809.216573,
+    "ttft_ms": 755.719458,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 22825.859279,
+    "ttft_ms": 755.352101,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 3,
+    "e2e_ms": 22514.05698,
+    "ttft_ms": 680.032587,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 4,
+    "e2e_ms": 21085.37445,
+    "ttft_ms": 809.854379,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 5,
+    "e2e_ms": 22787.788705,
+    "ttft_ms": 793.935443,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 6,
+    "e2e_ms": 22827.318251,
+    "ttft_ms": 732.266305,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 7,
+    "e2e_ms": 24056.244375,
+    "ttft_ms": 808.082151,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 8,
+    "e2e_ms": 20908.938419,
+    "ttft_ms": 721.532673,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 9,
+    "e2e_ms": 22413.634418,
+    "ttft_ms": 731.30591,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 10,
+    "e2e_ms": 24721.616305,
+    "ttft_ms": 809.601115,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 11,
+    "e2e_ms": 23706.016891,
+    "ttft_ms": 756.657851,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 12,
+    "e2e_ms": 21670.558095,
+    "ttft_ms": 686.69483,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 13,
+    "e2e_ms": 24746.851634,
+    "ttft_ms": 730.075443,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 14,
+    "e2e_ms": 23427.448225,
+    "ttft_ms": 721.090353,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 15,
+    "e2e_ms": 23603.869181,
+    "ttft_ms": 680.614988,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 16,
+    "e2e_ms": 21439.627394,
+    "ttft_ms": 630.505507,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 1,
+    "e2e_ms": 16924.793465,
+    "ttft_ms": 712.771705,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 2,
+    "e2e_ms": 17571.637686,
+    "ttft_ms": 625.017999,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 3,
+    "e2e_ms": 17225.048531,
+    "ttft_ms": 854.800973,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 4,
+    "e2e_ms": 16107.08868,
+    "ttft_ms": 818.342158,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 5,
+    "e2e_ms": 16870.277282,
+    "ttft_ms": 871.357165,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 6,
+    "e2e_ms": 17497.888997,
+    "ttft_ms": 824.786831,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 7,
+    "e2e_ms": 18786.539759,
+    "ttft_ms": 824.791587,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 8,
+    "e2e_ms": 15985.472502,
+    "ttft_ms": 766.839843,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 9,
+    "e2e_ms": 17504.001051,
+    "ttft_ms": 825.363184,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 10,
+    "e2e_ms": 18729.557634,
+    "ttft_ms": 688.897112,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 11,
+    "e2e_ms": 18329.005799,
+    "ttft_ms": 818.478865,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 12,
+    "e2e_ms": 16404.637519,
+    "ttft_ms": 569.096801,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 13,
+    "e2e_ms": 19170.932269,
+    "ttft_ms": 690.494665,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 14,
+    "e2e_ms": 17820.017969,
+    "ttft_ms": 701.204854,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 15,
+    "e2e_ms": 17577.547167,
+    "ttft_ms": 708.854627,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "question": 16,
+    "e2e_ms": 16426.215693,
+    "ttft_ms": 706.119448,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 24237.004274,
+    "ttft_ms": 33.887444,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 24335.46835,
+    "ttft_ms": 71.151843,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 3,
+    "e2e_ms": 24333.461726,
+    "ttft_ms": 75.53345,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 4,
+    "e2e_ms": 24330.790435,
+    "ttft_ms": 73.175438,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 5,
+    "e2e_ms": 24326.812736,
+    "ttft_ms": 74.443642,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 6,
+    "e2e_ms": 24321.510538,
+    "ttft_ms": 78.283278,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 7,
+    "e2e_ms": 24315.305231,
+    "ttft_ms": 85.729488,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 8,
+    "e2e_ms": 24309.266005,
+    "ttft_ms": 92.617632,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 9,
+    "e2e_ms": 24300.36891,
+    "ttft_ms": 97.534837,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 10,
+    "e2e_ms": 24292.307584,
+    "ttft_ms": 197.710521,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 11,
+    "e2e_ms": 24237.419096,
+    "ttft_ms": 296.650669,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 12,
+    "e2e_ms": 24175.690711,
+    "ttft_ms": 294.384912,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 13,
+    "e2e_ms": 24075.956586,
+    "ttft_ms": 194.456967,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 14,
+    "e2e_ms": 24013.130043,
+    "ttft_ms": 179.20888,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 15,
+    "e2e_ms": 23949.218417,
+    "ttft_ms": 159.104826,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "ar",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 16,
+    "e2e_ms": 23880.62718,
+    "ttft_ms": 141.171795,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 20380.763903,
+    "ttft_ms": 42.483511,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 22447.336264,
+    "ttft_ms": 87.95344,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 3,
+    "e2e_ms": 20737.476867,
+    "ttft_ms": 95.410718,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 4,
+    "e2e_ms": 20269.774591,
+    "ttft_ms": 92.473254,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 5,
+    "e2e_ms": 21683.878802,
+    "ttft_ms": 95.278748,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 6,
+    "e2e_ms": 22112.308067,
+    "ttft_ms": 101.990385,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 7,
+    "e2e_ms": 23957.993514,
+    "ttft_ms": 110.114864,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 8,
+    "e2e_ms": 20846.775807,
+    "ttft_ms": 116.649062,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 9,
+    "e2e_ms": 22597.025797,
+    "ttft_ms": 119.774742,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 10,
+    "e2e_ms": 24328.912482,
+    "ttft_ms": 283.680773,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 11,
+    "e2e_ms": 23866.309577,
+    "ttft_ms": 453.068275,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 12,
+    "e2e_ms": 21592.3015,
+    "ttft_ms": 613.724229,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 13,
+    "e2e_ms": 24069.433085,
+    "ttft_ms": 611.074361,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 14,
+    "e2e_ms": 22477.444481,
+    "ttft_ms": 613.49406,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 15,
+    "e2e_ms": 23141.49439,
+    "ttft_ms": 581.725078,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 16,
+    "e2e_ms": 20880.473659,
+    "ttft_ms": 518.307483,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 1,
+    "e2e_ms": 15949.446362,
+    "ttft_ms": 41.760317,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 2,
+    "e2e_ms": 17275.226125,
+    "ttft_ms": 90.643216,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 3,
+    "e2e_ms": 16630.534682,
+    "ttft_ms": 92.143805,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 4,
+    "e2e_ms": 15389.692806,
+    "ttft_ms": 91.254561,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 5,
+    "e2e_ms": 16381.374707,
+    "ttft_ms": 85.864393,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 6,
+    "e2e_ms": 16741.00678,
+    "ttft_ms": 88.455815,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 7,
+    "e2e_ms": 18103.453509,
+    "ttft_ms": 101.980962,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 8,
+    "e2e_ms": 15751.93089,
+    "ttft_ms": 91.403958,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 9,
+    "e2e_ms": 16677.101649,
+    "ttft_ms": 91.771326,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 10,
+    "e2e_ms": 18518.413081,
+    "ttft_ms": 191.851819,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 11,
+    "e2e_ms": 17765.605149,
+    "ttft_ms": 387.436517,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 12,
+    "e2e_ms": 16278.69229,
+    "ttft_ms": 394.253098,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 13,
+    "e2e_ms": 18551.711561,
+    "ttft_ms": 475.843336,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 14,
+    "e2e_ms": 17089.419635,
+    "ttft_ms": 462.764633,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 15,
+    "e2e_ms": 17685.574834,
+    "ttft_ms": 391.61396,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "question": 16,
+    "e2e_ms": 15839.833731,
+    "ttft_ms": 347.694466,
+    "tokens": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "stops": [
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      },
+      {
+        "type": "length",
+        "length": 512
+      }
+    ]
+  }
+]

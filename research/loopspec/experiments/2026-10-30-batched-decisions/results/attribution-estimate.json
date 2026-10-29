@@ -1,0 +1,2562 @@
+[
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "attention",
+    "projected_contribution_ms": -150.6237508596697,
+    "percent_of_loss": null,
+    "total_loss_ms": -165.66867612960323
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "model_compute",
+    "projected_contribution_ms": -873.1786471830972,
+    "percent_of_loss": null,
+    "total_loss_ms": -165.66867612960323
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "decision",
+    "projected_contribution_ms": 464.47356832645625,
+    "percent_of_loss": null,
+    "total_loss_ms": -165.66867612960323
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "branch_kv",
+    "projected_contribution_ms": 24.608102327448442,
+    "percent_of_loss": null,
+    "total_loss_ms": -165.66867612960323
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "prepare",
+    "projected_contribution_ms": 97.04474194570955,
+    "percent_of_loss": null,
+    "total_loss_ms": -165.66867612960323
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "host_runtime",
+    "projected_contribution_ms": 40.485286010465586,
+    "percent_of_loss": null,
+    "total_loss_ms": -165.66867612960323
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "transfer",
+    "projected_contribution_ms": 4.283378763944722,
+    "percent_of_loss": null,
+    "total_loss_ms": -165.66867612960323
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "unassigned",
+    "projected_contribution_ms": 227.23864487162234,
+    "percent_of_loss": null,
+    "total_loss_ms": -165.66867612960323
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "attention",
+    "projected_contribution_ms": -66.54453788451048,
+    "percent_of_loss": null,
+    "total_loss_ms": -165.66867612960323
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "model_compute",
+    "projected_contribution_ms": -666.0408528017806,
+    "percent_of_loss": null,
+    "total_loss_ms": -165.66867612960323
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "decision",
+    "projected_contribution_ms": 341.91676087298623,
+    "percent_of_loss": null,
+    "total_loss_ms": -165.66867612960323
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "branch_kv",
+    "projected_contribution_ms": 15.601010470318883,
+    "percent_of_loss": null,
+    "total_loss_ms": -165.66867612960323
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "prepare",
+    "projected_contribution_ms": 67.61527408841614,
+    "percent_of_loss": null,
+    "total_loss_ms": -165.66867612960323
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "host_runtime",
+    "projected_contribution_ms": -11.813040716579707,
+    "percent_of_loss": null,
+    "total_loss_ms": -165.66867612960323
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "transfer",
+    "projected_contribution_ms": 7.621893436971242,
+    "percent_of_loss": null,
+    "total_loss_ms": -165.66867612960323
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "unassigned",
+    "projected_contribution_ms": 145.97481664174262,
+    "percent_of_loss": null,
+    "total_loss_ms": -165.66867612960323
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "attention",
+    "projected_contribution_ms": -96.56514184763762,
+    "percent_of_loss": null,
+    "total_loss_ms": -429.2251279112379
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "model_compute",
+    "projected_contribution_ms": -678.2315901016976,
+    "percent_of_loss": null,
+    "total_loss_ms": -429.2251279112379
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "decision",
+    "projected_contribution_ms": 4.607818404437353,
+    "percent_of_loss": null,
+    "total_loss_ms": -429.2251279112379
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "branch_kv",
+    "projected_contribution_ms": 23.5490122579054,
+    "percent_of_loss": null,
+    "total_loss_ms": -429.2251279112379
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "prepare",
+    "projected_contribution_ms": 100.80395311794312,
+    "percent_of_loss": null,
+    "total_loss_ms": -429.2251279112379
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "host_runtime",
+    "projected_contribution_ms": 14.716160758225726,
+    "percent_of_loss": null,
+    "total_loss_ms": -429.2251279112379
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "transfer",
+    "projected_contribution_ms": 2.4913679240746553,
+    "percent_of_loss": null,
+    "total_loss_ms": -429.2251279112379
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "unassigned",
+    "projected_contribution_ms": 199.40329200379387,
+    "percent_of_loss": null,
+    "total_loss_ms": -429.2251279112379
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "attention",
+    "projected_contribution_ms": 4.6332265782382365,
+    "percent_of_loss": null,
+    "total_loss_ms": -429.2251279112379
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "model_compute",
+    "projected_contribution_ms": -431.4244653809766,
+    "percent_of_loss": null,
+    "total_loss_ms": -429.2251279112379
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "decision",
+    "projected_contribution_ms": -3.657471488785177,
+    "percent_of_loss": null,
+    "total_loss_ms": -429.2251279112379
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "branch_kv",
+    "projected_contribution_ms": 9.418574163298251,
+    "percent_of_loss": null,
+    "total_loss_ms": -429.2251279112379
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "prepare",
+    "projected_contribution_ms": 24.823590026403032,
+    "percent_of_loss": null,
+    "total_loss_ms": -429.2251279112379
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "host_runtime",
+    "projected_contribution_ms": -129.2097112369482,
+    "percent_of_loss": null,
+    "total_loss_ms": -429.2251279112379
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "transfer",
+    "projected_contribution_ms": 5.212593209773576,
+    "percent_of_loss": null,
+    "total_loss_ms": -429.2251279112379
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "unassigned",
+    "projected_contribution_ms": 90.97853649198612,
+    "percent_of_loss": null,
+    "total_loss_ms": -429.2251279112379
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "attention",
+    "projected_contribution_ms": 12.984079921050977,
+    "percent_of_loss": 0.6801378396988443,
+    "total_loss_ms": 1909.0365457096386
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "model_compute",
+    "projected_contribution_ms": -772.8168299796944,
+    "percent_of_loss": -40.482034339076435,
+    "total_loss_ms": 1909.0365457096386
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "decision",
+    "projected_contribution_ms": 1358.0288860572082,
+    "percent_of_loss": 71.1368721101352,
+    "total_loss_ms": 1909.0365457096386
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "branch_kv",
+    "projected_contribution_ms": 72.3045794931042,
+    "percent_of_loss": 3.7874905881504066,
+    "total_loss_ms": 1909.0365457096386
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "prepare",
+    "projected_contribution_ms": 283.4653995801559,
+    "percent_of_loss": 14.848610426930536,
+    "total_loss_ms": 1909.0365457096386
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "host_runtime",
+    "projected_contribution_ms": 431.01470203628963,
+    "percent_of_loss": 22.577603503974316,
+    "total_loss_ms": 1909.0365457096386
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "transfer",
+    "projected_contribution_ms": 21.195509172467002,
+    "percent_of_loss": 1.110272572837943,
+    "total_loss_ms": 1909.0365457096386
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "unassigned",
+    "projected_contribution_ms": 502.8602196763979,
+    "percent_of_loss": 26.341047310305505,
+    "total_loss_ms": 1909.0365457096386
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "attention",
+    "projected_contribution_ms": 213.11586955736544,
+    "percent_of_loss": 11.163530108227693,
+    "total_loss_ms": 1909.0365457096386
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "model_compute",
+    "projected_contribution_ms": -250.36305312266586,
+    "percent_of_loss": -13.11462861647834,
+    "total_loss_ms": 1909.0365457096386
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "decision",
+    "projected_contribution_ms": 1042.337578990259,
+    "percent_of_loss": 54.60018988807755,
+    "total_loss_ms": 1909.0365457096386
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "branch_kv",
+    "projected_contribution_ms": 48.050561883369554,
+    "percent_of_loss": 2.5170058682929985,
+    "total_loss_ms": 1909.0365457096386
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "prepare",
+    "projected_contribution_ms": 203.578977815243,
+    "percent_of_loss": 10.663964410360064,
+    "total_loss_ms": 1909.0365457096386
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "host_runtime",
+    "projected_contribution_ms": 270.1651978474433,
+    "percent_of_loss": 14.151913354126801,
+    "total_loss_ms": 1909.0365457096386
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "transfer",
+    "projected_contribution_ms": 31.901137941907628,
+    "percent_of_loss": 1.6710595726206563,
+    "total_loss_ms": 1909.0365457096386
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "unassigned",
+    "projected_contribution_ms": 350.2502749609623,
+    "percent_of_loss": 18.346965423376176,
+    "total_loss_ms": 1909.0365457096386
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "attention",
+    "projected_contribution_ms": 100.66707888094146,
+    "percent_of_loss": 10.763760781859109,
+    "total_loss_ms": 935.2407668758533
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "model_compute",
+    "projected_contribution_ms": -542.376992531013,
+    "percent_of_loss": -57.993300948889214,
+    "total_loss_ms": 935.2407668758533
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "decision",
+    "projected_contribution_ms": 13.682490865179119,
+    "percent_of_loss": 1.4629912798695799,
+    "total_loss_ms": 935.2407668758533
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "branch_kv",
+    "projected_contribution_ms": 74.28054117984227,
+    "percent_of_loss": 7.942397702355772,
+    "total_loss_ms": 935.2407668758533
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "prepare",
+    "projected_contribution_ms": 324.5861390848385,
+    "percent_of_loss": 34.70615809115227,
+    "total_loss_ms": 935.2407668758533
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "host_runtime",
+    "projected_contribution_ms": 390.545222492068,
+    "percent_of_loss": 41.75878942880921,
+    "total_loss_ms": 935.2407668758533
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "transfer",
+    "projected_contribution_ms": 16.41332445964836,
+    "percent_of_loss": 1.7549838545294203,
+    "total_loss_ms": 935.2407668758533
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "unassigned",
+    "projected_contribution_ms": 557.442962770964,
+    "percent_of_loss": 59.60421984523698,
+    "total_loss_ms": 935.2407668758533
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "attention",
+    "projected_contribution_ms": 228.39764344546535,
+    "percent_of_loss": 24.421266858203964,
+    "total_loss_ms": 935.2407668758533
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "model_compute",
+    "projected_contribution_ms": -252.12184847603476,
+    "percent_of_loss": -26.957961779001682,
+    "total_loss_ms": 935.2407668758533
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "decision",
+    "projected_contribution_ms": 20.82747483723223,
+    "percent_of_loss": 2.2269639621042026,
+    "total_loss_ms": 935.2407668758533
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "branch_kv",
+    "projected_contribution_ms": 48.76667161729989,
+    "percent_of_loss": 5.214344085983725,
+    "total_loss_ms": 935.2407668758533
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "prepare",
+    "projected_contribution_ms": 232.55565599160715,
+    "percent_of_loss": 24.86585959767912,
+    "total_loss_ms": 935.2407668758533
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "host_runtime",
+    "projected_contribution_ms": 255.92279575035315,
+    "percent_of_loss": 27.36437555061424,
+    "total_loss_ms": 935.2407668758533
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "transfer",
+    "projected_contribution_ms": 21.460496187368392,
+    "percent_of_loss": 2.294649350996172,
+    "total_loss_ms": 935.2407668758533
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "unassigned",
+    "projected_contribution_ms": 379.43187770643937,
+    "percent_of_loss": 40.570502393081235,
+    "total_loss_ms": 935.2407668758533
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "attention",
+    "projected_contribution_ms": 646.8217618809371,
+    "percent_of_loss": 12.722423289837279,
+    "total_loss_ms": 5084.108169845447
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "model_compute",
+    "projected_contribution_ms": -1530.9582058756196,
+    "percent_of_loss": -30.112620635334743,
+    "total_loss_ms": 5084.108169845447
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "decision",
+    "projected_contribution_ms": 3007.166232973828,
+    "percent_of_loss": 59.148352720143706,
+    "total_loss_ms": 5084.108169845447
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "branch_kv",
+    "projected_contribution_ms": 159.57741478767667,
+    "percent_of_loss": 3.1387494021892084,
+    "total_loss_ms": 5084.108169845447
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "prepare",
+    "projected_contribution_ms": 665.4788745139297,
+    "percent_of_loss": 13.089392520422312,
+    "total_loss_ms": 5084.108169845447
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "host_runtime",
+    "projected_contribution_ms": 1111.865542452879,
+    "percent_of_loss": 21.869431280937494,
+    "total_loss_ms": 5084.108169845447
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "transfer",
+    "projected_contribution_ms": 53.50432935983317,
+    "percent_of_loss": 1.0523837725793246,
+    "total_loss_ms": 5084.108169845447
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "unassigned",
+    "projected_contribution_ms": 970.6522198591988,
+    "percent_of_loss": 19.091887651334254,
+    "total_loss_ms": 5084.108169845447
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "attention",
+    "projected_contribution_ms": 1250.3193118124243,
+    "percent_of_loss": 24.592696890838045,
+    "total_loss_ms": 5084.108169845447
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "model_compute",
+    "projected_contribution_ms": -703.7481383910945,
+    "percent_of_loss": -13.842115763097302,
+    "total_loss_ms": 5084.108169845447
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "decision",
+    "projected_contribution_ms": 2418.1788310931292,
+    "percent_of_loss": 47.56348115163411,
+    "total_loss_ms": 5084.108169845447
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "branch_kv",
+    "projected_contribution_ms": 111.07488628411659,
+    "percent_of_loss": 2.1847467161087795,
+    "total_loss_ms": 5084.108169845447
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "prepare",
+    "projected_contribution_ms": 485.9748650717849,
+    "percent_of_loss": 9.558704276871397,
+    "total_loss_ms": 5084.108169845447
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "host_runtime",
+    "projected_contribution_ms": 724.2987023656008,
+    "percent_of_loss": 14.246327540029874,
+    "total_loss_ms": 5084.108169845447
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "transfer",
+    "projected_contribution_ms": 82.04682599914251,
+    "percent_of_loss": 1.6137899363702302,
+    "total_loss_ms": 5084.108169845447
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "unassigned",
+    "projected_contribution_ms": 715.9628857057711,
+    "percent_of_loss": 14.082369253121845,
+    "total_loss_ms": 5084.108169845447
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "attention",
+    "projected_contribution_ms": 843.6758771487562,
+    "percent_of_loss": 28.594869953346937,
+    "total_loss_ms": 2950.44488233459
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "model_compute",
+    "projected_contribution_ms": -1056.331442055826,
+    "percent_of_loss": -35.80244621346682,
+    "total_loss_ms": 2950.44488233459
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "decision",
+    "projected_contribution_ms": 30.64998990289277,
+    "percent_of_loss": 1.0388260457399374,
+    "total_loss_ms": 2950.44488233459
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "branch_kv",
+    "projected_contribution_ms": 176.04616167518785,
+    "percent_of_loss": 5.966766663876408,
+    "total_loss_ms": 2950.44488233459
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "prepare",
+    "projected_contribution_ms": 785.6800751432902,
+    "percent_of_loss": 26.629207000186607,
+    "total_loss_ms": 2950.44488233459
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "host_runtime",
+    "projected_contribution_ms": 1021.6778619494478,
+    "percent_of_loss": 34.62792570932651,
+    "total_loss_ms": 2950.44488233459
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "transfer",
+    "projected_contribution_ms": 42.17424666392654,
+    "percent_of_loss": 1.4294199127880487,
+    "total_loss_ms": 2950.44488233459
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "unassigned",
+    "projected_contribution_ms": 1106.8721120026196,
+    "percent_of_loss": 37.515430931446105,
+    "total_loss_ms": 2950.44488233459
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "attention",
+    "projected_contribution_ms": 1270.1479931568963,
+    "percent_of_loss": 43.04937200358306,
+    "total_loss_ms": 2950.44488233459
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "model_compute",
+    "projected_contribution_ms": -547.1947737309783,
+    "percent_of_loss": -18.546178476582863,
+    "total_loss_ms": 2950.44488233459
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "decision",
+    "projected_contribution_ms": 38.13172325500213,
+    "percent_of_loss": 1.2924058837130268,
+    "total_loss_ms": 2950.44488233459
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "branch_kv",
+    "projected_contribution_ms": 119.74446066680687,
+    "percent_of_loss": 4.058522204016128,
+    "total_loss_ms": 2950.44488233459
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "prepare",
+    "projected_contribution_ms": 561.1565310351567,
+    "percent_of_loss": 19.01938702176778,
+    "total_loss_ms": 2950.44488233459
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "host_runtime",
+    "projected_contribution_ms": 662.4947221612389,
+    "percent_of_loss": 22.454061966310267,
+    "total_loss_ms": 2950.44488233459
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "transfer",
+    "projected_contribution_ms": 56.43715685514662,
+    "percent_of_loss": 1.912835491117182,
+    "total_loss_ms": 2950.44488233459
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "unassigned",
+    "projected_contribution_ms": 789.5270689850644,
+    "percent_of_loss": 26.75959390776138,
+    "total_loss_ms": 2950.44488233459
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "attention",
+    "projected_contribution_ms": 1601.2491711223047,
+    "percent_of_loss": 11.55149722602777,
+    "total_loss_ms": 13861.832278454596
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "model_compute",
+    "projected_contribution_ms": -1252.6022880978746,
+    "percent_of_loss": -9.036339950850442,
+    "total_loss_ms": 13861.832278454596
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "decision",
+    "projected_contribution_ms": 6676.0683229968445,
+    "percent_of_loss": 48.1615142131927,
+    "total_loss_ms": 13861.832278454596
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "branch_kv",
+    "projected_contribution_ms": 382.3102727947803,
+    "percent_of_loss": 2.758006770786024,
+    "total_loss_ms": 13861.832278454596
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "prepare",
+    "projected_contribution_ms": 1660.487599369104,
+    "percent_of_loss": 11.978846418088573,
+    "total_loss_ms": 13861.832278454596
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "host_runtime",
+    "projected_contribution_ms": 2695.7264769498743,
+    "percent_of_loss": 19.44711509126996,
+    "total_loss_ms": 13861.832278454596
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "transfer",
+    "projected_contribution_ms": 107.04430256802263,
+    "percent_of_loss": 0.772223328184408,
+    "total_loss_ms": 13861.832278454596
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "unassigned",
+    "projected_contribution_ms": 1991.5484206721035,
+    "percent_of_loss": 14.36713690272794,
+    "total_loss_ms": 13861.832278454596
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "attention",
+    "projected_contribution_ms": 3603.161478821384,
+    "percent_of_loss": 25.993399764486888,
+    "total_loss_ms": 13861.832278454596
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "model_compute",
+    "projected_contribution_ms": -317.03567861935494,
+    "percent_of_loss": -2.287112354635271,
+    "total_loss_ms": 13861.832278454596
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "decision",
+    "projected_contribution_ms": 5493.962433789308,
+    "percent_of_loss": 39.63373905719922,
+    "total_loss_ms": 13861.832278454596
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "branch_kv",
+    "projected_contribution_ms": 276.1060304447477,
+    "percent_of_loss": 1.9918436819777314,
+    "total_loss_ms": 13861.832278454596
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "prepare",
+    "projected_contribution_ms": 1228.5360248627003,
+    "percent_of_loss": 8.86272463974485,
+    "total_loss_ms": 13861.832278454596
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "host_runtime",
+    "projected_contribution_ms": 1888.9646734988723,
+    "percent_of_loss": 13.627092259909135,
+    "total_loss_ms": 13861.832278454596
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "transfer",
+    "projected_contribution_ms": 158.88690271672664,
+    "percent_of_loss": 1.146218620489905,
+    "total_loss_ms": 13861.832278454596
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "unassigned",
+    "projected_contribution_ms": 1529.2504129028548,
+    "percent_of_loss": 11.032094330558046,
+    "total_loss_ms": 13861.832278454596
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "attention",
+    "projected_contribution_ms": 2494.9852090177474,
+    "percent_of_loss": 28.710526882436934,
+    "total_loss_ms": 8690.140794817675
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "model_compute",
+    "projected_contribution_ms": -672.3891029711015,
+    "percent_of_loss": -7.737378701298806,
+    "total_loss_ms": 8690.140794817675
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "decision",
+    "projected_contribution_ms": 56.12863394705772,
+    "percent_of_loss": 0.6458886601760213,
+    "total_loss_ms": 8690.140794817675
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "branch_kv",
+    "projected_contribution_ms": 413.2248014354856,
+    "percent_of_loss": 4.755099039153776,
+    "total_loss_ms": 8690.140794817675
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "prepare",
+    "projected_contribution_ms": 1876.458459171506,
+    "percent_of_loss": 21.592958082917637,
+    "total_loss_ms": 8690.140794817675
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "host_runtime",
+    "projected_contribution_ms": 2265.6162311997105,
+    "percent_of_loss": 26.071110752898274,
+    "total_loss_ms": 8690.140794817675
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "transfer",
+    "projected_contribution_ms": 79.25345901252761,
+    "percent_of_loss": 0.9119928075249373,
+    "total_loss_ms": 8690.140794817675
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "whole_wall",
+    "category": "unassigned",
+    "projected_contribution_ms": 2176.863104068096,
+    "percent_of_loss": 25.049802476920263,
+    "total_loss_ms": 8690.140794817675
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "attention",
+    "projected_contribution_ms": 4042.6192576491144,
+    "percent_of_loss": 46.51960598912174,
+    "total_loss_ms": 8690.140794817675
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "model_compute",
+    "projected_contribution_ms": -121.83492591139907,
+    "percent_of_loss": -1.4019902414475813,
+    "total_loss_ms": 8690.140794817675
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "decision",
+    "projected_contribution_ms": 56.480886946528585,
+    "percent_of_loss": 0.6499421387995313,
+    "total_loss_ms": 8690.140794817675
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "branch_kv",
+    "projected_contribution_ms": 279.54791141794135,
+    "percent_of_loss": 3.2168398420500672,
+    "total_loss_ms": 8690.140794817675
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "prepare",
+    "projected_contribution_ms": 1297.1730330504936,
+    "percent_of_loss": 14.926950709752099,
+    "total_loss_ms": 8690.140794817675
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "host_runtime",
+    "projected_contribution_ms": 1471.175219308911,
+    "percent_of_loss": 16.929244923007914,
+    "total_loss_ms": 8690.140794817675
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "transfer",
+    "projected_contribution_ms": 104.42742490674395,
+    "percent_of_loss": 1.2016770196521873,
+    "total_loss_ms": 8690.140794817675
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "simultaneous",
+    "projection": "gpu_fixed",
+    "category": "unassigned",
+    "projected_contribution_ms": 1560.5519874740987,
+    "percent_of_loss": 17.95772961934894,
+    "total_loss_ms": 8690.140794817675
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "attention",
+    "projected_contribution_ms": -92.50927574293604,
+    "percent_of_loss": -27.60044861201339,
+    "total_loss_ms": 335.17308737753774
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "model_compute",
+    "projected_contribution_ms": -508.76452495350077,
+    "percent_of_loss": -151.79157996669056,
+    "total_loss_ms": 335.17308737753774
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "decision",
+    "projected_contribution_ms": 468.6805461734351,
+    "percent_of_loss": 139.83239222471198,
+    "total_loss_ms": 335.17308737753774
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "branch_kv",
+    "projected_contribution_ms": 23.271272002692562,
+    "percent_of_loss": 6.943061026997041,
+    "total_loss_ms": 335.17308737753774
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "prepare",
+    "projected_contribution_ms": 127.82979047194772,
+    "percent_of_loss": 38.13844108789102,
+    "total_loss_ms": 335.17308737753774
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "host_runtime",
+    "projected_contribution_ms": 96.96805013371102,
+    "percent_of_loss": 28.930738709485517,
+    "total_loss_ms": 335.17308737753774
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "transfer",
+    "projected_contribution_ms": 8.217530923221625,
+    "percent_of_loss": 2.4517275499406157,
+    "total_loss_ms": 335.17308737753774
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "unassigned",
+    "projected_contribution_ms": 211.4796983576463,
+    "percent_of_loss": 63.09566797630036,
+    "total_loss_ms": 335.17308737753774
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "attention",
+    "projected_contribution_ms": -10.042557857686404,
+    "percent_of_loss": -2.996230376448603,
+    "total_loss_ms": 335.17308737753774
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "model_compute",
+    "projected_contribution_ms": -308.2791049835862,
+    "percent_of_loss": -91.97609133705348,
+    "total_loss_ms": 335.17308737753774
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "decision",
+    "projected_contribution_ms": 350.2551803038487,
+    "percent_of_loss": 104.4997923444022,
+    "total_loss_ms": 335.17308737753774
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "branch_kv",
+    "projected_contribution_ms": 15.138493240643719,
+    "percent_of_loss": 4.516619564861356,
+    "total_loss_ms": 335.17308737753774
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "prepare",
+    "projected_contribution_ms": 90.65243174995108,
+    "percent_of_loss": 27.04645306078543,
+    "total_loss_ms": 335.17308737753774
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "host_runtime",
+    "projected_contribution_ms": 45.28240727174099,
+    "percent_of_loss": 13.510156088616702,
+    "total_loss_ms": 335.17308737753774
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "transfer",
+    "projected_contribution_ms": 11.390781058818037,
+    "percent_of_loss": 3.3984772309560474,
+    "total_loss_ms": 335.17308737753774
+  },
+  {
+    "variant": "old",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "unassigned",
+    "projected_contribution_ms": 140.77545656666035,
+    "percent_of_loss": 42.000823415780815,
+    "total_loss_ms": 335.17308737753774
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "attention",
+    "projected_contribution_ms": -51.02884111045029,
+    "percent_of_loss": -65.52686326683158,
+    "total_loss_ms": 77.87468919831554
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "model_compute",
+    "projected_contribution_ms": -361.8827784336704,
+    "percent_of_loss": -464.6988413810557,
+    "total_loss_ms": 77.87468919831554
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "decision",
+    "projected_contribution_ms": 10.726600892069428,
+    "percent_of_loss": 13.774181319366921,
+    "total_loss_ms": 77.87468919831554
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "branch_kv",
+    "projected_contribution_ms": 24.417395536808538,
+    "percent_of_loss": 31.354726148090617,
+    "total_loss_ms": 77.87468919831554
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "prepare",
+    "projected_contribution_ms": 142.3001411689163,
+    "percent_of_loss": 182.72964249852097,
+    "total_loss_ms": 77.87468919831554
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "host_runtime",
+    "projected_contribution_ms": 75.5298881346902,
+    "percent_of_loss": 96.98900748399255,
+    "total_loss_ms": 77.87468919831554
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "transfer",
+    "projected_contribution_ms": 6.353321874426247,
+    "percent_of_loss": 8.158391307664663,
+    "total_loss_ms": 77.87468919831554
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "unassigned",
+    "projected_contribution_ms": 231.4589606604583,
+    "percent_of_loss": 297.2197552802109,
+    "total_loss_ms": 77.87468919831554
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "attention",
+    "projected_contribution_ms": 6.707010214134073,
+    "percent_of_loss": 8.61256755330864,
+    "total_loss_ms": 77.87468919831554
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "model_compute",
+    "projected_contribution_ms": -259.79150324294164,
+    "percent_of_loss": -333.60197763532267,
+    "total_loss_ms": 77.87468919831554
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "decision",
+    "projected_contribution_ms": 13.364198267739113,
+    "percent_of_loss": 17.16115775910947,
+    "total_loss_ms": 77.87468919831554
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "branch_kv",
+    "projected_contribution_ms": 15.769181674820718,
+    "percent_of_loss": 20.249431281405116,
+    "total_loss_ms": 77.87468919831554
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "prepare",
+    "projected_contribution_ms": 101.59620888219136,
+    "percent_of_loss": 130.46114203225474,
+    "total_loss_ms": 77.87468919831554
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "host_runtime",
+    "projected_contribution_ms": 41.01384696054811,
+    "percent_of_loss": 52.66646632271279,
+    "total_loss_ms": 77.87468919831554
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "transfer",
+    "projected_contribution_ms": 7.979354878240842,
+    "percent_of_loss": 10.246403498215743,
+    "total_loss_ms": 77.87468919831554
+  },
+  {
+    "variant": "new",
+    "bs": 2,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "unassigned",
+    "projected_contribution_ms": 151.23639128582653,
+    "percent_of_loss": 194.20480883164518,
+    "total_loss_ms": 77.87468919831554
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "attention",
+    "projected_contribution_ms": 28.186588890320024,
+    "percent_of_loss": 1.417507806350658,
+    "total_loss_ms": 1988.460928683403
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "model_compute",
+    "projected_contribution_ms": -714.4233185198357,
+    "percent_of_loss": -35.928456436550086,
+    "total_loss_ms": 1988.460928683403
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "decision",
+    "projected_contribution_ms": 1329.4137017535234,
+    "percent_of_loss": 66.85641556124278,
+    "total_loss_ms": 1988.460928683403
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "branch_kv",
+    "projected_contribution_ms": 67.58783092179709,
+    "percent_of_loss": 3.3990022105462367,
+    "total_loss_ms": 1988.460928683403
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "prepare",
+    "projected_contribution_ms": 304.5609103572704,
+    "percent_of_loss": 15.316414115258773,
+    "total_loss_ms": 1988.460928683403
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "host_runtime",
+    "projected_contribution_ms": 436.58143821178453,
+    "percent_of_loss": 21.955746372188127,
+    "total_loss_ms": 1988.460928683403
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "transfer",
+    "projected_contribution_ms": 22.26712979728732,
+    "percent_of_loss": 1.1198173157986464,
+    "total_loss_ms": 1988.460928683403
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "unassigned",
+    "projected_contribution_ms": 514.2866469055953,
+    "percent_of_loss": 25.863553036775738,
+    "total_loss_ms": 1988.460928683403
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "attention",
+    "projected_contribution_ms": 219.68147651767316,
+    "percent_of_loss": 11.04781458608434,
+    "total_loss_ms": 1988.460928683403
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "model_compute",
+    "projected_contribution_ms": -223.11973433754565,
+    "percent_of_loss": -11.220725090398302,
+    "total_loss_ms": 1988.460928683403
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "decision",
+    "projected_contribution_ms": 1031.4795608336215,
+    "percent_of_loss": 51.87326268042809,
+    "total_loss_ms": 1988.460928683403
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "branch_kv",
+    "projected_contribution_ms": 45.56145620530859,
+    "percent_of_loss": 2.2912925040712606,
+    "total_loss_ms": 1988.460928683403
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "prepare",
+    "projected_contribution_ms": 221.57355402367378,
+    "percent_of_loss": 11.142967449221231,
+    "total_loss_ms": 1988.460928683403
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "host_runtime",
+    "projected_contribution_ms": 297.0217088049534,
+    "percent_of_loss": 14.937266532142374,
+    "total_loss_ms": 1988.460928683403
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "transfer",
+    "projected_contribution_ms": 32.445862275471114,
+    "percent_of_loss": 1.6317073072667374,
+    "total_loss_ms": 1988.460928683403
+  },
+  {
+    "variant": "old",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "unassigned",
+    "projected_contribution_ms": 363.81704406515115,
+    "percent_of_loss": 18.296414016343846,
+    "total_loss_ms": 1988.460928683403
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "attention",
+    "projected_contribution_ms": 112.96482488613469,
+    "percent_of_loss": 11.041082499851035,
+    "total_loss_ms": 1023.1317888228696
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "model_compute",
+    "projected_contribution_ms": -471.5786817612452,
+    "percent_of_loss": -46.0916850510338,
+    "total_loss_ms": 1023.1317888228696
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "decision",
+    "projected_contribution_ms": 9.068156004440596,
+    "percent_of_loss": 0.8863135818381386,
+    "total_loss_ms": 1023.1317888228696
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "branch_kv",
+    "projected_contribution_ms": 73.92536043320672,
+    "percent_of_loss": 7.225399625033554,
+    "total_loss_ms": 1023.1317888228696
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "prepare",
+    "projected_contribution_ms": 340.50656382839435,
+    "percent_of_loss": 33.280811675312414,
+    "total_loss_ms": 1023.1317888228696
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "host_runtime",
+    "projected_contribution_ms": 377.1993486992164,
+    "percent_of_loss": 36.86713215442075,
+    "total_loss_ms": 1023.1317888228696
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "transfer",
+    "projected_contribution_ms": 16.96409395194295,
+    "percent_of_loss": 1.6580556031262041,
+    "total_loss_ms": 1023.1317888228696
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "unassigned",
+    "projected_contribution_ms": 564.0821220794095,
+    "percent_of_loss": 55.13288984290044,
+    "total_loss_ms": 1023.1317888228696
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "attention",
+    "projected_contribution_ms": 241.0289262371549,
+    "percent_of_loss": 23.55795498392859,
+    "total_loss_ms": 1023.1317888228696
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "model_compute",
+    "projected_contribution_ms": -198.86216096398698,
+    "percent_of_loss": -19.436612481054983,
+    "total_loss_ms": 1023.1317888228696
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "decision",
+    "projected_contribution_ms": 17.176452070400586,
+    "percent_of_loss": 1.6788112986072288,
+    "total_loss_ms": 1023.1317888228696
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "branch_kv",
+    "projected_contribution_ms": 48.81015533700635,
+    "percent_of_loss": 4.770661597091345,
+    "total_loss_ms": 1023.1317888228696
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "prepare",
+    "projected_contribution_ms": 243.75096504572312,
+    "percent_of_loss": 23.82400465986525,
+    "total_loss_ms": 1023.1317888228696
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "host_runtime",
+    "projected_contribution_ms": 261.48419624913737,
+    "percent_of_loss": 25.557235060595602,
+    "total_loss_ms": 1023.1317888228696
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "transfer",
+    "projected_contribution_ms": 21.89693019742791,
+    "percent_of_loss": 2.1401866735682895,
+    "total_loss_ms": 1023.1317888228696
+  },
+  {
+    "variant": "new",
+    "bs": 4,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "unassigned",
+    "projected_contribution_ms": 387.84632418979623,
+    "percent_of_loss": 37.907758162418155,
+    "total_loss_ms": 1023.1317888228696
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "attention",
+    "projected_contribution_ms": 639.0623851454086,
+    "percent_of_loss": 12.110465188353963,
+    "total_loss_ms": 5276.943331293032
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "model_compute",
+    "projected_contribution_ms": -1372.3346493386478,
+    "percent_of_loss": -26.00624193177338,
+    "total_loss_ms": 5276.943331293032
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "decision",
+    "projected_contribution_ms": 2970.2827637538708,
+    "percent_of_loss": 56.287941281075874,
+    "total_loss_ms": 5276.943331293032
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "branch_kv",
+    "projected_contribution_ms": 151.81676105091424,
+    "percent_of_loss": 2.876982971384571,
+    "total_loss_ms": 5276.943331293032
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "prepare",
+    "projected_contribution_ms": 697.0655080201057,
+    "percent_of_loss": 13.209645513651946,
+    "total_loss_ms": 5276.943331293032
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "host_runtime",
+    "projected_contribution_ms": 1163.1741769390565,
+    "percent_of_loss": 22.04257472391766,
+    "total_loss_ms": 5276.943331293032
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "transfer",
+    "projected_contribution_ms": 54.114095131125794,
+    "percent_of_loss": 1.0254818316926284,
+    "total_loss_ms": 5276.943331293032
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "unassigned",
+    "projected_contribution_ms": 973.7622902530882,
+    "percent_of_loss": 18.453150415289432,
+    "total_loss_ms": 5276.943331293032
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "attention",
+    "projected_contribution_ms": 1224.0662586684125,
+    "percent_of_loss": 23.196501872770238,
+    "total_loss_ms": 5276.943331293032
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "model_compute",
+    "projected_contribution_ms": -546.8822488811427,
+    "percent_of_loss": -10.363617999042217,
+    "total_loss_ms": 5276.943331293032
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "decision",
+    "projected_contribution_ms": 2376.4796396765887,
+    "percent_of_loss": 45.03515559061859,
+    "total_loss_ms": 5276.943331293032
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "branch_kv",
+    "projected_contribution_ms": 104.90617038022549,
+    "percent_of_loss": 1.9880101754763373,
+    "total_loss_ms": 5276.943331293032
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "prepare",
+    "projected_contribution_ms": 504.13707610069804,
+    "percent_of_loss": 9.55358139078532,
+    "total_loss_ms": 5276.943331293032
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "host_runtime",
+    "projected_contribution_ms": 814.657037991777,
+    "percent_of_loss": 15.438047878224193,
+    "total_loss_ms": 5276.943331293032
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "transfer",
+    "projected_contribution_ms": 82.01498681560913,
+    "percent_of_loss": 1.5542139012418132,
+    "total_loss_ms": 5276.943331293032
+  },
+  {
+    "variant": "old",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "unassigned",
+    "projected_contribution_ms": 717.564410286792,
+    "percent_of_loss": 13.598107185110972,
+    "total_loss_ms": 5276.943331293032
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "attention",
+    "projected_contribution_ms": 863.6067455140831,
+    "percent_of_loss": 27.251452313819307,
+    "total_loss_ms": 3169.030169728404
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "model_compute",
+    "projected_contribution_ms": -907.1309287445147,
+    "percent_of_loss": -28.624875124564014,
+    "total_loss_ms": 3169.030169728404
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "decision",
+    "projected_contribution_ms": 32.8782121636346,
+    "percent_of_loss": 1.0374849844503804,
+    "total_loss_ms": 3169.030169728404
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "branch_kv",
+    "projected_contribution_ms": 176.34208600027827,
+    "percent_of_loss": 5.564544247156579,
+    "total_loss_ms": 3169.030169728404
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "prepare",
+    "projected_contribution_ms": 810.2307032071323,
+    "percent_of_loss": 25.567150194615273,
+    "total_loss_ms": 3169.030169728404
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "host_runtime",
+    "projected_contribution_ms": 1048.0179722281305,
+    "percent_of_loss": 33.07062148663447,
+    "total_loss_ms": 3169.030169728404
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "transfer",
+    "projected_contribution_ms": 44.184982278600756,
+    "percent_of_loss": 1.3942745859812231,
+    "total_loss_ms": 3169.030169728404
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "unassigned",
+    "projected_contribution_ms": 1100.9003968108614,
+    "percent_of_loss": 34.73934730338058,
+    "total_loss_ms": 3169.030169728404
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "attention",
+    "projected_contribution_ms": 1262.0582793464484,
+    "percent_of_loss": 39.824748006567916,
+    "total_loss_ms": 3169.030169728404
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "model_compute",
+    "projected_contribution_ms": -454.58185802844605,
+    "percent_of_loss": -14.344510265972167,
+    "total_loss_ms": 3169.030169728404
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "decision",
+    "projected_contribution_ms": 39.55582584920286,
+    "percent_of_loss": 1.2481997245420016,
+    "total_loss_ms": 3169.030169728404
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "branch_kv",
+    "projected_contribution_ms": 121.67755723319813,
+    "percent_of_loss": 3.8395834282520034,
+    "total_loss_ms": 3169.030169728404
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "prepare",
+    "projected_contribution_ms": 587.0789577241123,
+    "percent_of_loss": 18.52550863453682,
+    "total_loss_ms": 3169.030169728404
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "host_runtime",
+    "projected_contribution_ms": 756.199337881689,
+    "percent_of_loss": 23.862169098456317,
+    "total_loss_ms": 3169.030169728404
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "transfer",
+    "projected_contribution_ms": 57.89771713403038,
+    "percent_of_loss": 1.8269853561852458,
+    "total_loss_ms": 3169.030169728404
+  },
+  {
+    "variant": "new",
+    "bs": 8,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "unassigned",
+    "projected_contribution_ms": 799.1443524424645,
+    "percent_of_loss": 25.217316012834104,
+    "total_loss_ms": 3169.030169728404
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "attention",
+    "projected_contribution_ms": 1561.462254752645,
+    "percent_of_loss": 11.184087080561493,
+    "total_loss_ms": 13961.463671599493
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "model_compute",
+    "projected_contribution_ms": -1032.8051833606632,
+    "percent_of_loss": -7.39754231830007,
+    "total_loss_ms": 13961.463671599493
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "decision",
+    "projected_contribution_ms": 6553.995481455426,
+    "percent_of_loss": 46.94346979384124,
+    "total_loss_ms": 13961.463671599493
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "branch_kv",
+    "projected_contribution_ms": 359.76070105356985,
+    "percent_of_loss": 2.5768122133598186,
+    "total_loss_ms": 13961.463671599493
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "prepare",
+    "projected_contribution_ms": 1698.6009483564885,
+    "percent_of_loss": 12.16635295776183,
+    "total_loss_ms": 13961.463671599493
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "host_runtime",
+    "projected_contribution_ms": 2723.7576689146285,
+    "percent_of_loss": 19.509112604399174,
+    "total_loss_ms": 13961.463671599493
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "transfer",
+    "projected_contribution_ms": 106.79413369212234,
+    "percent_of_loss": 0.7649207576234555,
+    "total_loss_ms": 13961.463671599493
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "unassigned",
+    "projected_contribution_ms": 1989.897666740474,
+    "percent_of_loss": 14.25278691079029,
+    "total_loss_ms": 13961.463671599493
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "attention",
+    "projected_contribution_ms": 3416.453085486572,
+    "percent_of_loss": 24.470593956680524,
+    "total_loss_ms": 13961.463671599493
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "model_compute",
+    "projected_contribution_ms": -120.99095919101683,
+    "percent_of_loss": -0.8666065538467681,
+    "total_loss_ms": 13961.463671599493
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "decision",
+    "projected_contribution_ms": 5373.79750178768,
+    "percent_of_loss": 38.49021584118788,
+    "total_loss_ms": 13961.463671599493
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "branch_kv",
+    "projected_contribution_ms": 257.9683213546187,
+    "percent_of_loss": 1.8477168828607826,
+    "total_loss_ms": 13961.463671599493
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "prepare",
+    "projected_contribution_ms": 1247.2047419940336,
+    "percent_of_loss": 8.933194766184196,
+    "total_loss_ms": 13961.463671599493
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "host_runtime",
+    "projected_contribution_ms": 2104.259677059217,
+    "percent_of_loss": 15.071913135724566,
+    "total_loss_ms": 13961.463671599493
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "transfer",
+    "projected_contribution_ms": 158.7145897795745,
+    "percent_of_loss": 1.1368048043732897,
+    "total_loss_ms": 13961.463671599493
+  },
+  {
+    "variant": "old",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "unassigned",
+    "projected_contribution_ms": 1524.0567133173884,
+    "percent_of_loss": 10.916167166753693,
+    "total_loss_ms": 13961.463671599493
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "attention",
+    "projected_contribution_ms": 2295.811091695146,
+    "percent_of_loss": 25.549852568238027,
+    "total_loss_ms": 8985.61385261829
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "model_compute",
+    "projected_contribution_ms": -445.4023997054744,
+    "percent_of_loss": -4.956838865000748,
+    "total_loss_ms": 8985.61385261829
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "decision",
+    "projected_contribution_ms": 63.769644585485764,
+    "percent_of_loss": 0.7096860117898804,
+    "total_loss_ms": 8985.61385261829
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "branch_kv",
+    "projected_contribution_ms": 402.5818986716101,
+    "percent_of_loss": 4.480293781535059,
+    "total_loss_ms": 8985.61385261829
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "prepare",
+    "projected_contribution_ms": 1956.542481954917,
+    "percent_of_loss": 21.77416606195253,
+    "total_loss_ms": 8985.61385261829
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "host_runtime",
+    "projected_contribution_ms": 2386.981627556581,
+    "percent_of_loss": 26.564480365034225,
+    "total_loss_ms": 8985.61385261829
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "transfer",
+    "projected_contribution_ms": 80.92214143456634,
+    "percent_of_loss": 0.9005744377829756,
+    "total_loss_ms": 8985.61385261829
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "whole_wall",
+    "category": "unassigned",
+    "projected_contribution_ms": 2244.407366039961,
+    "percent_of_loss": 24.97778563437789,
+    "total_loss_ms": 8985.61385261829
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "attention",
+    "projected_contribution_ms": 3552.0564941217685,
+    "percent_of_loss": 39.5304823063006,
+    "total_loss_ms": 8985.61385261829
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "model_compute",
+    "projected_contribution_ms": -2.1028478543889833,
+    "percent_of_loss": -0.02340238395372667,
+    "total_loss_ms": 8985.61385261829
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "decision",
+    "projected_contribution_ms": 66.20712533734692,
+    "percent_of_loss": 0.7368124918706032,
+    "total_loss_ms": 8985.61385261829
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "branch_kv",
+    "projected_contribution_ms": 286.8147995405655,
+    "percent_of_loss": 3.1919332863051024,
+    "total_loss_ms": 8985.61385261829
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "prepare",
+    "projected_contribution_ms": 1427.5515919319353,
+    "percent_of_loss": 15.887079228493285,
+    "total_loss_ms": 8985.61385261829
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "host_runtime",
+    "projected_contribution_ms": 1866.2501677237071,
+    "percent_of_loss": 20.76931190605199,
+    "total_loss_ms": 8985.61385261829
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "transfer",
+    "projected_contribution_ms": 104.60671854835526,
+    "percent_of_loss": 1.1641577332846798,
+    "total_loss_ms": 8985.61385261829
+  },
+  {
+    "variant": "new",
+    "bs": 16,
+    "pattern": "staggered",
+    "projection": "gpu_fixed",
+    "category": "unassigned",
+    "projected_contribution_ms": 1684.2298030601428,
+    "percent_of_loss": 18.74362542932312,
+    "total_loss_ms": 8985.61385261829
+  }
+]
