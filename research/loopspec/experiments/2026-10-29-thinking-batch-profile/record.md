@@ -37,3 +37,9 @@ Round 3: SHA6c42e8be31b489d50957d4c8f0c288dbd9f64331. Independent padded control
 ## Round 4/10
 
 Complete independent calibration for ALL requested batch sizes, not only16: contiguous cohorts covering all16 questions at bs1/2/4/8 and physical row widths1/4 with graph-equivalent prefill padding; full native forward, identical reference prefixes, no LoopSpec computation. This specifically covers small/mixed cohort shapes omitted before. Retain numeric check and observed outlier. Pin kernels0.9.0/huggingface_hub0.34.4 only in independent HF environment to match its Transformers4.54.1; rerun unchanged HF probe. Production unchanged. Then strict HTTP smoke before performance interpretation.
+
+Round 4: SHA1817d6a4045fe1bea74264654985a99f6bd07696. HF eager6positions exit0/all final argmax equal, maxlogitabs .3359375/maxRMSE .0742701. Native expanded controls exit0,11264positions/48flips; independent maxdepth1RMSE .350301 =>25%headroom .437876, covers prior .336233 LoopSpec outlier. Strict HTTP smoke did not execute requests: client failed Git dubious ownership; its server independently OOM during prefill graph capture at memfraction.85 (pool+graphs left90MiB). Both failures preserved. Container-specific Git safe.directory set; no global host change. No living GPU process/port after server self-cleanup. Synthetic AR/LS analyzer4-loop association checks exit0.
+
+## Round 5/10
+
+For BOTH algorithms set memfraction.78/max_total_tokens12000, same R4/context2048/graphmaxdecode16. Workload3218prompt+8192maxoutput=11410 logical tokens plus small branch headroom, so capacity should cover B16. Verify no retractions rather than assuming. Compute Git SHA before spawning server so metadata failure cannot orphan it. Strict smoke1/16, verify unchanged LoopSpec with new independently measured envelope, then full20-cell performance and separate profile. No production edits.

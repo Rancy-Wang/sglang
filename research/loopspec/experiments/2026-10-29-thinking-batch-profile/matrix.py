@@ -39,7 +39,7 @@ def main():
         common = ['--model-path', a.model, '--host', '127.0.0.1', '--port', str(a.port),
             '--dtype', 'bfloat16', '--attention-backend', 'triton', '--bf16-gemm-backend', 'auto',
             '--max-running-requests', '16', '--page-size', '1', '--disable-radix-cache',
-            '--context-length', '2048', '--mem-fraction-static', '0.85',
+            '--context-length', '2048', '--mem-fraction-static', '0.78', '--max-total-tokens', '12000',
             '--cuda-graph-max-bs-decode', '16', '--enable-metrics', '--stream-interval', '1']
         if algorithm == 'loopspec':
             common += ['--speculative-algorithm', 'loopspec', '--speculative-draft-depth', '1']
@@ -51,11 +51,12 @@ def main():
             env.pop('SGLANG_RECURRENT_TRACE', None)
         if a.phase == 'smoke':
             env['SGLANG_ENABLE_STRICT_MEM_CHECK_DURING_BUSY'] = '1'
+        sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
         with (a.output / f'{algorithm}-server.log').open('w') as log:
             process = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT,
                                        start_new_session=True)
         write_json(a.output / f'{algorithm}-process.json', {'command': command, 'pid': process.pid,
-            'sha': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()})
+            'sha': sha})
         try:
             for _ in range(600):
                 if process.poll() is not None:
@@ -72,7 +73,7 @@ def main():
                     cmd = [sys.executable, str(OLD/'profile_workload.py'), '--output', str(folder),
                         '--external-server', '--thinking', '--model', a.model, '--first', str(bs),
                         '--arrival-ms', *map(str, arrivals), '--max-new-tokens', str(a.max_new_tokens),
-                        '--max-running-requests', '16', '--graph-max-bs', '16', '--mem-fraction', '.85',
+                        '--max-running-requests', '16', '--graph-max-bs', '16', '--mem-fraction', '.78', '--max-total-tokens', '12000',
                         '--algorithm', algorithm, '--base-url', url, '--port', str(a.port),
                         '--warmup', str(a.warmup), '--repeat', '1' if a.phase == 'profile' else str(a.repeat),
                         '--report-mismatches']
