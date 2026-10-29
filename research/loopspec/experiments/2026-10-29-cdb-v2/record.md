@@ -371,3 +371,15 @@ graph两项实际均108次decode replay、0次prefill replay，logits与eager逐
 - GPU0启动前7MiB占用、无计算进程、30126空闲。`verify_recurrent.py --reference /results/round-5/native-joint-long --tokens /results/round-2/ar-reference --output /results/round-6/eager --steps 63` 退出134，完整log保留。首prefill和常规decode推进后，混合行测试在attention期间illegal memory access；尚无数值验收结果，不记通过。
 - 代码诊断：重排/重复源请求的执行描述保留了原 `seq_lens_sum`；重复长请求后KV CSR所需容量可能大于旧汇总值，Triton backend按旧值分配而按新GPU seq_lens写入。compact view应独立确定有界索引容量，不继承父batch的长度汇总。
 - **候选7/15六项计划**：目的为修正混合视图的KV索引容量；步骤为将映射后的 `seq_lens_sum` 设置为执行行数×上下文容量（纯host已知上界，无GPU readback），再重放原测试；范围仅timeline_pool.py及本记录；标准仍为固定数值包络、原mixed重复/重排行测试，禁止删失败测试；风险为过量scratch分配，规模限于活跃行×context且graph可复用；验证为相同CPU契约、Git同步后同X5环境顺序eager/graph检查，结果写round-7。本任务已用6轮，开始7/15，Scheduler尚未接线。
+
+### 第7轮验证结果及候选8/15计划
+
+- 提交 `9e809300a396fe62c23a6fd23de77f3d59dc6bfd` 已同步核验。CPU三项寻址契约通过。短64位置测试的单项P99越界（0.25>0.24）同样存在于未改基线相同前64位置，不能把全497位置分布门槛套到一个非随机子集后推导回归；保留该失败结果，不更改包络。
+- `round-7/eager-full` 与 `graph-full`，`verify_recurrent.py ... --steps 496 [--graph]` 均退出0，各3976位置，固定数值包络检查全部通过。每项8组混合深度/行重排/重复前缀检查均零误差。图重放的动态身份/深度已验证；尚无真实Scheduler CDB或性能结论。
+- **候选8/15**：
+  1. 目的：将已验证的通用执行器接入普通Scheduler，使每loop返回原生事件循环并可准入新请求。
+  2. 步骤：模型显式能力声明与兼容配置下自动选timeline；通用recurrent component维护预填充/解码continuation和完成回填；一个loop只产进度，最终depth才走原生采样/输出；复用正常/overlap事件循环、FutureMap、原生allocator与结果处理。
+  3. 范围：scheduler及小型scheduler_components/recurrent.py；GenerationBatchResult/ScheduleBatch的进度描述；ModelRunner/graph setup/pool配置；模型能力与验证脚本。EAGLE/DFLASH算法不复用；LoopSpec旧worker暂保持原路径。
+  4. 标准：8题交错请求正常输出，无错深度/错owner/多提交；trace证明未完成R4时能重新准入；取消和chunk生命周期安全；固定包络内同前缀一致；真实性能以原负载profile/paired E2E单独判断，未达到≤2%不称效率通过。
+  5. 风险：overlap的在途EOS/取消释放、partial prefill被误合并、FutureMap发布提前、hidden被图覆盖、phase公平性、graph与metadata开销。保留每token一次分配，partial状态持有tensor直到完成，使用原生stream/event屏障，显式完成列表而非伪造token。
+  6. 验证：CPU结构契约与静态检查；Git同步X5；先短服务/交错/取消/小chunk测试，再原AIME8题完整profile与无profiler测量。错误/慢路径如实记录；只有普通CDB功能与性能成立后再迁移LoopSpec V2。

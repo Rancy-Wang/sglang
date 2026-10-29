@@ -641,6 +641,13 @@ class Scheduler(
         # Init running status
         self.init_running_status()
 
+        self.recurrent_scheduler = None
+        if self.tp_worker.model_runner.recurrent_runner is not None:
+            from sglang.srt.managers.scheduler_components.recurrent import RecurrentScheduler
+
+            self.recurrent_scheduler = RecurrentScheduler(self)
+            logger.info("Native recurrent continuous depth batching enabled")
+
         # Init chunked prefill
         self.init_chunked_prefill()
         self.maybe_init_dynamic_chunk_sizer()
@@ -3775,6 +3782,8 @@ class Scheduler(
     def get_next_batch_to_run(
         self, running_batch: ScheduleBatch, last_batch: Optional[ScheduleBatch]
     ) -> NextBatchPlan:
+        if self.recurrent_scheduler is not None:
+            return self.recurrent_scheduler.next_batch(running_batch)
         self.process_pending_chunked_abort()
         self._process_hicache_events()
 
@@ -4527,6 +4536,9 @@ class Scheduler(
             logger.info(f"Scheduler.run_batch sleep {self.forward_sleep_time}s")
             time.sleep(self.forward_sleep_time)
 
+        if batch.recurrent_plan is not None:
+            return self.recurrent_scheduler.forward(batch)
+
         # Place holder handling for pd-disagg decode event loop
         if batch.forward_mode.is_prebuilt():
             return self._run_batch_prebuilt(batch)
@@ -4896,6 +4908,9 @@ class Scheduler(
         # TODO(lsyin): make the delayed sample a default behavior after
         # unifying the forward_batch_generation interface (related to spec V2).
         if batch_result is None or batch_result.delay_sample_func is None:
+            if batch_result is not None and batch_result.recurrent_outputs is not None:
+                for completed_batch, completed_result in batch_result.recurrent_outputs:
+                    self.launch_batch_sample_if_needed(completed_result, completed_batch)
             return
 
         with self.forward_stream_ctx:
@@ -4934,6 +4949,11 @@ class Scheduler(
         batch: ScheduleBatch,
         result: Union[GenerationBatchResult, EmbeddingBatchResult],
     ):
+        if isinstance(result, GenerationBatchResult) and result.recurrent_outputs is not None:
+            for completed_batch, completed_result in result.recurrent_outputs:
+                self.process_batch_result(completed_batch, completed_result)
+            self.maybe_send_health_check_signal()
+            return
         # Flush async trace ops here: in overlap mode this CPU work runs while
         # the next batch's GPU forward is in flight, giving free overlap.
         flush_trace_batch(batch.reqs)
@@ -5464,6 +5484,8 @@ class Scheduler(
         if self.enable_continuous_input_polling and self.result_queue:
             # Polling can run intake before the newest queued batch becomes last_batch.
             inflight_batches.extend(batch for batch, _ in self.result_queue)
+        if self.recurrent_scheduler is not None:
+            inflight_batches.extend(self.recurrent_scheduler.inflight_batches())
         return inflight_batches
 
     def abort_request(self, recv_req: AbortReq):

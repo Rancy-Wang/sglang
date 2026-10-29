@@ -197,6 +197,7 @@ class OuroModel(nn.Module):
 
 class OuroForCausalLM(nn.Module):
     has_injection = False
+    supports_recurrent_execution = True
 
     def __init__(self, config, quant_config=None, prefix=""):
         super().__init__()

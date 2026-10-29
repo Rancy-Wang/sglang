@@ -2340,6 +2340,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
 
     # === Core: request list (ForwardBatch derives lora_ids / rids / grammars / positions from it) ===
     reqs: List[Req]
+    recurrent_plan: Any = None
 
     # === Global config and shared resources (engine-lifetime; identical across batches) ===
     # Memory pool and cache

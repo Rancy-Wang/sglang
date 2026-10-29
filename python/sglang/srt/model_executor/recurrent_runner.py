@@ -21,6 +21,34 @@ from sglang.srt.model_executor.runner_utils.capture_mode import model_capture_mo
 from sglang.srt.speculative.spec_info import SpeculativeAlgorithm
 
 
+def use_recurrent_execution(model, server_args):
+    """Select the validated native CDB storage/execution capabilities."""
+    from sglang.srt.environ import envs
+
+    return (
+        getattr(model, "supports_recurrent_execution", False)
+        and server_args.speculative_algorithm is None
+        and (server_args.tp_size, server_args.pp_size, server_args.dp_size,
+             server_args.attn_cp_size) == (1, 1, 1, 1)
+        and server_args.attention_backend == "triton"
+        and server_args.device.startswith("cuda")
+        and all(backend in (None, "triton") for backend in (
+            server_args.prefill_attention_backend, server_args.decode_attention_backend))
+        and not envs.SGLANG_ENABLE_POST_CAPTURE_KV_SIZING.get()
+        and server_args.page_size == 1
+        and server_args.disable_radix_cache
+        and not any(getattr(server_args, name, False) for name in (
+            "enable_hierarchical_cache", "enable_unified_memory", "enable_hisparse",
+            "enable_unified_cache_external_linker", "enable_kv_cache_sharding",
+            "enable_lora", "enable_two_batch_overlap", "enable_mixed_chunk",
+            "enable_priority_preemption", "enable_torch_compile", "enable_memory_saver",
+        ))
+        and not server_args.cpu_offload_gb
+        and server_args.disaggregation_mode == "null"
+        and server_args.kv_cache_dtype in ("auto", "bf16", "bfloat16", "float16")
+    )
+
+
 @dataclass
 class RecurrentState:
     hidden: torch.Tensor
@@ -33,6 +61,24 @@ class RecurrentRunner:
         self.timeline = MixedTimelineRuntime(
             runner, request_pool or runner.req_to_token_pool, max_rows
         )
+        self.graphs = {}
+
+    def init_graphs(self):
+        from sglang.srt.model_executor.cuda_graph_config import check_cuda_graph_backend
+        from sglang.srt.runtime_context import get_exec
+
+        if check_cuda_graph_backend("decode", "disabled"):
+            return
+        for rows in get_exec().graph.cuda_graph_config.decode.bs:
+            if rows <= self.timeline.max_rows:
+                self.graphs[rows] = RecurrentDecodeGraph(self, rows)
+
+    def execute_core(self, batch, state, depths, *, token_rows=None):
+        if batch.forward_mode.is_decode():
+            for rows, graph in self.graphs.items():
+                if rows >= batch.batch_size:
+                    return graph.replay(batch, state, depths), True
+        return self.advance(batch, state, depths, token_rows=token_rows), False
 
     def prepare(self, batch, *, token_rows=None):
         depths = torch.zeros_like(batch.req_pool_indices)

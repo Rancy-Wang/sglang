@@ -74,3 +74,42 @@ class TestMixedTimeline(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TestRecurrentAdmission(unittest.TestCase):
+    def test_admit_at_loop_boundary_and_do_not_reprepare_active_token(self):
+        from unittest.mock import patch
+        from sglang.srt.managers.schedule_batch import ScheduleBatch, NextBatchPlan
+        from sglang.srt.managers.scheduler_components.recurrent import RecurrentScheduler
+
+        class Request:
+            def finished(self):
+                return False
+
+        a, b = Request(), Request()
+        batches = [ScheduleBatch(reqs=[a], forward_mode=ForwardMode.EXTEND),
+                   ScheduleBatch(reqs=[b], forward_mode=ForwardMode.EXTEND)]
+        occupancy = []
+        scheduler = SimpleNamespace(
+            tp_worker=SimpleNamespace(model_runner=SimpleNamespace(
+                recurrent_runner=object(), model=SimpleNamespace(config=SimpleNamespace(total_ut_steps=4)))),
+            chunked_req=None,
+        )
+
+        def admit(view):
+            occupancy.append(len(view.reqs))
+            return NextBatchPlan(batch_to_run=batches.pop(0) if batches else None, running_batch=view)
+
+        scheduler.get_new_batch_prefill = admit
+        component = RecurrentScheduler(scheduler)
+        running = ScheduleBatch(reqs=[])
+        seen = []
+        with patch('sglang.srt.managers.scheduler_components.recurrent.set_schedule_time_batch'):
+            for _ in range(3):
+                plan = component.next_batch(running)
+                work = plan.batch_to_run.recurrent_plan[0]
+                seen.append((work.batch.reqs[0], work.depth))
+                work.depth += 1
+        self.assertEqual(occupancy, [0, 1, 2])
+        self.assertEqual(seen, [(a, 0), (a, 1), (b, 0)])
+        self.assertEqual(len(component.pending), 2)
+        self.assertEqual(component.pending[0].depth, 2)

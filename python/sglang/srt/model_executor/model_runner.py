@@ -1105,6 +1105,21 @@ class ModelRunner:
             [self.attn_backend, self.decode_attn_backend]
         )
 
+        self.recurrent_runner = None
+        from sglang.srt.model_executor.recurrent_runner import (
+            RecurrentRunner, use_recurrent_execution,
+        )
+        if use_recurrent_execution(self.model, self.server_args):
+            from sglang.srt.mem_cache.timeline_pool import TimelineRuntime
+
+            self.recurrent_runner = RecurrentRunner(self, max_rows=self.max_running_requests)
+            # Keep the ordinary full-forward entry correct for warmup and
+            # one_batch tools. Serving advances through recurrent_runner.
+            self.model.timeline_runtime = TimelineRuntime(
+                self.token_to_kv_pool, self.token_to_kv_pool_allocator,
+                self.req_to_token_pool, self,
+            )
+
         if get_parallel().dcp_enabled and get_parallel().dcp_replicate_q_proj:
             self._prepare_replicated_q_proj()
 
@@ -1188,6 +1203,13 @@ class ModelRunner:
         self.decode_cuda_graph_runner = capture.decode.runner
         self.graph_memory_usage = capture.memory_usage
         self.graph_time_usage = capture.time_usage
+
+        if self.recurrent_runner is not None:
+            started = time.perf_counter()
+            allocated = torch.cuda.memory_allocated()
+            self.recurrent_runner.init_graphs()
+            self.graph_memory_usage["decode"] = (torch.cuda.memory_allocated() - allocated) / 2**30
+            self.graph_time_usage["decode"] = time.perf_counter() - started
 
         if is_scale_joiner:
             if self._elastic_cuda_graph_enabled():
