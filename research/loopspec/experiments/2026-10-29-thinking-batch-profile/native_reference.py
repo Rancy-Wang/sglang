@@ -99,13 +99,19 @@ def main():
         torch.save({'single':singles},a.output/'tensors.pt')
         (a.output/'cohort-0.json').write_text(json.dumps({'requests':[{'output_ids':t} for t in reference_tokens]}))
         errors=[]
-        for padding in [0,32-a.first,64-a.first]:
-            rows,_=run(list(range(a.first)),reference_tokens,padding,padded_prefill=True)
+        controls=[(list(range(a.first)), n-a.first) for n in [16,32,64]]
+        for size in [1,2,4,8]:
+            for start in range(0,a.first,size):
+                for width in [1,4]:
+                    controls.append((list(range(start,min(a.first,start+size))),size*(width-1)))
+        for indices,padding in controls:
+            rows,_=run(indices,reference_tokens,padding,padded_prefill=True)
+            print(json.dumps({'control_indices':indices,'padding':padding}),flush=True)
             for step,r in enumerate(rows):
-                for q in range(a.first):
-                    source=singles[q][step]; x,y=source['logits'][0],r['logits'][q]
-                    errors.append({'padding':padding,'question':q+1,'step':step,
-                        'hidden':[error(source['hidden'][d,0],r['hidden'][d,q]) for d in range(4)],
+                for j,q in enumerate(indices):
+                    source=singles[q][step]; x,y=source['logits'][0],r['logits'][j]
+                    errors.append({'batch_indices':indices,'padding':padding,'question':q+1,'step':step,
+                        'hidden':[error(source['hidden'][d,0],r['hidden'][d,j]) for d in range(4)],
                         'logits':error(x,y),'argmax_reference':int(x.argmax()),'argmax_candidate':int(y.argmax()),
                         'reference_margin':float(x.topk(2).values.diff().abs()[0])})
     hook.remove()
@@ -118,7 +124,7 @@ def main():
         'logits':bounds([r['logits'] for r in errors]),
         'max_argmax_flip_fraction':max(.01,len(flips)/len(errors)*1.25),
         'protected_reference_margin':max(.5,max((r['reference_margin'] for r in flips),default=0)*1.25),
-        'source':'Independent native full-R B16/B32/B64 with graph-equivalent power-of-two prefill padding vs B1, same Thinking prefixes; 25% headroom on observed maxima.'}
+        'source':'Independent native full-R bs1/2/4/8/16 and branch-width4 row shapes with graph-equivalent power-of-two prefill padding vs B1, same Thinking prefixes; 25% headroom on observed maxima.'}
     (a.output/'numerical_envelope.json').write_text(json.dumps(limits,indent=2))
     (a.output/'calibration.json').write_text(json.dumps({'records':errors,'limits':limits,'finite':all(torch.isfinite(r['logits']).all() for ss in singles for r in ss)},default=bool,indent=2))
     print(json.dumps({'completed':True,'positions':len(errors),'flips':len(flips),'limits':limits}),flush=True)

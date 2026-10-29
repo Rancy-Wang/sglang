@@ -31,3 +31,9 @@ Round 2: SHA314f62a6da32c07607555cb1403246e2a79564cf. HF exited1 (isolated envir
 ## Round 3/10
 
 Independent control omitted padded prefill: graph pads total tokens to next power-of-two, whereas native calibration used unpadded M. Extend ONLY independent native calibration to graph-equivalent prefill padding and decode M16/32/64, retaining B1 reference unchanged; then rerun unchanged LoopSpec verification against independently determined envelope. Correct HF isolation by ordered PYTHONPATH of HF site-packages then serving site-packages, without modifying serving dependencies or checkpoint. No production or algorithm changes. Preserve prior failed results.
+
+Round 3: SHA6c42e8be31b489d50957d4c8f0c288dbd9f64331. Independent padded controls exit0, 3072 positions/14 low-margin flips. Rechecking unchanged LoopSpec report removes five of six failures; depth1 RMSE .336233 remains at q9 prefix30 (target argmax identical, margin9.125). HF environment fails in new kernels package with old hub strict dataclass compatibility; no GPU HF result yet.
+
+## Round 4/10
+
+Complete independent calibration for ALL requested batch sizes, not only16: contiguous cohorts covering all16 questions at bs1/2/4/8 and physical row widths1/4 with graph-equivalent prefill padding; full native forward, identical reference prefixes, no LoopSpec computation. This specifically covers small/mixed cohort shapes omitted before. Retain numeric check and observed outlier. Pin kernels0.9.0/huggingface_hub0.34.4 only in independent HF environment to match its Transformers4.54.1; rerun unchanged HF probe. Production unchanged. Then strict HTTP smoke before performance interpretation.
