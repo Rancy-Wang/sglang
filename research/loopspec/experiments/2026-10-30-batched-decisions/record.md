@@ -3,11 +3,11 @@
 ## 身份与预算
 
 - 用户请求：制定逐 endpoint 草拟／验证决策批量化修复计划，沿用前次 Profile 规则，最终输出与 AR 的新对比。
-- 状态：用户已批准实施，第一轮进行中。
+- 状态：生产候选及基础正确性验证完成，配对实验与归因工具进行中。
 - 当前基线：`7df281a0e656e368c90f529d8d84305db99001f5`，分支 `loopspec-test`，制定计划前工作树干净。
 - 前次测量 SHA：`da56f8103931e5b3a2451219b4e0c4b3dcb16286`；之后仅分析和结果记录改变。实施前重新确认生产源码 diff。
 - 官方参考 SHA：`41aa710ed7c9ce908cffa03597be5d1df19d7b56`，只读。
-- 新修复任务预算：2/10。前次 benchmark 任务保持 6/10，不重置历史计数。每个源码／测试／行为配置候选的修改＋验证记一轮。
+- 新修复任务预算：3/5（按本对话用户提供的 AGENTS.md 五轮上限；磁盘技能仍写十轮，用户要求优先）。前次 benchmark 任务保持 6/10，不重置历史计数。每个源码／测试／行为配置候选的修改＋验证记一轮。
 - 正式 `loopspec` 分支未获本次晋升授权。
 
 ## 1. 修改目的与证据
@@ -165,10 +165,20 @@ X5 原始结果根目录：`/home/ruoxi/repo/test/results/loopspec/2026-10-30-ba
 
 最终报告需要量化 LoopSpec/AR 加速比从 bs1 随 batch 增大下降的各阶段百分比。以明确的归一化损失定义进行分析，GPU kernel/CPU区间去重、重叠只计一次，保留未归因项和 profiler 扰动。决策修复的因果证据来自旧/新配对实测；attention 等未独立干预的阶段仅作时间分解/反事实估算，不冒称精确因果比例。报告每个 bs、两种到达方式，并区分 batch 增长与题目长度分布变化。
 
-第一轮当前证据：本地 compileall/diff-check exit0；local/origin/X5 c1c895cc5430cc460bdd958fdbcc852d7a82121a。28项 CPU/CUDA 测试通过（10.52s，exit0）。同前缀1024位置实际graph分支计算通过固定native-reference-r4 envelope（exit0）。首次数值命令误用了自由生成AR B16输出作强制prefix，和参考在q2/7/8/10不同，导致exit1；保留numerical失败日志。改用参考自带cohort-0 tokens，源码不变，numerical-matched-prefix通过。这是纠正实验输入，不是放宽阈值。严格HTTP smoke正在运行。
+第一轮当前证据：本地 compileall/diff-check exit0；local/origin/X5 c1c895cc5430cc460bdd958fdbcc852d7a82121a。28项 CPU/CUDA 测试通过（10.52s，exit0）。同前缀1024位置实际graph分支计算通过固定native-reference-r4 envelope（exit0）。首次数值命令误用了自由生成AR B16输出作强制prefix，和参考在q2/7/8/10不同，导致exit1；保留numerical失败日志。改用参考自带cohort-0 tokens，源码不变，numerical-matched-prefix通过。这是纠正实验输入，不是放宽阈值。严格HTTP smoke（bs1/16、两种发送方式、64 token）exit0。
 
 ### 第 2 轮 / 10（实验工具候选）
 
 新增 benchmark_decisions.py 和 paired_matrix.py，生产代码保持第一轮不变。旧版只读 detached baseline为7df281a0e，候选和baseline挂载路径分别核实。为保留每组2次预热+5次连续测量，按bs轮换AR/旧/新算法块顺序，在同一server内测两种到达方式；这是配对算法块，不声称逐重复ABBA。每项数据保存实际SHA。
 
 独立微基准使用真实checkpoint target logits并构造可控endpoint role/proposal元数据，明确不是现场draft logits回放。测试单位是整个决策packet，包括同步回读；分别报告CPU提交、回读等待、GPU stream和kernel数。性能和profile矩阵分别运行。不会在第一轮正在运行的服务期间pull改变其源码。
+
+第二轮：59641366ae5cb9c971d01969340d60f266852a25 已同步 X5。微基准 exit0；38项混合参数、EOS、取消、零token及KV复用HTTP检查 exit0。完整bs1/2/4/8同前缀数值检查继续运行，bs16已在第一轮通过。
+
+### 第 3 轮 / 5（诊断容量修正，分析方案）
+
+在既有计划内新增 profile 分区和报告工具，不改生产候选。使用与前次相同的共享step路径分析，另对Chrome GPU/CPU区间去重，GPU执行优先，主机只记未被GPU覆盖的区间。此为占用时间分区而非关键路径因果模型；把Profile份额映射到无Profiler E2E的百分比明确标为估算，并报告扰动倍数。
+
+加速比损失使用 E_B=L_B-(L_1/A_1)A_B（保持bs1加速比应减少的LoopSpec时间），各阶段的有符号贡献之和为E_B；允许负贡献，保留未归因项。另报告旧/新实测的E_B下降，避免把旧版独有Profiler开销归因成真实运行收益。同步检查prompt IDs、全序列及停止原因差异、全部Profile覆盖；不改变既定数值/性能标准。
+
+第二轮扩展numeric-b1在构图阶段exit1：旧诊断脚本固定捕获到32行，超过bs1×width4容量；未进入数值比较。第三轮仅在verify_loopspec.py添加与生产init_graphs相同的capacity筛选，不改生产代码或误差标准。失败日志保留round-2/numeric-b1.log。分析工具的方案已记录，尚未修改工具源码。

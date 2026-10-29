@@ -118,6 +118,8 @@ def main():
         if args.graph:
             worker.executor.graph_pool = torch.cuda.graph_pool_handle()
             for n in sorted({1,2,4,8,worker.width,worker.width*2,worker.width*4,16,worker.width*8,worker.width*args.first}):
+                if n > worker.max_rows:
+                    continue  # Match RecurrentRunner.init_graphs capacity filtering.
                 worker.executor.graphs[n] = RecurrentCoreGraph(worker.executor,n)
                 worker.executor.finish_graphs[n] = RecurrentCoreGraph(worker.executor,n,role='finish')
         for q, req in enumerate(requests):
