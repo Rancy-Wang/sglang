@@ -1101,7 +1101,9 @@ class UnifiedRadixCache(BasePrefixCache):
                     effective_cache_len = min(effective_cache_len, cl)
 
             if getattr(req, "context_state", None) is not None:
-                effective_cache_len = context_publish_length(req, effective_cache_len)
+                effective_cache_len = context_publish_length(
+                    req, effective_cache_len, preserve_state_boundary=self.is_mamba_enabled
+                )
 
             # Truncate if needed; the tail free is deferred and batched with
             # the unaligned tail below so a shared boundary page is emitted once.
@@ -1463,7 +1465,9 @@ class UnifiedRadixCache(BasePrefixCache):
                 effective_cache_len = min(effective_cache_len, cl)
 
         if getattr(req, "context_state", None) is not None:
-            effective_cache_len = context_publish_length(req, effective_cache_len)
+            effective_cache_len = context_publish_length(
+                req, effective_cache_len, preserve_state_boundary=self.is_mamba_enabled
+            )
 
         radix_key = req.make_prefix_key(
             token_ids[:effective_cache_len], is_bigram=self.tree_core.is_eagle

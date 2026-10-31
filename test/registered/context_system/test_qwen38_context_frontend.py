@@ -28,6 +28,12 @@ def test_hybrid_admission():
     text.layer_types[-1] = "qwen_sparse_attention"
     with pytest.raises(ValueError, match="Full/Linear"):
         capabilities.validate_context_config(args, model)
+    from sglang.srt.configs.qwen3_5 import Qwen3_5TextConfig
+    model.hf_config.text_config = Qwen3_5TextConfig(
+        num_hidden_layers=4, full_attention_interval=4,
+        layer_types=["linear_attention"] * 3 + ["full_attention"],
+    )
+    capabilities.validate_context_config(args, model)
 
 
 @pytest.fixture(scope="module")
@@ -92,3 +98,19 @@ def test_binding_selects_full_layers_and_partial_rope():
     binding = ContextModelBinding(model, NS(get_kv_buffer=lambda i: buffers[i]), NS(), page_size=1)
     assert [layer.layer_id for layer in binding.layers] == [3, 7]
     assert all(layer.rotary_dim == 64 for layer in binding.layers)
+
+
+def test_hybrid_publication_does_not_relabel_native_state():
+    from sglang.srt.context_system.request_storage import context_publish_length
+
+    req = NS(
+        context_state=NS(terminal_rows=torch.tensor([1, 2, -1, -1, 5])),
+        context_recompute_program=None,
+        context_program=NS(
+            layout=NS(keep_mask=torch.tensor([True, True, False, False, True])),
+            visible_until=torch.tensor([5, 5, 4, 4, 5]),
+        ),
+    )
+    assert context_publish_length(req, 4) == 2
+    assert context_publish_length(req, 4, preserve_state_boundary=True) == 0
+    assert context_publish_length(req, 5, preserve_state_boundary=True) == 5

@@ -682,8 +682,12 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             raise ValueError(
                 "Context Drop leases require page_size=1 device-only Python Radix"
             )
-        if set(self.component_types) - {ComponentType.FULL, ComponentType.SWA}:
-            raise ValueError("Context Drop leases support Full/SWA KV components only")
+        if set(self.component_types) - {
+            ComponentType.FULL, ComponentType.SWA, ComponentType.MAMBA
+        }:
+            raise ValueError("Context Drop leases support Full/SWA/Mamba components only")
+        # Only Full references below are released. The native Mamba state lock
+        # stays on its endpoint; Drop never changes the live recurrent state.
         anchor = self.node_by_id(node_id)
         self._assert_receipt_anchor(anchor, receipt)
         if (

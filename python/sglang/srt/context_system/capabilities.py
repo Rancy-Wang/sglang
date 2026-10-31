@@ -30,7 +30,13 @@ def validate_context_config(args, model_config):
         raise ValueError(f"Context Drop/Reposition is not supported by {architecture}")
     if qwen_hybrid:
         config = getattr(model_config.hf_config, "text_config", model_config.hf_config)
-        kinds = getattr(config, "layer_types", None)
+        # SGLang's Qwen config consumes HF layer_types during construction and
+        # exposes the execution layout through layers_block_type instead.
+        kinds = getattr(config, "layers_block_type", None)
+        if kinds is None:
+            kinds = getattr(config, "layer_types", None)
+        if kinds:
+            kinds = ["full_attention" if kind == "attention" else kind for kind in kinds]
         if (
             not kinds or len(kinds) != config.num_hidden_layers
             or "full_attention" not in kinds

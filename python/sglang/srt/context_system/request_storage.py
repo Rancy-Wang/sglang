@@ -8,7 +8,7 @@ admission and contains page IDs, not extra model KV.
 import torch
 
 
-def context_publish_length(req, length):
+def context_publish_length(req, length, *, preserve_state_boundary=False):
     """Largest prefix whose absent terminal rows have an on-path Drop proof.
 
     A Drop at raw boundary b belongs to token b, so a b-token key does not
@@ -34,6 +34,11 @@ def context_publish_length(req, length):
     required = np.maximum.accumulate(np.where(missing, proof_end, 0))
     if required[-1] <= length:
         return length
+    if preserve_state_boundary:
+        # A recurrent state describes exactly `length` processed tokens. A
+        # shorter Full-only publication would mislabel that state. Defer this
+        # cache publication; the request keeps its live state and keeps going.
+        return 0
     valid = np.flatnonzero(required <= np.arange(1, len(rows) + 1))
     return int(valid[-1] + 1) if len(valid) else 0
 
