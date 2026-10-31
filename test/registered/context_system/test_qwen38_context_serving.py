@@ -94,7 +94,9 @@ def test_bcp_case771(endpoint, mode):
         "path": str(source), "case_id": "771", "trial": 1,
         "line_sha256": digest, "expected_answer": "Vakkorama", "evidence_docid": "72111",
     }, indent=2))
-    options = {"tools": tools}
+    # This is a final-answer replay, not a live search-engine rollout. The
+    # evidence is complete; disable additional calls consistently in all modes.
+    options = {"tools": tools, "tool_choice": "none"}
     if mode != "native":
         options["drop_message"] = {"3": [2]}
     if mode == "drop_reposition":

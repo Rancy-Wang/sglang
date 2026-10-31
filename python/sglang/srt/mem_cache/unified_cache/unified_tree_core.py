@@ -1821,6 +1821,8 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             # Restore the insertion's original matched prefix after the loop.
             state.result.prefix_len = base + start
             for component in self.components:
+                if component.component_type == ComponentType.MAMBA:
+                    continue
                 component.commit_insert_component_data(
                     node=node,
                     is_new_leaf=True,
@@ -1828,6 +1830,18 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                     result=state.result,
                     cache_actions=state.pending_actions,
                 )
+        # Unlike per-token Full/SWA KV, one recurrent state belongs only to
+        # the complete prefix endpoint. Sharing it across resident runs would
+        # invent earlier states and donate/free the same slot more than once.
+        mamba = self.components_by_type.get(ComponentType.MAMBA)
+        if mamba is not None:
+            mamba.commit_insert_component_data(
+                node=node,
+                is_new_leaf=True,
+                params=state.params,
+                result=state.result,
+                cache_actions=state.pending_actions,
+            )
         state.target_node = node
         state.is_new_leaf = True
         state.result.prefix_len = base

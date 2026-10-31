@@ -28,9 +28,15 @@ def test_hybrid_retry_boundary_and_drop_lease(compiler, monkeypatch):
         num_layers=4, full_attention_layer_ids=(3,),
     ))
     tokens = list(range(256))
-    key = RadixKey.from_context(compiler(*args(tokens, {128: [(0, 64)]}, [])))
-    values, state = allocator.alloc(256), pool.mamba_allocator.alloc(1)
-    cache.insert(InsertParams(key=key, value=values, mamba_value=state))
+    key = RadixKey.from_context(compiler(*args(tokens, {128: [(32, 64)]}, [])))
+    resident = torch.ones(256, dtype=torch.bool)
+    resident[32:64] = False
+    values = torch.full((256,), -1, dtype=torch.int64)
+    values[resident] = allocator.alloc(224)
+    state = pool.mamba_allocator.alloc(1)
+    cache.insert(InsertParams(key=key, value=values, mamba_value=state,
+                              context_resident=resident))
+    assert cache.tree_core.component_evictable_size_[ComponentType.MAMBA] == 1
     exact = cache.match_prefix(MatchPrefixParams(key=key, context_retry=True))
     assert len(exact.device_indices) == 256
     # There is only a native state at 256, never at the partial boundary 192.
@@ -38,12 +44,12 @@ def test_hybrid_retry_boundary_and_drop_lease(compiler, monkeypatch):
     assert len(partial.device_indices) == 0
     receipt = cache.inc_lock_ref(exact.last_device_node)
     required = torch.ones(256, dtype=torch.bool)
-    required[:64] = False
+    required[32:64] = False
     cache.configure_context_drop_lock(exact.last_device_node, receipt, required)
     node = cache.tree_core.node_by_id(exact.last_device_node)
     assert node.component_data[ComponentType.MAMBA].lock_ref == 1
     assert torch.equal(node.component_data[ComponentType.MAMBA].value, state)
-    assert receipt.context_skip_ranges == ((0, 64),)
+    assert receipt.context_skip_ranges == ((32, 64),)
     cache.dec_lock_ref(exact.last_device_node, receipt.to_dec_params())
     cache.evict(EvictParams(num_tokens=512, mamba_num=20))
     assert allocator.available_size() == 512
