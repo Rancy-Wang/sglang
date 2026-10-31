@@ -129,7 +129,8 @@ def test_bcp_case771(endpoint, mode):
             ), meta
 
 
-def test_raw_history_above_model_limit(endpoint):
+@pytest.mark.parametrize("retained_tail", [0, 512])
+def test_raw_history_above_model_limit(endpoint, retained_tail):
     """Exceed native 262144 tokens while keeping active Full positions small."""
     if not os.environ.get("QWEN38_CONTEXT_LONG"):
         pytest.skip("explicit long-history run required")
@@ -143,14 +144,23 @@ def test_raw_history_above_model_limit(endpoint):
         event = len(messages) - 1
         drops[str(event)] = [event - 1]
         reposition.append(event)
-    messages.append({"role": "user", "content": "Reply with exactly the word orange."})
+    messages.append({
+        "role": "user",
+        "content": "Neutral background. " * retained_tail
+        + "Reply with exactly the word orange.",
+    })
     flush(endpoint)
     for state in ("cold", "hot"):
-        result, text = request(endpoint, f"long-{state}", messages,
+        result, text = request(endpoint, f"long-tail{retained_tail}-{state}", messages,
                                drop_message=drops, reposition=reposition, max_tokens=32)
         assert text.strip().lower().strip(".!") == "orange", text
         assert len(result["sglext"]["input_ids"]) > 262144
-        usage = result["choices"][0]["meta_info"]["context_usage"]
-        assert usage["actual_prefill_tokens"] <= len(result["sglext"]["input_ids"]), usage
-        if state == "hot":
+        meta = result["choices"][0]["meta_info"]
+        usage = meta["context_usage"]
+        assert meta["num_retractions"] == 0
+        assert usage["actual_prefill_tokens"] == meta["prompt_tokens"] - meta["cached_tokens"]
+        # A short tail can end before the next native recurrent checkpoint;
+        # there need not be any jointly reusable prefix. Keep that boundary
+        # case, and separately require reuse when a retained tail spans it.
+        if state == "hot" and retained_tail:
             assert usage["drop_skipped_tokens"] > 262144, usage
