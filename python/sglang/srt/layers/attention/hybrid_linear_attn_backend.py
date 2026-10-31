@@ -1098,6 +1098,15 @@ class HybridLinearAttnBackend(AttentionBackend):
         ) or getattr(linear_attn_backend, "extend_dummy_seqs_capped_by_req_pool", False)
 
     @property
+    def context_decode_registry(self):
+        return getattr(self.full_attn_backend, "context_decode_registry", None)
+
+    @context_decode_registry.setter
+    def context_decode_registry(self, registry):
+        # Context changes Full KV reads only. GDN keeps its native state slots.
+        self.full_attn_backend.context_decode_registry = registry
+
+    @property
     def data_type(self):
         # KV-cache dtype readers (e.g. the trtllm_mla fused-rope check) reach the
         # wrapper since split backends are wrapped once (#31439); the full-attn

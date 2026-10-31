@@ -14,6 +14,10 @@ def validate_context_config(args, model_config):
     architecture = getattr(model_config, "_resolved_model_arch", None)
     if not isinstance(architecture, str):
         architecture = architectures[0] if architectures else None
+    qwen_hybrid = architecture in {
+        "Qwen3_5ForConditionalGeneration", "Qwen3_5MoeForConditionalGeneration",
+        "Qwen3_5ForCausalLM", "Qwen3_5MoeForCausalLM",
+    }
     if architecture not in {
         "QWenLMHeadModel",
         "Qwen2ForCausalLM",
@@ -22,8 +26,22 @@ def validate_context_config(args, model_config):
         "Qwen3MoeForCausalLM",
         "GptOssForCausalLM",
         "MiniMaxM2ForCausalLM",
-    }:
+    } and not qwen_hybrid:
         raise ValueError(f"Context Drop/Reposition is not supported by {architecture}")
+    if qwen_hybrid:
+        config = getattr(model_config.hf_config, "text_config", model_config.hf_config)
+        kinds = getattr(config, "layer_types", None)
+        if (
+            not kinds or len(kinds) != config.num_hidden_layers
+            or "full_attention" not in kinds
+            or any(kind not in {"full_attention", "linear_attention"} for kind in kinds)
+        ):
+            raise ValueError("Context Qwen hybrid requires Full/Linear attention layers")
+        if args.disaggregation_mode != "null":
+            raise ValueError("Context Qwen hybrid PD is not yet supported")
+        for name in ("enable_linear_replayssm", "enable_int8_mamba_checkpoint"):
+            if getattr(args, name, False):
+                raise ValueError(f"Context Qwen hybrid is not yet supported with {name}")
     if getattr(model_config.hf_config, "dual_chunk_attention_config", None):
         raise ValueError("Context Drop/Reposition does not support DualChunk RoPE")
     if architecture == "MiniMaxM2ForCausalLM":

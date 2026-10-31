@@ -999,12 +999,12 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             or self.kv_events.enabled
             or self.is_eagle
             or any(
-                ct not in (ComponentType.FULL, ComponentType.SWA)
+                ct not in (ComponentType.FULL, ComponentType.SWA, ComponentType.MAMBA)
                 for ct in self.component_types
             )
         ):
             raise ValueError(
-                "Context Radix currently requires device-only Full/SWA cache, "
+                "Context Radix currently requires device-only Full/SWA/Mamba cache, "
                 "without speculative decoding or KV cache event export"
             )
 
@@ -1049,10 +1049,17 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         if not len(key):
             return self._empty_match_result
         swa = self.components_by_type.get(ComponentType.SWA)
+        mamba = self.components_by_type.get(ComponentType.MAMBA)
 
         def advance(node, length, suffix):
             if node.evicted:
                 return None
+            if mamba is not None and not params.context_cache_publication:
+                # Preserve native hybrid prefix admission: a partial edge has no
+                # state at its new boundary. Do not COW a later state into it.
+                # Context never rewinds or transforms the selected linear state.
+                if length != len(node.key) or node.component_data[ComponentType.MAMBA].value is None:
+                    return False, suffix
             if swa is None or params.context_cache_publication:
                 return True, suffix
             if node.component_data[ComponentType.SWA].value is None:

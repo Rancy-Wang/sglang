@@ -52,6 +52,17 @@ def retained_template(template):
             raise ValueError("Unrecognized MiniMax thinking history guard")
         family = "minimax"
     elif "ns.last_query_index" in template and "reasoning_content" in template:
+        # Qwen3.8 retains reasoning natively unless preserve_thinking=False.
+        # Override that request-local switch only when Context asks to retain it.
+        native_guard = (
+            "preserve_thinking is undefined or preserve_thinking is true "
+            "or loop.index0 > ns.last_query_index"
+        )
+        if template.count(native_guard) == 1:
+            patched = template.replace(
+                native_guard, f"preserve_thinking_history or ({native_guard})"
+            )
+            return marker + "qwen #}" + patched, "qwen"
         patched, count = re.subn(
             r"({%-?\s*if\s+)loop\.index0\s*>\s*ns\.last_query_index(\s*-?%})",
             r"\1preserve_thinking_history or loop.index0 > ns.last_query_index\2",
