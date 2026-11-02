@@ -544,7 +544,7 @@ def test_hybrid_deferred_publication_keeps_source_lease(compiler, monkeypatch, f
             node = cache.tree_core.node_by_id(req.last_node)
             saved = node.component_data[ComponentType.MAMBA].value
             assert torch.all(pool.mamba_pool.mamba_cache.temporal[:, saved] == 200)
-            assert (req.prefix_indices < 0).sum() == 48
+            assert (req.context_state.terminal_rows[:48] < 0).all()
             cache.sanity_check()
         cache.cache_finished_req(req, is_insert=False, kv_len_to_handle=200)
         pool.free(req)
