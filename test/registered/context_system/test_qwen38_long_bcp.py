@@ -8,6 +8,7 @@ saves a newly generated final answer for independent grading.
 
 import argparse
 import copy
+from concurrent.futures import ThreadPoolExecutor
 import json
 import time
 from pathlib import Path
@@ -24,7 +25,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--model", default="/share/public/public_models/Qwen3.8-27B")
     parser.add_argument("--cases", default="775,844,792")
-    parser.add_argument("--mode", choices=["fault", "full"], required=True)
+    parser.add_argument("--mode", choices=["fault", "full", "stress"], required=True)
     opt = parser.parse_args()
     opt.output.mkdir(parents=True, exist_ok=True)
     session = requests.Session()
@@ -66,6 +67,42 @@ def main():
             with (opt.output / "progress.jsonl").open("a") as f:
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
             print(json.dumps(record, ensure_ascii=False), flush=True)
+
+    if opt.mode == "stress":
+        flush()
+        pending = []
+        for case, warm, target in [("775", 66, 68), ("792", 56, 58)]:
+            full = json.loads((opt.inputs / f"case{case}" / "full-request.json").read_text())
+            def prefix(index, count):
+                return dict(full, model=opt.model, messages=full["messages"][:index+1], max_tokens=count,
+                            drop_message={k:v for k,v in full["drop_message"].items() if int(k)<=index},
+                            reposition=[i for i in full["reposition"] if i<=index])
+            send(case, "interleave-warm", prefix(warm, 8))
+            pending.append((case, prefix(target, 64)))
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(send, case, "interleave-reposition", payload) for case, payload in pending]
+            for future in futures:
+                result = future.result()
+                assert result["choices"][0]["meta_info"]["cached_tokens"] > 0
+        flush()
+        case, payload = pending[0]
+        payload = dict(payload, rid="r1-explicit-abort", max_tokens=4096)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(requests.post, opt.url + "/v1/chat/completions", json=payload, timeout=180)
+            time.sleep(2)
+            aborted = session.post(opt.url + "/abort_request", json={"rid": payload["rid"]}, timeout=30)
+            aborted.raise_for_status()
+            response = future.result()
+            (opt.output / "explicit-abort.json").write_text(json.dumps({
+                "request_id": payload["rid"], "abort_status": aborted.status_code,
+                "response_status": response.status_code, "response": response.text,
+            }, indent=2))
+            assert "abort" in response.text.lower(), response.text
+        send("stress", "after-abort", dict(model=opt.model,
+             messages=[{"role":"user", "content":"Reply only OK."}], max_tokens=16,
+             temperature=0, chat_template_kwargs={"enable_thinking":False}))
+        flush()
+        return
 
     for case in opt.cases.split(","):
         full = json.loads((opt.inputs / f"case{case}" / "full-request.json").read_text())
