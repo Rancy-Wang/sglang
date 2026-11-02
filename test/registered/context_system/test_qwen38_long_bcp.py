@@ -26,6 +26,7 @@ def main():
     parser.add_argument("--model", default="/share/public/public_models/Qwen3.8-27B")
     parser.add_argument("--cases", default="775,844,792")
     parser.add_argument("--mode", choices=["fault", "full", "stress"], required=True)
+    parser.add_argument("--server-log", type=Path, help="Required for active-prefill abort evidence")
     opt = parser.parse_args()
     opt.output.mkdir(parents=True, exist_ok=True)
     session = requests.Session()
@@ -38,7 +39,7 @@ def main():
     def send(case, label, payload):
         stem = opt.output / f"{case}-{label}"
         payload = copy.deepcopy(payload)
-        payload.update(rid=f"r1-{case}-{label}-{time.time_ns()}", return_meta_info=True,
+        payload.update(rid=f"r3-{case}-{label}-{time.time_ns()}", return_meta_info=True,
                        return_input_ids_in_sglext=True, return_output_ids_in_sglext=True)
         stem.with_suffix(".request.json").write_text(json.dumps(payload, ensure_ascii=False))
         start = time.monotonic()
@@ -58,6 +59,11 @@ def main():
             assert choice["message"].get("content") or choice["message"].get("reasoning_content") or choice["message"].get("tool_calls"), choice
             session.get(opt.url + "/health", timeout=20).raise_for_status()
             assert record["meta"].get("num_retractions", 0) == 0, record
+            usage = record["meta"].get("context_usage")
+            if usage is not None:
+                assert usage["actual_prefill_tokens"] == (
+                    record["meta"]["prompt_tokens"] - record["meta"]["cached_tokens"]
+                ), record
             return result
         except Exception as exc:
             record["error"] = repr(exc)
@@ -86,10 +92,23 @@ def main():
                 assert result["choices"][0]["meta_info"]["cached_tokens"] > 0
         flush()
         case, payload = pending[0]
-        payload = dict(payload, rid="r1-explicit-abort", max_tokens=4096)
+        assert opt.server_log is not None, "active abort requires a server publication log"
+        payload = dict(payload, rid="r3-explicit-abort", max_tokens=4096)
+        log_start = opt.server_log.stat().st_size
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(requests.post, opt.url + "/v1/chat/completions", json=payload, timeout=180)
-            time.sleep(2)
+            deadline = time.monotonic() + 120
+            observed = ""
+            with opt.server_log.open() as log:
+                log.seek(log_start)
+                while time.monotonic() < deadline:
+                    observed += log.read()
+                    if "Context cache publication rid=r3-explicit-abort" in observed:
+                        break
+                    assert not future.done(), "request ended before active-prefill abort"
+                    time.sleep(.1)
+            assert "Context cache publication rid=r3-explicit-abort" in observed
+            (opt.output / "active-abort-publication.log").write_text(observed)
             aborted = session.post(opt.url + "/abort_request", json={"rid": payload["rid"]}, timeout=30)
             aborted.raise_for_status()
             response = future.result()
@@ -155,6 +174,14 @@ def main():
             if final:
                 (opt.output / f"{case}-final-answer.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
                 assert result["choices"][0]["finish_reason"] == "stop", "final answer truncated"
+                # Repeat exactly this template, tools and Context history. The
+                # final tool_choice change can make its first call cold; it
+                # must not be mistaken for a warm comparison.
+                hot = send(case, f"full-m{index:03d}-repeat", payload)
+                assert hot["sglext"]["input_ids"] == result["sglext"]["input_ids"]
+                assert hot["choices"][0]["meta_info"]["cached_tokens"] > 0
+                (opt.output / f"{case}-final-answer-repeat.json").write_text(
+                    json.dumps(hot, ensure_ascii=False, indent=2))
         # An ordinary request after the trajectory checks continued service.
         send(case, "health-generation", dict(model=opt.model, messages=[{"role":"user", "content":"Reply only OK."}],
              max_tokens=16, temperature=0, chat_template_kwargs={"enable_thinking": False}))
