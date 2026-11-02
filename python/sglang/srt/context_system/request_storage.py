@@ -66,6 +66,16 @@ def prefill_progress_reserve(req, query_end):
     at every chunk and transferred to Radix before Drop makes them evictable.
     Cache the CPU stage demand once per match, with no device page inspection.
     """
+    # After admission, the scheduler owns one chunked-prefill continuation.
+    # Its current canonical/target owners are already excluded from allocator
+    # availability, and later Drops retire them. Adding the original future
+    # peak on every chunk counts these owners as if they survived forever.
+    # Continuations use the exact next-forward union in _fit_context_admission;
+    # running decoders have their complete remaining output budget reserved
+    # there, so they can finish while the continuation waits for shared space.
+    if getattr(req, "context_prefill_started", False):
+        return 0
+
     import numpy as np
 
     program = req.context_recompute_program or req.context_program

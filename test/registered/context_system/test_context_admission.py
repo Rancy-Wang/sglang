@@ -350,6 +350,31 @@ def test_no_capacity_does_not_publish_a_plan(factory, compiler):
     assert adder.cur_rem_token_offset == 0
 
 
+def test_started_chunk_uses_exact_forward_budget(factory, compiler):
+    import torch
+    req = make_req(compiler)
+    req.plan_context_prefill(64)
+    window, plan = req.context_window_plan
+    step = req.context_state.advance(
+        window, plan, torch.arange(1,65),
+        torch.arange(65,65+plan.extra_page_count), req.context_program.visible_until,
+    )
+    req.context_state = step.state.publish(step.state.terminal_slots())
+    req.prefix_indices = step.state.terminal_slots()
+    req.context_prefill_started = True
+    # Existing owners are already subtracted from the allocator's availability.
+    # Sixteen available pages can execute a smaller chunk; the earlier Drop
+    # must not cause an unrelated far-future peak to be reserved again.
+    factory.mock_token_allocator.available_size.return_value = 16
+    adder = factory.create_adder(factory.create_running_batch(), rem_chunk_tokens=64)
+    assert adder.add_chunked_req(req) is req
+    assert adder.can_run_list == [req]
+    assert 0 < req.extend_range.length < 16
+    _, plan = req.context_window_plan
+    assert adder.cur_rem_token_offset == req.extend_range.length + plan.extra_page_count + 1
+    factory.mock_token_allocator.alloc.assert_not_called()
+
+
 def test_retry_self_pin_reports_error_without_recomputing_match(factory, compiler):
     import torch
     from sglang.srt.context_system.planner import ContextProgram
