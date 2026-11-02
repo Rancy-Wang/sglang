@@ -498,9 +498,9 @@ def test_hybrid_deferred_publication_keeps_source_lease(compiler, monkeypatch, f
     ))
     try:
         tokens = list(range(200))
-        drops = {48: [(0, 16)], 192: [(16, 40)]}
-        source = compiler(*args(tokens[:64], {48: [(0, 16)]}, []))
-        layout = compiler(*args(tokens, drops, [47, 191]))
+        drops = {192: [(0, 48)]}
+        source = compiler(*args(tokens[:64], {}, []))
+        layout = compiler(*args(tokens, drops, [191]))
         program = ContextProgram(layout, expiry_for(200, drops))
         cache.insert(InsertParams(key=RadixKey.from_context(source),
                                   value=allocator.alloc(64),
@@ -534,7 +534,7 @@ def test_hybrid_deferred_publication_keeps_source_lease(compiler, monkeypatch, f
         cache.sanity_check()
         if not finish_after_defer:
             # Model execution would have captured the real S_200 in this slot.
-            # Publishing it must preserve raw depth 200 despite 40 absent KV rows.
+            # Publishing it must preserve raw depth 200 despite 48 absent KV rows.
             req.kv.mamba_last_track_seqlen = 200
             slot = req.kv.mamba_ping_pong_track_buffer[req.kv.mamba_last_track_idx].item()
             pool.mamba_pool.mamba_cache.temporal[:, slot].fill_(200)
@@ -544,7 +544,7 @@ def test_hybrid_deferred_publication_keeps_source_lease(compiler, monkeypatch, f
             node = cache.tree_core.node_by_id(req.last_node)
             saved = node.component_data[ComponentType.MAMBA].value
             assert torch.all(pool.mamba_pool.mamba_cache.temporal[:, saved] == 200)
-            assert (req.prefix_indices < 0).sum() == 40
+            assert (req.prefix_indices < 0).sum() == 48
             cache.sanity_check()
         cache.cache_finished_req(req, is_insert=False, kv_len_to_handle=200)
         pool.free(req)
