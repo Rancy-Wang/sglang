@@ -390,6 +390,37 @@ def test_chunk_lifetime_publication_and_deferred_retirement(compiler, occurrence
         assert private == set()
 
 
+def test_last_transition_releases_obsolete_birth_before_prefill_end(compiler, occurrence):
+    n = 256
+    drops = {64: [(0, 16)]}
+    layout = compiler(*args(list(range(n)), drops, [63]))
+    expiry = expiry_for(n, drops)
+    state = occurrence.OccurrenceState.from_match(
+        torch.empty(0, dtype=torch.int64), torch.empty(0, dtype=torch.int32),
+        exact_prefix_len=0,
+    )
+    serial = 1
+    for start, end in ((0, 32), (32, 64), (64, 128)):
+        window = occurrence.compile_occurrence_window(
+            layout, expiry, layout.positions, query_start=start, query_end=end)
+        plan = state.plan(window, state.prefill_terminal_keep(layout, end))
+        births = torch.arange(serial, serial + end-start)
+        serial += len(births)
+        extra = torch.arange(serial, serial + plan.extra_page_count)
+        serial += len(extra)
+        step = state.advance(window, plan, births, extra, expiry)
+        state = step.state
+        if end == 32:
+            assert (state.canonical_rows[16:32] != state.terminal_rows[16:32]).all()
+        else:
+            assert torch.equal(state.canonical_rows[16:end], state.terminal_rows[16:end])
+            assert torch.equal(state.canonical_positions[16:end], layout.positions[16:end])
+            if end == 64:
+                assert len(step.retired_slots) >= 16
+        state = state.publish(state.terminal_slots())
+    assert not state.private_slots().numel()
+
+
 def test_hole_lifetime_and_publication_does_not_claim_missing_kv(compiler, occurrence):
     n, start = 16, 8
     drops = {start: [(0, 4)]}
