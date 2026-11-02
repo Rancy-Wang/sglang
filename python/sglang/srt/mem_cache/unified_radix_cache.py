@@ -966,6 +966,25 @@ class UnifiedRadixCache(BasePrefixCache):
             raise ValueError("Context Drop leases require the Python tree core")
         return self.tree_core.configure_context_drop_lock(node_id, receipt, required_raw)
 
+    def configure_context_prefill_drop_lock(self, req, receipt):
+        """Do not pin already cached, proven-unread Drop pages at admission.
+
+        This changes eviction eligibility only. The source tree keeps its KV
+        until real allocator pressure; Mamba's endpoint lock stays untouched.
+        The proof is checked against the matched source branch, not a future
+        Drop event that exists only in this request's target key.
+        """
+        if self.disable or get_memory().disable_drop_aware_eviction:
+            return
+        program = req.context_recompute_program or req.context_program
+        if program is None or req.context_prefill_started:
+            return
+        recovery = req.context_recovery_plan
+        length = recovery.matched_length if recovery is not None else len(req.prefix_indices)
+        start = recovery.start if recovery is not None else len(req.prefix_indices)
+        required = program.visible_until[:length] > start
+        self.configure_context_drop_lock(req.last_node, receipt, required)
+
     def context_leased_page_count(self, req):
         """Count this request's Full leases on the capacity-failure path.
 
@@ -976,7 +995,7 @@ class UnifiedRadixCache(BasePrefixCache):
         """
         if self.disable:
             return 0
-        leases = [(req.last_node, req.lock_receipt)]
+        leases = [(req.last_node, getattr(req, "_context_admission_receipt", None) or req.lock_receipt)]
         if req.context_source_lease is not None:
             leases.append(req.context_source_lease)
         seen, count = set(), 0

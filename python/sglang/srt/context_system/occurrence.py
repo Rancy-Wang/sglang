@@ -589,7 +589,7 @@ class OccurrenceState:
             else None,
         )
 
-    def prefill_terminal_keep(self, layout, query_end):
+    def prefill_terminal_keep(self, layout, query_end, visible_until=None):
         """Cache every computed token, independently of attention visibility.
 
         An already evicted source stays absent: publishing a later chunk must
@@ -600,6 +600,16 @@ class OccurrenceState:
         start = len(self.canonical_rows)
         keep = torch.ones(query_end, dtype=torch.bool)
         keep[:start] = (self.canonical_rows >= 0) | (self.terminal_rows >= 0)
+        if visible_until is not None:
+            # These borrowed tokens were already published by an earlier
+            # request/chunk. Leave their cache owners on that branch instead
+            # of copying unread dropped history into every new position key.
+            # Private rows still need publication; every new query is kept.
+            private = torch.zeros(start, dtype=torch.bool)
+            for rows in (self.canonical_rows, self.terminal_rows):
+                present = rows >= 0
+                private[present] |= self.owned[rows[present]]
+            keep[:start] &= (visible_until[:start] > start) | private
         return keep
 
     def plan(self, window, terminal_keep):

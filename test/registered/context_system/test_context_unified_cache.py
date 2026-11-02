@@ -14,6 +14,51 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def test_initial_drop_lease_keeps_checkpoint_and_only_unlocks_proven_pages(compiler, monkeypatch):
+    from types import SimpleNamespace
+    from test_occurrence_ownership import expiry_for
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "unit/mem_cache"))
+    import test_unified_radix_cache_unittest as native
+    from sglang.srt.mem_cache.base_prefix_cache import EvictParams, InsertParams, MatchPrefixParams
+    from sglang.srt.mem_cache.radix_cache import RadixKey
+    from sglang.srt.mem_cache.unified_cache.component_type import ComponentType
+    from sglang.srt.runtime_context import reset_context
+    monkeypatch.setattr(native, "get_device", lambda: "cpu")
+    cache, allocator, pool = native.build_fixture(native.CacheConfig(
+        components=(ComponentType.FULL, ComponentType.MAMBA), kv_size=512,
+        num_layers=4, full_attention_layer_ids=(3,),
+    ))
+    try:
+        drops = {128: [(0, 64)], 256: [(64, 96)]}
+        key = RadixKey.from_context(compiler(*args(list(range(300)), drops, [])))
+        cache.insert(InsertParams(key=key[:256], value=allocator.alloc(256),
+                                  mamba_value=pool.mamba_allocator.alloc(1)))
+        match = cache.match_prefix(MatchPrefixParams(key=key[:256], context_retry=True))
+        receipt = cache.inc_lock_ref(match.last_device_node).to_dec_params()
+        req = SimpleNamespace(
+            context_recompute_program=None,
+            context_program=SimpleNamespace(visible_until=expiry_for(300, drops)),
+            context_prefill_started=False, prefix_indices=match.device_indices,
+            context_recovery_plan=None, last_node=match.last_device_node,
+            lock_receipt=receipt, context_source_lease=None,
+        )
+        cache.configure_context_prefill_drop_lock(req, receipt)
+        # Drop at 256 is absent from the 256-token source key, so 64:96
+        # remains pinned even though this request no longer needs to read it.
+        assert receipt.context_skip_ranges == ((0, 64),)
+        assert cache.context_leased_page_count(req) == 192
+        assert allocator.available_size() == 256  # eligibility is not eviction
+        cache.evict(EvictParams(num_tokens=64))
+        assert allocator.available_size() == 320
+        node = cache.tree_core.node_by_id(req.last_node)
+        assert node.component_data[ComponentType.MAMBA].value is not None
+        cache.dec_lock_ref(req.last_node, receipt)
+        cache.evict(EvictParams(num_tokens=512, mamba_num=20))
+        assert allocator.available_size() == 512
+    finally:
+        reset_context()
+
+
 def test_hybrid_retry_boundary_and_drop_lease(compiler, monkeypatch):
     """A Full split cannot invent a recurrent state; Drop keeps its native lock."""
     monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "unit/mem_cache"))

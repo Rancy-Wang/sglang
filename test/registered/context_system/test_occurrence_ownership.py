@@ -31,6 +31,30 @@ def expiry_for(n, drops):
     return expiry
 
 
+def test_published_drop_history_is_not_copied_again(compiler, occurrence):
+    n, start = 128, 96
+    drops = {80: [(0, 64)]}
+    layout = compiler(*args(list(range(n)), drops, [95]))
+    expiry = expiry_for(n, drops)
+    state = occurrence.OccurrenceState.from_match(
+        torch.arange(start), torch.arange(start, dtype=torch.int32),
+        exact_prefix_len=0,
+    )
+    window = occurrence.compile_occurrence_window(
+        layout, expiry, layout.positions, query_start=start, query_end=n,
+    )
+    keep = state.prefill_terminal_keep(layout, n, expiry)
+    assert not keep[:64].any()
+    assert keep[64:].all()
+    plan = state.plan(window, keep)
+    copied_raw = window.occurrence_raw_tokens[plan.copy_occurrences]
+    assert not (copied_raw < 64).any()
+    # An uncommitted private version must still be cached even after Drop.
+    state.owned[10] = True
+    keep = state.prefill_terminal_keep(layout, n, expiry)
+    assert keep[10] and keep[start:].all()
+
+
 def test_materialization_ownership_and_positions(compiler, occurrence):
     rng = np.random.default_rng(1417)
     for tokens, drops, reposition in cases():

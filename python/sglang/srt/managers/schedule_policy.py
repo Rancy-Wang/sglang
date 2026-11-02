@@ -1164,6 +1164,8 @@ class PrefillAdder:
     def _req_inc_lock_ref(self, req: Req):
         # Persist the release receipt.
         req.lock_receipt = self.tree_cache.inc_lock_ref(req.last_node).to_dec_params()
+        if getattr(req, "context_program", None) is not None:
+            self.tree_cache.configure_context_prefill_drop_lock(req, req.lock_receipt)
         if getattr(req, "context_swa_source_required", None) is not None:
             self.tree_cache.configure_context_swa_lock(
                 req.last_node, req.lock_receipt, req.context_swa_source_required
@@ -1290,7 +1292,7 @@ class PrefillAdder:
         return req if truncated else None
 
     @contextmanager
-    def _lock_node(self, last_node: TreeNode):
+    def _lock_node(self, last_node: TreeNode, req=None):
         dec_lock_params = None
         try:
             result = self.tree_cache.inc_lock_ref(last_node)
@@ -1298,8 +1300,13 @@ class PrefillAdder:
                 # Replay the acquire's receipt (SWA boundary uuid, mamba flag)
                 # so release takes back exactly what this temporary lock took.
                 dec_lock_params = result.to_dec_params()
+                if req is not None and getattr(req, "context_program", None) is not None:
+                    self.tree_cache.configure_context_prefill_drop_lock(req, dec_lock_params)
+                    req._context_admission_receipt = dec_lock_params
             yield None
         finally:
+            if req is not None:
+                req._context_admission_receipt = None
             if dec_lock_params is not None:
                 self.tree_cache.dec_lock_ref(last_node, dec_lock_params)
             else:
@@ -1513,7 +1520,7 @@ class PrefillAdder:
 
         # The temporary pin excludes this prefix from the evictable budget.
         # Selection itself neither allocates slots nor materializes host hits.
-        with self._lock_node(req.last_node):
+        with self._lock_node(req.last_node, req):
             admission = self._select_prefill_admission(
                 req,
                 total_tokens=total_tokens,

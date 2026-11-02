@@ -26,7 +26,7 @@ def test_publication_waits_for_on_path_drop_and_deferred_active_copy(length, exp
     assert storage.context_publish_length(req, length) == expected
 
 
-def test_retry_self_pin_falls_back_but_external_pressure_waits(compiler):
+def test_retry_self_pin_reports_capacity_without_discarding_match(compiler):
     from test_ir import args
     from test_occurrence_ownership import expiry_for
 
@@ -65,7 +65,9 @@ def test_retry_self_pin_falls_back_but_external_pressure_waits(compiler):
     storage.handle_prefill_capacity_pressure(req, 256, needed)
     assert not req.context_force_miss and req.context_admission_error is None
     storage.handle_prefill_capacity_pressure(req, capacity, needed)
-    assert req.context_force_miss and req.context_admission_error is None
+    assert not req.context_force_miss
+    assert "retains 99 required cached" in req.context_admission_error
+    req.context_admission_error = None
     # Cold full prefill also exceeds this pool, but native chunking plus
     # Drop-aware release makes progress with the same occurrence semantics.
     state = occurrence.OccurrenceState.from_match(
@@ -94,7 +96,7 @@ def test_retry_self_pin_falls_back_but_external_pressure_waits(compiler):
     storage.handle_prefill_capacity_pressure(req, capacity, cold_needed)
     assert req.context_admission_error is None
     storage.handle_prefill_capacity_pressure(req, cold_needed, cold_needed)
-    assert "without a cached prefix" in storage.prefill_capacity_error(req, cold_needed)
+    assert "retains 0 required cached" in storage.prefill_capacity_error(req, cold_needed)
 
 
 pytest_plugins = ("test_ir",)

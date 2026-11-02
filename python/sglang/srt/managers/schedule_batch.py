@@ -1752,7 +1752,9 @@ class Req(ReqDllmMixin):
             query_start=start,
             query_end=query_end,
         )
-        keep = self.context_state.prefill_terminal_keep(program.layout, query_end)
+        keep = self.context_state.prefill_terminal_keep(
+            program.layout, query_end, program.visible_until
+        )
         plan = self.context_state.plan(window, keep)
         self.context_window_plan = (window, plan)
         return plan.extra_page_count

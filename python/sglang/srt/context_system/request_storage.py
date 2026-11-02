@@ -135,13 +135,20 @@ def prefill_progress_reserve(req, query_end):
         ))
         cached = req._context_progress_demand = (
             program, recovery, pending, copies, terminal, final_intermediate,
+            window.terminal_ready_after.numpy(),
         )
-    _, _, pending, copies, terminal, final_intermediate = cached
+    _, _, pending, copies, terminal, final_intermediate, terminal_ready = cached
     future = pending.copy()
     future[:query_end] = False
     expiry = np.minimum(program.visible_until.numpy(), n)
+    # Once a token reaches its last position transition, canonical reads alias
+    # its target owner. Do not reserve an obsolete birth version until Drop.
+    birth_expiry = np.where(
+        terminal, np.minimum(expiry, np.maximum(np.arange(n) + 1, terminal_ready)),
+        expiry,
+    )
     live = np.cumsum(future, dtype=np.int64) - np.bincount(
-        expiry[future], minlength=n + 1,
+        birth_expiry[future], minlength=n + 1,
     ).cumsum()[:n]
     # New target versions coexist with birth/read versions until their Drop.
     # Already published dropped targets are eviction candidates, not private
@@ -165,9 +172,9 @@ def handle_prefill_capacity_pressure(req, capacity, needed, tree_cache=None):
     Called only after the smallest permitted forward failed, without other
     reservations. Full-pool Context cache rows have one owner per resident raw
     token. Inspect CPU residency, never copy physical page IDs back from CUDA.
-    A failed initial match owns no pages: its temporary lease can be released
-    and the next pass can match from the root. Continuations must instead use
-    the scheduler's deferred abort to drain work and release their ownership.
+    Never discard a successful prefix match to retry from the root. Requests
+    whose own required owners cannot fit fail explicitly; external pressure
+    waits for the other owners to finish.
     """
     if req.context_prefill_started:
         state = req.context_state
@@ -203,16 +210,15 @@ def handle_prefill_capacity_pressure(req, capacity, needed, tree_cache=None):
         else (req.prefix_indices, req.context_resident)
     )
     pinned = len(slots) if resident is None else int(resident.count_nonzero())
+    if tree_cache is not None and getattr(req, "_context_admission_receipt", None) is not None:
+        pinned = tree_cache.context_leased_page_count(req)
     # Admission uses strict '<' for its total reservation, including its guard.
     if needed < capacity - pinned:
         return
-    if pinned:
-        req.context_force_miss = True
-    else:
-        req.context_admission_error = (
-            f"Context prefill needs {needed} reserved KV tokens even without "
-            f"a cached prefix, but the KV pool holds {capacity}"
-        )
+    req.context_admission_error = (
+        f"Context prefill retains {pinned} required cached KV tokens and needs "
+        f"{needed} reserved KV tokens, but the KV pool holds {capacity}"
+    )
 
 
 def prefill_capacity_error(req, capacity):
