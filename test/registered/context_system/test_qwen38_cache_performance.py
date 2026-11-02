@@ -34,7 +34,7 @@ def test_cache_performance():
                 {"role": "user", "content": "Neutral background. " * 256 + " List the integers from one to one hundred."},
             ],
             temperature=0, max_tokens=128, ignore_eos=True, stream=True,
-            stream_options={"include_usage": True}, return_meta_info=True,
+            stream_options={"include_usage": True},
             chat_template_kwargs={"enable_thinking": False, "preserve_thinking": True},
         )
         if mode != "native":
@@ -51,7 +51,7 @@ def test_cache_performance():
                 events = []
                 with session.post(base + "/v1/chat/completions", json=payload,
                                   stream=True, timeout=1800) as response:
-                    response.raise_for_status()
+                    assert response.status_code == 200, response.text
                     for line in response.iter_lines(chunk_size=1):
                         if not line.startswith(b"data: ") or line == b"data: [DONE]":
                             continue
