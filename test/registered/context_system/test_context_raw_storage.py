@@ -100,7 +100,7 @@ def test_retry_self_pin_falls_back_but_external_pressure_waits(compiler):
 pytest_plugins = ("test_ir",)
 
 
-def test_future_reservation_and_deferred_terminal_lifetime(compiler, monkeypatch):
+def test_future_reservation_with_incremental_terminal_publication(compiler, monkeypatch):
     import sys
     import types
     from test_ir import args
@@ -153,7 +153,11 @@ def test_future_reservation_and_deferred_terminal_lifetime(compiler, monkeypatch
             torch.arange(serial + length, serial + current), expiry,
         )
         assert not set(step.retired_slots.tolist()) & set(step.state.slots.tolist())
-        state, start, serial = step.state, end, serial + current
+        # Commit all new KV before releasing request references to Drop candidates.
+        assert (step.state.terminal_rows[start:end] >= 0).all()
+        state = step.state.publish(step.state.terminal_slots())
+        state = state.drop_borrowed_raw(expiry[:end] < end)
+        start, serial = end, serial + current
     assert torch.equal(state.terminal_rows >= 0, layout.keep_mask)
 
 

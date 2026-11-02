@@ -62,8 +62,8 @@ def prefill_progress_reserve(req, query_end):
     """Reserve singleton progress through future repair stages and final decode.
 
     Existing owners are already excluded from allocator availability. Future
-    birth KV survives only to its Drop; intermediate copies coexist with those
-    sources for one forward. Final-position copies are deferred until needed.
+    birth KV survives while future queries read it; target versions are prepared
+    at every chunk and transferred to Radix before Drop makes them evictable.
     Cache the CPU stage demand once per match, with no device page inspection.
     """
     import numpy as np
@@ -115,7 +115,7 @@ def prefill_progress_reserve(req, query_end):
         ):
             selected = keys[x:y]
             copies[a:b] = np.count_nonzero(pos[selected] != canonical[raw[selected]])
-        terminal = program.layout.keep_mask.numpy() & (
+        terminal = (
             (program.layout.positions.numpy() != canonical)
             | (
                 (np.arange(n) < (len(positions) if positions is not None else start))
@@ -138,16 +138,18 @@ def prefill_progress_reserve(req, query_end):
     live = np.cumsum(future, dtype=np.int64) - np.bincount(
         expiry[future], minlength=n + 1,
     ).cumsum()[:n]
-    demand = live + copies
-    # Active terminal copies coexist with the last query's reads, but a
-    # final-stage read at the terminal position uses that same occurrence.
-    # The union is bounded by terminal copies plus nonterminal read copies.
-    terminal = terminal.copy()
-    terminal[:query_end] &= (
-        req.context_window_plan[1].terminal_occurrences.numpy() < 0
-    )
+    # New target versions coexist with birth/read versions until their Drop.
+    # Already published dropped targets are eviction candidates, not private
+    # lifetime reservations. The current forward's exact union is charged by
+    # admission separately; do not reserve the entire historical cache forever.
+    future_terminal = terminal & future
+    terminal_live = np.cumsum(future_terminal, dtype=np.int64) - np.bincount(
+        expiry[future_terminal], minlength=n + 1,
+    ).cumsum()[:n]
+    demand = live + copies + terminal_live
+    # Final-position reads alias target versions rather than adding a third copy.
     demand[-1] = max(
-        demand[-1], live[-1] + int(terminal.sum()) + final_intermediate,
+        live[-1] + terminal_live[-1] + final_intermediate, live[-1],
     )
     return persistent + int(demand[query_end:].max()) + output
 

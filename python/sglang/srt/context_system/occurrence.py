@@ -586,29 +586,16 @@ class OccurrenceState:
         )
 
     def prefill_terminal_keep(self, layout, query_end):
+        """Cache every computed token, independently of attention visibility.
+
+        An already evicted source stays absent: publishing a later chunk must
+        not reconstruct dropped history just to fill a cache hole. New queries
+        always have a birth KV and receive a target-position cache version in
+        this forward, including queries that a later Drop makes invisible.
+        """
         start = len(self.canonical_rows)
-        # Match mini's recovery policy: historical queries may read a dropped
-        # token's birth KV, but no future decode needs its terminal cache copy.
-        # advance() retains those birth sources until their final query and
-        # retires private pages only after the completed forward.
-        keep = layout.keep_mask[:query_end].clone()
-        keep[:start] &= (self.canonical_rows >= 0) | (
-            self.terminal_rows >= 0
-        )
-        if query_end < len(layout.positions):
-            # Do not keep a third (final-position) version while a historical
-            # stage still needs birth and intermediate-position KV. Publish
-            # holes until the final forward; active birth sources stay private
-            # and live, so the final copy still rotates directly from its source.
-            available = (
-                layout.birth_positions[:query_end]
-                == layout.positions[:query_end]
-            )
-            available[:start] = (
-                self.canonical_positions
-                == layout.positions[:start]
-            ) | (self.terminal_rows >= 0)
-            keep &= available
+        keep = torch.ones(query_end, dtype=torch.bool)
+        keep[:start] = (self.canonical_rows >= 0) | (self.terminal_rows >= 0)
         return keep
 
     def plan(self, window, terminal_keep):

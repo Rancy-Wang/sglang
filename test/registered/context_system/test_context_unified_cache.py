@@ -56,6 +56,57 @@ def test_hybrid_retry_boundary_and_drop_lease(compiler, monkeypatch):
     assert pool.mamba_allocator.available_size() == 20
 
 
+def test_drop_pressure_preserves_all_raw_checkpoints(compiler, monkeypatch):
+    """Full pressure must not delete S_64/S_128 when their KV becomes holes."""
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "unit/mem_cache"))
+    import test_unified_radix_cache_unittest as native
+    from sglang.srt.mem_cache.base_prefix_cache import EvictParams, InsertParams, MatchPrefixParams
+    from sglang.srt.mem_cache.radix_cache import RadixKey
+    from sglang.srt.mem_cache.unified_cache.component_type import ComponentType
+    from sglang.srt.runtime_context import reset_context
+
+    monkeypatch.setattr(native, "get_device", lambda: "cpu")
+    cache, allocator, pool = native.build_fixture(native.CacheConfig(
+        components=(ComponentType.FULL, ComponentType.MAMBA), kv_size=512,
+        num_layers=4, full_attention_layer_ids=(3,),
+    ))
+    try:
+        key = RadixKey.from_context(compiler(*args(list(range(256)), {192: [(0,128)]}, [])))
+        pages = allocator.alloc(256)
+        saved = {}
+        for end in (64, 128, 256):
+            slot = pool.mamba_allocator.alloc(1)
+            pool.mamba_pool.mamba_cache.temporal[:, slot].fill_(end)
+            cache.insert(InsertParams(key=key[:end], value=pages[:end], mamba_value=slot))
+            hit = cache.match_prefix(MatchPrefixParams(key=key[:end], context_retry=True))
+            assert len(hit.device_indices) == end
+            saved[end] = (hit.last_device_node, slot.clone())
+        anchor = saved[256][0]
+        receipt = cache.inc_lock_ref(anchor).to_dec_params()
+        needed = torch.ones(256, dtype=torch.bool)
+        needed[:128] = False
+        cache.configure_context_drop_lock(anchor, receipt, needed)
+        assert allocator.available_size() == 256  # eligibility did not free KV
+        cache.evict(EvictParams(num_tokens=128, mamba_num=0))
+        assert allocator.available_size() == 384
+        for end, (handle, slot) in saved.items():
+            node = cache.tree_core.node_by_id(handle)
+            assert torch.equal(node.component_data[ComponentType.MAMBA].value, slot)
+            assert torch.all(pool.mamba_pool.mamba_cache.temporal[:, slot] == end)
+        # A later key containing the Drop can reuse the complete hybrid state.
+        hit = cache.match_prefix(MatchPrefixParams(key=key, context_retry=True))
+        assert len(hit.device_indices) == 256
+        assert not hit.context_resident[:128].any()
+        cache.sanity_check()
+        cache.dec_lock_ref(anchor, receipt)
+        cache.evict(EvictParams(num_tokens=512, mamba_num=20))
+        assert allocator.available_size() == 512
+        assert pool.mamba_allocator.available_size() == 20
+        cache.sanity_check()
+    finally:
+        reset_context()
+
+
 def test_native_insert_split_lock_and_page_reclaim(compiler):
     from sglang.srt.mem_cache.allocator.token import TokenToKVPoolAllocator
     from sglang.srt.mem_cache.base_prefix_cache import (
@@ -432,12 +483,11 @@ def test_context_occurrence_native_publication_and_release(compiler, mode):
             allocator.free(advanced.retired_slots)
             cache.cache_unfinished_req(req, chunked=end < 128)
             if mode in {"cold", "tail_drop"} and end == 17:
-                # Final-position copies are deferred and the future Drop is
-                # absent from this key. The raw cursor must still advance.
-                assert req.kv.cache_protected_len == 4
+                # Every computed KV is published, even before a future Drop.
+                assert req.kv.cache_protected_len == end
                 assert len(req.prefix_indices) == end
             if mode == "tail_drop" and end == 128:
-                assert req.kv.cache_protected_len == 80
+                assert req.kv.cache_protected_len == 128
             remaining = req.context_state.terminal_rows >= 0
             assert torch.equal(
                 req.context_state.terminal_slots()[remaining],
@@ -450,10 +500,7 @@ def test_context_occurrence_native_publication_and_release(compiler, mode):
             )
             cache.sanity_check()
             if mode in {"retry_abort", "recovery_deferred_abort"}:
-                from sglang.srt.context_system.request_storage import context_publish_length
-
-                if context_publish_length(req, end) < req.kv.cache_protected_len:
-                    break
+                break
         if mode in {"retry_abort", "recovery_deferred_abort"}:
             assert end < 128
         if mode == "recovery":
@@ -524,6 +571,10 @@ def test_hybrid_deferred_publication_keeps_source_lease(compiler, monkeypatch, f
         req.kv.kv_committed_len = 200
         allocator.free(advanced.retired_slots)
         req.kv.mamba_last_track_seqlen = 192
+        # Inject a missing target version before the Drop is on the candidate key.
+        # Normal chunk materialization now publishes these KV, including Drop KV.
+        saved_rows = req.context_state.terminal_rows.clone()
+        req.context_state.terminal_rows[:48] = -1
         cache.cache_unfinished_req(req)
         assert not req.context_cache_published
         assert req.last_node == old_node and req.lock_receipt is old_receipt
@@ -531,6 +582,7 @@ def test_hybrid_deferred_publication_keeps_source_lease(compiler, monkeypatch, f
         assert len(req.prefix_indices) == 200
         assert req.context_state.owned.any()
         assert req.kv.mamba_last_track_seqlen is None
+        req.context_state.terminal_rows.copy_(saved_rows)
         cache.sanity_check()
         if not finish_after_defer:
             # Model execution would have captured the real S_200 in this slot.

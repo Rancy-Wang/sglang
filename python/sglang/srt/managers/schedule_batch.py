@@ -3308,8 +3308,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             # to force the math calculation to retrieve the correct mamba state from h.
             return i + 1
 
-        context_endpoint = req.context_program is not None
-        mask = req.extend_range.length > 0 if context_endpoint else req.extend_range.length >= checkpoint_grid
+        mask = req.extend_range.length >= checkpoint_grid
         track_index = req.kv.mamba_ping_pong_track_buffer[
             req.kv.mamba_next_track_idx
         ].item()
@@ -3352,7 +3351,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
                         req.kv.mamba_next_track_idx
                     )
                 )
-            if not context_endpoint and req.mamba_branching_seqlen is not None:
+            if req.mamba_branching_seqlen is not None:
                 # track branching point in this forward if the branching point
                 # is within the current extend batch.
                 branching_seqlen_aligned_mask = (
@@ -3368,12 +3367,6 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
                     # See _force_track_h() for more details.
                     mamba_track_seqlen = _force_track_h(req.mamba_branching_seqlen)
                     mamba_track_seqlen_aligned = req.mamba_branching_seqlen
-            if context_endpoint:
-                # Raw progress includes dropped Full-KV holes. GDN snapshots
-                # the live conv + recurrent state at this forward endpoint,
-                # before overlap can advance it with a subsequent decode.
-                mamba_track_seqlen = req.extend_range.end
-                mamba_track_seqlen_aligned = req.extend_range.end
             req.kv.mamba_last_track_seqlen = mamba_track_seqlen_aligned
 
         return _MambaRadixCacheV2TrackEntry(

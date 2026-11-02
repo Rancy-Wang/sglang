@@ -807,7 +807,11 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             and node.context_drop_eligible
             and node.full_page_count
             and not node.backuped
-            and not any(cd.lock_ref or cd.host_lock_ref for cd in node.component_data)
+            and not any(
+                node.component_data[ct].lock_ref or node.component_data[ct].host_lock_ref
+                for ct in (ComponentType.FULL, ComponentType.SWA)
+                if ct in self.component_types
+            )
         ):
             kind = 1
         elif node in self.evictable_device_leaves:
@@ -821,13 +825,17 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         )
 
     def evict_context_pages(self, node, tracker, device_frees, host_frees):
-        """Free an unread edge while retaining its path for live/retry users."""
+        """Evict unread attention KV, preserving independent recurrent states."""
         assert node.context_drop_eligible and node.full_page_count
         assert not node.backuped and not any(
-            cd.lock_ref or cd.host_lock_ref for cd in node.component_data
+            node.component_data[ct].lock_ref or node.component_data[ct].host_lock_ref
+            for ct in (ComponentType.FULL, ComponentType.SWA)
+            if ct in self.component_types
         )
         value = node.component_data[BASE_COMPONENT_TYPE].value
         for component in self.components:
+            if component.component_type == ComponentType.MAMBA:
+                continue
             self._evict_component_and_detach_lru(
                 node,
                 component,
@@ -849,6 +857,11 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             and not node.children
             and not node.context_path_ref
             and not any(cd.lock_ref or cd.host_lock_ref for cd in node.component_data)
+            and not any(
+                cd.value is not None or cd.host_value is not None
+                for ct, cd in enumerate(node.component_data)
+                if ct != BASE_COMPONENT_TYPE
+            )
         ):
             parent = node.parent
             self.evictable_device_leaves.discard(node)
@@ -3280,8 +3293,11 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                     E(f"node {nid} invalid Context hole state")
                 elif not torch.all(node.component_data[FCT].value == -1):
                     E(f"node {nid} Context hole contains a physical page")
-                if any(node.component_data[ct].value is not None for ct in self.component_types if ct != FCT):
-                    E(f"node {nid} Context hole still owns auxiliary pages")
+                # Full holes may retain an independent raw-prefix recurrent
+                # checkpoint. Attention components must still release their KV.
+                if any(node.component_data[ct].value is not None for ct in self.component_types
+                       if ct not in (FCT, ComponentType.MAMBA)):
+                    E(f"node {nid} Context hole still owns auxiliary attention pages")
 
             # Full is the tree backbone, so aux data requires Full data.
             for ct in self.component_types:

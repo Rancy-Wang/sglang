@@ -385,7 +385,7 @@ def test_chunk_lifetime_publication_and_deferred_retirement(compiler, occurrence
         for retired in pending:
             free(retired)
         # Final publication owns all surviving terminal KV; no birth/private leak.
-        assert torch.equal(state.terminal_rows >= 0, layout.keep_mask)
+        assert (state.terminal_rows >= 0).all()
         assert state.private_slots().numel() == 0
         assert private == set()
 
