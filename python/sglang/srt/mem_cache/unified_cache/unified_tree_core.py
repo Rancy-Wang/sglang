@@ -2651,10 +2651,18 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         Only the Full (base) component is required; auxiliary components
         (Mamba, SWA) are not mandatory for D-leaf membership."""
         ct = BASE_COMPONENT_TYPE
-        if node is self.root_node or node.evicted or node.context_hole:
+        if node is self.root_node or node.evicted:
             return False
         if any(cd.lock_ref > 0 for cd in node.component_data):
             return False
+        if node.context_hole:
+            # Drop-only eviction retains a checkpoint-only edge. If ordinary
+            # LRU eviction later removes this entire unused branch, it must be
+            # able to walk through that edge (zero Full pages) to its parent.
+            # Otherwise the Full ledger advertises ancestors as evictable but
+            # the allocator can never reclaim them. Live path/state leases
+            # still protect the checkpoint; Drop-first eviction never deletes it.
+            return not node.children and not node.context_path_ref
         if any(
             child.component_data[ct].value is not None
             for child in node.children.values()

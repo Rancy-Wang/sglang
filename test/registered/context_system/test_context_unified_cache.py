@@ -151,6 +151,46 @@ def test_drop_pressure_preserves_all_raw_checkpoints(compiler, monkeypatch):
         reset_context()
 
 
+def test_normal_lru_can_cross_checkpoint_only_drop_edge(compiler, monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "unit/mem_cache"))
+    import test_unified_radix_cache_unittest as native
+    from sglang.srt.mem_cache.base_prefix_cache import EvictParams, InsertParams, MatchPrefixParams
+    from sglang.srt.mem_cache.radix_cache import RadixKey
+    from sglang.srt.mem_cache.unified_cache.component_type import ComponentType
+    from sglang.srt.runtime_context import reset_context
+    monkeypatch.setattr(native, "get_device", lambda: "cpu")
+    cache, allocator, pool = native.build_fixture(native.CacheConfig(
+        components=(ComponentType.FULL, ComponentType.MAMBA), kv_size=512,
+        num_layers=4, full_attention_layer_ids=(3,),
+    ))
+    try:
+        key = RadixKey.from_context(compiler(*args(list(range(256)), {128: [(64,128)]}, [])))
+        handles = {}
+        for end in (64,128,256):
+            cache.insert(InsertParams(key=key[:end], value=allocator.alloc(end),
+                                      mamba_value=pool.mamba_allocator.alloc(1)))
+            handles[end] = cache.match_prefix(MatchPrefixParams(key=key[:end], context_retry=True)).last_device_node
+        receipt = cache.inc_lock_ref(handles[256]).to_dec_params()
+        required = torch.ones(256, dtype=torch.bool)
+        required[64:128] = False
+        cache.configure_context_drop_lock(handles[256], receipt, required)
+        cache.dec_lock_ref(handles[256], receipt)
+        # Enough Drop pages: no checkpoint may be evicted incidentally.
+        result = cache.evict(EvictParams(num_tokens=64))
+        assert result.num_tokens_evicted == 64 and result.mamba_num_evicted == 0
+        assert pool.mamba_allocator.available_size() == 17
+        cache.sanity_check()
+        # Additional pressure now needs ordinary LRU eviction of the whole
+        # unleased branch, including its native checkpoints, to reach ancestors.
+        result = cache.evict(EvictParams(num_tokens=192))
+        assert result.num_tokens_evicted == 192
+        assert allocator.available_size() == 512
+        assert pool.mamba_allocator.available_size() == 20
+        cache.sanity_check()
+    finally:
+        reset_context()
+
+
 def test_native_insert_split_lock_and_page_reclaim(compiler):
     from sglang.srt.mem_cache.allocator.token import TokenToKVPoolAllocator
     from sglang.srt.mem_cache.base_prefix_cache import (
