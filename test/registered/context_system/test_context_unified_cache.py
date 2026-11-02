@@ -475,3 +475,83 @@ def test_context_occurrence_native_publication_and_release(compiler, mode):
         cache.sanity_check()
     finally:
         reset_context()
+
+
+@pytest.mark.parametrize("finish_after_defer", [False, True])
+def test_hybrid_deferred_publication_keeps_source_lease(compiler, monkeypatch, finish_after_defer):
+    """A checkpoint before the final Drop must not commit a shorter target lease."""
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "unit/mem_cache"))
+    import test_unified_radix_cache_unittest as native
+    from sglang.srt.context_system.planner import ContextProgram
+    from sglang.srt.managers.schedule_batch import Req
+    from sglang.srt.mem_cache.base_prefix_cache import EvictParams, InsertParams
+    from sglang.srt.mem_cache.radix_cache import RadixKey
+    from sglang.srt.mem_cache.unified_cache.component_type import ComponentType
+    from sglang.srt.runtime_context import reset_context
+    from sglang.srt.sampling.sampling_params import SamplingParams
+    from test_occurrence_ownership import expiry_for
+
+    monkeypatch.setattr(native, "get_device", lambda: "cpu")
+    cache, allocator, pool = native.build_fixture(native.CacheConfig(
+        components=(ComponentType.FULL, ComponentType.MAMBA), kv_size=2048,
+        num_layers=2, full_attention_layer_ids=(1,), enable_mamba_extra_buffer=True,
+    ))
+    try:
+        tokens = list(range(200))
+        drops = {48: [(0, 16)], 192: [(16, 40)]}
+        source = compiler(*args(tokens[:64], {48: [(0, 16)]}, []))
+        layout = compiler(*args(tokens, drops, [47, 191]))
+        program = ContextProgram(layout, expiry_for(200, drops))
+        cache.insert(InsertParams(key=RadixKey.from_context(source),
+                                  value=allocator.alloc(64),
+                                  mamba_value=pool.mamba_allocator.alloc(1)))
+        req = Req("hybrid-defer", "", array("q", tokens), SamplingParams(max_new_tokens=8),
+                  context_program=program.to_wire())
+        req._refresh_fill_ids()
+        pool.alloc([req])
+        req.init_next_round_input(cache)
+        req.lock_receipt = cache.inc_lock_ref(req.last_node).to_dec_params()
+        old_node, old_receipt = req.last_node, req.lock_receipt
+        assert len(req.prefix_indices) == 64
+        assert req.context_exact_prefix_len == 48
+        extra = req.plan_context_prefill(200)
+        window, plan = req.context_window_plan
+        advanced = req.context_state.advance(
+            window, plan, allocator.alloc(136), allocator.alloc(extra), program.visible_until
+        )
+        req.context_state = advanced.state
+        req.set_extend_range(64, 200)
+        req.kv.kv_committed_len = 200
+        allocator.free(advanced.retired_slots)
+        req.kv.mamba_last_track_seqlen = 192
+        cache.cache_unfinished_req(req)
+        assert not req.context_cache_published
+        assert req.last_node == old_node and req.lock_receipt is old_receipt
+        assert req.kv.cache_protected_len == 64
+        assert len(req.prefix_indices) == 200
+        assert req.context_state.owned.any()
+        assert req.kv.mamba_last_track_seqlen is None
+        cache.sanity_check()
+        if not finish_after_defer:
+            # Model execution would have captured the real S_200 in this slot.
+            # Publishing it must preserve raw depth 200 despite 40 absent KV rows.
+            req.kv.mamba_last_track_seqlen = 200
+            slot = req.kv.mamba_ping_pong_track_buffer[req.kv.mamba_last_track_idx].item()
+            pool.mamba_pool.mamba_cache.temporal[:, slot].fill_(200)
+            cache.cache_unfinished_req(req)
+            assert req.context_cache_published
+            assert req.kv.cache_protected_len == 200
+            node = cache.tree_core.node_by_id(req.last_node)
+            saved = node.component_data[ComponentType.MAMBA].value
+            assert torch.all(pool.mamba_pool.mamba_cache.temporal[:, saved] == 200)
+            assert (req.prefix_indices < 0).sum() == 40
+            cache.sanity_check()
+        cache.cache_finished_req(req, is_insert=False, kv_len_to_handle=200)
+        pool.free(req)
+        cache.evict(EvictParams(num_tokens=2048, mamba_num=20))
+        assert allocator.available_size() == 2048
+        assert pool.mamba_allocator.available_size() == 20
+        assert req.context_state is None and req.context_source_lease is None
+        cache.sanity_check()
+    finally:
+        reset_context()

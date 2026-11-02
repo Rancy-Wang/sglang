@@ -1050,6 +1050,14 @@ class GDNAttnBackend(MambaAttnBackendBase):
                 ssm_states[cache_indices] = ssm_states_contig
 
             if forward_metadata.has_mamba_track_mask:
+                endpoint_mask = getattr(forward_batch, "context_mamba_endpoint_mask", None)
+                if endpoint_mask is not None:
+                    # Capture after convolution updated its rolling state.
+                    # Gathering just the input tail is wrong for short extends
+                    # whose conv history also contains cached-prefix tokens.
+                    conv_states[forward_batch.mamba_track_indices[endpoint_mask]] = (
+                        conv_states[cache_indices[endpoint_mask]]
+                    )
                 self._track_mamba_state_extend(
                     forward_batch, h, ssm_states, forward_metadata
                 )

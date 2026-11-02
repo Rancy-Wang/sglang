@@ -1227,11 +1227,11 @@ class UnifiedRadixCache(BasePrefixCache):
             return
         state = getattr(req, "context_state", None)
         if state is not None:
-            self._prepare_context_cache_row(req, retain_source=True)
+            prepared_len = self._prepare_context_cache_row(req, retain_source=True)
             length = len(req.get_fill_ids())
             if (
                 not self.disable
-                and context_publish_length(req, length) < req.kv.cache_protected_len
+                and context_publish_length(req, length) < prepared_len
             ):
                 # A borrowed sparse prefix can rely on a later Drop marker.
                 # Until deferred copies reach that marker, keep the original
@@ -1241,8 +1241,8 @@ class UnifiedRadixCache(BasePrefixCache):
                     self.req_to_token_pool, req.kv.req_pool_idx
                 )[:length].to(dtype=torch.int64, copy=True)
                 return
-        self._cache_unfinished_req_native(req, chunked=chunked, **kwargs)
-        if state is not None and not self.disable:
+        published = self._cache_unfinished_req_native(req, chunked=chunked, **kwargs)
+        if published and state is not None and not self.disable:
             req.context_state = state.publish(
                 req.prefix_indices, cache_len=req.kv.cache_protected_len,
                 swa_resident=req.context_swa_resident,
@@ -1310,6 +1310,7 @@ class UnifiedRadixCache(BasePrefixCache):
 
     def _prepare_context_cache_row(self, req: Req, *, retain_source: bool):
         state = req.context_state
+        prepared_len = req.kv.cache_protected_len
         if req.session is not None or req.kv_rotation_base is not None:
             raise ValueError("Context cache does not support session/ring KV layouts")
         if not req.context_cache_published and not self.disable:
@@ -1331,13 +1332,17 @@ class UnifiedRadixCache(BasePrefixCache):
                         req.last_node, receipt, req.context_swa_source_required
                     )
                 req.context_source_lease = (req.last_node, receipt)
-            req.kv.cache_protected_len = min(
-                req.kv.cache_protected_len, req.context_exact_prefix_len
-            )
+            prepared_len = min(prepared_len, req.context_exact_prefix_len)
+            # Unfinished publication may defer. Keep the old lease length until
+            # native insert/rematch installs its replacement. Finished cleanup
+            # still needs the target ownership boundary for private-page release.
+            if not retain_source:
+                req.kv.cache_protected_len = prepared_len
         terminal = state.terminal_slots()
         self.req_to_token_pool.write(
             (req.kv.req_pool_idx, slice(0, len(terminal))), terminal
         )
+        return prepared_len
 
     @staticmethod
     def _context_cache_residency(req, length):
@@ -1432,22 +1437,27 @@ class UnifiedRadixCache(BasePrefixCache):
             self.dec_lock_ref(node, receipt)
             req.context_source_lease = None
 
-    def _cache_unfinished_req_native(self, req: Req, chunked: bool = False, **kwargs) -> None:
+    def _cache_unfinished_req_native(self, req: Req, chunked: bool = False, **kwargs) -> bool:
         if self.session.try_cache_unfinished_req(req, chunked=chunked, **kwargs):
-            return
+            return False
 
         token_ids = req.get_fill_ids()
 
         if self.disable:
             kv_indices = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[: len(token_ids)]
             req.prefix_indices = kv_indices.to(dtype=torch.int64, copy=True)
-            return
+            return False
 
         kv_indices_orig = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[: len(token_ids)]
 
+        # This is a proposed insertion boundary, not the still-held lease length.
+        prev_prefix_len = req.kv.cache_protected_len
+        if req.context_state is not None and not req.context_cache_published:
+            prev_prefix_len = min(prev_prefix_len, req.context_exact_prefix_len)
+
         # components prepare insert data + return effective cache_len
         insert_params = InsertParams(
-            prev_prefix_len=req.kv.cache_protected_len,
+            prev_prefix_len=prev_prefix_len,
             chunked=chunked,
             priority=getattr(req, "priority", 0) or 0,
             session_id=req.session_id,
@@ -1488,7 +1498,7 @@ class UnifiedRadixCache(BasePrefixCache):
                 comp.cleanup_after_caching_req(
                     req, is_finished=False, insert_params=insert_params
                 )
-            return
+            return False
 
         kv_indices = kv_indices_orig[:effective_cache_len]
 
@@ -1523,7 +1533,7 @@ class UnifiedRadixCache(BasePrefixCache):
                 comp.cleanup_after_caching_req(
                     req, is_finished=False, insert_params=insert_params
                 )
-            return
+            return False
 
         # Match prefix. SWA insertion retains one extra window before the
         # page-aligned boundary, so the normal match remains safe to repoint.
@@ -1538,15 +1548,15 @@ class UnifiedRadixCache(BasePrefixCache):
         new_indices = match_result.device_indices
         new_last_node = match_result.last_device_node
         new_prefix_len = result.prefix_len
-        assert req.kv.cache_protected_len <= len(new_indices) + self.page_size - 1, (
-            f"{req.kv.cache_protected_len=}, {len(new_indices)=}, {page_aligned_len=}"
+        assert prev_prefix_len <= len(new_indices) + self.page_size - 1, (
+            f"{prev_prefix_len=}, {len(new_indices)=}, {page_aligned_len=}"
         )
         assert new_prefix_len <= len(new_indices), (
             f"{new_prefix_len=}, {len(new_indices)=}"
         )
         self.req_to_token_pool.write(
-            (req.kv.req_pool_idx, slice(req.kv.cache_protected_len, len(new_indices))),
-            new_indices[req.kv.cache_protected_len :],
+            (req.kv.req_pool_idx, slice(prev_prefix_len, len(new_indices))),
+            new_indices[prev_prefix_len :],
         )
 
         self._dec_req_lock(req, skip_swa=req.swa_prefix_lock_released)
@@ -1598,6 +1608,7 @@ class UnifiedRadixCache(BasePrefixCache):
                 insert_result=result,
                 insert_params=insert_params,
             )
+        return True
 
     # ---- Internal Helpers ----
 

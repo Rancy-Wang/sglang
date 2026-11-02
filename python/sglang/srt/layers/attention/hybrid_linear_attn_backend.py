@@ -393,6 +393,11 @@ class MambaAttnBackendBase(AttentionBackend):
         dst_masked = mamba_track_indices[mamba_track_mask]
 
         is_aligned = (lens_masked % state_chunk_size) == 0
+        endpoint_mask = getattr(forward_batch, "context_mamba_endpoint_mask", None)
+        if endpoint_mask is not None:
+            # Endpoint snapshots read the in-place final state even for a
+            # partial kernel chunk; never substitute its earlier h boundary.
+            is_aligned |= endpoint_mask.cpu()[mamba_track_mask]
 
         # Aligned: last_recurrent_state from ssm_states.
         track_ssm_final_src = mamba_cache_indices[mamba_track_mask][is_aligned]

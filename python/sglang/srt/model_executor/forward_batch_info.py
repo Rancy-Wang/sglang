@@ -439,6 +439,8 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
     mamba_track_mask: Optional[torch.Tensor] = None  # shape: [b], bool
     # The seqlens to track mamba state if masked, prefill only.
     mamba_track_seqlens: Optional[torch.Tensor] = None  # shape: [b], int64
+    # Context GDN snapshots the actual extend endpoint, including short tails.
+    context_mamba_endpoint_mask: Optional[torch.Tensor] = None
     # Deferred mamba init ops: COW pairs and clear indices (performed on forward stream)
     mamba_cow_src_indices: Optional[torch.Tensor] = None
     mamba_cow_dst_indices: Optional[torch.Tensor] = None
@@ -870,6 +872,11 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
                 raise ValueError("Context prefill metadata requires ordinary extend")
             ret.context_attention = batch.context_prefill_input.bind(model_runner)
             ret.positions = ret.context_attention.full.query_positions
+            if ret.mamba_track_mask is not None:
+                ret.context_mamba_endpoint_mask = torch.tensor(
+                    [req.context_program is not None for req in batch.reqs],
+                    dtype=torch.bool, device=ret.mamba_track_mask.device,
+                ) & ret.mamba_track_mask
 
         if ret.forward_mode.is_decode():
             registry = getattr(model_runner, "context_decode_registry", None)
