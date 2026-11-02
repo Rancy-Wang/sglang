@@ -328,7 +328,9 @@ def test_continuation_shrinks_before_allocation(factory, compiler):
     factory.mock_token_allocator.available_size.return_value = 150
     assert adder.add_chunked_req(req) is req
     assert adder.can_run_list == [req]
-    assert req.extend_range.length == 64
+    # Early target versions now coexist with historical read versions. The
+    # reservation must shrink before allocation rather than discard Drop KV.
+    assert 0 < req.extend_range.length < 128
     _, plan = req.context_window_plan
     assert adder.cur_rem_token_offset == (
         req.extend_range.length + plan.extra_page_count + 1

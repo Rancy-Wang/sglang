@@ -75,7 +75,7 @@ def test_drop_pressure_preserves_all_raw_checkpoints(compiler, monkeypatch):
         saved = {}
         for end in (64, 128, 256):
             slot = pool.mamba_allocator.alloc(1)
-            pool.mamba_pool.mamba_cache.temporal[:, slot].fill_(end)
+            pool.mamba_pool.mamba_cache.temporal[:, slot] = end
             cache.insert(InsertParams(key=key[:end], value=allocator.alloc(end), mamba_value=slot))
             hit = cache.match_prefix(MatchPrefixParams(key=key[:end], context_retry=True))
             assert len(hit.device_indices) == end
