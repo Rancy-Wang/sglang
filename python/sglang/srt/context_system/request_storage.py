@@ -163,7 +163,9 @@ def prefill_progress_reserve(req, query_end):
     demand[-1] = max(
         live[-1] + terminal_live[-1] + final_intermediate, live[-1],
     )
-    return persistent + int(demand[query_end:].max()) + output
+    # This request decodes only after prefill has released historical versions.
+    # Reserve both phases, not the sum of two peaks that cannot coexist.
+    return persistent + max(int(demand[query_end:].max()), int(demand[-1]) + output)
 
 
 def handle_prefill_capacity_pressure(req, capacity, needed, tree_cache=None):

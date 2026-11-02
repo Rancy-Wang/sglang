@@ -163,6 +163,39 @@ def test_future_reservation_with_incremental_terminal_publication(compiler, monk
     assert torch.equal(state.terminal_rows >= 0, layout.keep_mask)
 
 
+def test_prefill_and_decode_peaks_do_not_coexist(compiler, monkeypatch):
+    import sys
+    import types
+    from test_ir import args
+    from test_occurrence_ownership import expiry_for
+    package = types.ModuleType("context_phase_capacity_test")
+    package.__path__ = [str(ROOT / "python/sglang/srt/context_system")]
+    monkeypatch.setitem(sys.modules, package.__name__, package)
+    capacity = load_file(
+        "context_phase_capacity_test.request_storage",
+        ROOT / "python/sglang/srt/context_system/request_storage.py",
+    )
+    from context_phase_capacity_test.occurrence import OccurrenceState, compile_occurrence_window
+    drops = {96: [(0, 80)]}
+    layout = compiler(*args(list(range(128)), drops, []))
+    expiry = expiry_for(128, drops)
+    state = OccurrenceState.from_match(torch.empty(0,dtype=torch.int64),
+                                      torch.empty(0,dtype=torch.int32),exact_prefix_len=0)
+    window = compile_occurrence_window(layout,expiry,layout.positions,query_start=0,query_end=1)
+    plan = state.plan(window,state.prefill_terminal_keep(layout,1,expiry))
+    req = SimpleNamespace(context_program=SimpleNamespace(layout=layout,visible_until=expiry),
+                          context_recompute_program=None,context_recovery_plan=None,
+                          context_recovery_source=None,context_source_positions=None,
+                          context_exact_prefix_len=0,prefix_indices=[],output_ids=[],
+                          context_window_plan=(window,plan),
+                          sampling_params=SimpleNamespace(max_new_tokens=4))
+    small = capacity.prefill_progress_reserve(req,1)
+    req.sampling_params.max_new_tokens = 40
+    assert capacity.prefill_progress_reserve(req,1) == small == 96
+    req.sampling_params.max_new_tokens = 80
+    assert capacity.prefill_progress_reserve(req,1) == 130
+
+
 def test_source_lease_releases_only_after_last_borrowed_read_and_gap():
     state = SimpleNamespace(
         canonical_rows=torch.tensor([0, 1]), terminal_rows=torch.tensor([-1, 1]),
