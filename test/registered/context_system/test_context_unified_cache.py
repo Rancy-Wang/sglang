@@ -72,12 +72,11 @@ def test_drop_pressure_preserves_all_raw_checkpoints(compiler, monkeypatch):
     ))
     try:
         key = RadixKey.from_context(compiler(*args(list(range(256)), {192: [(0,128)]}, [])))
-        pages = allocator.alloc(256)
         saved = {}
         for end in (64, 128, 256):
             slot = pool.mamba_allocator.alloc(1)
             pool.mamba_pool.mamba_cache.temporal[:, slot].fill_(end)
-            cache.insert(InsertParams(key=key[:end], value=pages[:end], mamba_value=slot))
+            cache.insert(InsertParams(key=key[:end], value=allocator.alloc(end), mamba_value=slot))
             hit = cache.match_prefix(MatchPrefixParams(key=key[:end], context_retry=True))
             assert len(hit.device_indices) == end
             saved[end] = (hit.last_device_node, slot.clone())

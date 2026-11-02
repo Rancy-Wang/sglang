@@ -114,7 +114,12 @@ def prefill_progress_reserve(req, query_end):
             offsets[:-1], offsets[1:], strict=True,
         ):
             selected = keys[x:y]
-            copies[a:b] = np.count_nonzero(pos[selected] != canonical[raw[selected]])
+            # Reads at a target position use the retained target itself. Only
+            # a third, intermediate position needs another transient version.
+            copies[a:b] = np.count_nonzero(
+                (pos[selected] != canonical[raw[selected]])
+                & (pos[selected] != program.layout.positions.numpy()[raw[selected]])
+            )
         terminal = (
             (program.layout.positions.numpy() != canonical)
             | (
