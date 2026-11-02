@@ -115,6 +115,14 @@ def test_bcp_case771(endpoint, mode):
         }))
         assert not result["choices"][0]["message"].get("tool_calls")
         results.append(result)
+    hot_meta = results[1]["choices"][0]["meta_info"]
+    # The fixed 5745-token fixture must retain native S_5696, even though the
+    # live state advanced through the final 49 tokens. A nonzero but needlessly
+    # short match is also a regression.
+    if len(results[1]["sglext"]["input_ids"]) == 5745:
+        assert hot_meta["cached_tokens"] == 5696, hot_meta
+    else:
+        assert hot_meta["cached_tokens"] > 0, hot_meta
     if mode != "native":
         cold, hot = [r["choices"][0]["meta_info"]["context_usage"] for r in results]
         assert hot["actual_prefill_tokens"] < cold["actual_prefill_tokens"], (cold, hot)
@@ -159,8 +167,8 @@ def test_raw_history_above_model_limit(endpoint, retained_tail):
         usage = meta["context_usage"]
         assert meta["num_retractions"] == 0
         assert usage["actual_prefill_tokens"] == meta["prompt_tokens"] - meta["cached_tokens"]
-        # A short tail can end before the next native recurrent checkpoint;
-        # there need not be any jointly reusable prefix. Keep that boundary
-        # case, and separately require reuse when a retained tail spans it.
-        if state == "hot" and retained_tail:
+        # Earlier chunks now publish their native checkpoints too. A short
+        # final tail must not erase those valid reuse boundaries.
+        if state == "hot":
+            assert meta["cached_tokens"] > 0, meta
             assert usage["drop_skipped_tokens"] > 262144, usage
