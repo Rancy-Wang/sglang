@@ -17,7 +17,9 @@ def test_context_checkpoint_uses_raw_extend_end(length, holes):
     from sglang.srt.server_args import ServerArgs
 
     reset_context()
-    publish(ServerArgs(model_path="dummy", page_size=1), role="scheduler")
+    server_args = ServerArgs(model_path="dummy", page_size=1)
+    server_args._mamba_cache_chunk_size = 64
+    publish(server_args, role="scheduler")
     try:
         prefix = torch.arange(64)
         prefix[:holes] = -1

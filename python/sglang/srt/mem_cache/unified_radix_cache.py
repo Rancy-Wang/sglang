@@ -1241,7 +1241,16 @@ class UnifiedRadixCache(BasePrefixCache):
                     self.req_to_token_pool, req.kv.req_pool_idx
                 )[:length].to(dtype=torch.int64, copy=True)
                 return
+        checkpoint_len = req.kv.mamba_last_track_seqlen if self.is_mamba_enabled else None
+        old_protected_len = req.kv.cache_protected_len
         published = self._cache_unfinished_req_native(req, chunked=chunked, **kwargs)
+        if state is not None:
+            logger.debug(
+                "Context cache publication rid=%s raw_end=%d checkpoint=%s "
+                "published=%s protected=%d->%d",
+                req.rid, len(req.get_fill_ids()), checkpoint_len, published,
+                old_protected_len, req.kv.cache_protected_len,
+            )
         if published and state is not None and not self.disable:
             req.context_state = state.publish(
                 req.prefix_indices, cache_len=req.kv.cache_protected_len,
