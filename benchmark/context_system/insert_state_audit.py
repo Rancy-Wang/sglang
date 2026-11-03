@@ -234,6 +234,66 @@ def brute_decode_reads(layout, generated, window=-1):
     return pairs
 
 
+def audit_trajectory_files(paths, output):
+    """Rendered-token LCP versus operation-key LCP for consecutive real turns.
+
+    This supplements, and does not replace, the server's resident-tree audit.
+    The last sampled output has no committed KV and is excluded from the source.
+    """
+    import gzip
+    import re
+    from array import array
+    from types import SimpleNamespace
+
+    from sglang.srt.context_system.ir import ContextKeyData
+    from sglang.srt.context_system.planner import compile_chat_program
+    from sglang.srt.context_system.rules import parse_drop_rule
+    from sglang.srt.mem_cache.radix_cache import RadixKey
+    from sglang.srt.parser.gpt_oss_encoding import HarmonyEncoder
+
+    previous, result = {}, []
+    for path in sorted(map(Path, paths)):
+        match = re.search(r"-(\d+)-turn-(\d+)\.json\.gz$", path.name)
+        if match is None:
+            continue
+        case, turn = match.groups()
+        with gzip.open(path, "rt") as source:
+            saved = json.load(source)
+        payload, response = saved["request"], saved["response"]
+        messages = payload["messages"]
+        clean = [{k: v for k, v in m.items() if k != "index"} for m in messages]
+        ids, owners, _ = HarmonyEncoder(payload.get("reasoning_effort", "low")).render_tokens(
+            clean, payload.get("tools"))
+        rule = parse_drop_rule(None, messages, legacy_drop_message=payload.get("drop_message"))
+        program = compile_chat_program(messages, SimpleNamespace(input_ids=ids, owners=owners),
+                                       rule, payload.get("reposition"), payload.get("insert"))
+        tokens = program.input_ids
+        if tokens != response["sglext"]["input_ids"]:
+            raise ValueError(f"Offline rendering differs from the actual served input: {path}")
+        data = ContextKeyData.from_layout(program.layout)
+        key = RadixKey(array("i", tokens), context=data)
+        if case in previous:
+            old_tokens, old_key, old_input = previous[case]
+            text_lcp = common_units(old_tokens, tokens)
+            exact = common_units(token_units(old_key), token_units(key))
+            retry = common_units(token_units(old_key, retry=True), token_units(key, retry=True))
+            result.append(dict(case=case, turn=int(turn), artifact=str(path),
+                               token_lcp=text_lcp, exact=exact, retry=retry,
+                               operation_extra_loss=max(0, text_lcp-retry),
+                               historical_token_prefix_loss=max(0, old_input-text_lcp)))
+        generated = response["sglext"]["output_ids"][0][:-1]
+        data.append_tokens(array("i", generated), next_position=program.layout.next_position)
+        cached = tokens + generated
+        previous[case] = (cached, RadixKey(array("i", cached), context=data), len(tokens))
+    report = dict(transitions=len(result),
+                  operation_extra_loss=sum(r["operation_extra_loss"] for r in result),
+                  token_prefix_changes=sum(r["historical_token_prefix_loss"]>0 for r in result),
+                  retrigger_extensions=sum(r["retry"]>r["exact"] for r in result),
+                  records=result)
+    Path(output).write_text(json.dumps(report, indent=2))
+    return report
+
+
 def replay(args):
     """Frozen warm/exact/cold and multi-step teacher forcing on an isolated server."""
     import copy
