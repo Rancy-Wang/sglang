@@ -332,8 +332,8 @@ def _plan_insert_recovery(resident, expiry, layout, rewind, incompatible,
             if source >= matched:
                 continue
             readers[source].append((a, b))
-            if positions[occurrence] != stored_positions[source]:
-                old_version_readers[source].append((a, b))
+            if a < matched and positions[occurrence] != stored_positions[source]:
+                old_version_readers[source].append((a, min(b, matched)))
             if window is not None:
                 end = min(b, a+int(positions[occurrence])+window-int(birth[a]))
                 if a < end:
@@ -341,8 +341,8 @@ def _plan_insert_recovery(resident, expiry, layout, rewind, incompatible,
         for source in range(a, min(b, matched)):
             if source+1 < b:
                 readers[source].append((source+1, b))
-                if birth[source] != stored_positions[source]:
-                    old_version_readers[source].append((source+1, b))
+                if source+1 < matched and birth[source] != stored_positions[source]:
+                    old_version_readers[source].append((source+1, min(b, matched)))
                 if window is not None:
                     swa_readers[source].append((source+1, min(b, source+window)))
 
@@ -364,7 +364,6 @@ def _plan_insert_recovery(resident, expiry, layout, rewind, incompatible,
     needed = np.zeros(n, dtype=bool)
     needed[matched:] = True
     required = np.zeros(matched, dtype=bool)
-    repair = False
     for source in range(matched-1, -1, -1):
         full_needed = reads(readers[source])
         swa_needed = bool(terminal[source]) or reads(swa_readers[source])
@@ -372,11 +371,12 @@ def _plan_insert_recovery(resident, expiry, layout, rewind, incompatible,
         # A repaired query after R can read the already-correct final Full KV.
         # Rewind only when a selected historical query needs another version;
         # a missing SWA tail must not invalidate every rotated prefix token.
-        needs_old_version = repair and rewind[source] and reads(old_version_readers[source])
-        full_missing = not present[source] or incompatible[source] or needs_old_version
+        # Queries at/after the match may apply new R transitions by COW. Those
+        # future rotations do not invalidate the source used by repaired queries.
+        needs_old_version = (rewind[source] or incompatible[source]) and reads(old_version_readers[source])
+        full_missing = not present[source] or needs_old_version
         if (full_needed and full_missing) or (swa_needed and not swa_present[source]):
             needed[source] = required[source] = True
-            repair = True
             i = source+1
             while i <= n:
                 tree[i] += 1

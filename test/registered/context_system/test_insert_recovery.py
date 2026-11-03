@@ -138,3 +138,25 @@ def test_rotated_source_versions_follow_selected_queries(context_modules):
             layout=p.layout, swa_window=window, source_positions=stored,
         )
         assert {q for a, b in result.intervals for q in range(a, b)} == planned
+
+
+def test_retrigger_rotates_future_versions_without_rewinding_retained_suffix(context_modules):
+    p = program(context_modules, repos=True, width=7)
+    module = importlib.import_module(context_modules[2].__package__ + '.recovery')
+    matched, n = 63, len(p.input_ids)
+    stored = p.layout.birth_positions[:matched].clone()
+    stored[21:28] = torch.arange(7, 14, dtype=torch.int32)  # source's first R
+    resident = torch.ones(matched, dtype=torch.bool)
+    resident[7:21] = False  # the source has completed D(1,2), R, and A(4..8)
+    swa = resident.clone()
+    swa[-1] = False  # only the final old-assistant token requires repair
+    rewind = resident & (stored != p.layout.birth_positions[:matched])
+    for incompatible in (None, stored != p.layout.positions[:matched]):
+        result = module.plan_recovery(
+            resident, p.visible_until, n, rewind, incompatible,
+            swa_resident=swa,
+            swa_query_starts=module.sliding_window_starts(p.layout, p.visible_until, 5),
+            layout=p.layout, swa_window=5, source_positions=stored,
+        )
+        assert result.intervals == ((matched-1, n),)
+        assert result.reusable_prefix[42:62].all()
