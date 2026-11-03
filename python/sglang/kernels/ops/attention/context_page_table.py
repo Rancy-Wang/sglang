@@ -48,7 +48,8 @@ def _prompt_window_count(Index, lower, budget):
 
 
 @triton.jit
-def context_window_lengths(Registry, Rows, Lengths, Output, WINDOW: tl.constexpr):
+def context_window_lengths(Registry, Rows, Lengths, Output, WINDOW: tl.constexpr,
+                           NATIVE_CAPACITY: tl.constexpr = -1):
     b = tl.program_id(0)
     row = tl.load(Rows + b)
     # Eager batches carry int64 lengths; graph buffers use int32. Registry
@@ -56,7 +57,7 @@ def context_window_lengths(Registry, Rows, Lengths, Output, WINDOW: tl.constexpr
     length = tl.load(Lengths + b).to(tl.int32)
     entry = Registry + row * 8
     pointer = tl.load(entry)
-    result = tl.minimum(length, WINDOW + 1)
+    result = tl.minimum(length, WINDOW + 1 if NATIVE_CAPACITY < 0 else NATIVE_CAPACITY)
     if pointer != 0:
         positions = tl.load(entry + 1).to(tl.pointer_type(tl.int32))
         active = tl.load(entry + 3).to(tl.int32)

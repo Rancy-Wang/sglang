@@ -795,15 +795,16 @@ class ContextDecodeRegistry:
             tuple(refs),
         )
 
-    def window_lengths_cpu(self, window, batch_size):
-        key = (window, batch_size)
+    def window_lengths_cpu(self, window, batch_size, *, native_capacity=None):
+        native_capacity = window + 1 if native_capacity is None else native_capacity
+        key = (window, batch_size, native_capacity)
         cached = self._window_lengths.get(key)
         if cached is not None:
             return cached
         lengths = []
         for layout, generated in self.batch_layouts:
             if layout is None:
-                lengths.append(min(generated, window + 1))
+                lengths.append(min(generated, native_capacity))
             else:
                 lower = layout.next_position + generated - 1 - window
                 lengths.append(
@@ -819,7 +820,7 @@ class ContextDecodeRegistry:
         return result
 
     def fits_graph(self, batch_size, full_capacity, *, window=None,
-                   window_capacity=None, table=False):
+                   window_capacity=None, table=False, native_capacity=None):
         """Check fixed captured storage without reading any device metadata.
 
         All SWA rows, including overlapping positions, fit the native W bound.
@@ -835,7 +836,7 @@ class ContextDecodeRegistry:
         bound = window + 1 if table else batch_size * (window + 1)
         if bound <= window_capacity:
             return True
-        lengths = self.window_lengths_cpu(window, batch_size)
+        lengths = self.window_lengths_cpu(window, batch_size, native_capacity=native_capacity)
         required = int(lengths.max()) if table else int(lengths.sum())
         return required <= window_capacity
 
@@ -885,14 +886,17 @@ class ContextDecodeRegistry:
                   window=window if window is not None else -1, full_lengths=seq_lens)
         return lengths
 
-    def fill_window(self, row_ids, seq_lens, indptr, window, output):
+    def fill_window(self, row_ids, seq_lens, indptr, window, output, *, native_capacity=None):
         from sglang.kernels.ops.attention.context_page_table import (
             context_window_lengths,
         )
 
         bs = len(seq_lens)
         lengths = torch.empty_like(seq_lens)
-        context_window_lengths[(bs,)](self.rows, row_ids, seq_lens, lengths, window)
+        context_window_lengths[(bs,)](
+            self.rows, row_ids, seq_lens, lengths, window,
+            NATIVE_CAPACITY=-1 if native_capacity is None else native_capacity,
+        )
         indptr = indptr[: bs + 1]
         indptr[1:] = lengths.cumsum(0)
         starts = seq_lens - lengths

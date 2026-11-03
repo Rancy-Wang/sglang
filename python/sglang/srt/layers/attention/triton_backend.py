@@ -556,6 +556,7 @@ class TritonAttnBackend(AttentionBackend):
                     self.context_decode_registry.fill_window(
                         req_pool_indices, seq_lens, self.window_kv_indptr,
                         self.sliding_window_size, self.cuda_graph_window_kv_indices,
+                        native_capacity=self.sliding_window_size,
                     )
                 )
                 return kv_indptr, window_kv_indptr, window_kv_lens, num_kv_splits_lens
@@ -869,7 +870,8 @@ class TritonAttnBackend(AttentionBackend):
                     if self.context_decode_registry is not None:
                         window_kv_indices = torch.empty(
                             int(self.context_decode_registry.window_lengths_cpu(
-                                self.sliding_window_size, bs
+                                self.sliding_window_size, bs,
+                                native_capacity=self.sliding_window_size,
                             ).sum()),
                             dtype=torch.int64, device=self.device,
                         )
@@ -878,6 +880,7 @@ class TritonAttnBackend(AttentionBackend):
                                 forward_batch.req_pool_indices, forward_batch.seq_lens,
                                 self.window_kv_indptr, self.sliding_window_size,
                                 window_kv_indices,
+                                native_capacity=self.sliding_window_size,
                             )
                         )
                     else:
@@ -1109,6 +1112,9 @@ class TritonAttnBackend(AttentionBackend):
             batch_size, self.cuda_graph_kv_indices.numel(),
             window=window,
             window_capacity=(self.cuda_graph_window_kv_indices.numel() if swa else None),
+            # Native Triton decode uses window as capacity; Context rows use
+            # inclusive position distance. A mixed batch must preserve both.
+            native_capacity=window,
         )
 
     def init_cuda_graph_state(

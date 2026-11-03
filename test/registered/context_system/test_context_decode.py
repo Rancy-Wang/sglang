@@ -38,6 +38,23 @@ def test_empty_active_prompt_still_marks_context():
     assert view.swa_raw_floor(12, 2) == 9
 
 
+def test_native_capacity_does_not_change_context_distance_window():
+    load_file("sglang.srt.context_system.request_storage",
+              ROOT / "python/sglang/srt/context_system/request_storage.py")
+    module = load_file("context_capacity_backend",
+                      ROOT / "python/sglang/srt/layers/attention/context_backend.py")
+    view, _ = layout([0, 7, 8, 19], [0, 1, 2, 3], 20, 4)
+    registry = object.__new__(module.ContextDecodeRegistry)
+    registry.batch_layouts = [(None, 7), (view, 1)]
+    registry._window_lengths = {}
+    registry.full_length_sum, registry.full_length_max = 12, 7
+    assert registry.window_lengths_cpu(2, 2).tolist() == [3, 3]
+    assert registry.window_lengths_cpu(2, 2, native_capacity=2).tolist() == [2, 3]
+    assert registry.window_lengths_cpu(2, 2).tolist() == [3, 3]
+    assert registry.fits_graph(2, 12, window=2, window_capacity=5, native_capacity=2)
+    assert not registry.fits_graph(2, 12, window=2, window_capacity=5)
+
+
 def test_mixed_extend_composes_queries_positions_and_slots():
     load_file("sglang.srt.context_system.request_storage",
               ROOT / "python/sglang/srt/context_system/request_storage.py")

@@ -282,3 +282,42 @@ def test_native_decode_adapters_oversized_window(context_modules, mixed):
     packed = torch.empty(len(expected), device="cuda", dtype=torch.int64)
     registry.fill_window(rows, lens, ptr, 128, packed)
     assert packed.tolist() == expected
+    # Triton's native decode helper uses total capacity=window, whereas its
+    # Context lane follows the inclusive position predicate. Exercise the real
+    # adapter and compare the ordinary lane with the unchanged native helper.
+    from types import MethodType
+    from sglang.srt.layers.attention.triton_backend import update_sliding_window_buffer
+
+    backend.dcp_size = 1
+    backend.kv_indptr = torch.zeros(5, device="cuda", dtype=torch.int32)
+    backend.window_kv_indptr = torch.zeros_like(backend.kv_indptr)
+    backend.cuda_graph_kv_indices = torch.empty(8192, device="cuda", dtype=torch.int64)
+    backend.cuda_graph_window_kv_indices = packed
+    backend._fill_kv_indptr_and_indices = MethodType(
+        TritonAttnBackend._fill_kv_indptr_and_indices, backend)
+    def run_triton():
+        return TritonAttnBackend._update_decode_kv_buffers(backend, 4, lens, rows)
+    run_triton()
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        run_triton()
+    graph.replay()
+    count = int(backend.window_kv_indptr[-1])
+    triton_expected = expected[:3*129] + (expected[-128:] if mixed else expected[3*129:])
+    assert packed[:count].tolist() == triton_expected
+    assert registry.window_lengths_cpu(128, 4, native_capacity=128).sum() == count
+    backend.cuda_graph_window_kv_indices = packed[:count]
+    assert TritonAttnBackend.context_decode_fits_graph(backend, 4)
+    if mixed:
+        def native_gather(*, req_pool_indices, seq_lens, indptr, out, kv_start_idx, **kwargs):
+            for i, row in enumerate(req_pool_indices.tolist()):
+                out[int(indptr[i]):int(indptr[i+1])] = table[
+                    row, int(kv_start_idx[i]):int(kv_start_idx[i]+seq_lens[i])]
+            return False
+        native_translator = SimpleNamespace(reads_are_translated=False,
+                                           fill_packed_read_stream=native_gather)
+        native_ptr = torch.zeros(2, device="cuda", dtype=torch.int32)
+        _, native_indices, _, _ = update_sliding_window_buffer(
+            native_ptr, native_translator, rows[-1:], 128, lens[-1:], 1,
+            device="cuda", token_to_kv_pool=None)
+        assert torch.equal(packed[count-len(native_indices):count], native_indices)
