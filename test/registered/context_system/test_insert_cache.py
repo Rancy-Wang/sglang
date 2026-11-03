@@ -120,7 +120,9 @@ def test_insert_http_summary_lifecycle(tmp_path, request):
     """Warm/retrigger, exact, nested later-turn insertion and cold restoration."""
     import requests
     from serving_logits_probe import serialized_probe
-    server = request.getfixturevalue("server")
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "benchmark/context_system"))
+    from insert_summary48k import logit_metrics, native_logit_bounds
+    server = os.environ.get("CONTEXT_EXISTING_SERVER") or request.getfixturevalue("server")
     root = Path(os.environ.get("CONTEXT_TRACE_DIR", str(tmp_path)))
     root.mkdir(parents=True, exist_ok=True)
     messages = [{"role": "system", "content": "Remember the conversation. Answer briefly."}]
@@ -142,6 +144,14 @@ def test_insert_http_summary_lifecycle(tmp_path, request):
         assert response.status_code == 200, response.text
         return response.json(), torch.load(path, weights_only=True)
     requests.post(server+"/flush_cache", timeout=30).raise_for_status()
+    call(messages[:9])
+    _, native_warm = call(messages)
+    _, native_exact = call(messages)
+    requests.post(server+"/flush_cache", timeout=30).raise_for_status()
+    _, native_cold = call(messages)
+    bounds = native_logit_bounds([logit_metrics(x, native_cold) for x in (native_warm, native_exact)])
+    print("INSERT_NATIVE_BOUNDS", bounds, flush=True)
+    requests.post(server+"/flush_cache", timeout=30).raise_for_status()
     call(messages[:9], drop_message={"3": [1, 2]}, reposition=[3])
     summary = {"index": -1, "role": "user", "content": "Summary: the earlier messages discussed red, blue, green and amber."}
     logical = messages[:6] + [summary] + messages[6:]
@@ -153,9 +163,9 @@ def test_insert_http_summary_lifecycle(tmp_path, request):
     assert warm["usage"]["prompt_tokens_details"]["cached_tokens"] > 0
     assert exact["usage"]["prompt_tokens_details"]["cached_tokens"] >= warm["usage"]["prompt_tokens_details"]["cached_tokens"]
     for actual in (a, b):
-        error = (actual-c).abs()
-        print("INSERT_LOGITS", error.max().item(), error.mean().item(), flush=True)
-        assert error.max() < .15 and error.mean() < .015
+        metrics = logit_metrics(actual, c)
+        print("INSERT_LOGITS", metrics, flush=True)
+        assert all(metrics[k] <= bounds[k] for k in bounds)
     # A second Insert targets the prior inserted token range by birth depth.
     logical = messages[:6] + [{"index": -2, "role": "user", "content": "Additional summary: remember amber."}, summary] + messages[6:]
     logical += [{"role": "assistant", "content": "Understood."}, {"role": "user", "content": "Which colors?"}]
@@ -164,9 +174,9 @@ def test_insert_http_summary_lifecycle(tmp_path, request):
     later, d = call(logical, **ops)
     requests.post(server+"/flush_cache", timeout=30).raise_for_status()
     _, e = call(logical, **ops)
-    error = (d-e).abs()
-    print("INSERT_LATER_LOGITS", error.max().item(), error.mean().item(), flush=True)
-    assert error.max() < .15 and error.mean() < .015
+    metrics = logit_metrics(d, e)
+    print("INSERT_LATER_LOGITS", metrics, flush=True)
+    assert all(metrics[k] <= bounds[k] for k in bounds)
     assert later["usage"]["prompt_tokens_details"]["cached_tokens"] > 0
 
 

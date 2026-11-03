@@ -2,7 +2,17 @@
 import copy
 
 import pytest
-from insert_summary48k import History, process_summary, select_summary
+from insert_summary48k import History, native_logit_bounds, process_summary, select_summary
+
+
+def test_numeric_bounds_use_only_native_controls_and_reject_invalid_controls():
+    control = {"max_abs": 2., "mean_abs": .3, "p99_abs": .9}
+    assert native_logit_bounds([control]) == {"max_abs": 4., "mean_abs": .6, "p99_abs": 1.8}
+    assert native_logit_bounds([{k: 0. for k in control}]) == {
+        "max_abs": .15, "mean_abs": .02, "p99_abs": .0625}
+    for invalid in ([], [dict(control, max_abs=float("nan"))], [dict(control, mean_abs=-1)]):
+        with pytest.raises(ValueError):
+            native_logit_bounds(invalid)
 
 
 def test_transaction_drops_before_insert_and_preserves_stateless_history():

@@ -75,3 +75,58 @@ def test_nonmonotone_swa_gather_graph(context_modules):
         raw += [len(p.input_ids)+i for i in range(generated) if p.layout.next_position+i >= lower]
         assert ptr[-1].item() == len(raw)
         assert out[:len(raw)].tolist() == [256+r for r in raw]
+
+
+@pytest.mark.skipif(not os.environ.get("CONTEXT_INSERT_KV_TRACES"), reason="saved model KV probes required")
+@pytest.mark.parametrize("rank", [0, 1])
+@pytest.mark.parametrize("layer", range(4))
+@pytest.mark.parametrize("mode", ["warm", "exact", "cold"])
+@pytest.mark.parametrize("kind", ["insert_no_r", "insert_r"])
+def test_insert_saved_model_attention(rank, layer, mode, kind):
+    """Independent FP32 attention over actual GPT-OSS query and cached KV.
+
+    The token state-machine tests separately verify visibility. Here the real
+    model's sinks, GQA, physical prefix reads and BF16 outputs are checked on
+    both tensor-parallel ranks, with and without a post-Insert Reposition.
+    """
+    import json
+    import math
+    from pathlib import Path
+
+    from safetensors import safe_open
+
+    root = Path(os.environ["CONTEXT_INSERT_KV_TRACES"])
+    model = Path(os.environ["CONTEXT_SERVER_MODEL"])
+    data = torch.load(root / f"{kind}-{mode}.pt.layer{layer}.rank{rank}.0.pt", weights_only=True)
+    torch.testing.assert_close(data["stored_k"], data["k"].reshape_as(data["stored_k"]), rtol=0, atol=0)
+    torch.testing.assert_close(data["stored_v"], data["v"].reshape_as(data["stored_v"]), rtol=0, atol=0)
+    name = f"model.layers.{layer}.self_attn.sinks"
+    index = json.loads((model / "model.safetensors.index.json").read_text())["weight_map"]
+    with safe_open(str(model / index[name]), framework="pt", device="cpu") as weights:
+        sinks = weights.get_tensor(name)
+    dim = data["stored_k"].shape[-1]
+    q = data["q"].reshape(len(data["q"]), -1, dim).float().cuda()
+    k = data["k"].reshape(len(q), -1, dim).float().cuda()
+    v = data["v"].reshape_as(k).float().cuda()
+    pk, pv = data["prefix_k"].float().cuda(), data["prefix_v"].float().cuda()
+    qp, pp = data["query_positions"].cuda(), data["kv_positions"].cuda()
+    sinks = sinks[rank*q.shape[1]:(rank+1)*q.shape[1]].float().cuda()
+    expected = torch.empty_like(q)
+    for a, b, x, y in zip(data["qo_indptr"][:-1], data["qo_indptr"][1:],
+                          data["kv_indptr"][:-1], data["kv_indptr"][1:]):
+        a, b, x, y = map(int, (a, b, x, y))
+        kk = torch.cat((pk[x:y], k[a:b])).repeat_interleave(q.shape[1]//k.shape[1], dim=1)
+        vv = torch.cat((pv[x:y], v[a:b])).repeat_interleave(q.shape[1]//v.shape[1], dim=1)
+        positions = torch.cat((pp[x:y], qp[a:b]))
+        for start in range(a, b, 128):
+            end = min(start+128, b)
+            scores = torch.einsum("qhd,khd->hqk", q[start:end], kk) / math.sqrt(dim)
+            visible = torch.arange(len(kk), device="cuda")[None, :] <= (
+                y-x+torch.arange(start-a, end-a, device="cuda"))[:, None]
+            if data["window"] is not None and data["window"] >= 0:
+                visible &= qp[start:end, None] <= positions[None, :]+data["window"]
+            scores.masked_fill_(~visible[None, :, :], -float("inf"))
+            scores = torch.cat((scores, sinks[:, None, None].expand(-1, end-start, 1)), dim=-1)
+            expected[start:end] = torch.einsum("hqk,khd->qhd", scores.softmax(-1)[..., :-1], vv)
+    torch.testing.assert_close(data["output"].reshape_as(expected).float().cuda(),
+                               expected, rtol=.0078125, atol=.0078125)

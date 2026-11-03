@@ -44,6 +44,30 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+def logit_metrics(actual, expected):
+    import torch
+    difference = (actual.float() - expected.float()).abs()
+    if not bool(torch.isfinite(difference).all()):
+        raise ValueError("Non-finite logits in numerical validation")
+    return {"max_abs": difference.max().item(), "mean_abs": difference.mean().item(),
+            "p99_abs": torch.quantile(difference.flatten(), .99).item()}
+
+
+def native_logit_bounds(native_metrics):
+    """Predeclared 2x native batch-shape envelope, never fitted to Insert.
+
+    This follows test_model_forward's native calibration rule. Absolute BF16
+    floors alone are invalid for GPT-OSS MXFP4: small rounding differences can
+    change MoE routes. This is an end-to-end regression gate, not a KV oracle.
+    """
+    import math
+    floors = {"max_abs": .15, "mean_abs": .02, "p99_abs": .0625}
+    if not native_metrics or any(not math.isfinite(m[k]) or m[k] < 0
+                                 for m in native_metrics for k in floors):
+        raise ValueError("Native numerical calibration must be finite and nonnegative")
+    return {k: max(floor, 2 * max(m[k] for m in native_metrics)) for k, floor in floors.items()}
+
+
 def load_cases(root, case_ids):
     root = Path(root)
     entries = {e["case_id"]: e for e in map(json.loads, (root / "tasks_unique.jsonl").read_text().splitlines())}
@@ -184,30 +208,51 @@ def run(args):
         ids, owners, _ = HarmonyEncoder("low").render_tokens(clean, tools)
         return ids, owners
 
-    def compare_summary(payload, label):
+    def compare_summary(payload, active_messages, label):
         """Freeze this event's text/tokens and compare warm/exact/cold logits."""
         import torch
         sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test/registered/context_system"))
         from serving_logits_probe import serialized_probe
         logits, hashes, usage = {}, {}, {}
-        for mode in ("warm", "exact", "cold"):
-            if mode == "cold":
-                session.post(args.url + "/flush_cache", timeout=30).raise_for_status()
-            path = (out / f"{label}-{mode}.pt").resolve()
-            probe = dict(payload, max_tokens=1, custom_logit_processor=serialized_probe(),
+        def probe_call(request, name):
+            path = (out / f"{label}-{name}.pt").resolve()
+            probe = dict(request, max_tokens=1, custom_logit_processor=serialized_probe(),
                          custom_params={"context_trace_path": str(path), "context_trace_count": 1})
-            response = call(probe, label+"-"+mode)
-            logits[mode] = torch.load(path, weights_only=True)
+            response = call(probe, label+"-"+name)
+            return response, torch.load(path, weights_only=True)
+
+        for mode in ("warm", "exact"):
+            response, logits[mode] = probe_call(payload, mode)
             hashes[mode] = digest(response["sglext"]["input_ids"])
             usage[mode] = response["usage"]
+        # Keep the real warm result before flushing. Calibrate only against
+        # ordinary native requests, then fix bounds before comparing Insert.
+        # Active text is a rounding control, never the semantic KV reference.
+        native = {k: v for k, v in payload.items() if k not in
+                  ("drop_message", "insert", "reposition", "messages")}
+        native["messages"] = [{k: v for k, v in m.items() if k != "index"} for m in active_messages]
+        native["messages"], _ = wire_history(native["messages"])
+        session.post(args.url + "/flush_cache", timeout=30).raise_for_status()
+        probe_call(dict(native, messages=native["messages"][:-1]), "native-source")
+        nw, na = probe_call(native, "native-warm")
+        ne, nb = probe_call(native, "native-exact")
+        session.post(args.url + "/flush_cache", timeout=30).raise_for_status()
+        nc, reference = probe_call(native, "native-cold")
+        if len({digest(r["sglext"]["input_ids"]) for r in (nw, ne, nc)}) != 1:
+            raise ValueError("Native calibration changed tokens")
+        calibration = [logit_metrics(x, reference) for x in (na, nb)]
+        bounds = native_logit_bounds(calibration)
+        emit({"kind": "native_calibration", "label": label, "metrics": calibration, "bounds": bounds})
+        session.post(args.url + "/flush_cache", timeout=30).raise_for_status()
+        response, logits["cold"] = probe_call(payload, "cold")
+        hashes["cold"] = digest(response["sglext"]["input_ids"])
+        usage["cold"] = response["usage"]
         if len(set(hashes.values())) != 1:
             raise ValueError("Frozen Insert replay changed execution tokens")
         for mode in ("warm", "exact"):
-            difference = (logits[mode]-logits["cold"]).abs()
-            metrics = {"max_abs": difference.max().item(), "mean_abs": difference.mean().item(),
-                       "p99_abs": torch.quantile(difference.float(), .99).item()}
-            emit({"kind": "summary_numeric", "label": label, "mode": mode, "metrics": metrics, "usage": usage[mode]})
-            if metrics["max_abs"] > .15 or metrics["mean_abs"] > .02 or metrics["p99_abs"] > .0625:
+            metrics = logit_metrics(logits[mode], logits["cold"])
+            emit({"kind": "summary_numeric", "label": label, "mode": mode, "metrics": metrics, "bounds": bounds, "usage": usage[mode]})
+            if any(metrics[k] > bounds[k] for k in bounds):
                 raise ValueError(f"Insert numerical mismatch: {label} {mode} {metrics}")
 
     for case, source_hash in cases:
@@ -244,7 +289,7 @@ def run(args):
                 payload.update(tools=tools, max_tokens=args.probe_tokens or turn["max_new_tokens"],
                                ignore_eos=True, reasoning_effort="low")
                 if inserted and not args.skip_numeric:
-                    compare_summary(payload, f"{case_id}-event-{summaries}")
+                    compare_summary(payload, state.active(), f"{case_id}-event-{summaries}")
                 body = call(payload, f"{case_id}-turn-{turn['turn']}")
                 assistant = body["choices"][0]["message"]
                 state.append([assistant])
