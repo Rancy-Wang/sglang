@@ -147,3 +147,70 @@ def test_insert_saved_model_attention(rank, layer, mode, kind):
             expected[start:end] = torch.einsum("hqk,khd->qhd", scores.softmax(-1)[..., :-1], vv)
     torch.testing.assert_close(data["output"].reshape_as(expected).float().cuda(),
                                expected, rtol=.0078125, atol=.0078125)
+
+
+@pytest.mark.parametrize("mixed", [False, True])
+def test_native_decode_adapters_oversized_window(context_modules, mixed):
+    from sglang.srt.layers.attention.context_backend import ContextDecodeRegistry
+    from sglang.srt.layers.attention.flashattention_backend import FlashAttentionBackend
+    from sglang.srt.layers.attention.flashinfer_backend import (
+        FlashInferIndicesUpdaterDecode,
+    )
+    from sglang.srt.layers.attention.triton_backend import TritonAttnBackend
+    occ = importlib.import_module(context_modules[2].__package__ + ".occurrence")
+    positions = [0] + list(range(1, 513))*2
+    layout = SimpleNamespace(keep_mask=torch.ones(1025, dtype=torch.bool),
+                             positions=torch.tensor(positions, dtype=torch.int32),
+                             logical_order=torch.arange(1025, dtype=torch.int32), next_position=513)
+    view = occ.ContextDecodeLayout.from_layout(layout, "cuda")
+    table = torch.arange(5*2048, device="cuda", dtype=torch.int32).reshape(5, 2048)
+    translator = SimpleNamespace(page_size=1, defer_read_translate=False,
+                                 req_to_token=table, is_translating=False, reads_are_translated=False)
+    registry = ContextDecodeRegistry(translator, SimpleNamespace())
+    req = SimpleNamespace(context_program=object(), context_decode_layout=view)
+    reqs = [req]*3 + [SimpleNamespace(context_program=None) if mixed else req]
+    rows = torch.arange(4, device="cuda")
+    cpu, lens, _, _ = registry.bind_batch(reqs, [1026]*4, rows)
+    expected = []
+    for i in range(4):
+        raw = (list(range(897, 1026)) if mixed and i == 3 else
+               [j for j, p in enumerate(positions) if p >= 385] + [1025])
+        expected.extend(i*2048+j for j in raw)
+    assert len(expected) > 4*129
+    backend = SimpleNamespace(context_decode_registry=registry, sliding_window_size=128,
+                              cuda_graph_kv_indices=torch.empty(8192),
+                              cuda_graph_window_kv_indices=torch.empty(516))
+    assert not TritonAttnBackend.context_decode_fits_graph(backend, 4)
+    backend.cuda_graph_window_kv_indices = torch.empty(len(expected))
+    assert TritonAttnBackend.context_decode_fits_graph(backend, 4)
+    metadata = SimpleNamespace(page_table=torch.empty((4, 2048)), pa_swa_page_table=torch.empty((4, 129)))
+    backend.decode_cuda_graph_metadata = {4: metadata}
+    assert not FlashAttentionBackend.context_decode_fits_graph(backend, 4)
+    metadata.pa_swa_page_table = torch.empty((4, 257))
+    assert FlashAttentionBackend.context_decode_fits_graph(backend, 4)
+    # Exercise the real FlashInfer updater, stopping at the native wrapper's plan
+    # boundary. Compare its physical gather to an independent logical oracle.
+    captured = []
+    def begin(ptr, indices, *args, **kwargs):
+        captured.append(indices[:int(ptr[-1])].clone())
+    updater = object.__new__(FlashInferIndicesUpdaterDecode)
+    updater.attn_backend = SimpleNamespace(context_decode_registry=registry, kv_index_translator=translator)
+    updater.sliding_window_size = 128
+    updater._swa_kv_pool = None
+    updater.kv_indptr = [torch.zeros(5, device="cuda", dtype=torch.int32) for _ in range(2)]
+    updater.kv_last_page_len = torch.ones(4, device="cuda", dtype=torch.int32)
+    updater.num_qo_heads, updater.num_kv_heads, updater.head_dim = 4, 2, 64
+    updater.data_type = updater.q_data_type = torch.bfloat16
+    wrappers = [SimpleNamespace(is_cuda_graph_enabled=False, begin_forward=begin) for _ in range(2)]
+    updater.update_sliding_window(lens, cpu, int(cpu.sum()), wrappers, None, None, req_pool_indices=rows)
+    assert captured[0].tolist() == expected
+    assert len(captured[1]) == 4*1026
+    # Use the FA table and Triton packed adapters with sufficient buffers.
+    out = torch.full((4, 257), -1, device="cuda", dtype=torch.int32)
+    lengths = registry.fill_table(rows, lens, out, window=128)
+    actual = [x for row, n in zip(out.tolist(), lengths.tolist()) for x in row[:n]]
+    assert actual == expected
+    ptr = torch.zeros(5, device="cuda", dtype=torch.int32)
+    packed = torch.empty(len(expected), device="cuda", dtype=torch.int64)
+    registry.fill_window(rows, lens, ptr, 128, packed)
+    assert packed.tolist() == expected

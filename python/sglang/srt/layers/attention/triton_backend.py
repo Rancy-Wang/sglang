@@ -868,7 +868,9 @@ class TritonAttnBackend(AttentionBackend):
                 ):
                     if self.context_decode_registry is not None:
                         window_kv_indices = torch.empty(
-                            bs * (self.sliding_window_size + 1),
+                            int(self.context_decode_registry.window_lengths_cpu(
+                                self.sliding_window_size, bs
+                            ).sum()),
                             dtype=torch.int64, device=self.device,
                         )
                         window_kv_indptr, window_kv_indices, window_kv_lens, _ = (
@@ -1097,6 +1099,16 @@ class TritonAttnBackend(AttentionBackend):
             lean_Op=lean_Op,
             lean_locks=lean_locks,
             context_attention=forward_batch.context_attention,
+        )
+
+    def context_decode_fits_graph(self, batch_size):
+        registry = self.context_decode_registry
+        window = self.sliding_window_size
+        swa = window is not None and window > 0
+        return registry.fits_graph(
+            batch_size, self.cuda_graph_kv_indices.numel(),
+            window=window,
+            window_capacity=(self.cuda_graph_window_kv_indices.numel() if swa else None),
         )
 
     def init_cuda_graph_state(

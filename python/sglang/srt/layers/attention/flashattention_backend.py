@@ -786,7 +786,10 @@ class FlashAttentionBackend(AttentionBackend):
             metadata.page_table = torch.empty((batch_size, max(eager_max_k, 1)), device=device, dtype=torch.int32)
             metadata.max_seq_len_k = eager_max_k
             if self.has_swa:
-                metadata.pa_swa_page_table = torch.zeros((batch_size, self.sliding_window_size + 1), device=device, dtype=torch.int32)
+                registry = getattr(self, "context_decode_registry", None)
+                width = (int(registry.window_lengths_cpu(self.sliding_window_size, batch_size).max())
+                         if registry is not None else self.sliding_window_size + 1)
+                metadata.pa_swa_page_table = torch.zeros((batch_size, width), device=device, dtype=torch.int32)
                 metadata.pa_swa_cache_seqlens = torch.empty_like(metadata.cache_seqlens_int32)
             self._set_decode_page_metadata(metadata, forward_batch.req_pool_indices, seqlens_in_batch, 0)
             if self.use_sliding_window_kv_pool:
@@ -2223,6 +2226,16 @@ class FlashAttentionBackend(AttentionBackend):
                 o = result
 
         return o.view(-1, layer.tp_q_head_num * layer.v_head_dim)
+
+    def context_decode_fits_graph(self, batch_size):
+        metadata = self.decode_cuda_graph_metadata[batch_size]
+        table = metadata.pa_swa_page_table
+        return self.context_decode_registry.fits_graph(
+            batch_size, metadata.page_table.shape[1],
+            window=self.sliding_window_size,
+            window_capacity=table.shape[1] if table is not None else None,
+            table=True,
+        )
 
     def init_cuda_graph_state(self, max_bs: int, max_num_tokens: int):
         """Initialize CUDA graph state for the attention backend.

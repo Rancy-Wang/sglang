@@ -700,6 +700,7 @@ class ContextDecodeRegistry:
 
         entries, lengths, positions, refs = [], [], [], []
         self.batch_layouts = []
+        self._window_lengths = {}
         for req, raw_length in zip(reqs, raw_lengths):
             raw_length = int(raw_length)
             if req.context_program is None:
@@ -745,6 +746,12 @@ class ContextDecodeRegistry:
             dtype=torch.int64,
         ).to(row_ids.device, non_blocking=True)
         self.rows[row_ids] = packed[:, :7]
+        self.full_length_sum = sum(lengths)
+        self.full_length_max = max(lengths, default=0)
+        self.nonmonotone = any(
+            layout is not None and not layout.positions_monotone
+            for layout, _ in self.batch_layouts
+        )
         return (
             torch.tensor(lengths, dtype=torch.int64),
             packed[:, 7].to(torch.int32),
@@ -753,15 +760,48 @@ class ContextDecodeRegistry:
         )
 
     def window_lengths_cpu(self, window, batch_size):
+        key = (window, batch_size)
+        cached = self._window_lengths.get(key)
+        if cached is not None:
+            return cached
         lengths = []
         for layout, generated in self.batch_layouts:
             if layout is None:
                 lengths.append(min(generated, window + 1))
             else:
                 lower = layout.next_position + generated - 1 - window
-                lengths.append(len(layout.positions) - int(np.searchsorted(layout.sorted_positions, lower)) + min(generated, window + 1))
+                lengths.append(
+                    len(layout.positions)
+                    - int(np.searchsorted(layout.sorted_positions, lower))
+                    + min(generated, window + 1)
+                )
         # Native decode graph padding uses seq_len=1; its outputs are discarded.
-        return torch.tensor(lengths + [1] * (batch_size - len(lengths)), dtype=torch.int64)
+        result = torch.tensor(
+            lengths + [1] * (batch_size - len(lengths)), dtype=torch.int64
+        )
+        self._window_lengths[key] = result
+        return result
+
+    def fits_graph(self, batch_size, full_capacity, *, window=None,
+                   window_capacity=None, table=False):
+        """Check fixed captured storage without reading any device metadata.
+
+        Monotone summaries use constant-time bounds. Only overlapping positions
+        need the cached O(batch * log(prompt)) SWA count used by eager allocation.
+        Capacities are packed entries, or columns per row when table=True.
+        """
+        full = (self.full_length_max if table else
+                self.full_length_sum + batch_size - len(self.batch_layouts))
+        if full > full_capacity:
+            return False
+        if window_capacity is None:
+            return True
+        bound = window + 1 if table else batch_size * (window + 1)
+        if not self.nonmonotone and bound <= window_capacity:
+            return True
+        lengths = self.window_lengths_cpu(window, batch_size)
+        required = int(lengths.max()) if table else int(lengths.sum())
+        return required <= window_capacity
 
     def fill(self, row_ids, lengths, indptr, output, *, starts=None, swa=False, window=-1, full_lengths=None):
         from sglang.kernels.ops.attention.context_page_table import (

@@ -1035,6 +1035,15 @@ class FlashInferAttnBackend(AttentionBackend):
                 swa_out_cache_loc=swa_out_cache_loc,
             )
 
+    def context_decode_fits_graph(self, batch_size):
+        swa = self.dispatch_reason == WrapperDispatch.SLIDING_WINDOW
+        buffers = self.cuda_graph_kv_indices
+        return self.context_decode_registry.fits_graph(
+            batch_size, buffers[1 if swa else 0].numel(),
+            window=self.indices_updater_decode.sliding_window_size if swa else None,
+            window_capacity=buffers[0].numel() if swa else None,
+        )
+
     def init_cuda_graph_state(
         self,
         max_bs: int,
@@ -1695,6 +1704,8 @@ class FlashInferIndicesUpdaterDecode:
                 fixed_split_size=fixed_split_size,
                 disable_split_kv=disable_split_kv,
                 req_pool_indices=req_pool_indices,
+                context_window=self.sliding_window_size if wrapper_id == 0 else -1,
+                context_full_lengths=seq_lens,
             )
 
     def update_cross_attention(
@@ -1751,6 +1762,8 @@ class FlashInferIndicesUpdaterDecode:
         disable_split_kv: Optional[bool] = None,
         *,
         req_pool_indices: torch.Tensor,
+        context_window: int = -1,
+        context_full_lengths: torch.Tensor | None = None,
     ):
         # Unified SWA wrapper-0: gather from the swa canonical directly -- its
         # entries are already swa-side kernel-facing ids, so the in-place
@@ -1773,7 +1786,8 @@ class FlashInferIndicesUpdaterDecode:
             registry = getattr(self.attn_backend, "context_decode_registry", None)
             if registry is not None:
                 registry.fill(req_pool_indices, paged_kernel_lens, kv_indptr, kv_indices,
-                              starts=kv_start_idx, swa=use_sliding_window_kv_pool)
+                              starts=kv_start_idx, swa=use_sliding_window_kv_pool,
+                              window=context_window, full_lengths=context_full_lengths)
                 # Registry already returns the selected pool's physical IDs.
                 use_swa_source = use_sliding_window_kv_pool
             else:

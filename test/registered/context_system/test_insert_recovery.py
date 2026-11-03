@@ -6,7 +6,7 @@ import pytest
 import torch
 from test_insert_ir import all_reads, program
 
-pytest_plugins = ("test_rules",)
+pytest_plugins = ("test_rules", "test_context_attention_plan")
 
 
 @pytest.mark.parametrize("nested", [False, True])
@@ -53,3 +53,36 @@ def test_warm_summary_never_recomputes_retained_suffix(context_modules):
     result = module.plan_recovery(resident, p.visible_until, len(p.input_ids), layout=p.layout)
     assert result.intervals == ((9,11),)
     assert result.required_prefix.nonzero().flatten().tolist() == [0,6,7,8]
+
+
+@pytest.mark.parametrize("duplicate_only", [False, True])
+def test_decode_capacity_uses_logical_position_counts(context_modules, attention_plan, duplicate_only, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    occ = importlib.import_module(context_modules[2].__package__ + ".occurrence")
+    monkeypatch.setitem(sys.modules, "sglang.srt.context_system.occurrence", occ)
+    positions = ([0] + list(range(1, 513)) * 2 if not duplicate_only else [0] + [512] * 1024)
+    layout = SimpleNamespace(keep_mask=torch.ones(1025, dtype=torch.bool),
+                             positions=torch.tensor(positions, dtype=torch.int32),
+                             logical_order=torch.arange(1025, dtype=torch.int32), next_position=513)
+    view = occ.ContextDecodeLayout.from_layout(layout, "cpu")
+    assert not view.positions_monotone
+    table = torch.zeros((5, 2048), dtype=torch.int32)
+    registry = attention_plan.ContextDecodeRegistry(SimpleNamespace(
+        page_size=1, defer_read_translate=False, req_to_token=table), SimpleNamespace())
+    req = SimpleNamespace(context_program=object(), context_decode_layout=view)
+    registry.bind_batch([req]*4, [1026]*4, torch.arange(4))
+    expected = 257 if not duplicate_only else 1025
+    assert registry.window_lengths_cpu(128, 4).tolist() == [expected]*4
+    assert not registry.fits_graph(4, 8192, window=128, window_capacity=516)
+    assert registry.fits_graph(4, 8192, window=128, window_capacity=4*expected)
+    assert not registry.fits_graph(4, 4096)
+    assert not registry.fits_graph(4, 2048, window=128, window_capacity=129, table=True)
+    # A regular repositioned summary retains the constant-time graph path.
+    layout.positions = torch.arange(1025, dtype=torch.int32)
+    layout.next_position = 1025
+    req.context_decode_layout = occ.ContextDecodeLayout.from_layout(layout, "cpu")
+    registry.bind_batch([req], [1026], torch.tensor([0]))
+    assert registry.fits_graph(4, 8192, window=128, window_capacity=516)
+    assert registry._window_lengths == {}  # No per-query search in the usual case.
+    assert registry.window_lengths_cpu(128, 4).tolist() == [129, 1, 1, 1]

@@ -16,6 +16,7 @@ def create_insert_cache_probe(config):
     """Opt-in read-only cache tracing through native --forward-hooks."""
     import json
 
+    from sglang.srt.managers.schedule_batch import Req
     from sglang.srt.mem_cache.unified_radix_cache import UnifiedRadixCache
 
     def walk(cache, key):
@@ -39,6 +40,30 @@ def create_insert_cache_probe(config):
 
     native_match = UnifiedRadixCache.match_prefix
     native_finished = UnifiedRadixCache._cache_finished_req_native
+    native_recovery = Req.prepare_context_recovery
+
+    def recovery(req):
+        matched = len(req.prefix_indices)
+        before_swa = req.context_swa_resident
+        before_positions = req.context_source_positions
+        before_resident = req.context_resident
+        result = native_recovery(req)
+        plan = req.context_recovery_plan
+        if plan is not None:
+            missing = (plan.required_prefix & ~before_swa).nonzero().flatten().tolist() if before_swa is not None else []
+            emit({"kind": "recovery", "rid": req.rid, "matched": matched,
+                  "start": plan.start, "intervals": plan.intervals,
+                  "missing_swa_required": len(missing), "missing_first": missing[:8],
+                  "missing_last": missing[-8:]})
+            if config.get("trace_dir") and plan.start < matched and (
+                    not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0):
+                root = Path(config["trace_dir"])
+                root.mkdir(parents=True, exist_ok=True)
+                torch.save({"program": req.context_program.to_wire(), "resident": before_resident,
+                            "swa": before_swa, "positions": before_positions,
+                            "matched": matched, "window": req.context_swa_window,
+                            "intervals": plan.intervals}, root / f"{req.rid}.pt")
+        return result
 
     def match(cache, params):
         result = native_match(cache, params)
@@ -56,6 +81,7 @@ def create_insert_cache_probe(config):
                       "output": len(req.output_ids), "topology": walk(cache, key)})
         return result
 
+    Req.prepare_context_recovery = recovery
     UnifiedRadixCache.match_prefix = match
     UnifiedRadixCache._cache_finished_req_native = finished
 
@@ -242,7 +268,8 @@ def test_insert_bcp48k(request, monkeypatch):
 
 
 @pytest.mark.skipif(not os.environ.get("CONTEXT_SERVER_MODEL"), reason="isolated model server required")
-def test_insert_long_overlap_decode(tmp_path, request):
+@pytest.mark.parametrize("repeats", [80, 600])
+def test_insert_long_overlap_decode(tmp_path, request, repeats):
     """An Insert beyond the ordinary cursor remains legal without Reposition."""
     import requests
     from serving_logits_probe import serialized_probe
@@ -251,18 +278,18 @@ def test_insert_long_overlap_decode(tmp_path, request):
     root = Path(os.environ.get("CONTEXT_TRACE_DIR", str(tmp_path)))
     root.mkdir(parents=True, exist_ok=True)
     messages = [{"role": "user", "content": "Remember red and blue."},
-                {"index": -1, "role": "user", "content": "red blue " * 80},
+                {"index": -1, "role": "user", "content": "red blue " * repeats},
                 {"role": "assistant", "content": "Understood."},
                 {"role": "user", "content": "Which colors?"}]
     requests.post(server+"/flush_cache", timeout=30).raise_for_status()
     for mode in ("cold", "warm"):
-        path = root / f"long-overlap-{mode}.pt"
+        path = root / f"long-overlap-{repeats}-{mode}.pt"
         response = requests.post(server+"/v1/chat/completions", json={
             "model": os.environ["CONTEXT_SERVER_MODEL"], "messages": messages, "insert": {"2": -1},
             "reposition": [], "temperature": 0, "max_tokens": 4, "ignore_eos": True,
             "custom_logit_processor": serialized_probe(), "custom_params": {
                 "context_trace_path": str(path), "context_trace_count": 4}}, timeout=600)
-        (root / f"long-overlap-{mode}.json").write_text(response.text)
+        (root / f"long-overlap-{repeats}-{mode}.json").write_text(response.text)
         assert response.status_code == 200, response.text
         assert response.json()["usage"]["completion_tokens"] == 4
         logits = torch.load(path, weights_only=True)

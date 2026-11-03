@@ -680,6 +680,17 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
             else cuda_graph_bs <= self.max_bs
         )
 
+        # Insert may retain more keys than a position-distance window's width.
+        # Check the actual captured buffers before any graph metadata writes.
+        # Ordinary batches have no active registry and retain the native path.
+        if is_bs_supported and forward_batch.forward_mode.is_decode():
+            attn_backend = self._replay_attn_backend()
+            if getattr(attn_backend, "context_decode_registry", None) is not None:
+                padded_bs = (cuda_graph_bs if self.disable_padding else
+                             self._pad_to_bucket(cuda_graph_bs, self.capture_bs))
+                if not attn_backend.context_decode_fits_graph(padded_bs):
+                    return False
+
         if self.require_mlp_sync:
             is_bs_supported = (
                 is_bs_supported and forward_batch.can_run_decode_cuda_graph
