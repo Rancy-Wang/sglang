@@ -98,7 +98,7 @@ SWA 缺页不等于所有已旋转的 Full KV 都必须重算。恢复规划按 
 位置判断旧版本需求：query 位于最后一次 R 之后、且缓存 Full KV 已在对应位置时，仍可直接
 复用。只有被选中的历史 query 需要其他位置版本，才进入原有的 rewind 恢复规则。
 `Req.prepare_context_recovery` 传入匹配得到的源位置；不能只用“曾经 R 过”作为全局失效条件
-（`python/sglang/srt/managers/schedule_batch.py:1577-1665`）。
+（`python/sglang/srt/managers/schedule_batch.py:1578-1668`）。
 匹配点之后的新 query 可以通过后续 R/COW 获得目标位置版本；不能因为未来旋转，
 反过来把正在修复的历史 query 所使用的正确源 KV 标为失效。
 
@@ -115,19 +115,29 @@ Decode 的 SWA 条件为 `q_pos-k_pos <= window`，先在因果可见的 logical
 候选；terminal 恢复需求覆盖前 W−1 个未来 query 的并集。之后新 query 已填满窗口，
 不再需要 prompt KV。R 后严格单调的位置只需一次二分和尾部截取。
 
-容量入口为 `python/sglang/srt/layers/attention/triton_backend.py:1104-1112`、
+容量入口为 `python/sglang/srt/layers/attention/triton_backend.py:1107-1118`、
 `flashinfer_backend.py:1038-1045`、`flashattention_backend.py:2230-2238` 的
 `context_decode_fits_graph`；准入位于
 `python/sglang/srt/model_executor/runner/decode_cuda_graph_runner.py:635-726`（`can_run_graph`）。
 FlashInfer 将 window 和完整 logical 长度传入 gather，避免把非单调窗口当作连续尾部
 （`python/sglang/srt/layers/attention/flashinfer_backend.py:1751-1871`，`call_begin_forward`）。
 
-实现入口：`python/sglang/srt/context_system/occurrence.py:146-308`
-（`compile_occurrence_window`）；`python/sglang/srt/context_system/recovery.py:301-385`
+实现入口：`python/sglang/srt/context_system/occurrence.py:159-321`
+（`compile_occurrence_window`）；`python/sglang/srt/context_system/recovery.py:305-400`
 （`_plan_insert_recovery`）；
 `python/sglang/srt/mem_cache/unified_cache/unified_tree_core.py:1059-1178`
-（`_match_context_retry`）；`python/sglang/srt/layers/attention/context_backend.py:678-865`
+（`_match_context_retry`）；`python/sglang/srt/layers/attention/context_backend.py:713-905`
 （`ContextDecodeRegistry`）。
+
+旋转后私有 SWA 页的释放不能从 source match 的 `cache_protected_len` 开始。
+该边界保护的是被借用的源分支，边界之前也可能存在本请求的 COW 目标页。
+`OccurrenceState.first_private_terminal` 在不可变状态上缓存最早私有 raw 行，
+回收起点同时服从已经回收的位置和存活依赖下界；`live_swa_ranges(..., owned_only=True)`
+排除共享源页和已缺失的 SWA。decode 和完成后的 publication 都使用相同规则，
+超过原生历史表容量时从扩展 raw row 读取地址。
+实现为 `python/sglang/srt/context_system/occurrence.py:936-973`、
+`python/sglang/srt/managers/schedule_batch.py:4211-4241` 和
+`python/sglang/srt/mem_cache/unified_cache/components/swa.py:1076-1103`。
 
 ## 性能边界
 
@@ -315,7 +325,7 @@ GPU 2 的既有其他任务未操作。0/1 用于主验证、2 被占用，后�
 Qwen3.8-27B 不进行 Insert 成功路径验收，仍按用户要求保持不支持。
 
 
-## R3 验证进度（尚未验收）
+## R3 实施与验证（数值验收尚未通过）
 
 Qwen/Linear Insert 的全部支持修改和模型实验继续 Pending；当前仍拒绝 Insert。
 原生 Harmony 模板没有修改。下列诊断不进入生产默认路径：
@@ -341,8 +351,167 @@ Tengxuan-BUS-2 新环境的原生组合回归在 `96bff08496` 为 224 passed、5
 其中随机窗口共 600 组长度/位置/物理槽对照通过。这个失败发生在 logits 比较前，
 不是对旧 logits 差异的解释。
 
+随后真实 8 步 decode 在 238/241/786/844 以及 1641-token 短例中发现 127 个 SWA
+槽位未释放。Full 池仍平衡，Radix key/位置审计通过；问题在于私有旋转目标落在源
+`cache_protected_len` 之前，旧回收游标跳过它们，publication 又将其标记为已无 SWA。
+`5c9154c10b` 修正所有权边界，`71110c9283` 补齐扩展 raw row 的读取。
+两种新输入长度的 warm→8-step decode→exact 请求链，以及两种无 R 的长重叠 Insert
+请求均通过，共 4 个真实模型 HTTP 用例。原生 CPU 组合复验为 173 passed、8 skipped；
+后者需要独立 GPU 或 HTTP 服务，不计为通过。
+
+新的冻结 241 首次 8 步回放仍 FAIL：零基 step 2 的 exact，以及 step 4 的 warm/exact
+超过逐步 native-control 阈值。所有步骤强制使用 cold 生成的同一组 token，输入 hash
+一致，不能将不同续写造成的差异混入比较。聚合阈值通过也不能掩盖单个步骤失败。
+增加的 `create_decode_read_probe` 比较实际物理 gather 与独立扫描 logical 状态的参考，
+并用模型 sinks/GQA 做 FP32 attention。此探针只用于诊断，不进入性能测量。
+对该冻结事件两个 TP rank 的 36 层，采样的最终 prefill 行及 7 个后续 decode 行
+均使用相同 token/position。后续 decode 的 layer 0 采样 Q/K/V/output 相同，首次
+attention output 差异在 layer 1；prefill 的 layer 0 已有小幅差异（rank 1 exact 的 Q
+最大差约 3.05e-5）。这是末尾 query 的定位证据，不是完整历史 KV 值的等价证明。
+实际 decode gather 另按全部被读 KV 的槽号检查，当前 query 的存储 K/V 逐元素核对；
+深层 FP32 attention 参考在 native 与 Context 两边均出现超限，仍逐项保留为 FAIL。
+原生 kernel 的 softmax 权重转 BF16 后做 P·V 是一个可能的数值来源，不能仅凭源码
+把最终 logits 失败归因于它（`python/sglang/kernels/ops/attention/decode_attention.py:729-739`）。
+
+诊断还确认一个既有边界差异：该 GPT-OSS 的层距离参数为 127；Context 路径按已批准
+规则读最多 128 项，而纯 native Triton decode 的 `update_sliding_window_buffer`
+直接将参数作为总容量，只读 127 项。该 helper 在 R3 基线已有相同行为
+（`python/sglang/srt/layers/attention/triton_backend.py:2665-2715`）。
+普通请求继续原生路径，R3 没有修改这个 helper。`5e7cb2915b` 修正普通请求与 Context
+请求混批时的容量选择：普通 lane 读 127 项，Context lane 读 128 项，CPU 准入和 GPU
+计数/gather 使用同一分流规则。FlashInfer/FlashAttention 沿用各自原有边界。
+最终相关 GPU 回归为 25 passed、48 skipped，覆盖真实 Triton adapter 的 eager/graph
+索引与原生 helper 对照；CPU 组合为 174 passed、8 skipped。
+其中 GPU 48 项需要 `CONTEXT_INSERT_KV_TRACES` 指定的旧 fixture；CPU 8 项需要独立
+CUDA/HTTP/BCP 服务。它们均不计入通过数。native control 的读数审计
+按其既有容量规则单独标记；不能据此宣称普通 native 和 identity Context 的 decode 边界完全相同，
+也不能将这项差异用作放宽 Insert logits 门槛的理由。
+
 独立环境位于 `/home/wangruoxi/insert-r3-20261103/env/venv`，Python 3.12.16、
 PyTorch 2.13.0+cu130、Triton 3.7.1；用户态 CUDA compatibility 库位于同目录下，
-主机驱动未修改。依赖 freeze 和源码 hash 已归档。10 题无 flush 轨迹、冻结 logits
-和不带审计的性能对照仍在验证，尚未验收。
-旧的 56 项比较中 10 项失败保持 FAIL；本轮尚未确定其原因，不能归为 BF16 误差。
+主机驱动未修改。依赖 freeze 和源码 hash 已归档。可使用
+`source /home/wangruoxi/insert-r3-20261103/env/activate-runtime.sh` 激活完整运行环境。
+主机驱动保持 535.161.08，CUDA 13 兼容库仅通过此环境加载。
+
+10 题无 flush 轨迹已完成 393 turn、27 次真实 48K summary；每个 turn 沿用原始输出预算。
+822 本次触发 2 次 summary，其余题目与 V4 次数一致。agent 与 summary 都重新生成，
+因此这不是固定文本的两版本数值对照。轨迹使用 `--skip-numeric`，冻结数值验收单独运行。
+按响应 request ID 排除初始 HTTP 测试后，213 个含 Insert 请求在两个 TP rank 上产生
+426 次真实树匹配和 426 次发布审计，均通过；最大匹配深度 130043，最大发布深度
+130399 个 execution token。观测范围内没有发现驻留兼容分支被漏选或固定截止在 IB/IE。
+383 次相邻 turn 的离线重建都与实际服务 input IDs 一致；按记录中的 Harmony 日期
+重建，避免分析日期变化混入 token 差异。27 次 retrigger 比 exact 更长，operation
+额外前缀损失为 0。另有 15 次实际 token 前缀变化，未逐项重新归类为 analysis 清理；
+它们与 operation 编码造成的损失分别计数。
+服务端 3418 条 decode 日志样本全部使用 CUDA graph；这是采样日志，并非所有 token
+的逐个统计，且 A 组包括最初四个 HTTP 回归用例。
+
+无诊断探针的性能对照已完成：同机 GPU 0/1、同一模型/配置/环境，每版本三轮交错测量。
+基线为 `3a889579b8`，当前生产代码为 `5e7cb2915b`（后续 `d6f4cd18c6` 只改离线审计）。
+JIT、预热和 source cache 填充不进入统计；普通/Drop-R 热请求各 36 条、冷 TTFT 各 9 条，
+summary warm prefill 每版 3 条。跨午夜和修复前的两个试跑轮次排除，原记录保留。
+
+| 指标 | 基线 | R3 | 变化 |
+| --- | ---: | ---: | ---: |
+| 普通 decode p50，ms/token | 8.9215 | 8.9247 | +0.04% |
+| 普通 decode p95，ms/token | 8.9294 | 8.9481 | +0.21% |
+| 普通热 TTFT p50，ms | 124.37 | 126.19 | +1.46% |
+| 普通冷 TTFT p50，ms | 10280.23 | 10280.59 | +0.004% |
+| Summary warm prefill p50，ms | 7857.45 | 7843.85 | −0.17% |
+| Drop/R decode p50，ms/token | 8.7695 | 8.7707 | +0.01% |
+
+以上满足计划门槛。decode p50/p95 是每条 128-token SSE 请求的平均单 token 延时分布，
+不是逐 token 到达间隔的分位数；TTFT 取首个可见内容/reasoning/tool delta。其他诊断
+实例使用独立 GPU，但共享主机 CPU/内存。样本不足以外推所有并发负载或宣称统计显著加速。
+KV 池预分配为每 rank Full 131072 槽、SWA 104857 槽，约 4.05 GiB/rank；
+日志中的使用率是采样值，不是精确驻留高水位。
+
+### 冻结 28 个旧事件的最终数值结果
+
+28 个旧 summary 事件全部完成 8 步 teacher-forcing replay；它们与本次重新生成的
+27 次 summary 长轨迹分别统计。每个事件的 cold/warm/exact 使用相同 execution input
+IDs，并在后续步骤强制使用 cold 生成的 token。cold 从空缓存重放同一 A/D/I/R 程序，
+warm 先填充原先请求的缓存，exact 再次执行同一目标请求；比较的是后两者分别与 cold
+的全词表 logits。普通 active-text 的 native 对照仅校准浮点重复性，不是 Insert 语义参考。
+实现见 `benchmark/context_system/insert_state_audit.py:315-490`（`replay`）。
+
+| 验收口径 | 通过 | 失败 |
+| --- | ---: | ---: |
+| 首步 warm/cold 与 exact/cold，28×2 | 45 | 11 |
+| 每步独立门槛，28×2×8 | 343 | 105 |
+| 跨 8 步聚合门槛，28×2 | 50 | 6 |
+| 事件：两条路径全部步骤和聚合均通过 | 3 | 25 |
+
+仍使用预先固定的 `max(BF16 floor, 2 × native envelope)`，没有放宽阈值；整体验收为
+**FAIL**。事件级通过要求更严格，不能拿 3/28 与旧的首步 46/56 直接比较。旧 R1/R2
+的 10 项失败原样保留；新环境、实际模板日期和逐步门槛不同，也不能把新增失败数直接
+解释为 R3 引入的回归。三次跨午夜的未完成对照只有输入第 35 号 token 因 Harmony
+日期改变，已排除并完整重跑；28 组有效对照各自内部日期与 input hash 一致。
+
+decode 独立读集探针在 Context 和 native 两组各检查 42240 个 layer/rank/forward
+样本，物理槽号顺序均符合各自规则；各 41472 个当前 query 的存储 K/V 检查均通过。
+初始四个事件只采样前四层，后续事件采样全部 36 层；异步调度可能多产生一个未提交
+token 的 forward，故样本数不是 28×8×36×2。FP32 attention 对照仍分别有
+209 / 202 个超限样本，最大绝对差约 0.1661 / 0.1594，保留为失败。
+这里验证的是读槽和当前写入，尚未逐元素证明全部历史 KV 的值与来源正确。
+探针见 `test/registered/context_system/serving_logits_probe.py:4-103`
+（`create_decode_read_probe`）。
+
+额外在同一新环境、同一日期和相同 input IDs 下回放旧基线 `3a889579b8` 的 875
+第 1 个事件。完成的 cold 和 warm 各 8 步分别与 R3 **逐位相同**；两版本 warm/cold
+最大绝对差都是 2.09375、平均差约 0.19267。此样本的差异在 R3 前已经存在。
+但旧基线在 warm 完成后的原生空闲检查中复现 127 个 SWA 槽位泄漏，服务退出，
+exact/native 对照未完成，因此它不是完整的基线数值验收，也不能解释其他事件。
+没有修改基线源码或关闭该检查来把失败变为通过。
+
+实际 layer-0 extend query 计数：cold 中位数 80963.5、warm 中位数 3683.5；
+28 次 exact 均只计算 1 个 prefill token。最大 warm 为 53114，对应包含超长全新
+pending 输入的 864 事件；这些计数包含恢复 query，不包含 decode、复制或元数据工作。
+诊断 replay 关闭 graph 以采集完整读集，不能用其 HTTP 时间衡量生产性能。
+上面的无探针性能实验和无 flush 长轨迹使用开启 graph 的独立服务。
+
+### 复现、归档与未解决项
+
+Tengxuan-BUS-2 的源码目录为 `/home/wangruoxi/insert-20261103/sglang`。
+CPU 组合在 `d6f4cd18c6` 运行，GPU 组合在 `5e7cb2915b` 运行；两者生产代码一致。
+下列为实际测试命令（先激活前述环境并进入该目录）：
+
+```bash
+CUDA_VISIBLE_DEVICES=99 python -m pytest -q \
+  test/registered/context_system/test_insert_frontend.py \
+  test/registered/context_system/test_insert_ir.py \
+  test/registered/context_system/test_insert_recovery.py \
+  test/registered/context_system/test_insert_cache.py \
+  test/registered/context_system/test_insert_long_match.py \
+  test/registered/context_system/test_insert_state_audit.py \
+  test/registered/context_system/test_context_admission.py \
+  test/registered/context_system/test_context_decode.py \
+  benchmark/context_system/test_insert_summary48k.py
+# 174 passed, 8 skipped
+
+CUDA_VISIBLE_DEVICES=2 RUN_CONTEXT_GPU=1 python -m pytest -q \
+  test/registered/context_system/test_insert_attention.py \
+  test/registered/context_system/test_context_decode.py --tb=short --maxfail=1
+# 25 passed, 48 skipped
+```
+
+无 flush 长轨迹的运行时代码为 `71110c9283`，后续 `5e7cb2915b` 只修正普通请求
+与 Context 混批的原生容量，相关 mixed-lane GPU 用例另行通过。冻结 replay 的运行
+版本和配置分别留在各目录的 server/config JSON；不能将所有实验冒称为同一 HEAD。
+28 个冻结请求的 target/source/steps 保存在每个 `report.json`，用
+`insert_state_audit.py --url ... --model ... --target ... --source ... --steps 8
+--layer-probe --output ...` 可在同配置独立服务重放；退出码为 0 不代表数值通过，
+必须检查报告的 `pass`。性能运行使用 `--timing` 且不启用 forward hooks。
+
+实验根目录 `/home/wangruoxi/insert-r3-20261103/` 保留：
+`frozen-final-report.json`、`frozen-prefill-accounting.json`、`frozen-rendered-dates.json`、
+`midnight-exclusions.json`、`baseline-numeric-comparison.json`、`241-layer-localization.json`、
+`trajectory-final-report.json`、`trajectory-key-audit.json`、`performance-final-report.json`，
+以及原始 logits、请求/响应、日志、依赖 freeze、各轮配置。实验服务已停止，GPU 已释放；
+没有删除旧失败或跨午夜记录。
+
+剩余的主要问题是长上下文 logits 差异的根因：需要继续区分历史 KV 数值/旋转误差、
+prefill 分段及量化计算路径的影响。当前证据不足以宣称所有复用数值正确，也不足以
+将全部失败归因于浮点误差；SWA 回收修复没有消除这些差异。Qwen/Linear Insert
+按用户要求全部 Pending。FlashAttention/FlashInfer 的全模型覆盖、其他硬件和更大
+并发下的吞吐未在本轮验证，不能从 A800/Triton 的结果外推。
