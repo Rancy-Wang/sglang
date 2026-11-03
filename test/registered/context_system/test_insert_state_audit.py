@@ -10,6 +10,17 @@ audit = load_file(
 )
 
 
+def test_decode_read_oracle_preserves_logical_order_and_candidate_reentry():
+    import torch
+
+    layout = SimpleNamespace(positions=torch.tensor([20, 1, 1, 999]),
+        logical_order=torch.tensor([0, 2, 1, 3]),
+        keep_mask=torch.tensor([True, True, True, False]), next_position=3)
+    assert audit.brute_decode_reads(layout, 1, 2) == [(2, 1), (1, 1), (4, 3)]
+    assert audit.brute_decode_reads(layout, 2, 2) == [(0, 20), (4, 3), (5, 4)]
+    assert audit.brute_decode_reads(layout, 1) == [(0, 20), (2, 1), (1, 1), (4, 3)]
+
+
 class Key:
     def __init__(self, records, start=0, end=None):
         flat = array("i", [x for row in records for x in row])

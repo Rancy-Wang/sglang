@@ -221,6 +221,19 @@ def active_messages(payload):
     return result
 
 
+def brute_decode_reads(layout, generated, window=-1):
+    """Independent scalar oracle, intentionally scanning the entire prompt."""
+    n = len(layout.positions)
+    order = layout.logical_order.tolist() or list(range(n))
+    pairs = [(i, int(layout.positions[i])) for i in order if layout.keep_mask[i]]
+    pairs += [(n+i, int(layout.next_position)+i) for i in range(generated)]
+    if window >= 0:
+        query_position = int(layout.next_position) + generated - 1
+        pairs = [(i, p) for i, p in pairs if query_position <= p + window]
+        pairs = pairs[-(window+1):]
+    return pairs
+
+
 def replay(args):
     """Frozen warm/exact/cold and multi-step teacher forcing on an isolated server."""
     import copy

@@ -1,6 +1,88 @@
 """Opt-in numerical instrumentation, excluded from throughput measurements."""
 
 
+def create_decode_read_probe(config):
+    """Audit actual Triton decode gathers and FP32 attention, outside timing runs.
+
+    Single-request, page-one GPT-OSS diagnostics only. No production selector
+    supplies the expected window. Save metrics, not a full historical KV dump.
+    """
+    import json
+    from pathlib import Path
+
+    import torch
+    from safetensors import safe_open
+    from insert_state_audit import brute_decode_reads
+    from sglang.srt.context_system.request_storage import request_row
+    from sglang.srt.model_executor.forward_context import get_attn_backend
+
+    model = Path(config["model"])
+    weights = json.loads((model / "model.safetensors.index.json").read_text())["weight_map"]
+    layers = set(config.get("layers", [0, 1, 2, 3]))
+    sinks_cache = {}
+
+    def hook(layer, args, output):
+        if layer.layer_id not in layers or len(args) < 4:
+            return
+        q, k, v, batch = args[:4]
+        params = getattr(batch.sampling_info, "custom_params", None)
+        if (not batch.forward_mode.is_decode() or not params or len(params) != 1
+                or not params[0].get("context_layer_probe")):
+            return
+        req = params[0]["__req__"]
+        backend = get_attn_backend()
+        metadata = backend.forward_metadata
+        window = layer.sliding_window_size
+        window = -1 if window is None else window
+        pos = int(batch.positions[0])
+        if req.context_program is None:
+            pairs = [(i, i) for i in range(pos+1)]
+            if window >= 0:
+                pairs = pairs[-(window+1):]
+        else:
+            layout = req.context_program.layout
+            pairs = brute_decode_reads(layout, pos-int(layout.next_position)+1, window)
+        row = request_row(backend.req_to_token_pool, req.kv.req_pool_idx)
+        raw = torch.tensor([i for i, _ in pairs], device=row.device, dtype=torch.long)
+        wanted = row[raw]
+        if window >= 0:
+            wanted = backend.token_to_kv_pool.translate_loc_from_full_to_swa(wanted)
+            indptr, indices = metadata.window_kv_indptr, metadata.window_kv_indices
+        else:
+            wanted = backend.kv_index_translator.translate_full_attn_ids(wanted)
+            indptr, indices = metadata.kv_indptr, metadata.kv_indices
+        actual = indices[int(indptr[0]):int(indptr[1])]
+        slots_ok = torch.equal(actual, wanted)
+        kp, vp = backend.token_to_kv_pool.get_kv_buffer(layer.layer_id)
+        kk, vv = kp[actual.long()].float(), vp[actual.long()].float()
+        qq = q.reshape(1, layer.tp_q_head_num, layer.qk_head_dim).float()
+        rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
+        if layer.layer_id not in sinks_cache:
+            name = f"model.layers.{layer.layer_id}.self_attn.sinks"
+            with safe_open(str(model / weights[name]), framework="pt", device="cpu") as source:
+                sinks_cache[layer.layer_id] = source.get_tensor(name)[
+                    rank*layer.tp_q_head_num:(rank+1)*layer.tp_q_head_num
+                ].float().to(q.device)
+        groups = layer.tp_q_head_num // kk.shape[1]
+        # Explicit FP32 dot/softmax/reduction, with the model's attention sink.
+        scores = torch.einsum("qhd,khd->hqk", qq, kk.repeat_interleave(groups, 1)) * layer.scaling
+        scores = torch.cat((scores, sinks_cache[layer.layer_id][:, None, None]), -1)
+        expected = torch.einsum("hqk,khd->qhd", scores.softmax(-1)[..., :-1],
+                                vv.repeat_interleave(groups, 1))
+        error = (output.reshape_as(expected).float()-expected).abs()
+        report = dict(layer=layer.layer_id, rank=rank, position=pos,
+                      read_count=len(actual), expected_count=len(pairs), slots_ok=slots_ok,
+                      max_abs=float(error.max()), mean_abs=float(error.mean()),
+                      fp32_close=bool(torch.all(error <= .0078125 + .0078125*expected.abs())))
+        destination = Path(params[0]["context_trace_path"]+f".reads.rank{rank}.jsonl")
+        with destination.open("a") as target:
+            target.write(json.dumps(report)+"\n")
+        if not slots_ok:
+            raise AssertionError(f"Decode physical read oracle failed: {report}")
+
+    return hook
+
+
 def create_bounded_attention_probe(config):
     """Sample final query rows at each layer, never dump a long prefix KV pool.
 
