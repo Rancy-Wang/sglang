@@ -1612,6 +1612,7 @@ class Req(ReqDllmMixin):
             swa_terminal_required=terminal,
             layout=program.layout,
             swa_window=self.context_swa_window,
+            source_positions=positions,
         )
         if recovery.start < matched:
             # Like mini, restore source versions only for historical repair.
@@ -1630,6 +1631,7 @@ class Req(ReqDllmMixin):
                 swa_terminal_required=terminal,
                 layout=program.layout,
                 swa_window=self.context_swa_window,
+                source_positions=positions,
             )
         self.context_recovery_plan = recovery
         self.context_recovery_source = None

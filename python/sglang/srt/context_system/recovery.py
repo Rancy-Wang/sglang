@@ -299,7 +299,7 @@ def _insert_read_masks(layout, expiry, intervals, prefix_length, window=None):
 
 
 def _plan_insert_recovery(resident, expiry, layout, rewind, incompatible,
-                          swa_resident, window, terminal):
+                          swa_resident, window, terminal, source_positions):
     n, matched = len(expiry), len(resident)
     if not 0 <= matched < n:
         raise ValueError("Insert recovery must leave an uncached query suffix")
@@ -318,10 +318,13 @@ def _plan_insert_recovery(resident, expiry, layout, rewind, incompatible,
     raw, positions = view.occurrence_raw_tokens.numpy(), view.occurrence_positions.numpy()
     keys, offsets = view.segment_key_occurrences.numpy(), view.segment_key_offsets.numpy()
     birth = layout.birth_positions.numpy()
+    stored_positions = (layout.positions.numpy()[:matched] if source_positions is None
+                        else source_positions.numpy())
     # Each source's readers are intervals of execution queries. Shared prefixes
     # cost one interval per segment, not a dense query-by-key matrix.
     readers = [[] for _ in range(matched)]
     swa_readers = [[] for _ in range(matched)]
+    old_version_readers = [[] for _ in range(matched)]
     for a, b, x, y in zip(view.segment_query_starts.numpy(), view.segment_query_ends.numpy(), offsets[:-1], offsets[1:]):
         a, b = int(a), int(b)
         for occurrence in keys[x:y-(b-a)]:
@@ -329,6 +332,8 @@ def _plan_insert_recovery(resident, expiry, layout, rewind, incompatible,
             if source >= matched:
                 continue
             readers[source].append((a, b))
+            if positions[occurrence] != stored_positions[source]:
+                old_version_readers[source].append((a, b))
             if window is not None:
                 end = min(b, a+int(positions[occurrence])+window-int(birth[a]))
                 if a < end:
@@ -336,6 +341,8 @@ def _plan_insert_recovery(resident, expiry, layout, rewind, incompatible,
         for source in range(a, min(b, matched)):
             if source+1 < b:
                 readers[source].append((source+1, b))
+                if birth[source] != stored_positions[source]:
+                    old_version_readers[source].append((source+1, b))
                 if window is not None:
                     swa_readers[source].append((source+1, min(b, source+window)))
 
@@ -362,7 +369,11 @@ def _plan_insert_recovery(resident, expiry, layout, rewind, incompatible,
         full_needed = reads(readers[source])
         swa_needed = bool(terminal[source]) or reads(swa_readers[source])
         required[source] = full_needed or swa_needed
-        full_missing = not present[source] or incompatible[source] or (repair and rewind[source])
+        # A repaired query after R can read the already-correct final Full KV.
+        # Rewind only when a selected historical query needs another version;
+        # a missing SWA tail must not invalidate every rotated prefix token.
+        needs_old_version = repair and rewind[source] and reads(old_version_readers[source])
+        full_missing = not present[source] or incompatible[source] or needs_old_version
         if (full_needed and full_missing) or (swa_needed and not swa_present[source]):
             needed[source] = required[source] = True
             repair = True
@@ -386,6 +397,7 @@ def plan_recovery(
     swa_terminal_required: torch.Tensor | None = None,
     layout=None,
     swa_window: int | None = None,
+    source_positions: torch.Tensor | None = None,
 ) -> RecoveryPlan:
     """Close missing KV dependencies backwards without scanning the Radix tree.
 
@@ -424,9 +436,14 @@ def plan_recovery(
             raise ValueError("Insert recovery metadata must cover the complete input")
         if swa_resident is not None and (swa_window is None or swa_window <= 0):
             raise ValueError("Insert SWA recovery requires a positive inclusive window")
+        if source_positions is not None and (
+            source_positions.device.type != "cpu" or source_positions.dtype != torch.int32
+            or source_positions.shape != resident.shape
+        ):
+            raise ValueError("Insert source positions must match CPU residency")
         return _plan_insert_recovery(resident, visible_until, layout, rewind_sources,
                                      incompatible_sources, swa_resident, swa_window,
-                                     swa_terminal_required)
+                                     swa_terminal_required, source_positions)
     present = resident.numpy()
     expiry = visible_until.numpy()
     matched = len(present)

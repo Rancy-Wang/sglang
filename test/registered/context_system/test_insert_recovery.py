@@ -86,3 +86,55 @@ def test_decode_capacity_uses_logical_position_counts(context_modules, attention
     assert registry.fits_graph(4, 8192, window=128, window_capacity=516)
     assert registry._window_lengths == {}  # No per-query search in the usual case.
     assert registry.window_lengths_cpu(128, 4).tolist() == [129, 1, 1, 1]
+
+
+def test_post_reposition_swa_hole_keeps_correct_full_versions(context_modules):
+    p = program(context_modules, nested=True, repos=True, width=7)
+    module = importlib.import_module(context_modules[2].__package__ + '.recovery')
+    n = len(p.input_ids)
+    matched = n - 1
+    resident = p.layout.keep_mask[:matched].clone()
+    swa = resident.clone()
+    swa[-1] = False
+    rewind = resident & (p.layout.positions[:matched] != p.layout.birth_positions[:matched])
+    assert rewind.any()
+    result = module.plan_recovery(
+        resident, p.visible_until, n, rewind, swa_resident=swa,
+        swa_query_starts=module.sliding_window_starts(p.layout, p.visible_until, 5),
+        layout=p.layout, swa_window=5,
+    )
+    # Both the missing query and its successor are after the final R. Every
+    # cached Full prefix already has the exact positions these queries need.
+    assert result.intervals == ((matched-1, n),)
+
+
+def test_rotated_source_versions_follow_selected_queries(context_modules):
+    p = program(context_modules, nested=True, repos=True, width=4)
+    module = importlib.import_module(context_modules[2].__package__ + '.recovery')
+    rows = all_reads(context_modules, p)
+    n, window = len(p.input_ids), 5
+    matched = n - 1
+    resident = p.layout.keep_mask[:matched].clone()
+    stored = p.layout.positions[:matched]
+    rewind = resident & (stored != p.layout.birth_positions[:matched])
+    rng = random.Random(81103)
+    for _ in range(50):
+        swa = resident & torch.tensor([rng.random() > .15 for _ in range(matched)])
+        planned, full, sliding = set(range(matched, n)), {}, set()
+        for q in range(n-1, -1, -1):
+            if q < matched:
+                versions = full.get(q, set())
+                if ((versions and (not resident[q] or (rewind[q] and any(pos != stored[q] for pos in versions))))
+                        or (q in sliding and not swa[q])):
+                    planned.add(q)
+            if q in planned:
+                for raw, pos in rows[q][:-1]:
+                    full.setdefault(raw, set()).add(pos)
+                    if pos >= p.layout.birth_positions[q] - (window-1):
+                        sliding.add(raw)
+        result = module.plan_recovery(
+            resident, p.visible_until, n, rewind, swa_resident=swa,
+            swa_query_starts=module.sliding_window_starts(p.layout, p.visible_until, window),
+            layout=p.layout, swa_window=window, source_positions=stored,
+        )
+        assert {q for a, b in result.intervals for q in range(a, b)} == planned

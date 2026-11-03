@@ -160,6 +160,15 @@ def process_summary(response):
     return text
 
 
+def validate_completion(body):
+    """HTTP 200 can still carry an aborted generation; never append it."""
+    choices = body.get("choices") or []
+    if (not choices or any(c.get("finish_reason") in {"abort", "error"} for c in choices)
+            or body.get("usage", {}).get("completion_tokens", 0) <= 0):
+        reasons = [c.get("finish_reason") for c in choices]
+        raise RuntimeError(f"Generation did not complete: {reasons}")
+
+
 def run(args):
     import requests
     from sglang.srt.entrypoints.openai.protocol import Tool
@@ -198,6 +207,7 @@ def run(args):
             json.dump(record, target, ensure_ascii=False)
         if response.status_code != 200:
             raise RuntimeError(f"HTTP {response.status_code}: {body}")
+        validate_completion(body)
         emit({"kind": "request", "label": label, "artifact": filename, "seconds": record["seconds"],
                   "usage": body.get("usage"), "input_sha256": digest(body.get("sglext", {}).get("input_ids"))})
         return body
@@ -249,14 +259,19 @@ def run(args):
         usage["cold"] = response["usage"]
         if len(set(hashes.values())) != 1:
             raise ValueError("Frozen Insert replay changed execution tokens")
+        failures = []
         for mode in ("warm", "exact"):
             metrics = logit_metrics(logits[mode], logits["cold"])
             emit({"kind": "summary_numeric", "label": label, "mode": mode, "metrics": metrics, "bounds": bounds, "usage": usage[mode]})
             if any(metrics[k] > bounds[k] for k in bounds):
-                raise ValueError(f"Insert numerical mismatch: {label} {mode} {metrics}")
+                failures.append({"label": label, "mode": mode, "metrics": metrics, "bounds": bounds})
+        # Continue the original trajectory to cover later summaries, while the
+        # case remains failed under the same fixed numerical acceptance rule.
+        return failures
 
     for case, source_hash in cases:
         state, summaries = History(), 0
+        numerical_failures, completed_turns = [], 0
         case_id = case["case_id"]
         session.post(args.url + "/flush_cache", timeout=30).raise_for_status()
         emit({"kind": "case_start", "case_id": case_id, "source_sha256": source_hash})
@@ -289,15 +304,20 @@ def run(args):
                 payload.update(tools=tools, max_tokens=args.probe_tokens or turn["max_new_tokens"],
                                ignore_eos=True, reasoning_effort="low")
                 if inserted and not args.skip_numeric:
-                    compare_summary(payload, state.active(), f"{case_id}-event-{summaries}")
+                    numerical_failures.extend(compare_summary(
+                        payload, state.active(), f"{case_id}-event-{summaries}"
+                    ))
                 body = call(payload, f"{case_id}-turn-{turn['turn']}")
                 assistant = body["choices"][0]["message"]
                 state.append([assistant])
+                completed_turns += 1
             if not summaries:
                 raise ValueError("Case never triggered a 48K summary")
-            result = {"case_id": case_id, "status": "completed", "summaries": summaries, "turns": len(case["turns"])}
+            result = {"case_id": case_id, "status": "failed" if numerical_failures else "completed",
+                      "summaries": summaries, "turns": completed_turns, "numerical_failures": numerical_failures}
         except (requests.RequestException, ValueError, RuntimeError, KeyError) as exc:
-            result = {"case_id": case_id, "status": "failed", "summaries": summaries, "error": repr(exc)}
+            result = {"case_id": case_id, "status": "failed", "summaries": summaries,
+                      "turns": completed_turns, "numerical_failures": numerical_failures, "error": repr(exc)}
         results.append(result)
         emit(dict(kind="case_end", **result))
         (out / "report.json").write_text(json.dumps({

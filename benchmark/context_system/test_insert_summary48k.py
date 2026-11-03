@@ -52,3 +52,17 @@ def test_failed_summary_does_not_mutate_history():
     with pytest.raises(ValueError):
         process_summary({"choices": [{"finish_reason": "length", "message": {"content": "partial"}}]})
     assert history.payload() == old
+
+
+@pytest.mark.parametrize("reason,completion,valid", [
+    ("abort", 0, False), ("abort", 1, False), ("error", 1, False),
+    ("stop", 0, False), ("stop", 1, True), ("length", 64, True), ("tool_calls", 1, True),
+])
+def test_http_success_is_not_generation_success(reason, completion, valid):
+    from insert_summary48k import validate_completion
+    body = {"choices": [{"finish_reason": reason}], "usage": {"completion_tokens": completion}}
+    if valid:
+        validate_completion(body)
+    else:
+        with pytest.raises(RuntimeError, match="did not complete"):
+            validate_completion(body)
