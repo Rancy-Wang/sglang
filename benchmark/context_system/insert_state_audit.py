@@ -262,6 +262,7 @@ def replay(args):
         request = copy.deepcopy(request)
         request.update(
             model=args.model,
+            n=1,
             temperature=0,
             max_tokens=args.steps if probe else 1,
             ignore_eos=True,
@@ -309,7 +310,7 @@ def replay(args):
     # Independent run: never flush the no-flush trajectory server while it runs.
     flush()
     cold_body, cold = call(payload, "cold")
-    forced = cold_body["sglext"]["output_ids"][: args.steps]
+    forced = cold_body["sglext"]["output_ids"][0][: args.steps]
     if len(forced) != args.steps:
         raise ValueError(
             "Frozen baseline did not generate the requested number of steps"
@@ -333,7 +334,7 @@ def replay(args):
     native["messages"] = active_messages(payload)
     flush()
     native_cold_body, native_cold = call(native, "native-cold")
-    native_forced = native_cold_body["sglext"]["output_ids"][: args.steps]
+    native_forced = native_cold_body["sglext"]["output_ids"][0][: args.steps]
     if len(native_forced) != args.steps:
         raise ValueError("Native calibration generated too few forced tokens")
     native_exact_body, native_exact = call(native, "native-exact", native_forced)
