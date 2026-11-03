@@ -334,10 +334,18 @@ def replay(args):
     flush()
     native_cold_body, native_cold = call(native, "native-cold")
     native_forced = native_cold_body["sglext"]["output_ids"][: args.steps]
-    _, native_exact = call(native, "native-exact", native_forced)
+    if len(native_forced) != args.steps:
+        raise ValueError("Native calibration generated too few forced tokens")
+    native_exact_body, native_exact = call(native, "native-exact", native_forced)
     flush()
     call(dict(native, messages=native["messages"][:-1]), "native-source", probe=False)
-    _, native_warm = call(native, "native-warm", native_forced)
+    native_warm_body, native_warm = call(native, "native-warm", native_forced)
+    native_hashes = [
+        digest(body["sglext"]["input_ids"])
+        for body in (native_cold_body, native_warm_body, native_exact_body)
+    ]
+    if len(set(native_hashes)) != 1:
+        raise ValueError("Native calibration changed input tokens")
     bounds = native_logit_bounds(
         [logit_metrics(value, native_cold) for value in (native_warm, native_exact)]
     )
@@ -345,6 +353,32 @@ def replay(args):
         name: logit_metrics(value, cold)
         for name, value in (("warm", warm), ("exact", exact))
     }
+    # Preserve each step's gate: aggregating the vocabulary over all eight
+    # steps could hide a mean/p99 failure confined to one decode position.
+    step_results = []
+    for step in range(args.steps):
+        step_bounds = native_logit_bounds(
+            [
+                logit_metrics(value[step], native_cold[step])
+                for value in (native_warm, native_exact)
+            ]
+        )
+        step_metrics = {
+            name: logit_metrics(value[step], cold[step])
+            for name, value in (("warm", warm), ("exact", exact))
+        }
+        step_results.append(
+            {
+                "step": step,
+                "bounds": step_bounds,
+                "metrics": step_metrics,
+                "pass": all(
+                    values[k] <= step_bounds[k]
+                    for values in step_metrics.values()
+                    for k in step_bounds
+                ),
+            }
+        )
     report = {
         "target": str(args.target),
         "source": args.source,
@@ -352,8 +386,10 @@ def replay(args):
         "steps": args.steps,
         "bounds": bounds,
         "metrics": metrics,
+        "native_input_sha256": native_hashes[0],
+        "step_results": step_results,
         "requests": journal,
-        "pass": all(
+        "pass": all(item["pass"] for item in step_results) and all(
             values[k] <= bounds[k] for values in metrics.values() for k in bounds
         ),
     }

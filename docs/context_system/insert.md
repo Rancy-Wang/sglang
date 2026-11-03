@@ -330,5 +330,19 @@ Qwen/Linear Insert 的全部支持修改和模型实验继续 Pending；当前�
   causal 边界后，逆置换输出应相等。只改变 Q 的顺序而未保留这些关系不具备等价保证。
 
 本地 CPU 已运行 frontend/IR/recovery/decode/audit 组合：147 passed、77 skipped（组合中包括 GPU/服务测试跳过）。
-GPU、实际树 Linux 用例、10 题无 flush 轨迹、冻结 logits 和性能对照仍待独立新环境验证。
+Tengxuan-BUS-2 新环境的原生组合回归在 `96bff08496` 为 224 passed、52 skipped；
+包括 Full/Full+SWA 各 40 turn 的实际树验证。跳过项为 48 个旧模型 KV trace fixture
+和 4 个需要单独 HTTP/BCP 服务的用例，不计为通过。
+
+实际模型随后发现 eager 的 int64 长度会使新的 SWA Triton 计数循环发生类型提升、
+编译失败；graph 使用 int32，原 GPU 测试只覆盖了后者。`a93584b3ad` 将有界 token
+长度统一为内部 int32，并补充两个输入 dtype 的 eager/graph 随机测试。修复后
+`test_insert_attention.py test_context_decode.py` 为 24 passed、48 skipped，
+其中随机窗口共 600 组长度/位置/物理槽对照通过。这个失败发生在 logits 比较前，
+不是对旧 logits 差异的解释。
+
+独立环境位于 `/home/wangruoxi/insert-r3-20261103/env/venv`，Python 3.12.16、
+PyTorch 2.13.0+cu130、Triton 3.7.1；用户态 CUDA compatibility 库位于同目录下，
+主机驱动未修改。依赖 freeze 和源码 hash 已归档。10 题无 flush 轨迹、冻结 logits
+和不带审计的性能对照仍在验证，尚未验收。
 旧的 56 项比较中 10 项失败保持 FAIL；本轮尚未确定其原因，不能归为 BF16 误差。
