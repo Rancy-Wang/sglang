@@ -12,6 +12,57 @@ pytest_plugins = ("test_rules", "test_serving_runtime")
 pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="native SRT requires Linux")
 
 
+def create_insert_kv_probe(config):
+    """Opt-in RadixAttention forward hook; never enabled in timing runs.
+
+    Use the native --forward-hooks API with target ``*.self_attn.attn`` and
+    custom_params.context_kv_probe=true on a single-request diagnostic run.
+    Disable graphs so every request, including exact hits, invokes the hook.
+    """
+    from sglang.srt.model_executor.forward_context import get_attn_backend
+
+    counts = {}
+    layers = set(config.get("layers", [0, 1, 2, 3]))
+
+    def hook(layer, args, output):
+        if layer.layer_id not in layers or len(args) < 4:
+            return
+        q, k, v, batch = args[:4]
+        params = getattr(batch.sampling_info, "custom_params", None)
+        if not params or len(params) != 1 or not params[0].get("context_kv_probe"):
+            return
+        backend = get_attn_backend()
+        metadata = backend.forward_metadata
+        context = batch.context_attention
+        window = layer.sliding_window_size
+        is_swa = window is not None and window >= 0
+        slots = metadata.swa_out_cache_loc if is_swa else None
+        if slots is None:
+            slots = backend.kv_index_translator.translate_full_attn_ids(batch.out_cache_loc)
+        kp, vp = backend.token_to_kv_pool.get_kv_buffer(layer.layer_id)
+        data = dict(
+            input_ids=batch.input_ids.detach().cpu(), positions=batch.positions.detach().cpu(),
+            q=q.detach().cpu(), k=k.detach().cpu(), v=v.detach().cpu(),
+            slots=slots.detach().cpu(), stored_k=kp[slots.long()].detach().cpu(),
+            stored_v=vp[slots.long()].detach().cpu(), output=output.detach().cpu(),
+            window=window,
+        )
+        if context is not None:
+            cm = context.for_layer(layer)
+            for name in ("qo_indptr", "kv_indptr", "kv_indices", "query_positions", "kv_positions"):
+                data[name] = getattr(cm, name).detach().cpu()
+            data["prefix_k"] = kp[cm.kv_indices.long()].detach().cpu()
+            data["prefix_v"] = vp[cm.kv_indices.long()].detach().cpu()
+        rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
+        path = params[0]["context_trace_path"]
+        key = (path, layer.layer_id)
+        n = counts.get(key, 0)
+        counts[key] = n + 1
+        torch.save(data, f"{path}.layer{layer.layer_id}.rank{rank}.{n}.pt")
+
+    return hook
+
+
 @pytest.mark.parametrize("swa", [False, True])
 def test_insert_match_publication_and_branch_isolation(context_modules, monkeypatch, swa):
     monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "unit/mem_cache"))
