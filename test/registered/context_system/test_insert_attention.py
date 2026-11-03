@@ -52,12 +52,23 @@ def test_insert_segment_batch(context_modules, attention_plan, native_attention,
     torch.testing.assert_close(output, expected, rtol=.0078125, atol=.0078125)
 
 
-def test_nonmonotone_swa_gather_graph(context_modules):
+@pytest.mark.parametrize("tail_dropped", [False, True])
+def test_nonmonotone_swa_gather_graph(context_modules, tail_dropped):
     from sglang.srt.layers.attention.context_backend import ContextDecodeRegistry
     occ = importlib.import_module(context_modules[2].__package__ + ".occurrence")
     p = program(context_modules, nested=True, repos=False, width=7)
+    window_size = 9
+    if tail_dropped:
+        ir = importlib.import_module(context_modules[2].__package__ + ".ir")
+        layout = ir.compile_execution_layout(
+            list(range(10)), [(2, 3, 1, 0), (10, 4, 0, 0), (10, 1, 1, 2)],
+            [0, 9, *range(1, 9)], [(2, 10, 2)])
+        expiry = torch.full((10,), 2**31-1, dtype=torch.int32)
+        expiry[1] = 10
+        p = context_modules[2].ContextProgram(layout, expiry)
+        window_size = 3
     view = occ.ContextDecodeLayout.from_layout(p.layout, "cuda")
-    assert any(a > b for a, b in zip(view.positions[:-1], view.positions[1:]))
+    assert not view.positions_monotone
     table = torch.arange(512, dtype=torch.int32, device="cuda").reshape(2, 256)
     registry = ContextDecodeRegistry(SimpleNamespace(page_size=1, defer_read_translate=False,
         req_to_token=table, is_translating=False), SimpleNamespace())
@@ -67,7 +78,7 @@ def test_nonmonotone_swa_gather_graph(context_modules):
     ptr = torch.zeros(2, device="cuda", dtype=torch.int32)
     out = torch.empty(256, device="cuda", dtype=torch.int64)
     def run():
-        registry.fill_window(rows, lens, ptr, 9, out)
+        registry.fill_window(rows, lens, ptr, window_size, out)
     run()
     graph = torch.cuda.CUDAGraph()
     with torch.cuda.graph(graph):
@@ -76,7 +87,7 @@ def test_nonmonotone_swa_gather_graph(context_modules):
         _, new_lens, _, _ = registry.bind_batch([req], [len(p.input_ids)+generated], rows)
         lens.copy_(new_lens)
         graph.replay()
-        lower = p.layout.next_position + generated - 1 - 9
+        lower = p.layout.next_position + generated - 1 - window_size
         raw = [r for r, pos in zip(view.raw_indices.tolist(), view.positions.tolist()) if pos >= lower]
         raw += [len(p.input_ids)+i for i in range(generated) if p.layout.next_position+i >= lower]
         assert ptr[-1].item() == len(raw)

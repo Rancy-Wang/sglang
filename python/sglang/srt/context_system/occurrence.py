@@ -69,7 +69,11 @@ class ContextDecodeLayout:
         positions = layout.positions.numpy()[raw].copy()
         if not permuted and np.any(np.diff(positions.astype(np.int64)) <= 0):
             raise ValueError("Active decode positions must be strictly increasing")
-        monotone = not np.any(positions[1:] < positions[:-1])
+        # The contiguous-tail window fast path also assumes future decode
+        # positions follow this prefix. Dropping an Insert's original suffix
+        # can leave a sorted prompt whose positions exceed the append cursor.
+        monotone = (not np.any(positions[1:] < positions[:-1])
+                    and (not len(positions) or positions[-1] < layout.next_position))
         # Build once. Decode window counts and safe raw release floors then
         # cost O(log N), even when Insert leaves overlapping position ranges.
         order_by_position = np.arange(len(raw)) if monotone else np.argsort(positions)
