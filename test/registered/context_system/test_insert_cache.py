@@ -190,7 +190,8 @@ def test_insert_match_publication_and_branch_isolation(context_modules, monkeypa
 
 
 @pytest.mark.parametrize("path", ["schedule", "publication"])
-def test_swa_retires_private_cow_below_source_match(path):
+@pytest.mark.parametrize("extended_row", [False, True])
+def test_swa_retires_private_cow_below_source_match(path, extended_row):
     """A source prefix lease cannot hide private rotated target SWA owners."""
     from types import SimpleNamespace
 
@@ -207,6 +208,9 @@ def test_swa_retires_private_cow_below_source_match(path):
     released = []
     allocator = SimpleNamespace(free_swa_segment=lambda slots, **kw: released.extend(slots.tolist()))
     pool = SimpleNamespace(req_to_token=torch.arange(512).reshape(1, 512))
+    offset = 1000 if extended_row else 0
+    if extended_row:
+        pool._context_rows = {0: torch.arange(512) + offset}
     cache = SimpleNamespace(supports_swa=lambda: True, sliding_window_size=128,
                             page_size=1, swa_retain_floor=lambda req: None,
                             req_to_token_pool=pool, token_to_kv_pool_allocator=allocator)
@@ -224,11 +228,11 @@ def test_swa_retires_private_cow_below_source_match(path):
             component = SimpleNamespace(cache=cache, sliding_window_size=128)
             SWAComponent._free_context_decode_window(component, req, 400)
     retire()
-    assert released == [*range(100, 110), *range(120, 200), *range(300, 350)]
+    assert released == [offset+i for i in [*range(100, 110), *range(120, 200), *range(300, 350)]]
     assert req.kv.swa_evicted_seqlen == 350
     boundary[0] = 450
     retire()
-    assert released[-100:] == list(range(350, 450))  # includes native generated slots
+    assert released[-100:] == list(range(offset+350, offset+450))  # includes generated slots
     assert len(released) == len(set(released))
 
 

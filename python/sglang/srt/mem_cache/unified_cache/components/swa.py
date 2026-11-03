@@ -1089,7 +1089,9 @@ class SWAComponent(TreeComponent):
         req.kv.swa_evicted_seqlen = start
         if end <= start:
             return
-        row = self.cache.req_to_token_pool.req_to_token[req.kv.req_pool_idx]
+        from sglang.srt.context_system.request_storage import request_row
+
+        row = request_row(self.cache.req_to_token_pool, req.kv.req_pool_idx)
         allocator = self.cache.token_to_kv_pool_allocator
         if state is None or start >= len(state.terminal_rows):
             # Steady decode frees one fresh generated peer, with no scan or
