@@ -143,11 +143,13 @@ def test_decode_gather_keeps_native_raw_row_and_replays_mutable_registry(transla
         swa = torch.tensor(raw_window, device=device, dtype=torch.int64)
         if translated:
             full, swa = mapping[full] * 2, mapping[swa] * 3
+        assert int(indptr[-1]) == len(full)
+        assert int(windptr[-1]) == len(swa)
         torch.testing.assert_close(output[: len(full)], full.to(output.dtype))
         torch.testing.assert_close(window[: len(swa)], swa.to(window.dtype))
 
     run()
-    check([128, 135, 136, 147, 148, *range(64, 71)], [136, 147, 148, 69, 70])
+    check([128, 135, 136, 147, 148, *range(64, 71)], [136, 147, 148, 68, 69, 70])
     graph = torch.cuda.CUDAGraph()
     with torch.cuda.graph(graph):
         run()
@@ -158,11 +160,11 @@ def test_decode_gather_keeps_native_raw_row_and_replays_mutable_registry(transla
     _, new_lens, _, _ = registry.bind_batch(reqs, [22, 6], rows)
     lens.copy_(new_lens)
     graph.replay()
-    check([129, 135, 137, 148, 149, *range(64, 70)], [137, 148, 149, 68, 69])
+    check([129, 135, 137, 148, 149, *range(64, 70)], [137, 148, 149, 67, 68, 69])
     torch.testing.assert_close(table, before)
     # Reuse a former Context request slot for an ordinary request.
     reqs[0].context_program = None
     _, new_lens, _, _ = registry.bind_batch(reqs, [3, 4], rows)
     lens.copy_(new_lens)
     graph.replay()
-    check([128, 129, 130, 64, 65, 66, 67], [129, 130, 66, 67])
+    check([128, 129, 130, 64, 65, 66, 67], [128, 129, 130, 65, 66, 67])
