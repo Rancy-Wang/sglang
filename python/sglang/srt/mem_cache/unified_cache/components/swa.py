@@ -1079,7 +1079,9 @@ class SWAComponent(TreeComponent):
             return
         if self.cache.page_size != 1:
             raise ValueError("Context SWA eviction requires page_size=1")
-        start = max(req.kv.swa_evicted_seqlen, req.kv.swa_dead_lo(1))
+        state = req.context_state
+        start = (state.swa_retire_start(req.kv) if state is not None else
+                 max(req.kv.swa_evicted_seqlen, req.kv.swa_dead_lo(1)))
         end = req.context_decode_layout.swa_raw_floor(pre_len, self.sliding_window_size)
         retain = self.cache.swa_retain_floor(req)
         if retain is not None:
@@ -1089,13 +1091,12 @@ class SWAComponent(TreeComponent):
             return
         row = self.cache.req_to_token_pool.req_to_token[req.kv.req_pool_idx]
         allocator = self.cache.token_to_kv_pool_allocator
-        state = req.context_state
         if state is None or start >= len(state.terminal_rows):
             # Steady decode frees one fresh generated peer, with no scan or
             # materialization of the prompt's CPU validity metadata.
             allocator.free_swa_segment(row[start:end], start_pos=start)
         else:
-            for a, b in state.live_swa_ranges(start, end):
+            for a, b in state.live_swa_ranges(start, end, owned_only=True):
                 allocator.free_swa_segment(row[a:b], start_pos=a)
         req.kv.swa_evicted_seqlen = end
 

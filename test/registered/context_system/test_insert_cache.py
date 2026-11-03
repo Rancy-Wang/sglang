@@ -189,6 +189,49 @@ def test_insert_match_publication_and_branch_isolation(context_modules, monkeypa
         reset_context()
 
 
+@pytest.mark.parametrize("path", ["schedule", "publication"])
+def test_swa_retires_private_cow_below_source_match(path):
+    """A source prefix lease cannot hide private rotated target SWA owners."""
+    from types import SimpleNamespace
+
+    from sglang.srt.context_system.occurrence import OccurrenceState
+    from sglang.srt.managers.schedule_batch import ScheduleBatch
+    from sglang.srt.mem_cache.unified_cache.components.swa import SWAComponent
+
+    rows = torch.arange(400, dtype=torch.int64)
+    owned = (rows >= 100) & ((rows < 200) | (rows >= 300))
+    swa = torch.ones(400, dtype=torch.bool)
+    swa[110:120] = False
+    state = OccurrenceState(rows, owned, rows, rows, rows.to(torch.int32), 100, swa)
+    assert state.first_private_terminal == 100
+    released = []
+    allocator = SimpleNamespace(free_swa_segment=lambda slots, **kw: released.extend(slots.tolist()))
+    pool = SimpleNamespace(req_to_token=torch.arange(512).reshape(1, 512))
+    cache = SimpleNamespace(supports_swa=lambda: True, sliding_window_size=128,
+                            page_size=1, swa_retain_floor=lambda req: None,
+                            req_to_token_pool=pool, token_to_kv_pool_allocator=allocator)
+    boundary = [350]
+    req = SimpleNamespace(context_program=object(), context_state=state,
+        context_decode_layout=SimpleNamespace(swa_raw_floor=lambda *args: boundary[0]),
+        kv=SimpleNamespace(holds_kv=True, req_pool_idx=0, cache_protected_len=300,
+                           swa_evicted_seqlen=0, swa_evict_floor=0))
+    def retire():
+        if path == "schedule":
+            batch = SimpleNamespace(tree_cache=cache, req_to_token_pool=pool,
+                                    token_to_kv_pool_allocator=allocator)
+            ScheduleBatch._evict_swa(batch, req, 400)
+        else:
+            component = SimpleNamespace(cache=cache, sliding_window_size=128)
+            SWAComponent._free_context_decode_window(component, req, 400)
+    retire()
+    assert released == [*range(100, 110), *range(120, 200), *range(300, 350)]
+    assert req.kv.swa_evicted_seqlen == 350
+    boundary[0] = 450
+    retire()
+    assert released[-100:] == list(range(350, 450))  # includes native generated slots
+    assert len(released) == len(set(released))
+
+
 @pytest.mark.skipif(not os.environ.get("CONTEXT_SERVER_MODEL"), reason="isolated model server required")
 def test_insert_http_summary_lifecycle(tmp_path, request):
     """Warm/retrigger, exact, nested later-turn insertion and cold restoration."""
@@ -265,6 +308,38 @@ def test_insert_bcp48k(request, monkeypatch):
         cases=list(CASES), keep_recent=20000, summary_tokens=4096, timeout=1800,
         probe_tokens=int(os.environ.get("CONTEXT_INSERT_PROBE_TOKENS", "0")), skip_numeric=False,
     ))
+
+
+@pytest.mark.skipif(not os.environ.get("CONTEXT_SERVER_MODEL"), reason="isolated model server required")
+@pytest.mark.parametrize("pending_repeats", [0, 300])
+def test_insert_retrigger_decode_slot_conservation(request, pending_repeats):
+    """Exercise eviction after COW, then let the native idle invariant run."""
+    import requests
+
+    server = os.environ.get("CONTEXT_EXISTING_SERVER") or request.getfixturevalue("server")
+    session = requests.Session()
+    session.trust_env = False
+    session.post(server + "/flush_cache", timeout=30).raise_for_status()
+    messages = [{"role": "system", "content": "Remember the conversation. Answer briefly."}]
+    for i in range(1, 10):
+        messages.append({"role": "user" if i % 2 else "assistant",
+                         "content": f"Message {i}. " + "red blue green amber " * 24})
+    def call(ms, **ops):
+        response = session.post(server + "/v1/chat/completions", json=dict(
+            model=os.environ["CONTEXT_SERVER_MODEL"], messages=ms,
+            temperature=0, ignore_eos=True, **ops), timeout=600)
+        response.raise_for_status()
+        return response.json()
+    call(messages[:9], drop_message={"3": [1, 2]}, reposition=[3], max_tokens=1)
+    messages[-1]["content"] += "green amber " * pending_repeats
+    summary = {"index": -1, "role": "user", "content": "Summary of red blue green amber."}
+    logical = messages[:6] + [summary] + messages[6:]
+    for _ in range(2):
+        body = call(logical, drop_message={"3": [1, 2], "8": [1, 2, 3, 4, 5]},
+                    insert={"9": -1}, reposition=[3, -1], max_tokens=8)
+        assert body["usage"]["completion_tokens"] == 8
+        assert body["usage"]["prompt_tokens_details"]["cached_tokens"] > 0
+        session.get(server + "/health", timeout=30).raise_for_status()
 
 
 @pytest.mark.skipif(not os.environ.get("CONTEXT_SERVER_MODEL"), reason="isolated model server required")

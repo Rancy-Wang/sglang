@@ -4214,7 +4214,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             if req.context_decode_layout is None or not req.kv.holds_kv:
                 # Prefill owns stage-specific occurrences until completion.
                 return
-            start = max(req.kv.swa_evicted_seqlen, req.kv.swa_dead_lo(1))
+            start = req.context_state.swa_retire_start(req.kv)
             end = req.context_decode_layout.swa_raw_floor(
                 pre_len, self.tree_cache.sliding_window_size
             )
@@ -4223,7 +4223,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
                 end = min(end, retain_floor)
             end = max(start, end)
             row = request_row(self.req_to_token_pool, req.kv.req_pool_idx)
-            for left, right in req.context_state.live_swa_ranges(start, end):
+            for left, right in req.context_state.live_swa_ranges(start, end, owned_only=True):
                 self.token_to_kv_pool_allocator.free_swa_segment(
                     row[left:right], start_pos=left
                 )

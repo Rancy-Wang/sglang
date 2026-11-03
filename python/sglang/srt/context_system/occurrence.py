@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cached_property
 from itertools import pairwise
 from typing import TYPE_CHECKING
 
@@ -932,7 +933,24 @@ class OccurrenceState:
         result[present] = self.swa_resident[rows[present]]
         return result
 
-    def live_swa_ranges(self, start: int, end: int):
+    @cached_property
+    def first_private_terminal(self):
+        """First private raw row, including COW pages before the source match.
+
+        Computed once per immutable state, not once per decode token. A native
+        protected-prefix boundary describes the source lease, not ownership of
+        the request's newly rotated target pages.
+        """
+        rows = self.terminal_rows.numpy()
+        present = np.flatnonzero(rows >= 0)
+        private = present[self.owned.numpy()[rows[present]]]
+        return int(private[0]) if len(private) else len(rows)
+
+    def swa_retire_start(self, kv):
+        return max(kv.swa_evicted_seqlen, kv.swa_evict_floor,
+                   min(kv.cache_protected_len, self.first_private_terminal))
+
+    def live_swa_ranges(self, start: int, end: int, *, owned_only=False):
         """Read only the newly retiring CPU interval, never the full history.
 
         Generated slots beyond this prefill state own native SWA peers. The
@@ -949,6 +967,9 @@ class OccurrenceState:
         if self.swa_resident is not None:
             indices = np.flatnonzero(present)
             live[indices] = self.swa_resident.numpy()[rows[indices]]
+        if owned_only:
+            indices = np.flatnonzero(present)
+            live[indices] &= self.owned.numpy()[rows[indices]]
         return [(start + a, start + b) for a, b in mask_ranges(live)]
 
     def private_slots(self):
