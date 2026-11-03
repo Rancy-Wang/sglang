@@ -243,15 +243,18 @@ def audit_trajectory_files(paths, output):
     import gzip
     import re
     from array import array
+    from datetime import date as calendar_date
     from types import SimpleNamespace
+    from unittest.mock import patch
 
     from sglang.srt.context_system.ir import ContextKeyData
     from sglang.srt.context_system.planner import compile_chat_program
     from sglang.srt.context_system.rules import parse_drop_rule
     from sglang.srt.mem_cache.radix_cache import RadixKey
     from sglang.srt.parser.gpt_oss_encoding import HarmonyEncoder
+    from sglang.srt.parser import gpt_oss_encoding as harmony_module
 
-    previous, result = {}, []
+    previous, result, dates = {}, [], set()
     for path in sorted(map(Path, paths)):
         match = re.search(r"-(\d+)-turn-(\d+)\.json\.gz$", path.name)
         if match is None:
@@ -262,8 +265,23 @@ def audit_trajectory_files(paths, output):
         payload, response = saved["request"], saved["response"]
         messages = payload["messages"]
         clean = [{k: v for k, v in m.items() if k != "index"} for m in messages]
-        ids, owners, _ = HarmonyEncoder(payload.get("reasoning_effort", "low")).render_tokens(
-            clean, payload.get("tools"))
+        # Offline reconstruction must use the date actually rendered by the
+        # server, not the analyst's current date. This local patch never runs
+        # in serving and does not alter Harmony's analysis cleanup behavior.
+        prefix = HarmonyEncoder._get_harmony_encoding().decode(
+            response["sglext"]["input_ids"][:64])
+        rendered_date = re.search(r"Current date: (\d{4}-\d{2}-\d{2})", prefix)
+        if rendered_date is None:
+            raise ValueError(f"Missing recorded Harmony date: {path}")
+        day = calendar_date.fromisoformat(rendered_date[1])
+        dates.add(day.isoformat())
+        class RecordedDate(calendar_date):
+            @classmethod
+            def today(cls):
+                return day
+        with patch.object(harmony_module, "date", RecordedDate):
+            ids, owners, _ = HarmonyEncoder(payload.get("reasoning_effort", "low")).render_tokens(
+                clean, payload.get("tools"))
         rule = parse_drop_rule(None, messages, legacy_drop_message=payload.get("drop_message"))
         program = compile_chat_program(messages, SimpleNamespace(input_ids=ids, owners=owners),
                                        rule, payload.get("reposition"), payload.get("insert"))
@@ -285,7 +303,7 @@ def audit_trajectory_files(paths, output):
         data.append_tokens(array("i", generated), next_position=program.layout.next_position)
         cached = tokens + generated
         previous[case] = (cached, RadixKey(array("i", cached), context=data), len(tokens))
-    report = dict(transitions=len(result),
+    report = dict(transitions=len(result), rendered_dates=sorted(dates),
                   operation_extra_loss=sum(r["operation_extra_loss"] for r in result),
                   token_prefix_changes=sum(r["historical_token_prefix_loss"]>0 for r in result),
                   retrigger_extensions=sum(r["retry"]>r["exact"] for r in result),
