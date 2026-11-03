@@ -1068,6 +1068,11 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         swa = self.components_by_type.get(ComponentType.SWA)
         mamba = self.components_by_type.get(ComponentType.MAMBA)
 
+        # Insert's logical SWA window need not be an execution-order suffix.
+        # Match Full history first; recovery validates every actual SWA reader
+        # against the returned residency map before any attention is dispatched.
+        insert_history = key.context is not None and 3 in key.context.records[0::3]
+
         def advance(node, length, suffix):
             if node.evicted:
                 return None
@@ -1077,7 +1082,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                 # Context never rewinds or transforms the selected linear state.
                 if length != len(node.key) or node.component_data[ComponentType.MAMBA].value is None:
                     return False, suffix
-            if swa is None or params.context_cache_publication:
+            if swa is None or params.context_cache_publication or insert_history:
                 return True, suffix
             if node.component_data[ComponentType.SWA].value is None:
                 return False, 0

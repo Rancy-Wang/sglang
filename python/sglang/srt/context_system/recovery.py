@@ -140,6 +140,10 @@ def sliding_window_starts(
     """
     if window <= 0:
         raise ValueError("Context SWA window must be positive")
+    if layout.insert_spans.numel():
+        # Insert windows are not raw suffixes. Exact consumers use the logical
+        # occurrence read sets below; zero is a safe conservative raw bound.
+        return torch.zeros(len(layout.positions), dtype=torch.int32)
     birth = layout.birth_positions.numpy()
     stages = layout.birth_stages.numpy()
     expiry = visible_until.numpy()
@@ -174,6 +178,7 @@ def sliding_window_read_mask(
     visible_until: torch.Tensor,
     intervals: tuple[tuple[int, int], ...],
     prefix_length: int,
+    *, layout=None, window=None,
 ) -> torch.Tensor:
     """Union of cached SWA reads, with no query-by-key matrix.
 
@@ -182,6 +187,10 @@ def sliding_window_read_mask(
     queries cannot undo its Drop. Evaluate only the potential read range of
     each monotonic run, including disjoint historical repair intervals.
     """
+    if layout is not None and layout.insert_spans.numel():
+        if window is None:
+            raise ValueError("Insert SWA demand requires its native window")
+        return _insert_read_masks(layout, visible_until, intervals, prefix_length, window)[1]
     starts, expiry = query_starts.numpy(), visible_until.numpy()
     n = len(starts)
     if (
@@ -250,6 +259,121 @@ class _SWAQueryDemand:
             cursor += cursor & -cursor
 
 
+def _insert_window(layout, expiry, start=0):
+    from .occurrence import compile_occurrence_window
+    return compile_occurrence_window(layout, expiry, layout.positions,
+                                     query_start=start, query_end=len(expiry))
+
+
+def _insert_read_masks(layout, expiry, intervals, prefix_length, window=None):
+    """Union actual readers, in occurrence order; no position-sorted assumption."""
+    n = len(expiry)
+    full = np.zeros(prefix_length, dtype=np.bool_)
+    swa = np.zeros(prefix_length, dtype=np.bool_)
+    if not intervals or not prefix_length:
+        return torch.from_numpy(full), torch.from_numpy(swa)
+    selected = np.zeros(n, dtype=np.bool_)
+    for a, b in intervals:
+        selected[a:b] = True
+    view = _insert_window(layout, expiry, min(a for a, b in intervals))
+    raw, pos = view.occurrence_raw_tokens.numpy(), view.occurrence_positions.numpy()
+    keys, offsets = view.segment_key_occurrences.numpy(), view.segment_key_offsets.numpy()
+    birth = layout.birth_positions.numpy()
+    for a, b, x, y in zip(view.segment_query_starts.numpy(), view.segment_query_ends.numpy(), offsets[:-1], offsets[1:]):
+        queries = np.flatnonzero(selected[a:b]) + a
+        if not len(queries):
+            continue
+        prefix = keys[x:y-(b-a)]
+        source = raw[prefix]
+        valid = source < prefix_length
+        source, positions = source[valid], pos[prefix][valid]
+        full[source] = True
+        if window is not None:
+            swa[source[positions >= birth[queries[0]]-(window-1)]] = True
+        own = np.arange(a, min(queries[-1], prefix_length))
+        full[own] = True
+        if window is not None and len(own):
+            next_query = queries[np.searchsorted(queries, own, side="right")]
+            swa[own[birth[own] >= birth[next_query]-(window-1)]] = True
+    return torch.from_numpy(full), torch.from_numpy(swa)
+
+
+def _plan_insert_recovery(resident, expiry, layout, rewind, incompatible,
+                          swa_resident, window, terminal):
+    n, matched = len(expiry), len(resident)
+    if not 0 <= matched < n:
+        raise ValueError("Insert recovery must leave an uncached query suffix")
+    present = resident.numpy()
+    rewind = np.zeros(matched, dtype=bool) if rewind is None else rewind.numpy()
+    incompatible = np.zeros(matched, dtype=bool) if incompatible is None else incompatible.numpy()
+    swa_present = np.ones(matched, dtype=bool) if swa_resident is None else swa_resident.numpy()
+    terminal = np.zeros(matched, dtype=bool) if terminal is None else terminal.numpy()
+    suffix = ((matched, n),)
+    full, swa = _insert_read_masks(layout, expiry, suffix, matched, window)
+    sw = swa.numpy() | terminal
+    if not np.any((~present | incompatible) & full.numpy()) and not np.any(~swa_present & sw):
+        return RecoveryPlan(suffix, full | torch.from_numpy(sw), matched, resident.clone())
+
+    view = _insert_window(layout, expiry)
+    raw, positions = view.occurrence_raw_tokens.numpy(), view.occurrence_positions.numpy()
+    keys, offsets = view.segment_key_occurrences.numpy(), view.segment_key_offsets.numpy()
+    birth = layout.birth_positions.numpy()
+    # Each source's readers are intervals of execution queries. Shared prefixes
+    # cost one interval per segment, not a dense query-by-key matrix.
+    readers = [[] for _ in range(matched)]
+    swa_readers = [[] for _ in range(matched)]
+    for a, b, x, y in zip(view.segment_query_starts.numpy(), view.segment_query_ends.numpy(), offsets[:-1], offsets[1:]):
+        a, b = int(a), int(b)
+        for occurrence in keys[x:y-(b-a)]:
+            source = int(raw[occurrence])
+            if source >= matched:
+                continue
+            readers[source].append((a, b))
+            if window is not None:
+                end = min(b, a+int(positions[occurrence])+window-int(birth[a]))
+                if a < end:
+                    swa_readers[source].append((a, end))
+        for source in range(a, min(b, matched)):
+            if source+1 < b:
+                readers[source].append((source+1, b))
+                if window is not None:
+                    swa_readers[source].append((source+1, min(b, source+window)))
+
+    # A Fenwick tree answers whether any selected query lies in a read interval.
+    tree = np.zeros(n+1, dtype=np.int32)
+    for i in range(1, n+1):
+        tree[i] = max(0, i-max(i-(i & -i), matched))
+
+    def total(end):
+        value = 0
+        while end:
+            value += int(tree[end])
+            end -= end & -end
+        return value
+
+    def reads(ranges):
+        return any(total(b) != total(a) for a, b in ranges)
+
+    needed = np.zeros(n, dtype=bool)
+    needed[matched:] = True
+    required = np.zeros(matched, dtype=bool)
+    repair = False
+    for source in range(matched-1, -1, -1):
+        full_needed = reads(readers[source])
+        swa_needed = bool(terminal[source]) or reads(swa_readers[source])
+        required[source] = full_needed or swa_needed
+        full_missing = not present[source] or incompatible[source] or (repair and rewind[source])
+        if (full_needed and full_missing) or (swa_needed and not swa_present[source]):
+            needed[source] = required[source] = True
+            repair = True
+            i = source+1
+            while i <= n:
+                tree[i] += 1
+                i += i & -i
+    return RecoveryPlan(tuple(mask_ranges(needed)), torch.from_numpy(required),
+                        matched, torch.from_numpy(present & ~needed[:matched]))
+
+
 def plan_recovery(
     resident: torch.Tensor,
     visible_until: torch.Tensor,
@@ -260,6 +384,8 @@ def plan_recovery(
     swa_resident: torch.Tensor | None = None,
     swa_query_starts: torch.Tensor | None = None,
     swa_terminal_required: torch.Tensor | None = None,
+    layout=None,
+    swa_window: int | None = None,
 ) -> RecoveryPlan:
     """Close missing KV dependencies backwards without scanning the Radix tree.
 
@@ -293,6 +419,10 @@ def plan_recovery(
             raise ValueError(
                 "Recovery source masks must match the CPU residency vector."
             )
+    if layout is not None and layout.insert_spans.numel():
+        return _plan_insert_recovery(resident, visible_until, layout, rewind_sources,
+                                     incompatible_sources, swa_resident, swa_window,
+                                     swa_terminal_required)
     present = resident.numpy()
     expiry = visible_until.numpy()
     matched = len(present)

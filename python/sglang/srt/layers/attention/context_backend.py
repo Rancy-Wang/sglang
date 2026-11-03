@@ -201,10 +201,10 @@ class ContextAttentionMetadata:
             if window >= 0 and np.any(np.diff(positions) != 1):
                 for query in range(a, b):
                     end = y - x + query - a + 1
-                    start = np.searchsorted(positions[:end], qpos[query] - window)
-                    gathers.append(indices[start:end])
+                    selected = indices[:end][positions[:end] >= qpos[query] - window]
+                    gathers.append(selected)
                     q_lengths.append(1)
-                    k_lengths.append(end - start)
+                    k_lengths.append(len(selected))
             else:
                 start = np.searchsorted(positions, qpos[a] - window) if window >= 0 else 0
                 gathers.append(indices[start:])
@@ -678,7 +678,7 @@ class ContextDecodeRegistry:
         self.pool = pool
         self.request_pool = request_pool
         self.rows = torch.zeros(
-            (translator.req_to_token.shape[0], 6),
+            (translator.req_to_token.shape[0], 7),
             dtype=torch.int64,
             device=translator.req_to_token.device,
         )
@@ -691,7 +691,7 @@ class ContextDecodeRegistry:
         for req, raw_length in zip(reqs, raw_lengths):
             raw_length = int(raw_length)
             if req.context_program is None:
-                entries.append((0, 0, 0, 0, 0, 0))
+                entries.append((0, 0, 0, 0, 0, 0, 0))
                 lengths.append(raw_length)
                 positions.append(raw_length - 1)
                 self.batch_layouts.append((None, raw_length))
@@ -721,6 +721,7 @@ class ContextDecodeRegistry:
                     count,
                     layout.next_position,
                     row_pointer,
+                    int(np.any(np.diff(layout.positions.astype(np.int64)) < 0)),
                 )
             )
             lengths.append(count + generated)
@@ -731,11 +732,11 @@ class ContextDecodeRegistry:
             [(*entry, n, p) for entry, n, p in zip(entries, lengths, positions)],
             dtype=torch.int64,
         ).to(row_ids.device, non_blocking=True)
-        self.rows[row_ids] = packed[:, :6]
+        self.rows[row_ids] = packed[:, :7]
         return (
             torch.tensor(lengths, dtype=torch.int64),
-            packed[:, 6].to(torch.int32),
-            packed[:, 7],
+            packed[:, 7].to(torch.int32),
+            packed[:, 8],
             tuple(refs),
         )
 
@@ -746,12 +747,11 @@ class ContextDecodeRegistry:
                 lengths.append(min(generated, window + 1))
             else:
                 lower = layout.next_position + generated - 1 - window
-                start = np.searchsorted(layout.positions, lower)
-                lengths.append(len(layout.positions) - start + min(generated, window + 1))
+                lengths.append(int(np.count_nonzero(layout.positions >= lower)) + min(generated, window + 1))
         # Native decode graph padding uses seq_len=1; its outputs are discarded.
         return torch.tensor(lengths + [1] * (batch_size - len(lengths)), dtype=torch.int64)
 
-    def fill(self, row_ids, lengths, indptr, output, *, starts=None, swa=False):
+    def fill(self, row_ids, lengths, indptr, output, *, starts=None, swa=False, window=-1, full_lengths=None):
         from sglang.kernels.ops.attention.context_page_table import (
             context_decode_indices,
         )
@@ -776,10 +776,12 @@ class ContextDecodeRegistry:
             output,
             starts,
             mapping,
+            full_lengths,
             ROW_STRIDE=translator.req_to_token.stride(0),
             TRANSLATE=mapping is not None,
             MULTIPLIER=multiplier,
             HAS_START=starts is not None,
+            WINDOW=window,
         )
 
     def fill_table(self, row_ids, seq_lens, output, *, window=None):
@@ -791,7 +793,8 @@ class ContextDecodeRegistry:
             context_window_lengths[(len(seq_lens),)](self.rows, row_ids, seq_lens, lengths, window)
             starts = seq_lens - lengths
         indptr = torch.arange(len(seq_lens) + 1, device=seq_lens.device, dtype=torch.int32) * output.stride(0)
-        self.fill(row_ids, lengths, indptr, output.view(-1), starts=starts, swa=window is not None)
+        self.fill(row_ids, lengths, indptr, output.view(-1), starts=starts, swa=window is not None,
+                  window=window if window is not None else -1, full_lengths=seq_lens)
         return lengths
 
     def fill_window(self, row_ids, seq_lens, indptr, window, output):
@@ -805,5 +808,6 @@ class ContextDecodeRegistry:
         indptr = indptr[: bs + 1]
         indptr[1:] = lengths.cumsum(0)
         starts = seq_lens - lengths
-        self.fill(row_ids, lengths, indptr, output, starts=starts, swa=True)
+        self.fill(row_ids, lengths, indptr, output, starts=starts, swa=True,
+                  window=window, full_lengths=seq_lens)
         return indptr, output, lengths, starts

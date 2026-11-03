@@ -1298,7 +1298,7 @@ class OpenAIServingChat(OpenAIServingBase):
         """Process chat messages and apply chat template"""
         context_rule = None
         has_context = bool(
-            request.model_fields_set & {"drop_message", "drop_rule", "reposition"}
+            request.model_fields_set & {"drop_message", "drop_rule", "reposition", "insert"}
         )
         if has_context:
             from sglang.srt.arg_groups.overrides import resolving_view
@@ -1307,6 +1307,7 @@ class OpenAIServingChat(OpenAIServingBase):
             validate_context_config(
                 resolving_view(self.tokenizer_manager.server_args),
                 self.tokenizer_manager.model_config,
+                has_insert=bool(request.insert),
             )
             warmup_error = getattr(self.tokenizer_manager, "context_warmup_error", None)
             if isinstance(warmup_error, str):
@@ -1333,7 +1334,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 # Apply the same native validation and template processing to the
                 # full history; the public kept projection is only a selection.
                 full = ChatCompletionRequest.model_validate(
-                    {"messages": list(context_rule.full_messages)}
+                    {"messages": list(context_rule.full_messages), "insert": request.insert}
                 ).messages
                 request = request.model_copy(update={"messages": full})
                 if context_rule.use_visible_as_full:
@@ -1524,16 +1525,19 @@ class OpenAIServingChat(OpenAIServingBase):
                 == "thinking_drop",
             )
             ids, owners, _ = encoder.render_tokens(
-                messages, tools, enable_thinking=kwargs.get("enable_thinking")
+                [{k: v for k, v in m.items() if k != "index"} for m in messages],
+                tools, enable_thinking=kwargs.get("enable_thinking")
             )
             program = None
             if has_context:
                 from sglang.srt.context_system.planner import compile_chat_program
 
                 trace = encoder._build_harmony_provenance(ids, owners)
-                program = compile_chat_program(
-                    messages, trace, context_rule, request.reposition
-                ).to_wire()
+                compiled = compile_chat_program(
+                    messages, trace, context_rule, request.reposition, request.insert
+                )
+                ids = compiled.input_ids
+                program = compiled.to_wire()
             return MessageProcessingResult(
                 prompt="",
                 prompt_ids=ids,
@@ -1565,6 +1569,7 @@ class OpenAIServingChat(OpenAIServingBase):
         messages = [msg.model_dump() for msg in request.messages]
         context_messages = messages if has_context else None
         context_trace = [] if has_context else None
+        messages = [{k: v for k, v in m.items() if k != "index"} for m in messages]
         for message in messages:
             normalize_assistant_tool_call_arguments(
                 message, strict=self.chat_encoding_spec != "kimi_k3"
@@ -1801,9 +1806,11 @@ class OpenAIServingChat(OpenAIServingBase):
                 raise ValueError(
                     "Context request has no unique canonical template trace"
                 )
-            context_program = compile_chat_program(
-                context_messages, context_trace[0], context_rule, request.reposition
-            ).to_wire()
+            compiled = compile_chat_program(
+                context_messages, context_trace[0], context_rule, request.reposition, request.insert
+            )
+            prompt_ids = compiled.input_ids
+            context_program = compiled.to_wire()
         return MessageProcessingResult(
             prompt=prompt,
             prompt_ids=prompt_ids,
@@ -1970,9 +1977,11 @@ class OpenAIServingChat(OpenAIServingBase):
                 self.tokenizer_manager.tokenizer, conv, messages, prompt
             )
             prompt_ids = trace.input_ids
-            context_program = compile_chat_program(
-                messages, trace, context_rule, request.reposition
-            ).to_wire()
+            compiled = compile_chat_program(
+                messages, trace, context_rule, request.reposition, request.insert
+            )
+            prompt_ids = compiled.input_ids
+            context_program = compiled.to_wire()
         elif not is_multimodal:
             prompt_ids = self.tokenizer_manager.tokenizer.encode(prompt)
 
@@ -2269,6 +2278,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 ]
 
             sglext_full = SglExt(
+                **request.context_index_metadata(),
                 routed_experts=sglext_routed,
                 cached_tokens_details=sglext_cached_tokens_details,
                 spec_tokens_details=sglext_spec_tokens_details,
@@ -2433,8 +2443,11 @@ class OpenAIServingChat(OpenAIServingBase):
             or spec_tokens_details
             or input_ids is not None
             or output_ids is not None
+            or request.insert is not None
+            or any(m.index is not None for m in request.messages)
         ):
             response_sglext = SglExt(
+                **request.context_index_metadata(),
                 routed_experts=routed_experts,
                 cached_tokens_details=cached_tokens_details,
                 spec_tokens_details=spec_tokens_details,

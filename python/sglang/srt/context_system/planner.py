@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from dataclasses import dataclass, fields
+from itertools import pairwise
 from typing import Any
 
 import torch
@@ -317,6 +318,10 @@ class ContextProgram:
     layout: ContextLayout
     visible_until: torch.Tensor
 
+    @property
+    def input_ids(self):
+        return self.layout.records[self.layout.token_to_key, 1].tolist()
+
     def with_generated(self, token_ids) -> ContextProgram:
         from .ir import append_generated_layout
 
@@ -350,8 +355,10 @@ class ContextProgram:
         The tensors are immutable by convention throughout the request lifetime.
         """
         return {
-            "version": 3,
-            "layout": vars(self.layout),
+            "version": 5 if self.layout.insert_spans.numel() else 3,
+            "layout": {name: value for name, value in vars(self.layout).items()
+                       if self.layout.insert_spans.numel() or name not in
+                       {"logical_order", "logical_ranks", "insert_spans"}},
             "visible_until": self.visible_until,
         }
 
@@ -368,9 +375,9 @@ class ContextProgram:
             }
 
         return {
-            "version": 4,
+            "version": 6 if self.layout.insert_spans.numel() else 4,
             "layout": {
-                name: encode(value) for name, value in vars(self.layout).items()
+                name: encode(value) for name, value in self.to_wire()["layout"].items()
             },
             "visible_until": encode(self.visible_until),
         }
@@ -381,7 +388,7 @@ class ContextProgram:
         if (
             isinstance(wire, dict)
             and type(wire.get("version")) is int
-            and wire["version"] == 4
+            and wire["version"] in (4, 6)
         ):
             import base64
             import math
@@ -432,7 +439,7 @@ class ContextProgram:
             ):
                 raise ValueError("Invalid Context JSON wire")
             wire = {
-                "version": 3,
+                "version": wire["version"] - 1,
                 "layout": {
                     name: decode(name, value) for name, value in wire["layout"].items()
                 },
@@ -442,13 +449,14 @@ class ContextProgram:
             not isinstance(wire, dict)
             or set(wire) != {"version", "layout", "visible_until"}
             or type(wire["version"]) is not int
-            or wire["version"] != 3
+            or wire["version"] not in (3, 5)
         ):
             raise ValueError("Unsupported Context program wire version")
         data = wire["layout"]
-        if not isinstance(data, dict) or set(data) != {
-            field.name for field in fields(ContextLayout)
-        }:
+        expected = {field.name for field in fields(ContextLayout)}
+        if wire["version"] == 3:
+            expected -= {"logical_order", "logical_ranks", "insert_spans"}
+        if not isinstance(data, dict) or set(data) != expected:
             raise ValueError("Context layout fields do not match the wire schema")
         layout = ContextLayout(**data)
         n = len(input_ids)
@@ -518,7 +526,139 @@ class ContextProgram:
             torch.any(layout.positions < 0) | torch.any(layout.birth_positions < 0)
         ):
             raise ValueError("Context positions disagree with the Radix key")
+        if wire["version"] == 5 and not layout.insert_spans.numel():
+            raise ValueError("Insert wire requires Insert spans")
+        if layout.insert_spans.numel():
+            if layout.insert_spans.numel() % 3 or len(layout.logical_order) != n or len(layout.logical_ranks) != n:
+                raise ValueError("Invalid Context Insert permutation or spans")
+            order, ranks = layout.logical_order.to(torch.int64), layout.logical_ranks.to(torch.int64)
+            if (bool(torch.any(order < 0) | torch.any(order >= n))
+                    or not torch.equal(ranks[order], torch.arange(n))):
+                raise ValueError("Context logical and execution maps are not inverse permutations")
+            for start, end, depth in layout.insert_spans.reshape(-1, 3).tolist():
+                if not 0 < depth <= start < end <= n:
+                    raise ValueError("Context Insert anchor is not an ancestor token")
         return cls(layout, expiry)
+
+
+def _compile_insert_program(raw_messages, provenance, drop_rule, reposition, insert):
+    """Schedule message events, then permute one complete logical tokenization."""
+    import numpy as np
+
+    from .ir import compile_execution_layout
+    from .rules import InsertRule, MessageDropRule
+
+    rule = InsertRule.from_payload(insert, raw_messages)
+    ids = rule.message_ids
+    owners = {public: ordinal for ordinal, public in enumerate(ids)}
+    count, n = len(ids), len(provenance.input_ids)
+    compiler = TokenEventCompiler
+    token_owners = np.clip(np.asarray(provenance.owners), 0, count)
+    owner_ranges = compiler._build_owner_position_ranges(token_owners.tolist())
+    repos = reposition or []
+    if any(type(i) is not int or i not in owners for i in repos) or len(set(repos)) != len(repos):
+        raise ValueError("reposition must contain unique existing message indices")
+    repo_set = set(repos)
+
+    # Each negative message is born before following its child trigger. Children
+    # run before the parent's Drop/Reposition hooks, independent of JSON order.
+    schedule = []
+    for ordinary in (i for i in ids if i >= 0):
+        stack = [("post", ordinary), ("tokens", ordinary)]
+        if ordinary in rule.triggers:
+            stack.append(("insert", rule.triggers[ordinary]))
+        while stack:
+            kind, public = stack.pop()
+            if kind == "insert":
+                stack.extend([("post", public)])
+                if public in rule.triggers:
+                    stack.append(("insert", rule.triggers[public]))
+                stack.extend([("end", public), ("tokens", public), ("begin", public)])
+            else:
+                schedule.append((kind, public))
+
+    execution = []
+    for kind, public in schedule:
+        if kind == "tokens":
+            for a, b in owner_ranges.get(owners[public], ()):
+                execution.extend(range(a, b))
+    for a, b in owner_ranges.get(count, ()):
+        execution.extend(range(a, b))
+    if len(execution) != n or len(set(execution)) != n:
+        raise ValueError("Insert template ownership does not cover the logical token sequence")
+    ranks = np.asarray(execution, dtype=np.int32)
+    inverse = np.empty(n, dtype=np.int32)
+    inverse[ranks] = np.arange(n, dtype=np.int32)
+
+    other_events = {}
+    if drop_rule is not None and not isinstance(drop_rule, MessageDropRule):
+        context = DropCompileContext(
+            raw_messages=raw_messages, owner_ranges=owner_ranges,
+            provenance=provenance, normalized_message_count=count,
+            normalize_content=lambda content: _matchable_content({"content": content}, field="messages"),
+            rendered_source_start=compiler._rendered_source_start,
+            token_ranges_for_char_spans=compiler._token_ranges_for_char_spans,
+            canonicalize_ranges=compiler._canonicalize_position_ranges,
+            position_ranges_from_ids=compiler._position_ranges_from_ids,
+        )
+        other_events = {ids[k]: v for k, v in drop_rule.position_events(context).items()}
+
+    cursor, commands, spans = 0, [], []
+    born, covered, live = set(), [], []
+    expiry = np.full(n, np.iinfo(np.int32).max, dtype=np.int32)
+    insertion = None
+    for kind, public in schedule:
+        ordinal = owners[public]
+        ranges = owner_ranges.get(ordinal, ())
+        if kind == "begin":
+            if not ranges:
+                raise ValueError(f"insert message {public} owns no tokens")
+            first = ranges[0][0]
+            # Live ranges, not message IDs, resolve the first born successor.
+            successor = next((a for a, b in live if a > first), None)
+            if successor is None:
+                raise ValueError(f"insert message {public} has no already-born logical token anchor")
+            target = int(inverse[successor])
+            commands.append((cursor, 3, target, 0))
+            insertion = (cursor, target+1)
+        elif kind == "tokens":
+            born.add(public)
+            cursor += sum(b-a for a, b in ranges)
+            live = compiler._canonicalize_position_ranges([*live, *ranges])
+        elif kind == "end":
+            start, depth = insertion
+            commands.append((cursor, 4, 0, 0))
+            spans.append((start, cursor, depth))
+            insertion = None
+        else:
+            selected = []
+            if isinstance(drop_rule, MessageDropRule):
+                for target in drop_rule.drop_messages.get(public, ()):
+                    if target not in born:
+                        raise ValueError(f"drop_message[{public}] cannot drop unborn message {target}")
+                    selected.extend(owner_ranges.get(owners[target], ()))
+            else:
+                selected = other_events.get(public, [])
+            canonical = compiler._canonicalize_position_ranges(selected)
+            delta = compiler._subtract_position_ranges(canonical, covered)
+            if delta:
+                raw = np.sort(np.concatenate([inverse[a:b] for a, b in delta]))
+                if len(raw) and raw[-1] >= cursor:
+                    raise ValueError(f"drop_message[{public}] references unborn tokens")
+                cuts = np.r_[0, np.flatnonzero(np.diff(raw) != 1)+1, len(raw)]
+                for a, b in pairwise(cuts):
+                    commands.append((cursor, 1, int(raw[a]), int(raw[b-1])+1))
+                expiry[raw] = cursor
+                covered = compiler._canonicalize_position_ranges([*covered, *delta])
+                live = compiler._subtract_position_ranges(live, delta)
+            if public in repo_set:
+                if not live:
+                    raise ValueError(f"reposition {public} has no active tokens")
+                commands.append((cursor, 2, 0, 0))
+
+    tokens = np.asarray(provenance.input_ids, dtype=np.int32)[ranks]
+    layout = compile_execution_layout(tokens, commands, ranks, spans)
+    return ContextProgram(layout, torch.from_numpy(expiry))
 
 
 def compile_chat_program(
@@ -526,6 +666,7 @@ def compile_chat_program(
     provenance: TemplateTokenProvenance,
     drop_rule: DropRule | None,
     reposition: list[int] | None,
+    insert: dict | None = None,
 ) -> ContextProgram:
     """Compile one canonical native-template result; never render a prefix again.
 
@@ -533,6 +674,11 @@ def compile_chat_program(
     same IDs. Keep-text callers supply the full history selected by the rule.
     This function is called only after the no-feature fast-path decision.
     """
+    if any(message.get("index") is not None for message in raw_messages):
+        from .rules import InsertRule
+        InsertRule.from_payload(insert, raw_messages)
+    if insert:
+        return _compile_insert_program(raw_messages, provenance, drop_rule, reposition, insert)
     compiler = TokenEventCompiler
     message_count = len(raw_messages)
     epochs = compiler._query_epochs_from_owners(provenance.owners, message_count)

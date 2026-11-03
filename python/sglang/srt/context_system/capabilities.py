@@ -7,7 +7,7 @@ or acquire restrictions from these staged integration limits.
 from __future__ import annotations
 
 
-def validate_context_config(args, model_config):
+def validate_context_config(args, model_config, *, has_insert=False):
     if args.page_size != 1:
         raise ValueError("Context Drop/Reposition requires page_size=1")
     architectures = model_config.hf_config.architectures or ()
@@ -29,6 +29,8 @@ def validate_context_config(args, model_config):
     } and not qwen_hybrid:
         raise ValueError(f"Context Drop/Reposition is not supported by {architecture}")
     if qwen_hybrid:
+        if has_insert:
+            raise ValueError("Insert is not supported for Qwen3.8/Qwen3.5 hybrid Linear attention; its state semantics are pending")
         config = getattr(model_config.hf_config, "text_config", model_config.hf_config)
         # SGLang's Qwen config consumes HF layer_types during construction and
         # exposes the execution layout through layers_block_type instead.
@@ -125,4 +127,7 @@ def validate_context_request(args, model_config, request):
     # Validate tensor IPC or native PD rebootstrap JSON before scheduler IPC.
     from sglang.srt.context_system.planner import ContextProgram
 
-    return ContextProgram.from_wire(request.context_program, request.input_ids)
+    program = ContextProgram.from_wire(request.context_program, request.input_ids)
+    if program.layout.insert_spans.numel():
+        validate_context_config(args, model_config, has_insert=True)
+    return program

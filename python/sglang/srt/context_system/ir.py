@@ -25,13 +25,19 @@ from __future__ import annotations
 import time
 from array import array
 from bisect import bisect_left
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 import torch
 
 TOKEN_KIND = 0
 DELTA_KIND = 1
 REPOSITION_KIND = 2
+INSERT_BEGIN_KIND = 3
+INSERT_END_KIND = 4
+
+
+def _empty_i32():
+    return torch.empty(0, dtype=torch.int32)
 
 
 @dataclass(frozen=True)
@@ -58,6 +64,12 @@ class ContextLayout:
     ignored_repositions: torch.Tensor
     next_position: int
     compile_ns: int
+    # Empty on the original fast path. Otherwise these are inverse permutations
+    # of the full history, including tokens that have subsequently been dropped.
+    logical_order: torch.Tensor = field(default_factory=_empty_i32)
+    logical_ranks: torch.Tensor = field(default_factory=_empty_i32)
+    # Flattened (execution start, execution end, target birth-depth) triples.
+    insert_spans: torch.Tensor = field(default_factory=_empty_i32)
 
     @property
     def keys(self) -> torch.Tensor:
@@ -101,6 +113,10 @@ def append_generated_layout(layout: ContextLayout, token_ids) -> ContextLayout:
         birth_positions=torch.cat((layout.birth_positions, positions)),
         birth_stages=torch.cat((layout.birth_stages, stages)),
         next_position=layout.next_position + count,
+        logical_order=(torch.cat((layout.logical_order, torch.arange(n, n + count, dtype=torch.int32)))
+                       if layout.logical_order.numel() else layout.logical_order),
+        logical_ranks=(torch.cat((layout.logical_ranks, torch.arange(n, n + count, dtype=torch.int32)))
+                       if layout.logical_ranks.numel() else layout.logical_ranks),
     )
 
 
@@ -273,6 +289,61 @@ def compile_context_layout(
         compile_ns=time.perf_counter_ns() - compile_started_ns,
     )
 
+
+def compile_execution_layout(token_ids, commands, logical_ranks, insert_spans) -> ContextLayout:
+    """Compile an Insert execution program with the native count/fill compiler.
+
+    Commands are ordered (raw boundary, kind, start/anchor, end) records.
+    Real-token birth depths never depend on active length or tree edge splits.
+    """
+    started = time.perf_counter_ns()
+    tokens = torch.as_tensor(token_ids, dtype=torch.int32).contiguous()
+    commands = torch.as_tensor(commands, dtype=torch.int32).reshape(-1, 4).contiguous()
+    ranks = torch.as_tensor(logical_ranks, dtype=torch.int32).contiguous()
+    spans = torch.as_tensor(insert_spans, dtype=torch.int32).reshape(-1).contiguous()
+    n = len(tokens)
+    metadata = torch.empty((n, 5), dtype=torch.int32)
+    status = torch.empty(6, dtype=torch.int64)
+    native = _load_module().compile_insert_layout
+    native(tokens, commands.reshape(-1), ranks, metadata, _empty_i32(), status)
+    records_n, changes_n, stages_n, drops_n, repos_n, next_pos = status.tolist()
+    packed = torch.empty(3*records_n + stages_n+1 + 3*changes_n + drops_n+repos_n,
+                         dtype=torch.int32)
+    native(tokens, commands.reshape(-1), ranks, metadata, packed, status)
+    offset = 0
+
+    def take(count):
+        nonlocal offset
+        result = packed[offset:offset+count]
+        offset += count
+        return result
+
+    records = take(3*records_n).reshape(-1, 3)
+    transitions = take(stages_n+1)
+    changed, old, new = (take(changes_n) for _ in range(3))
+    repos_stage = take(repos_n)
+    drop_keys = take(drops_n).to(torch.int64)
+    real = records[:, 0] == TOKEN_KIND
+    token_keys = torch.nonzero(real).flatten()
+    key_tokens = torch.full((records_n,), -1, dtype=torch.int64)
+    key_tokens[token_keys] = torch.arange(n)
+    drops = commands[commands[:, 1] == DELTA_KIND]
+    positions, birth, birth_stage, ready, kept = (metadata[:, i].contiguous() for i in range(5))
+    return ContextLayout(
+        drop_insert_offsets=drops[:, 0].contiguous(),
+        drop_range_offsets=torch.arange(drops_n+1, dtype=torch.int32),
+        drop_ranges=drops[:, 2:].contiguous().reshape(-1),
+        records=records, virtual_mask=~real, key_to_token=key_tokens,
+        token_to_key=token_keys, positions=positions, keep_mask=kept.bool(),
+        materialized_stage=ready, birth_positions=birth, birth_stages=birth_stage,
+        transition_offsets=transitions, transition_raw_tokens=changed,
+        transition_old_positions=old, transition_new_positions=new,
+        effective_reposition_stages=repos_stage, drop_event_to_key=drop_keys,
+        effective_repositions=repos_stage >= 0, ignored_repositions=repos_stage < 0,
+        next_position=next_pos, compile_ns=time.perf_counter_ns()-started,
+        logical_order=torch.argsort(ranks).to(torch.int32),
+        logical_ranks=ranks, insert_spans=spans,
+    )
 
 def _load_text_match_module():
     from sglang.kernels.ops.attention.context_plan import load_context_text_match

@@ -457,6 +457,8 @@ class SglExt(BaseModel):
     )
     input_ids: Optional[List[int]] = None
     output_ids: Optional[List[List[int]]] = None
+    context_message_indices: Optional[List[int]] = None
+    context_next_message_index: Optional[int] = None
 
     def split_ids(self) -> Tuple[Optional[SglExt], Optional[SglExt]]:
         """Split set fields into (non_ids, ids); a side with no set fields is None."""
@@ -721,6 +723,14 @@ _GENERIC_MESSAGE_ROLES: Tuple[str, ...] = get_args(_GenericMessageRole)
 
 
 class ChatCompletionMessageGenericParam(BaseModel):
+    index: Optional[Annotated[int, Field(strict=True)]] = None
+
+    @field_validator("index", mode="before")
+    @classmethod
+    def validate_index(cls, value):
+        if value is not None and type(value) is not int:
+            raise ValueError("message index must be an integer; omit the field for automatic numbering")
+        return value
     role: _GenericMessageRole
     content: Union[str, List[ChatCompletionMessageContentPart], None] = Field(
         default=None
@@ -755,6 +765,12 @@ class ChatCompletionMessageGenericParam(BaseModel):
 
 
 class ChatCompletionMessageUserParam(BaseModel):
+    index: Optional[Annotated[int, Field(strict=True)]] = None
+
+    @field_validator("index", mode="before")
+    @classmethod
+    def validate_index(cls, value):
+        return ChatCompletionMessageGenericParam.validate_index(value)
     role: Literal["user"]
     content: Union[str, List[ChatCompletionMessageContentPart]]
 
@@ -862,7 +878,29 @@ class ChatCompletionRequest(BaseModel):
     # Public message IDs retain their meaning through native template processing.
     drop_message: Optional[Dict[str, Any]] = None
     drop_rule: Optional[Dict[str, Any]] = None
-    reposition: Optional[List[Annotated[int, Field(strict=True, ge=0)]]] = None
+    insert: Optional[Dict[str, Annotated[int, Field(strict=True, lt=0)]]] = None
+    reposition: Optional[List[Annotated[int, Field(strict=True)]]] = None
+
+    @model_validator(mode="after")
+    def validate_context_indices(self):
+        if self.insert is not None or any(m.index is not None for m in self.messages):
+            from sglang.srt.context_system.rules import InsertRule
+
+            messages = [m.model_dump() for m in self.messages]
+            if self.drop_rule and self.drop_rule.get("type") == "keep_text_drop":
+                messages = self.drop_rule.get("full_messages", messages)
+            InsertRule.from_payload(self.insert, messages)
+        return self
+
+    def context_index_metadata(self):
+        if self.insert is None and not any(m.index is not None for m in self.messages):
+            return {}
+        from sglang.srt.context_system.rules import normalize_message_indices
+
+        ids = normalize_message_indices([m.model_dump() for m in self.messages])
+        return {"context_message_indices": list(ids),
+                "context_next_message_index": sum(i >= 0 for i in ids)}
+
     model: str = Field(
         default=DEFAULT_MODEL_NAME,
         description="Model name. Supports LoRA adapters via 'base-model:adapter-name' syntax.",

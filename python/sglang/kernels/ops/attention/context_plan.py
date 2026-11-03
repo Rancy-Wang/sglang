@@ -531,8 +531,135 @@ auto compile_radix_reposition_layout(
   (void)head;
 }
 
+auto compile_insert_layout(
+    const tvm::ffi::TensorView token_ids,
+    const tvm::ffi::TensorView commands,
+    const tvm::ffi::TensorView logical_ranks,
+    const tvm::ffi::TensorView metadata,
+    const tvm::ffi::TensorView packed,
+    const tvm::ffi::TensorView status) -> void {
+  require(is_cpu_tensor(token_ids, 1, 32) &&
+          is_cpu_tensor(commands, 1, 32) && commands.size(0) % 4 == 0 &&
+          is_cpu_tensor(logical_ranks, 1, 32) &&
+          is_cpu_tensor(metadata, 2, 32) && metadata.size(1) == 5 &&
+          is_cpu_tensor(packed, 1, 32) && is_cpu_tensor(status, 1, 64) &&
+          status.size(0) == 6, "Invalid Insert compiler tensors");
+  const int64_t size = token_ids.size(0);
+  require(size > 0 && size < std::numeric_limits<int32_t>::max() &&
+          logical_ranks.size(0) == size && metadata.size(0) == size,
+          "Invalid Insert token count");
+  const int32_t n = static_cast<int32_t>(size);
+  const auto *tokens = static_cast<const int32_t *>(token_ids.data_ptr());
+  const auto *cmd = static_cast<const int32_t *>(commands.data_ptr());
+  const auto *rank = static_cast<const int32_t *>(logical_ranks.data_ptr());
+  auto *meta = static_cast<int32_t *>(metadata.data_ptr());
+  std::fill(meta, meta + size * 5, 0);
+  std::vector<int32_t> prev(n, -1), next(n, -1), token_key(n), seen(n, 0);
+  for (int32_t t = 0; t < n; ++t) {
+    require(rank[t] >= 0 && rank[t] < n && !seen[rank[t]]++,
+            "Logical ranks must be a permutation");
+    require(tokens[t] >= 0, "Token IDs must be non-negative");
+  }
+  std::vector<int32_t> records, offsets{0}, changed, old, fresh, repo_stage, drop_keys;
+  auto emit = [&](int32_t kind, int32_t a, int32_t b) {
+    records.push_back(kind); records.push_back(a); records.push_back(b);
+  };
+  int32_t head = -1, tail = -1, stage = 0, cursor = 0;
+  int32_t target = -1, insert_position = 0, insert_start = -1;
+  int64_t ci = 0, count = commands.size(0) / 4;
+  for (int32_t t = 0; t <= n; ++t) {
+    while (ci < count && cmd[4 * ci] == t) {
+      const int32_t kind = cmd[4 * ci + 1];
+      const int32_t a = cmd[4 * ci + 2], b = cmd[4 * ci + 3];
+      if (kind == 1) {
+        require(target < 0 && a >= 0 && a < b && b <= t,
+                "Drop must reference born tokens outside an open Insert");
+        drop_keys.push_back(static_cast<int32_t>(records.size() / 3));
+        for (int32_t x = a; x < b; ++x) {
+          require(meta[5*x+4], "Insert compiler requires delta-only Drop ranges");
+          int32_t before = prev[x], after = next[x];
+          if (before < 0) head = after; else next[before] = after;
+          if (after < 0) tail = before; else prev[after] = before;
+          meta[5*x+4] = 0;
+        }
+        emit(1, -a-1, -b-1);
+      } else if (kind == 2) {
+        require(target < 0 && head >= 0, "Reposition requires active tokens");
+        const size_t start = changed.size();
+        int32_t p = 0;
+        for (int32_t x = head; x >= 0; x = next[x], ++p) {
+          if (meta[5*x] != p) {
+            changed.push_back(x); old.push_back(meta[5*x]); fresh.push_back(p);
+          }
+        }
+        if (changed.size() != start) {
+          ++stage;
+          for (size_t k = start; k < changed.size(); ++k) {
+            meta[5*changed[k]] = fresh[k];
+            meta[5*changed[k]+3] = stage;
+          }
+          offsets.push_back(static_cast<int32_t>(changed.size()));
+          cursor = p;
+          repo_stage.push_back(stage);
+          emit(2, t-1, -1);
+        } else {
+          // Preserve the existing no-op R / tail-Drop continuation semantics.
+          repo_stage.push_back(-1);
+        }
+      } else if (kind == 3) {
+        require(target < 0 && a >= 0 && a < t && meta[5*a+4],
+                "Insert anchor must be an active, already born token");
+        require(t < n && rank[t] < rank[a] &&
+                (prev[a] < 0 || rank[prev[a]] < rank[t]),
+                "Insert anchor does not identify the immediate logical successor");
+        target = a; insert_start = t; insert_position = meta[5*a];
+        emit(3, a+1, 0);
+      } else if (kind == 4) {
+        require(target >= 0 && t > insert_start, "Unmatched or empty Insert end");
+        target = -1; insert_start = -1;
+        emit(4, 0, 0);
+      } else {
+        require(false, "Unknown Insert compiler operation");
+      }
+      ++ci;
+    }
+    require(ci == count || cmd[4*ci] > t, "Operation offsets are not ordered");
+    if (t == n) break;
+    const int32_t before = target >= 0 ? prev[target] : tail;
+    require((before < 0 || rank[before] < rank[t]) &&
+            (target < 0 || rank[t] < rank[target]),
+            "Execution schedule disagrees with logical token order");
+    const int32_t p = target >= 0 ? insert_position : cursor;
+    require(p >= 0 && p < std::numeric_limits<int32_t>::max(),
+            "Insert position exceeds int32 range");
+    if (target >= 0) ++insert_position; else ++cursor;
+    meta[5*t] = meta[5*t+1] = p;
+    meta[5*t+2] = meta[5*t+3] = stage; meta[5*t+4] = 1;
+    prev[t] = before; next[t] = target;
+    if (before < 0) head = t; else next[before] = t;
+    if (target < 0) tail = t; else prev[target] = t;
+    token_key[t] = static_cast<int32_t>(records.size() / 3);
+    emit(0, tokens[t], p);
+  }
+  require(ci == count && target < 0, "Unclosed Insert or out-of-range operation");
+  for (int32_t t = 0; t < n; ++t) records[3*token_key[t]+2] = meta[5*t];
+  auto *s = static_cast<int64_t *>(status.data_ptr());
+  s[0] = records.size()/3; s[1] = changed.size(); s[2] = stage;
+  s[3] = drop_keys.size(); s[4] = repo_stage.size(); s[5] = cursor;
+  const size_t required_size = records.size() + offsets.size() + 3*changed.size()
+                             + repo_stage.size() + drop_keys.size();
+  if (!packed.size(0)) return;
+  require(static_cast<size_t>(packed.size(0)) == required_size,
+          "Insert count/fill passes disagree");
+  auto *out = static_cast<int32_t *>(packed.data_ptr());
+  for (const auto *v : {&records, &offsets, &changed, &old, &fresh, &repo_stage, &drop_keys}) {
+    out = std::copy(v->begin(), v->end(), out);
+  }
+}
+
 } // namespace
 
+TVM_FFI_DLL_EXPORT_TYPED_FUNC(compile_insert_layout, compile_insert_layout);
 TVM_FFI_DLL_EXPORT_TYPED_FUNC(compile_radix_reposition_layout,
                               compile_radix_reposition_layout);
 TVM_FFI_DLL_EXPORT_TYPED_FUNC(count_radix_reposition_transitions,

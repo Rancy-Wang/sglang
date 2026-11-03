@@ -37,6 +37,88 @@ MAX_DROP_MESSAGES = 4096
 MAX_SELECTORS_PER_MESSAGE = 1024
 
 
+def message_index(value: Any, *, field: str) -> int:
+    """JSON object keys may be canonical decimal strings; values must be ints."""
+    if isinstance(value, str):
+        try:
+            parsed = int(value)
+        except ValueError:
+            parsed = None
+        if parsed is not None and str(parsed) == value:
+            value = parsed
+    if type(value) is not int or not -(1 << 31) < value < (1 << 31):
+        raise ValueError(f"{field} must be an int32 message index")
+    return value
+
+
+def normalize_message_indices(messages: Sequence[Mapping[str, Any]]) -> tuple[int, ...]:
+    """Public indices are distinct from the template's ordinal owner IDs."""
+    for owner, message in enumerate(messages):
+        if message.get("index") is not None and type(message["index"]) is not int:
+            raise ValueError(f"messages[{owner}].index must be an integer")
+    ordinary = [m for m in messages if m.get("index") is None or m["index"] >= 0]
+    explicit = [m.get("index") is not None for m in ordinary]
+    if any(explicit) and not all(explicit):
+        raise ValueError("messages.index: ordinary messages must all specify index or all omit it")
+    ids, next_index = [], 0
+    for owner, message in enumerate(messages):
+        value = message.get("index")
+        if value is not None:
+            if type(value) is not int:
+                raise ValueError(f"messages[{owner}].index must be an integer")
+            value = message_index(value, field=f"messages[{owner}].index")
+        if value is None or value >= 0:
+            if value is not None and value != next_index:
+                raise ValueError(f"messages[{owner}].index must be {next_index}; negative indices do not consume numbering")
+            value = next_index
+            next_index += 1
+        ids.append(value)
+    if len(set(ids)) != len(ids):
+        raise ValueError("messages.index must be unique")
+    negative = sorted(i for i in ids if i < 0)
+    if negative != list(range(-len(negative), 0)):
+        raise ValueError("inserted message indices must use -1, -2, ... without gaps")
+    return tuple(ids)
+
+
+@dataclass(frozen=True)
+class InsertRule:
+    message_ids: tuple[int, ...]
+    triggers: dict[int, int]
+
+    @classmethod
+    def from_payload(cls, payload, messages):
+        ids = normalize_message_indices(messages)
+        if payload is not None and not isinstance(payload, Mapping):
+            raise ValueError("insert must be an object of trigger-to-negative-index pairs")
+        triggers = {}
+        for key, value in (payload or {}).items():
+            trigger = message_index(key, field="insert trigger")
+            if type(value) is not int or value >= 0:
+                raise ValueError(f"insert[{key}] must be a negative integer message index")
+            if trigger not in ids or value not in ids:
+                raise ValueError(f"insert[{key}] references a missing message index")
+            if trigger in triggers:
+                raise ValueError(f"insert trigger {trigger} is repeated")
+            triggers[trigger] = value
+        values = list(triggers.values())
+        if len(values) != len(set(values)):
+            raise ValueError("insert cannot insert the same message more than once")
+        if set(values) != {i for i in ids if i < 0}:
+            raise ValueError("every negative-index message must have exactly one insert trigger")
+        reached = set()
+        for root in (i for i in ids if i >= 0):
+            cursor = root
+            while cursor in triggers:
+                cursor = triggers[cursor]
+                if cursor in reached:
+                    raise ValueError("insert contains a cycle or duplicate insertion")
+                reached.add(cursor)
+        if reached != set(values):
+            raise ValueError("insert contains an unreachable cycle")
+        return cls(ids, triggers)
+
+
 def _role(message: Mapping[str, Any]) -> str:
     role = str(message.get("role", "")).lower()
     return "tool" if role == "function" else role
@@ -169,11 +251,15 @@ class MessageDropRule:
                 "message_drop.drop_messages must be an object of trigger-to-ID lists"
             )
         normalized: dict[int, tuple[int, ...]] = {}
+        indexed = any(message.get("index") is not None for message in messages)
+        public_ids = set(normalize_message_indices(messages)) if indexed else set()
         unknown = set(payload) - {"type", "drop_messages"}
         if unknown:
             raise ValueError(f"message_drop has unsupported fields: {sorted(unknown)}")
         for raw_trigger, raw_ids in raw.items():
-            trigger = _nonnegative_int(raw_trigger, field="message_drop trigger")
+            trigger = (message_index if indexed else _nonnegative_int)(raw_trigger, field="message_drop trigger")
+            if indexed and trigger not in public_ids:
+                raise ValueError(f"drop_message trigger {trigger} is outside the conversation")
             if trigger >= (1 << 63):
                 raise ValueError(
                     "message_drop trigger is outside the signed int64 range"
@@ -184,16 +270,18 @@ class MessageDropRule:
                 )
             ids: list[int] = []
             for raw_id in raw_ids:
-                message_id = _nonnegative_int(raw_id, field="message_drop message ID")
+                message_id = (message_index if indexed else _nonnegative_int)(raw_id, field="message_drop message ID")
+                if indexed and message_id not in public_ids:
+                    raise ValueError(f"drop_message target {message_id} is outside the conversation")
                 if message_id >= (1 << 63):
                     raise ValueError(
                         "message_drop message ID is outside the signed int64 range"
                     )
-                if message_id > trigger:
+                if not indexed and message_id > trigger:
                     raise ValueError(
                         f"message_drop event {trigger} cannot drop future message {message_id}"
                     )
-                if trigger < len(messages) and message_id >= len(messages):
+                if not indexed and trigger < len(messages) and message_id >= len(messages):
                     raise ValueError(
                         f"message_drop message ID {message_id} is outside the current message range"
                     )

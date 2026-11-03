@@ -33,6 +33,16 @@ if TYPE_CHECKING:
     from .ir import ContextLayout
 
 
+def logical_prefix(layout, expiry, boundary, *, query=None):
+    """Born, live keys in logical order; query also excludes its logical suffix."""
+    if layout.logical_order.numel():
+        limit = len(expiry) if query is None else int(layout.logical_ranks[query])
+        candidates = layout.logical_order.numpy()[:limit]
+        return candidates[(candidates < boundary) & (expiry[candidates] > boundary)]
+    raw = np.arange(boundary, dtype=np.int32)
+    return raw[expiry[:boundary] > boundary]
+
+
 @dataclass(frozen=True)
 class ContextDecodeLayout:
     """Immutable final prompt view; generated KV stays in the native raw row."""
@@ -46,9 +56,15 @@ class ContextDecodeLayout:
 
     @classmethod
     def from_layout(cls, layout: ContextLayout, device) -> ContextDecodeLayout:
-        raw = np.flatnonzero(layout.keep_mask.numpy()).astype(np.int32)
+        order = getattr(layout, "logical_order", None)
+        permuted = order is not None and order.numel() != 0
+        if permuted:
+            order = layout.logical_order.numpy()
+            raw = order[layout.keep_mask.numpy()[order]].copy()
+        else:
+            raw = np.flatnonzero(layout.keep_mask.numpy()).astype(np.int32)
         positions = layout.positions.numpy()[raw].copy()
-        if np.any(np.diff(positions.astype(np.int64)) <= 0):
+        if not permuted and np.any(np.diff(positions.astype(np.int64)) <= 0):
             raise ValueError("Active decode positions must be strictly increasing")
         packed = torch.from_numpy(np.concatenate((raw, positions))).to(
             device=device, non_blocking=True
@@ -75,9 +91,9 @@ class ContextDecodeLayout:
             return 0
         generated = computed_raw - self.prompt_length
         lower = self.next_position + generated - 1 - window
-        index = int(np.searchsorted(self.positions, lower))
-        if index < len(self.raw_indices):
-            return int(self.raw_indices[index])
+        selected = self.raw_indices[self.positions >= lower]
+        if len(selected):
+            return int(selected.min())
         return self.prompt_length + max(0, lower - self.next_position)
 
 
@@ -199,6 +215,10 @@ def compile_occurrence_window(
         next_id += count
 
     covered = query_start
+    insert_cuts = (layout.insert_spans.reshape(-1, 3)[:, :2].reshape(-1).numpy()
+                   if layout.insert_spans.numel() else np.empty(0, dtype=np.int32))
+    order_cuts = (np.flatnonzero(np.diff(layout.logical_ranks.numpy()) != 1) + 1
+                  if layout.logical_ranks.numel() else np.empty(0, dtype=np.int32))
     for stage in range(stage_count + 1):
         if stage:
             begin, end = int(offsets[stage - 1]), int(offsets[stage])
@@ -226,13 +246,15 @@ def compile_occurrence_window(
                 "Occurrence stages do not cover the requested query window."
             )
         values = expiry[:local_end]
-        cuts = [
+        cuts = np.unique([
             local_start,
             *np.unique(values[(values > local_start) & (values < local_end)]),
+            *insert_cuts[(insert_cuts > local_start) & (insert_cuts < local_end)],
+            *order_cuts[(order_cuts > local_start) & (order_cuts < local_end)],
             local_end,
-        ]
+        ])
         for start, end in pairwise(cuts):
-            active = raw[:start][expiry[:start] > start]
+            active = logical_prefix(layout, expiry, start, query=start)
             materialize(active)
             selected = np.concatenate((current_ids[active], raw[start:end]))
             if not len(selected) or selected[-1] != end - 1:

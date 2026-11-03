@@ -1610,6 +1610,8 @@ class Req(ReqDllmMixin):
             swa_resident=swa,
             swa_query_starts=self.context_swa_query_starts,
             swa_terminal_required=terminal,
+            layout=program.layout,
+            swa_window=self.context_swa_window,
         )
         if recovery.start < matched:
             # Like mini, restore source versions only for historical repair.
@@ -1626,6 +1628,8 @@ class Req(ReqDllmMixin):
                 swa_resident=swa,
                 swa_query_starts=self.context_swa_query_starts,
                 swa_terminal_required=terminal,
+                layout=program.layout,
+                swa_window=self.context_swa_window,
             )
         self.context_recovery_plan = recovery
         self.context_recovery_source = None
@@ -1674,6 +1678,8 @@ class Req(ReqDllmMixin):
                 if b > cursor
             ),
             min(length, n),
+            layout=program.layout,
+            window=self.context_swa_window,
         )
         required |= program.layout.keep_mask[: len(required)] & (
             program.layout.positions[: len(required)]
