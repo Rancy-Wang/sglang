@@ -491,6 +491,9 @@ class ContextProgram:
         records = layout.records
         if records.shape[1] != 3:
             raise ValueError("Context key records must have three columns")
+        max_kind = 4 if wire["version"] == 5 else 2
+        if bool(torch.any(records[:, 0] < 0) | torch.any(records[:, 0] > max_kind)):
+            raise ValueError("Context key record kind is invalid for its wire version")
         for name in (
             "token_to_key",
             "positions",

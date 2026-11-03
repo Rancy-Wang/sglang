@@ -199,9 +199,21 @@ class ContextAttentionMetadata:
             positions = np.r_[kpos[x:y], qpos[a:b]]
             indices = np.r_[np.arange(x, y), prefix_count + np.arange(a, b)]
             if window >= 0 and np.any(np.diff(positions) != 1):
+                monotone = not np.any(positions[1:] < positions[:-1])
+                candidates = (None if monotone else
+                              np.flatnonzero(kpos[x:y] >= qpos[a] - window))
                 for query in range(a, b):
-                    end = y - x + query - a + 1
-                    selected = indices[:end][positions[:end] >= qpos[query] - window]
+                    lower = qpos[query] - window
+                    if monotone:
+                        end = y - x + query - a + 1
+                        start = np.searchsorted(positions[:end], lower)
+                        selected = indices[start:end]
+                    else:
+                        # Scan the prefix once per segment, then only candidates
+                        # in its first window. Never scan all N keys per query.
+                        kept = candidates[kpos[x + candidates] >= lower]
+                        first = a + np.searchsorted(qpos[a:query+1], lower)
+                        selected = np.r_[x + kept, prefix_count + np.arange(first, query+1)]
                     gathers.append(selected)
                     q_lengths.append(1)
                     k_lengths.append(len(selected))
@@ -721,7 +733,7 @@ class ContextDecodeRegistry:
                     count,
                     layout.next_position,
                     row_pointer,
-                    int(np.any(np.diff(layout.positions.astype(np.int64)) < 0)),
+                    int(not layout.positions_monotone),
                 )
             )
             lengths.append(count + generated)
@@ -747,7 +759,7 @@ class ContextDecodeRegistry:
                 lengths.append(min(generated, window + 1))
             else:
                 lower = layout.next_position + generated - 1 - window
-                lengths.append(int(np.count_nonzero(layout.positions >= lower)) + min(generated, window + 1))
+                lengths.append(len(layout.positions) - int(np.searchsorted(layout.sorted_positions, lower)) + min(generated, window + 1))
         # Native decode graph padding uses seq_len=1; its outputs are discarded.
         return torch.tensor(lengths + [1] * (batch_size - len(lengths)), dtype=torch.int64)
 

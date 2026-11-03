@@ -329,6 +329,8 @@ def compile_execution_layout(token_ids, commands, logical_ranks, insert_spans) -
     key_tokens[token_keys] = torch.arange(n)
     drops = commands[commands[:, 1] == DELTA_KIND]
     positions, birth, birth_stage, ready, kept = (metadata[:, i].contiguous() for i in range(5))
+    logical_order = torch.empty_like(ranks)
+    logical_order[ranks.to(torch.int64)] = torch.arange(n, dtype=torch.int32)
     return ContextLayout(
         drop_insert_offsets=drops[:, 0].contiguous(),
         drop_range_offsets=torch.arange(drops_n+1, dtype=torch.int32),
@@ -341,7 +343,7 @@ def compile_execution_layout(token_ids, commands, logical_ranks, insert_spans) -
         effective_reposition_stages=repos_stage, drop_event_to_key=drop_keys,
         effective_repositions=repos_stage >= 0, ignored_repositions=repos_stage < 0,
         next_position=next_pos, compile_ns=time.perf_counter_ns()-started,
-        logical_order=torch.argsort(ranks).to(torch.int32),
+        logical_order=logical_order,
         logical_ranks=ranks, insert_spans=spans,
     )
 
@@ -381,6 +383,7 @@ class ContextKeyData:
     retry_records: array
     event_tokens: array
     positions: array
+    has_insert: bool = False
 
     @classmethod
     def from_layout(cls, layout: ContextLayout) -> ContextKeyData:
@@ -407,7 +410,8 @@ class ContextKeyData:
         positions = array("i")
         positions.frombytes(layout.positions.numpy().tobytes())
         return cls(
-            records, token_map, special_tokens, retry_records, event_tokens, positions
+            records, token_map, special_tokens, retry_records, event_tokens, positions,
+            bool(layout.insert_spans.numel()),
         )
 
     def append_tokens(self, token_ids: array, *, next_position: int) -> None:

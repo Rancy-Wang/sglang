@@ -53,6 +53,9 @@ class ContextDecodeLayout:
     device_positions: torch.Tensor
     prompt_length: int
     next_position: int
+    positions_monotone: bool
+    sorted_positions: np.ndarray
+    sorted_raw_suffix_min: np.ndarray
 
     @classmethod
     def from_layout(cls, layout: ContextLayout, device) -> ContextDecodeLayout:
@@ -66,6 +69,13 @@ class ContextDecodeLayout:
         positions = layout.positions.numpy()[raw].copy()
         if not permuted and np.any(np.diff(positions.astype(np.int64)) <= 0):
             raise ValueError("Active decode positions must be strictly increasing")
+        monotone = not np.any(positions[1:] < positions[:-1])
+        # Build once. Decode window counts and safe raw release floors then
+        # cost O(log N), even when Insert leaves overlapping position ranges.
+        order_by_position = np.arange(len(raw)) if monotone else np.argsort(positions)
+        sorted_positions = positions[order_by_position]
+        sorted_raw = raw[order_by_position]
+        suffix_min = np.minimum.accumulate(sorted_raw[::-1])[::-1].copy()
         packed = torch.from_numpy(np.concatenate((raw, positions))).to(
             device=device, non_blocking=True
         )
@@ -79,6 +89,9 @@ class ContextDecodeLayout:
             packed[len(raw) :] if len(raw) else packed,
             len(layout.positions),
             layout.next_position,
+            bool(monotone),
+            sorted_positions,
+            suffix_min,
         )
 
     def swa_raw_floor(self, computed_raw: int, window: int) -> int:
@@ -91,9 +104,9 @@ class ContextDecodeLayout:
             return 0
         generated = computed_raw - self.prompt_length
         lower = self.next_position + generated - 1 - window
-        selected = self.raw_indices[self.positions >= lower]
-        if len(selected):
-            return int(selected.min())
+        start = int(np.searchsorted(self.sorted_positions, lower))
+        if start < len(self.raw_indices):
+            return int(self.sorted_raw_suffix_min[start])
         return self.prompt_length + max(0, lower - self.next_position)
 
 

@@ -76,6 +76,11 @@ def test_decode_order_wire_and_chunks(context_modules, nested, repos, width):
     occurrence = importlib.import_module(planner.__package__ + ".occurrence")
     decoded = occurrence.ContextDecodeLayout.from_layout(p.layout, "cpu")
     assert p.layout.logical_ranks[decoded.raw_indices].tolist() == sorted(p.layout.logical_ranks[decoded.raw_indices].tolist())
+    for generated in (1, 7, 100):
+        lower = p.layout.next_position + generated - 1 - 9
+        selected = decoded.raw_indices[decoded.positions >= lower]
+        expected_floor = int(selected.min()) if len(selected) else len(p.input_ids) + max(0, lower-p.layout.next_position)
+        assert decoded.swa_raw_floor(len(p.input_ids)+generated, 9) == expected_floor
     expected = all_reads(context_modules, p)
     n = len(p.input_ids)
     for a, b in [(0, 2), (n//2, n), (n-2, n)]:

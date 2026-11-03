@@ -1071,7 +1071,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         # Insert's logical SWA window need not be an execution-order suffix.
         # Match Full history first; recovery validates every actual SWA reader
         # against the returned residency map before any attention is dispatched.
-        insert_history = key.context is not None and 3 in key.context.records[0::3]
+        insert_history = key.context is not None and key.context.has_insert
 
         def advance(node, length, suffix):
             if node.evicted:
