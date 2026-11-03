@@ -11,16 +11,17 @@ import json
 from pathlib import Path
 
 
-def token_units(key, *, depth=0, retry=False):
+def token_units(key, *, depth=0, retry=False, count=None):
     """Independent real-token units, retaining every preceding virtual event."""
     context = key.context
+    count = len(key) if count is None else min(count, len(key))
     if context is None:
         return [
             ((0, int(token), 0 if retry else depth + i),)
-            for i, token in enumerate(key.token_ids[: len(key)])
+            for i, token in enumerate(key.token_ids[:count])
         ]
     result = []
-    for raw in range(key.context_start, key.context_start + len(key)):
+    for raw in range(key.context_start, key.context_start + count):
         begin = context.token_to_record[raw - 1] + 1 if raw else 0
         end = context.token_to_record[raw] + 1
         unit = []
@@ -55,6 +56,9 @@ def brute_frontier(root, key, *, retry=False):
             ):
                 continue
             visited += 1
+            first = token_units(child.key, depth=depth, retry=retry, count=1)
+            if not first or first[0] != wanted[depth]:
+                continue
             units = token_units(child.key, depth=depth, retry=retry)
             matched = common_units(units, wanted[depth:])
             best = max(best, depth + matched)
@@ -133,13 +137,20 @@ def create_cache_audit(config):
         return
     UnifiedRadixCache._insert_state_audit = True
     native = UnifiedRadixCache.match_prefix
+    native_finished = UnifiedRadixCache._cache_finished_req_native
     rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
     output = Path(config["output"] + f".rank{rank}.jsonl")
     output.parent.mkdir(parents=True, exist_ok=True)
     sequence = 0
 
-    def match(cache, params):
+    def emit(report):
         nonlocal sequence
+        report["sequence"] = sequence
+        sequence += 1
+        with output.open("a") as target:
+            target.write(json.dumps(report) + "\n")
+
+    def match(cache, params):
         key = params.key
         enabled = (
             key.context is not None
@@ -158,17 +169,41 @@ def create_cache_audit(config):
         result = native(cache, params)
         report = audit_match(cache, key, result, expected)
         report.update(
-            sequence=sequence,
+            kind="match",
+            rid=getattr(params.req, "rid", None),
             key_sha256=hashlib.sha256(key.context.records.tobytes()).hexdigest(),
         )
-        sequence += 1
-        with output.open("a") as target:
-            target.write(json.dumps(report) + "\n")
+        emit(report)
         if not report["pass"] and config.get("fail_fast", True):
             raise AssertionError(f"Insert state audit failed: {report}")
         return result
 
+    def finished(cache, req, *args, **kwargs):
+        key = (
+            req.make_prefix_key(req.origin_input_ids)
+            if req.context_program is not None
+            else None
+        )
+        result = native_finished(cache, req, *args, **kwargs)
+        if key is not None and key.context is not None and key.context.has_insert:
+            # Record the real publication frontier without asserting that every
+            # old token must remain resident: eviction and a trailing Drop with
+            # no computed successor can legitimately limit publication.
+            emit(
+                {
+                    "kind": "publication",
+                    "rid": req.rid,
+                    "input_tokens": len(key),
+                    "oracle_exact": brute_frontier(cache.tree_core.root_node, key)[0],
+                    "oracle_retry": brute_frontier(
+                        cache.tree_core.root_node, key, retry=True
+                    )[0],
+                }
+            )
+        return result
+
     UnifiedRadixCache.match_prefix = match
+    UnifiedRadixCache._cache_finished_req_native = finished
 
 
 def active_messages(payload):
