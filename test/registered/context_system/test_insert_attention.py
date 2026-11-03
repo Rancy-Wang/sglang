@@ -122,6 +122,42 @@ def test_nonmonotone_swa_gather_graph(context_modules, tail_dropped):
         assert out[:len(raw)].tolist() == [256+r for r in raw]
 
 
+@pytest.mark.parametrize("window_size", [0, 3, 128])
+def test_random_swa_graph_matches_logical_tail(window_size):
+    from sglang.srt.context_system.occurrence import ContextDecodeLayout
+    from sglang.srt.layers.attention.context_backend import ContextDecodeRegistry
+
+    torch.manual_seed(931)
+    table = torch.randperm(4096, device="cuda", dtype=torch.int32).reshape(2, 2048)
+    registry = ContextDecodeRegistry(SimpleNamespace(page_size=1, defer_read_translate=False,
+        req_to_token=table, is_translating=False), SimpleNamespace())
+    rows = torch.tensor([1], device="cuda")
+    for _ in range(20):
+        layout = SimpleNamespace(positions=torch.randint(0, 160, (257,), dtype=torch.int32),
+                                 keep_mask=torch.rand(257) > .2,
+                                 logical_order=torch.randperm(257, dtype=torch.int32), next_position=80)
+        view = ContextDecodeLayout.from_layout(layout, "cuda")
+        req = SimpleNamespace(context_program=SimpleNamespace(layout=layout), context_decode_layout=view)
+        _, lengths, _, _ = registry.bind_batch([req], [258], rows)
+        ptr = torch.zeros(2, device="cuda", dtype=torch.int32)
+        output = torch.empty(256, device="cuda", dtype=torch.int64)
+        def run():
+            registry.fill_window(rows, lengths, ptr, window_size, output)
+        run()
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            run()
+        for generated in (1, 2, 4, 129, 150):
+            _, updated, _, _ = registry.bind_batch([req], [257+generated], rows)
+            lengths.copy_(updated)
+            graph.replay()
+            lower = 80 + generated - 1 - window_size
+            raw = [int(r) for r, pos in zip(view.raw_indices, view.positions) if pos >= lower]
+            raw += [257+i for i in range(generated) if 80+i >= lower]
+            expected = table[1, raw[-(window_size+1):]].tolist()
+            assert output[:int(ptr[-1])].tolist() == expected
+
+
 @pytest.mark.skipif(not os.environ.get("CONTEXT_INSERT_KV_TRACES"), reason="saved model KV probes required")
 @pytest.mark.parametrize("rank", [0, 1])
 @pytest.mark.parametrize("layer", range(4))

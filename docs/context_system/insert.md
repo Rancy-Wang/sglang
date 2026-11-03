@@ -329,6 +329,6 @@ Qwen/Linear Insert 的全部支持修改和模型实验继续 Pending；当前�
 - `test_insert_attention.py` 加入整段 Q 的置换对照：同步置换段的 Q/K/V、位置、读集和
   causal 边界后，逆置换输出应相等。只改变 Q 的顺序而未保留这些关系不具备等价保证。
 
-本地 CPU 已运行 frontend/IR/recovery/decode/audit 组合：109 passed、3 skipped。
+本地 CPU 已运行 frontend/IR/recovery/decode/audit 组合：147 passed、77 skipped（组合中包括 GPU/服务测试跳过）。
 GPU、实际树 Linux 用例、10 题无 flush 轨迹、冻结 logits 和性能对照仍待独立新环境验证。
 旧的 56 项比较中 10 项失败保持 FAIL；本轮尚未确定其原因，不能归为 BF16 误差。
