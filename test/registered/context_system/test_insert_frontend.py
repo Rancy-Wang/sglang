@@ -60,6 +60,12 @@ def test_unborn_anchor_and_drop_rejected(context_modules):
         planner.compile_chat_program(ms, trace, drop, [], {3: -1, -1: -2})
 
 
+def test_indexed_future_drop_rejected_before_tokenization(context_modules):
+    ms = [{"index": i, "role": "user", "content": ""} for i in range(2)]
+    with pytest.raises(ValueError, match="future message"):
+        context_modules[0].parse_drop_rule(None, ms, legacy_drop_message={0: [1]})
+
+
 @pytest.mark.skipif(sys.platform != "linux", reason="native SRT runtime requires Linux")
 def test_native_frontend_and_qwen_rejection(chat):
     from sglang.srt.context_system.planner import ContextProgram

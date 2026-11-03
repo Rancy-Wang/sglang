@@ -277,7 +277,10 @@ class MessageDropRule:
                     raise ValueError(
                         "message_drop message ID is outside the signed int64 range"
                     )
-                if not indexed and message_id > trigger:
+                # Ordinary messages retain their relative execution order even
+                # with Insert. Reject future IDs before tokenization, including
+                # messages which the template could render with no tokens.
+                if message_id > trigger and (not indexed or min(message_id, trigger) >= 0):
                     raise ValueError(
                         f"message_drop event {trigger} cannot drop future message {message_id}"
                     )

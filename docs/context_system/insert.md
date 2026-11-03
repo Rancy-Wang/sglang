@@ -146,4 +146,28 @@ python benchmark/context_system/insert_summary48k.py \
 不能代替完整预算验收。原始数据 SHA256、请求/响应、summary 文本、输入 hash、耗时和
 服务端 usage 都留档。每道题必须实际触发 summary 才算覆盖；Qwen Insert 仅验拒绝行为。
 
-实际运行结果随验证完成后补充，未完成的端到端实验不能据上述用例描述视为通过。
+默认在每个 summary 事件后冻结同一请求，比较 warm、exact、flush 后 cold 的全词表 logits。
+因此服务端需开启 `--enable-custom-logit-processor`，且驱动与服务端能访问相同的输出路径。
+`--skip-numeric` 只供独立性能实验使用；验收不能跳过数值比较。包含 flush 的整轮耗时
+不是纯吞吐测试结果，不能据此声称端到端无性能回退。
+
+## 已完成验证与待验收项
+
+生产实现检查点为 `26ab16e3df`；`99aa76ad9c` 增加 frozen replay 验收与文档。
+以下不同命令的用例有重叠，不应把通过数简单相加。
+
+| 验证 | 结果 | 范围 |
+| --- | --- | --- |
+| 本地 CPU 混合回归 | 427 passed / 13 skipped | Insert、IR、rules、attention plan、decode |
+| 本地最新新增测试与 benchmark 测试 | 94 passed / 10 skipped | 增加 ragged adapter 窗口 oracle |
+| InfiniAI-BUS-2 原生回归 | 295 passed / 13 skipped | frontend、unified cache、ownership、admission、storage、GPU |
+| Tengxuan-BUS-2 GPU 3 | 11 passed | Insert segment attention、非单调 SWA gather、decode CUDA graph |
+
+本地 49152-token 合成程序（嵌套 Insert、Drop、R；12 次取后 10 次中位数）中，
+编译约 10.29 ms、key 构建约 0.74 ms、warm recovery 规划约 1.47 ms。
+这是 CPU 元数据测量，不含 tokenizer、模型 forward 或网络，不代表端到端速度。
+前后样本存在噪声，不能据该测量声称编译/恢复有稳定百分比加速。
+
+GPT-OSS HTTP 请求链、10 题 48K summary、完整预算及实际性能验收仍待完成。
+InfiniAI-BUS-2 的两次长上下文启动受到其他作业显存占用影响；相关失败归为
+`ENVIRONMENT_BLOCKER`，不计通过。已改用用户指定的 Tengxuan-BUS-2 GPU 0/1。
