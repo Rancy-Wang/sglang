@@ -123,7 +123,7 @@ class History:
         self.negative -= 1
 
 
-def select_summary(messages, owners, keep_recent=20000):
+def select_summary(messages, owners, keep_recent=20000, *, trigger=None, summary_budget=4096):
     """Retain a complete recent protocol group and the initial task prefix."""
     counts = [0] * len(messages)
     for owner in owners:
@@ -140,9 +140,38 @@ def select_summary(messages, owners, keep_recent=20000):
         total += counts[cut]
     while cut > protected and messages[cut]["role"] == "tool":
         cut -= 1
+    if trigger is not None:
+        pending = next(i for i, m in enumerate(messages) if m["index"] >= trigger)
+        # Keep an already-computed anchor and whole assistant/tool groups. The
+        # recent-token target is approximate: one huge completed group must not
+        # force every later turn to retain more than the summary threshold.
+        eligible = [i for i in range(protected + 1, pending)
+                    if messages[i]["role"] != "tool"]
+        if not eligible:
+            raise ValueError("No complete older groups with a computed Insert anchor")
+        cut = max((i for i in eligible if i <= cut), default=eligible[0])
+        suffix = [0] * (len(counts) + 1)
+        for i in range(len(counts)-1, -1, -1):
+            suffix[i] = suffix[i+1] + counts[i]
+        room = THRESHOLD - summary_budget - sum(counts[:protected])
+        if suffix[cut] > room:
+            cut = next((i for i in eligible if i >= cut and suffix[i] <= room), eligible[-1])
     if cut <= protected or cut >= len(messages):
         raise ValueError("No complete older protocol groups available for summary")
     return messages[protected:cut], messages[cut]["index"]
+
+
+def validate_summary_size(before_tokens, after_tokens, pending_tokens):
+    """48K triggers compression; a single oversized new input is not truncated.
+
+    The native request admission still enforces the model's real context limit.
+    A later turn can summarize this input once it has actually been computed.
+    """
+    if after_tokens >= before_tokens:
+        raise ValueError("Processed summary did not shorten the active input")
+    if after_tokens >= THRESHOLD and pending_tokens < THRESHOLD:
+        raise ValueError("Processed summary did not reduce active input below 48K")
+    return after_tokens >= THRESHOLD
 
 
 def summary_messages(protected, selected):
@@ -282,15 +311,22 @@ def run(args):
                 active = state.active()
                 ids, owners = render(active)
                 if len(ids) >= THRESHOLD:
-                    selected, anchor = select_summary(active, owners, args.keep_recent)
+                    selected, anchor = select_summary(
+                        active, owners, args.keep_recent, trigger=trigger,
+                        summary_budget=args.summary_tokens,
+                    )
                     response = call({"messages": summary_messages(active[:1], selected),
                         "max_tokens": args.summary_tokens, "reasoning_effort": "low"}, f"{case_id}-summary-{summaries}")
                     text = process_summary(response)
                     candidate = copy.deepcopy(state)
                     candidate.commit([m["index"] for m in selected], anchor, trigger, text)
                     active_ids, _ = render(candidate.active())
-                    if len(active_ids) >= THRESHOLD:
-                        raise ValueError("Processed summary did not reduce active input below 48K")
+                    pending_owners = {i for i, m in enumerate(active) if m["index"] >= trigger}
+                    pending_tokens = sum(owner in pending_owners for owner in owners)
+                    if validate_summary_size(len(ids), len(active_ids), pending_tokens):
+                        emit({"kind": "oversized_pending", "case_id": case_id,
+                              "turn": turn["turn"], "pending_tokens": pending_tokens,
+                              "after_tokens": len(active_ids)})
                     state = candidate
                     summaries += 1
                     inserted = True
