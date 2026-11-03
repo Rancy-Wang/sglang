@@ -38,7 +38,11 @@ def create_decode_read_probe(config):
         if req.context_program is None:
             pairs = [(i, i) for i in range(pos+1)]
             if window >= 0:
-                pairs = pairs[-(window+1):]
+                # The unchanged native Triton decode helper treats its window
+                # argument as total capacity, unlike the inclusive position
+                # predicate used by Context. Keep this control distinct; do
+                # not silently change production native behavior in a probe.
+                pairs = pairs[-window:] if window else []
         else:
             layout = req.context_program.layout
             pairs = brute_decode_reads(layout, pos-int(layout.next_position)+1, window)
@@ -71,6 +75,8 @@ def create_decode_read_probe(config):
                                 vv.repeat_interleave(groups, 1))
         error = (output.reshape_as(expected).float()-expected).abs()
         report = dict(layer=layer.layer_id, rank=rank, position=pos,
+                      rule="native-capacity" if req.context_program is None else "context-inclusive-distance",
+                      window=window,
                       read_count=len(actual), expected_count=len(pairs), slots_ok=slots_ok,
                       max_abs=float(error.max()), mean_abs=float(error.mean()),
                       fp32_close=bool(torch.all(error <= .0078125 + .0078125*expected.abs())))
