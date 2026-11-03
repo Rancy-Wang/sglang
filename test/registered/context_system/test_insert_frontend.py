@@ -27,8 +27,19 @@ def test_single_tokenization_and_default_indices(context_modules, explicit):
     assert tokenizer.calls == 1
     assert rules.normalize_message_indices(ms) == (0, 1, -2, -1, 2, 3)
     assert sorted(p.input_ids) == sorted(trace.input_ids)
-    assert p.to_wire()["version"] == 5
-    assert p.to_json_wire()["version"] == 6
+    assert p.to_wire()["version"] == 7
+    assert p.to_json_wire()["version"] == 8
+
+
+@pytest.mark.parametrize("json_wire,old_version", [(False, 5), (True, 6)])
+def test_old_insert_window_semantics_rejected(context_modules, json_wire, old_version):
+    from test_insert_ir import program
+
+    p = program(context_modules)
+    wire = p.to_json_wire() if json_wire else p.to_wire()
+    wire["version"] = old_version
+    with pytest.raises(ValueError, match="version"):
+        context_modules[2].ContextProgram.from_wire(wire, p.input_ids)
 
 
 @pytest.mark.parametrize("indices,insert,error", [

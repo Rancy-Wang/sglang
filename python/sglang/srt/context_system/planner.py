@@ -355,7 +355,7 @@ class ContextProgram:
         The tensors are immutable by convention throughout the request lifetime.
         """
         return {
-            "version": 5 if self.layout.insert_spans.numel() else 3,
+            "version": 7 if self.layout.insert_spans.numel() else 3,
             "layout": {name: value for name, value in vars(self.layout).items()
                        if self.layout.insert_spans.numel() or name not in
                        {"logical_order", "logical_ranks", "insert_spans"}},
@@ -375,7 +375,7 @@ class ContextProgram:
             }
 
         return {
-            "version": 6 if self.layout.insert_spans.numel() else 4,
+            "version": 8 if self.layout.insert_spans.numel() else 4,
             "layout": {
                 name: encode(value) for name, value in self.to_wire()["layout"].items()
             },
@@ -388,7 +388,7 @@ class ContextProgram:
         if (
             isinstance(wire, dict)
             and type(wire.get("version")) is int
-            and wire["version"] in (4, 6)
+            and wire["version"] in (4, 8)
         ):
             import base64
             import math
@@ -449,7 +449,7 @@ class ContextProgram:
             not isinstance(wire, dict)
             or set(wire) != {"version", "layout", "visible_until"}
             or type(wire["version"]) is not int
-            or wire["version"] not in (3, 5)
+            or wire["version"] not in (3, 7)
         ):
             raise ValueError("Unsupported Context program wire version")
         data = wire["layout"]
@@ -491,7 +491,7 @@ class ContextProgram:
         records = layout.records
         if records.shape[1] != 3:
             raise ValueError("Context key records must have three columns")
-        max_kind = 4 if wire["version"] == 5 else 2
+        max_kind = 4 if wire["version"] == 7 else 2
         if bool(torch.any(records[:, 0] < 0) | torch.any(records[:, 0] > max_kind)):
             raise ValueError("Context key record kind is invalid for its wire version")
         for name in (
@@ -529,7 +529,7 @@ class ContextProgram:
             torch.any(layout.positions < 0) | torch.any(layout.birth_positions < 0)
         ):
             raise ValueError("Context positions disagree with the Radix key")
-        if wire["version"] == 5 and not layout.insert_spans.numel():
+        if wire["version"] == 7 and not layout.insert_spans.numel():
             raise ValueError("Insert wire requires Insert spans")
         if layout.insert_spans.numel():
             if layout.insert_spans.numel() % 3 or len(layout.logical_order) != n or len(layout.logical_ranks) != n:

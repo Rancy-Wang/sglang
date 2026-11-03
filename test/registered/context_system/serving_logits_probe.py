@@ -1,6 +1,54 @@
 """Opt-in numerical instrumentation, excluded from throughput measurements."""
 
 
+def create_bounded_attention_probe(config):
+    """Sample final query rows at each layer, never dump a long prefix KV pool.
+
+    Register on ``*.self_attn.attn`` with native ``--forward-hooks``. Set
+    custom_params.context_layer_probe=true and context_trace_path per request;
+    disable CUDA graphs for the diagnostic run. Samples include each chunk,
+    so compare the last extend call before decode, not a different chunk end.
+    This localizes layer divergence; it is not itself a semantic KV oracle.
+    """
+    from pathlib import Path
+
+    import torch
+
+    layers = set(config["layers"]) if "layers" in config else None
+    rows = int(config.get("rows", 4))
+    if not 1 <= rows <= 32:
+        raise ValueError("Layer probe rows must be between 1 and 32")
+    counts = {}
+
+    def hook(layer, args, output):
+        if len(args) < 4 or (layers is not None and layer.layer_id not in layers):
+            return
+        q, k, v, batch = args[:4]
+        params = getattr(batch.sampling_info, "custom_params", None)
+        if not params or len(params) != 1 or not params[0].get("context_layer_probe"):
+            return
+        if not len(q):
+            return
+        rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
+        path = params[0]["context_trace_path"]
+        key = (path, layer.layer_id)
+        call = counts.get(key, 0)
+        counts[key] = call + 1
+        sample = {"mode": str(batch.forward_mode), "query_count": len(q),
+                  "layer": layer.layer_id, "rank": rank, "call": call,
+                  "input_ids": batch.input_ids[-rows:].detach().cpu(),
+                  "positions": batch.positions[-rows:].detach().cpu(),
+                  "q": q[-rows:].detach().cpu(), "output": output[-rows:].detach().cpu()}
+        for name, value in (("k", k), ("v", v)):
+            if value is not None:
+                sample[name] = value[-rows:].detach().cpu()
+        destination = Path(f"{path}.layer{layer.layer_id}.rank{rank}.{call}.pt")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(sample, destination)
+
+    return hook
+
+
 def rewind_retracted_probe(req):
     params = req.sampling_params.custom_params or {}
     rows = params.get("_context_probe_rows")

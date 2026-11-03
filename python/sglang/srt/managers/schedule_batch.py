@@ -1005,6 +1005,7 @@ class Req(ReqDllmMixin):
         self.context_swa_window = None
         self.context_swa_query_starts = None
         self.context_swa_source_required = None
+        self.context_swa_terminal_required = None
         self.context_recovery_plan = None
         self.context_recovery_source = None
         self.context_gap_prefix = None
@@ -1598,10 +1599,12 @@ class Req(ReqDllmMixin):
             self.context_swa_query_starts = sliding_window_starts(
                 program.layout, program.visible_until, self.context_swa_window
             )
-            terminal = program.layout.keep_mask[:matched] & (
-                program.layout.positions[:matched]
-                >= program.layout.next_position - (self.context_swa_window - 1)
+            from sglang.srt.context_system.window import terminal_swa_mask
+
+            self.context_swa_terminal_required = torch.from_numpy(
+                terminal_swa_mask(program.layout, self.context_swa_window)
             )
+            terminal = self.context_swa_terminal_required[:matched]
         recovery = plan_recovery(
             resident,
             program.visible_until,
@@ -1683,10 +1686,7 @@ class Req(ReqDllmMixin):
             layout=program.layout,
             window=self.context_swa_window,
         )
-        required |= program.layout.keep_mask[: len(required)] & (
-            program.layout.positions[: len(required)]
-            >= program.layout.next_position - (self.context_swa_window - 1)
-        )
+        required |= self.context_swa_terminal_required[:len(required)]
         if length > n:
             required = torch.cat((required, torch.ones(length - n, dtype=torch.bool)))
         return required

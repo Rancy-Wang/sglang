@@ -30,8 +30,8 @@ def test_random_holes_against_read_graph(context_modules, nested, repos):
             if q in planned:
                 for raw, pos in rows[q][:-1]:
                     full.add(raw)
-                    if pos >= int(p.layout.birth_positions[q])-(window-1):
-                        sliding.add(raw)
+                chosen = [pair for pair in rows[q] if pair[1] >= int(p.layout.birth_positions[q])-(window-1)][-window:]
+                sliding.update(raw for raw, _ in chosen if raw != q)
         result = module.plan_recovery(
             resident, p.visible_until, n, swa_resident=swa,
             swa_query_starts=module.sliding_window_starts(p.layout, p.visible_until, window),
@@ -72,12 +72,13 @@ def test_decode_capacity_uses_logical_position_counts(context_modules, attention
         page_size=1, defer_read_translate=False, req_to_token=table), SimpleNamespace())
     req = SimpleNamespace(context_program=object(), context_decode_layout=view)
     registry.bind_batch([req]*4, [1026]*4, torch.arange(4))
-    expected = 257 if not duplicate_only else 1025
+    expected = 129
     assert registry.window_lengths_cpu(128, 4).tolist() == [expected]*4
-    assert not registry.fits_graph(4, 8192, window=128, window_capacity=516)
+    assert registry.fits_graph(4, 8192, window=128, window_capacity=516)
     assert registry.fits_graph(4, 8192, window=128, window_capacity=4*expected)
     assert not registry.fits_graph(4, 4096)
-    assert not registry.fits_graph(4, 2048, window=128, window_capacity=129, table=True)
+    assert registry.fits_graph(4, 2048, window=128, window_capacity=129, table=True)
+    assert not registry.fits_graph(4, 2048, window=128, window_capacity=128, table=True)
     # A regular repositioned summary retains the constant-time graph path.
     layout.positions = torch.arange(1025, dtype=torch.int32)
     layout.next_position = 1025
@@ -130,8 +131,8 @@ def test_rotated_source_versions_follow_selected_queries(context_modules):
             if q in planned:
                 for raw, pos in rows[q][:-1]:
                     full.setdefault(raw, set()).add(pos)
-                    if pos >= p.layout.birth_positions[q] - (window-1):
-                        sliding.add(raw)
+                chosen = [pair for pair in rows[q] if pair[1] >= int(p.layout.birth_positions[q])-(window-1)][-window:]
+                sliding.update(raw for raw, _ in chosen if raw != q)
         result = module.plan_recovery(
             resident, p.visible_until, n, rewind, swa_resident=swa,
             swa_query_starts=module.sliding_window_starts(p.layout, p.visible_until, window),
@@ -160,3 +161,56 @@ def test_retrigger_rotates_future_versions_without_rewinding_retained_suffix(con
         )
         assert result.intervals == ((matched-1, n),)
         assert result.reusable_prefix[42:62].all()
+
+
+def test_window_index_matches_independent_filter_and_tail(context_modules):
+    module = importlib.import_module(context_modules[2].__package__ + ".window")
+    rng = random.Random(61103)
+    for _ in range(300):
+        positions = [rng.randrange(40) for _ in range(rng.randrange(200))]
+        index = module.LogicalSWAWindowIndex(positions)
+        for capacity in (0, 1, 3, 17, 129):
+            lower = rng.randrange(-5, 45)
+            expected = [i for i, position in enumerate(positions) if position >= lower]
+            expected = expected[-capacity:] if capacity else []
+            assert index.tail(lower, capacity).tolist() == expected
+
+
+def test_window_candidate_can_reenter_after_later_keys_expire(context_modules):
+    module = importlib.import_module(context_modules[2].__package__ + ".window")
+    index = module.LogicalSWAWindowIndex([3, 1, 1])
+    # W=3, first query@3 selects B,C,Q; next query@4 selects A,Q,Q.
+    rows = list(index.prefix_reads(3, 20, 3))
+    assert [(i, row.tolist()) for i, row in rows] == [(0, [1, 2]), (1, [0])]
+    from types import SimpleNamespace
+    layout = SimpleNamespace(positions=torch.tensor([3, 1, 1]),
+                             keep_mask=torch.ones(3, dtype=torch.bool), next_position=3)
+    assert module.terminal_swa_mask(layout, 3).tolist() == [True, True, True]
+
+
+def test_terminal_window_union_against_decode_simulation(context_modules):
+    from types import SimpleNamespace
+
+    module = importlib.import_module(context_modules[2].__package__ + ".window")
+    rng = random.Random(318)
+    for monotone in (False, True):
+        for _ in range(60):
+            n, capacity = rng.randrange(1, 50), rng.randrange(1, 12)
+            positions = ([i*2 for i in range(n)] if monotone else
+                         [rng.randrange(50) for _ in range(n)])
+            keep = [rng.random() > .2 for _ in range(n)]
+            order = list(range(n))
+            if not monotone:
+                rng.shuffle(order)
+            next_position = rng.randrange(60)
+            layout = SimpleNamespace(positions=torch.tensor(positions, dtype=torch.int32),
+                                     keep_mask=torch.tensor(keep), logical_order=torch.tensor(order),
+                                     next_position=next_position)
+            active = [(i, positions[i]) for i in order if keep[i]]
+            expected = set()
+            for offset in range(capacity+2):
+                query_position = next_position+offset
+                active.append((n+offset, query_position))
+                selected = [(raw, pos) for raw, pos in active if pos >= query_position-capacity+1][-capacity:]
+                expected.update(raw for raw, _ in selected if raw < n)
+            assert module.terminal_swa_mask(layout, capacity).tolist() == [i in expected for i in range(n)]

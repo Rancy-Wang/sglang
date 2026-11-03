@@ -128,6 +128,6 @@ def validate_context_request(args, model_config, request):
     from sglang.srt.context_system.planner import ContextProgram
 
     program = ContextProgram.from_wire(request.context_program, request.input_ids)
-    if request.context_program.get("version") in (5, 6):
+    if request.context_program.get("version") in (7, 8):
         validate_context_config(args, model_config, has_insert=True)
     return program

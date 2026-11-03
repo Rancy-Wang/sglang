@@ -1736,6 +1736,17 @@ class TritonAttnBackend(AttentionBackend):
                 o[:count].view(-1, layer.tp_q_head_num, layer.v_head_dim),
                 context_k_buffer,
                 context_v_buffer,
+                birth_slots=(
+                    self.forward_metadata.swa_out_cache_loc[:count]
+                    if layer.sliding_window_size is not None
+                    and layer.sliding_window_size >= 0
+                    and self.forward_metadata.swa_out_cache_loc is not None
+                    else (
+                        self.forward_metadata.out_cache_loc_full_physical[:count]
+                        if self.forward_metadata.out_cache_loc_full_physical is not None
+                        else forward_batch.out_cache_loc[:count]
+                    )
+                ),
                 sm_scale=layer.scaling,
                 logit_cap=logits_soft_cap,
                 sliding_window_size=(

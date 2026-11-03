@@ -6,6 +6,10 @@ from types import SimpleNamespace
 import pytest
 import torch
 
+from test_ir import ROOT, load_file
+
+load_file("sglang.srt.context_system.window", ROOT / "python/sglang/srt/context_system/window.py")
+
 pytest_plugins = ("test_rules", "test_context_attention_plan")
 
 
@@ -126,7 +130,7 @@ def test_ragged_native_adapter_preserves_logical_window(context_modules, attenti
             for q in range(a, b):
                 lower = int(p.layout.birth_positions[q])-window
                 actual = [pair for pair in row[:prefix+q-a+1] if pair[1] >= lower]
-                assert actual == [pair for pair in expected[q] if pair[1] >= lower]
+                assert actual == [pair for pair in expected[q] if pair[1] >= lower][-(window+1):]
 
 
 @pytest.mark.parametrize("seed", range(60))

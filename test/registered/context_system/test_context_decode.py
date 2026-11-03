@@ -6,6 +6,8 @@ import pytest
 import torch
 from test_ir import ROOT, load_file
 
+load_file("sglang.srt.context_system.window", ROOT / "python/sglang/srt/context_system/window.py")
+
 ContextDecodeLayout = load_file(
     "context_decode_occurrence", ROOT / "python/sglang/srt/context_system/occurrence.py"
 ).ContextDecodeLayout

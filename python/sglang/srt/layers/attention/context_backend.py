@@ -199,24 +199,25 @@ class ContextAttentionMetadata:
             positions = np.r_[kpos[x:y], qpos[a:b]]
             indices = np.r_[np.arange(x, y), prefix_count + np.arange(a, b)]
             if window >= 0 and np.any(np.diff(positions) != 1):
-                monotone = not np.any(positions[1:] < positions[:-1])
-                candidates = (None if monotone else
-                              np.flatnonzero(kpos[x:y] >= qpos[a] - window))
-                for query in range(a, b):
-                    lower = qpos[query] - window
-                    if monotone:
-                        end = y - x + query - a + 1
-                        start = np.searchsorted(positions[:end], lower)
-                        selected = indices[start:end]
-                    else:
-                        # Scan the prefix once per segment, then only candidates
-                        # in its first window. Never scan all N keys per query.
-                        kept = candidates[kpos[x + candidates] >= lower]
-                        first = a + np.searchsorted(qpos[a:query+1], lower)
-                        selected = np.r_[x + kept, prefix_count + np.arange(first, query+1)]
+                from sglang.srt.context_system.window import LogicalSWAWindowIndex
+
+                if np.any(np.diff(qpos[a:b]) != 1):
+                    raise ValueError("Context segments require consecutive query positions")
+                index = LogicalSWAWindowIndex(kpos[x:y])
+                for offset, kept in index.prefix_reads(int(qpos[a]), b-a, window+1):
+                    query = a + offset
+                    selected = np.r_[x + kept, prefix_count + np.arange(a, query+1)]
                     gathers.append(selected)
                     q_lengths.append(1)
                     k_lengths.append(len(selected))
+                # Once this run has W query tokens the old prefix cannot enter
+                # its last-W window. Keep the rest as one native ragged segment.
+                tail = min(b, a + window)
+                if tail < b:
+                    first = max(a, tail-window)
+                    gathers.append(prefix_count + np.arange(first, b))
+                    q_lengths.append(b-tail)
+                    k_lengths.append(b-first)
             else:
                 start = np.searchsorted(positions, qpos[a] - window) if window >= 0 else 0
                 gathers.append(indices[start:])
@@ -225,7 +226,9 @@ class ContextAttentionMetadata:
         cpu_qo = torch.tensor(np.r_[0, np.cumsum(q_lengths)], dtype=torch.int32)
         cpu_kv = torch.tensor(np.r_[0, np.cumsum(k_lengths)], dtype=torch.int32)
         device = birth_slots.device
-        gather = torch.from_numpy(np.concatenate(gathers)).to(device, non_blocking=True)
+        cpu_gather = np.concatenate(gathers)
+        self.native_plans[("gather", window)] = cpu_gather
+        gather = torch.from_numpy(cpu_gather).to(device, non_blocking=True)
         slots = torch.cat((self.kv_indices, birth_slots)).index_select(0, gather)
         result = (cpu_qo, cpu_kv, cpu_qo.to(device, non_blocking=True),
                   cpu_kv.to(device, non_blocking=True), slots,
@@ -233,12 +236,44 @@ class ContextAttentionMetadata:
         self.native_plans[window] = result
         return result
 
-    def forward(self, kernel, q, k, v, output, k_pool, v_pool, **kwargs):
+    def forward(self, kernel, q, k, v, output, k_pool, v_pool, *, birth_slots=None, **kwargs):
         """One native extend launch, after this layer's KV writes and COW."""
         if kwargs.get("page_size", 1) != 1:
             raise ValueError("Context attention requires page_size=1")
         if self.query_count != q.shape[0]:
             raise ValueError("Context query metadata does not cover model output")
+        window = kwargs.get("sliding_window_size", -1)
+        if window is not None and window >= 0:
+            qo, kv, _, qpos, kpos = self.cpu_fields
+            overlapping = self.native_plans.get(("overlap", window))
+            if overlapping is None:
+                overlapping = any(np.any(np.diff(np.r_[kpos[x:y], qpos[a:b]]) <= 0)
+                                  for a, b, x, y in zip(qo[:-1], qo[1:], kv[:-1], kv[1:]))
+                self.native_plans[("overlap", window)] = overlapping
+            if overlapping:
+                if birth_slots is None:
+                    raise ValueError("Overlapping SWA requires physical birth slots")
+                key = ("triton", window)
+                metadata = self.native_plans.get(key)
+                if metadata is None:
+                    cqo, ckv, dqo, _, slots, max_q, _ = self.native_plan(birth_slots, window)
+                    cq, ck = cqo.numpy(), ckv.numpy()
+                    lengths = np.diff(ck) - np.diff(cq)
+                    selected = np.concatenate([np.arange(x, x+n) for x, n in zip(ck[:-1], lengths)])
+                    gather = self.native_plans[("gather", window)][selected]
+                    all_positions = np.r_[kpos, qpos]
+                    ptr = torch.from_numpy(np.r_[0, np.cumsum(lengths)]).to(q.device, non_blocking=True)
+                    ids = torch.from_numpy(selected).to(q.device, non_blocking=True)
+                    pos = torch.from_numpy(all_positions[gather]).to(q.device, non_blocking=True)
+                    metadata = (dqo, ptr, slots.index_select(0, ids), pos, max_q,
+                                tuple(int(n) for n in np.diff(cq)))
+                    self.native_plans[key] = metadata
+                dqo, ptr, slots, pos, max_q, lengths = metadata
+                kernel(q, k, v, output, k_pool, v_pool, dqo, ptr, slots,
+                       None, True, None, max_q, 1.0, 1.0,
+                       context_q_positions=self.query_positions,
+                       context_kv_positions=pos, extend_seq_lens_cpu=lengths, **kwargs)
+                return output
         kernel(
             q,
             k,
@@ -690,7 +725,7 @@ class ContextDecodeRegistry:
         self.pool = pool
         self.request_pool = request_pool
         self.rows = torch.zeros(
-            (translator.req_to_token.shape[0], 7),
+            (translator.req_to_token.shape[0], 8),
             dtype=torch.int64,
             device=translator.req_to_token.device,
         )
@@ -704,7 +739,7 @@ class ContextDecodeRegistry:
         for req, raw_length in zip(reqs, raw_lengths):
             raw_length = int(raw_length)
             if req.context_program is None:
-                entries.append((0, 0, 0, 0, 0, 0, 0))
+                entries.append((0, 0, 0, 0, 0, 0, 0, 0))
                 lengths.append(raw_length)
                 positions.append(raw_length - 1)
                 self.batch_layouts.append((None, raw_length))
@@ -735,6 +770,7 @@ class ContextDecodeRegistry:
                     layout.next_position,
                     row_pointer,
                     int(not layout.positions_monotone),
+                    layout.device_window_index.data_ptr(),
                 )
             )
             lengths.append(count + generated)
@@ -745,7 +781,7 @@ class ContextDecodeRegistry:
             [(*entry, n, p) for entry, n, p in zip(entries, lengths, positions)],
             dtype=torch.int64,
         ).to(row_ids.device, non_blocking=True)
-        self.rows[row_ids] = packed[:, :7]
+        self.rows[row_ids] = packed[:, :8]
         self.full_length_sum = sum(lengths)
         self.full_length_max = max(lengths, default=0)
         self.nonmonotone = any(
@@ -754,8 +790,8 @@ class ContextDecodeRegistry:
         )
         return (
             torch.tensor(lengths, dtype=torch.int64),
-            packed[:, 7].to(torch.int32),
-            packed[:, 8],
+            packed[:, 8].to(torch.int32),
+            packed[:, 9],
             tuple(refs),
         )
 
@@ -771,9 +807,9 @@ class ContextDecodeRegistry:
             else:
                 lower = layout.next_position + generated - 1 - window
                 lengths.append(
-                    len(layout.positions)
-                    - int(np.searchsorted(layout.sorted_positions, lower))
-                    + min(generated, window + 1)
+                    min(window + 1, len(layout.positions)
+                        - int(np.searchsorted(layout.sorted_positions, lower))
+                        + min(generated, window + 1))
                 )
         # Native decode graph padding uses seq_len=1; its outputs are discarded.
         result = torch.tensor(
@@ -786,8 +822,8 @@ class ContextDecodeRegistry:
                    window_capacity=None, table=False):
         """Check fixed captured storage without reading any device metadata.
 
-        Monotone summaries use constant-time bounds. Only overlapping positions
-        need the cached O(batch * log(prompt)) SWA count used by eager allocation.
+        All SWA rows, including overlapping positions, fit the native W bound.
+        Smaller captured buffers use the cached O(batch * log(prompt)) count.
         Capacities are packed entries, or columns per row when table=True.
         """
         full = (self.full_length_max if table else
@@ -797,7 +833,7 @@ class ContextDecodeRegistry:
         if window_capacity is None:
             return True
         bound = window + 1 if table else batch_size * (window + 1)
-        if not self.nonmonotone and bound <= window_capacity:
+        if bound <= window_capacity:
             return True
         lengths = self.window_lengths_cpu(window, batch_size)
         required = int(lengths.max()) if table else int(lengths.sum())

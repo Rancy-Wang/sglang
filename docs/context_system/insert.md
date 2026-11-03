@@ -1,7 +1,7 @@
 # Execution-order Insert
 
-实现计划：`PLAN-CS-20261103-R1`，以及已批准的容量补充计划 `PLAN-CS-20261103-R2`。本实现保留 `drop_message`，允许重复 Drop，
-SWA 沿用原来的位置窗口条件。Qwen3.8/Qwen3.5 的 Linear/Full hybrid 模型暂不支持 Insert，
+实现计划：`PLAN-CS-20261103-R1`、`PLAN-CS-20261103-R2`，以及 `PLAN-CS-20261103-R3` 的已批准非 Linear 部分。本实现保留 `drop_message`，允许重复 Drop；
+SWA 先沿用原位置窗口条件，再选 logical 最后 W 项（W=原生距离窗口+1，包含 query）。Qwen3.8/Qwen3.5 的 Linear/Full hybrid 模型暂不支持 Insert，
 请求会返回格式/能力错误；其原有 Drop/Reposition 路径保留。
 
 ## 接口与时机
@@ -73,8 +73,8 @@ retrigger 只忽略 TOKEN 最终位置，不忽略 D/R/IB/IE 或锚点。匹配�
 不改写共享源 KV。树边切分不改变 birth depth；IE 作为下一真实 token 的前导事件，
 末尾事件保留于请求程序，生成 token 追加时进入 key。
 
-张量 wire 的 Insert 版本为 5，JSON wire 为 6；无 Insert 保持原版本 3/4 和字段集合。
-需要所有 worker 使用相同实现，不可将 Insert 请求发给旧 worker。
+R3 张量 wire 的 Insert 版本为 7，JSON wire 为 8；无 Insert 保持原版本 3/4 和字段集合。
+旧 Insert 5/6 明确拒绝，避免静默混用不同 SWA 语义；所有 worker 必须使用同一版本并隔离旧缓存。
 
 实现入口：`python/sglang/srt/context_system/planner.py:317-544`（`ContextProgram`）、
 `planner.py:547-664`（`_compile_insert_program`）；
@@ -102,12 +102,18 @@ SWA 缺页不等于所有已旋转的 Full KV 都必须重算。恢复规划按 
 匹配点之后的新 query 可以通过后续 R/COW 获得目标位置版本；不能因为未来旋转，
 反过来把正在修复的历史 query 所使用的正确源 KV 标为失效。
 
-Decode 的 SWA 条件为 `q_pos-k_pos <= window`，在已经满足因果可见性的 logical KV 中筛选。
-位置重叠时，读数可大于 `window+1`。例如两段位置均为 1…512、query 位置为 513，
-距离窗口 128 需要 257 个 KV；四条这样的请求需要 1028 个索引，超过原来的 516 个槽。
-R2 按实际读数分配 eager 缓冲；CUDA graph 仅在 Full/SWA 读数超过已捕获容量时回退至
-原生 eager，不截断 KV。普通单调 summary 保留 graph 路径。普通请求与 Context 混批时，
-普通 lane 同样使用包含边界的 `window+1` 语义。
+Decode 的 SWA 条件为 `q_pos-k_pos <= window`，先在因果可见的 logical KV 中筛选，
+再从后往前保留最多 `W=window+1` 项，输出索引仍按正向 logical 排列。例：两段位置
+均为 1…512、query 位置为 513、距离窗口 128，位置条件给出 257 个候选；R3 最终
+只读最后 129 个（包含 query）。四条请求使用 516 个索引，适配原生 graph 缓冲。
+这替代 R2 的“所有位置候选都读入、超过容量时 eager”规则。Full 容量不足等独立
+限制仍可能导致原有 eager 回退，但位置重叠本身不再要求扩大 SWA graph 缓冲。
+
+当前未入选的旧 KV 不能一律永久释放。例：logical prefix 位置为 `[20, 1, 1]`，
+下一个 query 位置为 3、W=3，位置 20 被后面的候选挤出；到 query 位置 4 时，
+两个位置 1 同时过期，位置 20 又可入选。`window.py` 的 run maximum 索引每次重新选取合法
+候选；terminal 恢复需求覆盖前 W−1 个未来 query 的并集。之后新 query 已填满窗口，
+不再需要 prompt KV。R 后严格单调的位置只需一次二分和尾部截取。
 
 容量入口为 `python/sglang/srt/layers/attention/triton_backend.py:1104-1112`、
 `flashinfer_backend.py:1038-1045`、`flashattention_backend.py:2230-2238` 的
@@ -129,13 +135,14 @@ FlashInfer 将 window 和完整 logical 长度传入 gather，避免把非单调
 - logical/execution 逆映射线性构建。匹配使用预计算 `has_insert`，不复制扫描完整 key。
 - decode 的位置单调性、排序位置和 raw 后缀最小值只计算一次。
   CPU 窗口计数/安全回收边界用二分查找，不在每轮 decode 扫描整个历史。
-- 已绑定批次缓存 Full 总读数和最大行宽。普通单调 summary 的 graph 容量判断为 O(1)；
-  重叠位置才计算 O(batch × log N) 的窗口读数，并在同一 forward 内复用计数结果。
-  不进行 GPU→CPU 同步，不统一扩大所有请求的 graph 缓冲。
+- 已绑定批次缓存 Full 总读数和最大行宽。所有 SWA 请求的 W 上界均可 O(1) 判断
+  graph 容量，不进行 GPU→CPU 同步，不统一扩大 graph 缓冲。
 - Reposition 后的位置单调路径继续原生快速窗口 gather。未 Reposition 的非单调路径
-  按 logical 顺序压紧选中的 KV；该 GPU 分支仍需扫描非单调列表。
-- 非连续位置的原生 ragged SWA adapter 保留单调二分路径；非单调段先筛出首窗口候选，
-  后续 query 只检查候选，避免每个 query 全前缀扫描。不存在生产用 N×N attention mask。
+  用连续位置 run 的最大值树跳过不满足条件的区间，最多输出 W 个 logical 索引；
+  不再每步扫描完整 prompt。Full/SWA 原生物理槽翻译融合在 gather 中。
+- 非连续位置的 ragged SWA adapter 只拆分每段开始的最多 W−1 个 query；当新 query
+  填满窗口，余下 token 合为一个原生 segment。Triton 对位置重叠也使用该有界读集。
+  计划每个 pool/window/forward 只构建一次。不存在生产用 N×N attention mask。
 - 缺页恢复的最坏开销取决于 segment/read-set 数量；大量 Insert/R 不保证与纯 Append
   相同速度。真实 summary 场景需看 TTFT、实际 prefill tokens 和 cache hit，而不能只看命中长度。
 
@@ -186,12 +193,12 @@ warm/cold 与 exact/cold 差异；按照预先固定的 `max(BF16 floor, 2 × na
 数值失败会保留证据并将该题标记为 failed，同时继续后续 turn，覆盖重复 summary。
 HTTP 200 携带 `finish_reason=abort/error` 或零生成 token 时直接判为失败，不追加空 assistant。
 因此服务端需开启 `--enable-custom-logit-processor`，且驱动与服务端能访问相同的输出路径。
-`--skip-numeric` 只供独立性能实验使用；验收不能跳过数值比较。包含 flush 的整轮耗时
+`--skip-numeric` 用于独立无 flush 长程匹配或性能实验；另开冻结请求 replay 完成数值验收，不能用跳过比较的运行宣称 logits 通过。包含 flush 的整轮耗时
 不是纯吞吐测试结果，不能据此声称端到端无性能回退。
 
 ## 已完成验证与待验收项
 
-当前实现检查点为 `4c26d4713c`；R2 容量修改为 `bcdf3ff33d`、`f72a1e9636`。
+以下为 R1/R2 历史证据，运行时检查点为 `4c26d4713c`；R2 容量修改为 `bcdf3ff33d`、`f72a1e9636`。
 下列命令之间存在用例重叠，不应把通过数相加。
 
 | 验证 | 结果 | 范围 |
@@ -306,3 +313,22 @@ GPU 2 的既有其他任务未操作。0/1 用于主验证、2 被占用，后�
 每个并行实例分离端口、checkout、cache、日志和输出；运行时代码、模型及容量一致。
 补跑仅在前一实例退出后复用其 GPU/端口/cache，单独记录日志及输出。实验结束后已释放本次 GPU。
 Qwen3.8-27B 不进行 Insert 成功路径验收，仍按用户要求保持不支持。
+
+
+## R3 验证进度（尚未验收）
+
+Qwen/Linear Insert 的全部支持修改和模型实验继续 Pending；当前仍拒绝 Insert。
+原生 Harmony 模板没有修改。下列诊断不进入生产默认路径：
+
+- `benchmark/context_system/insert_state_audit.py` 的 `create_cache_audit` 通过原生
+  `--forward-hooks` 显式启用。独立逐 record 比较并遍历真实树，核对 maximal retrigger
+  前沿、所选分支 exact 边界、返回物理槽、source positions 和 Full/SWA residency。
+  `retry_only = matched - selected_exact`，不能把两种命中长度相加。
+- `test_insert_long_match.py` 在原生 Full 和 Full+SWA 树中连续执行 40 turn，覆盖重复
+  Drop、R、在历史 Insert 前再插入、同请求负编号链和边分裂后的完整回填。
+- `test_insert_attention.py` 加入整段 Q 的置换对照：同步置换段的 Q/K/V、位置、读集和
+  causal 边界后，逆置换输出应相等。只改变 Q 的顺序而未保留这些关系不具备等价保证。
+
+本地 CPU 已运行 frontend/IR/recovery/decode/audit 组合：109 passed、3 skipped。
+GPU、实际树 Linux 用例、10 题无 flush 轨迹、冻结 logits 和性能对照仍待独立新环境验证。
+旧的 56 项比较中 10 项失败保持 FAIL；本轮尚未确定其原因，不能归为 BF16 误差。

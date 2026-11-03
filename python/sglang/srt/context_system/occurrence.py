@@ -56,6 +56,7 @@ class ContextDecodeLayout:
     positions_monotone: bool
     sorted_positions: np.ndarray
     sorted_raw_suffix_min: np.ndarray
+    device_window_index: torch.Tensor
 
     @classmethod
     def from_layout(cls, layout: ContextLayout, device) -> ContextDecodeLayout:
@@ -86,6 +87,16 @@ class ContextDecodeLayout:
         # An empty active prompt still needs a non-null registry marker.
         if packed.numel() == 0:
             packed = torch.zeros(1, dtype=torch.int32, device=device)
+        # Only nonmonotone windows need a run index; decode reads O(W) slots
+        # from qualifying runs, without scanning all historical prompt tokens.
+        if monotone:
+            window_index = torch.empty(0, dtype=torch.int32, device=device)
+        else:
+            from sglang.srt.context_system.window import LogicalSWAWindowIndex
+
+            window_index = torch.from_numpy(LogicalSWAWindowIndex(positions).packed).to(
+                device=device, non_blocking=True
+            )
         return cls(
             raw,
             positions,
@@ -96,6 +107,7 @@ class ContextDecodeLayout:
             bool(monotone),
             sorted_positions,
             suffix_min,
+            window_index,
         )
 
     def swa_raw_floor(self, computed_raw: int, window: int) -> int:

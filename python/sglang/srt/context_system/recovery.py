@@ -267,6 +267,8 @@ def _insert_window(layout, expiry, start=0):
 
 def _insert_read_masks(layout, expiry, intervals, prefix_length, window=None):
     """Union actual readers, in occurrence order; no position-sorted assumption."""
+    from .window import LogicalSWAWindowIndex
+
     n = len(expiry)
     full = np.zeros(prefix_length, dtype=np.bool_)
     swa = np.zeros(prefix_length, dtype=np.bool_)
@@ -285,11 +287,13 @@ def _insert_read_masks(layout, expiry, intervals, prefix_length, window=None):
             continue
         prefix = keys[x:y-(b-a)]
         source = raw[prefix]
-        valid = source < prefix_length
-        source, positions = source[valid], pos[prefix][valid]
-        full[source] = True
+        full[source[source < prefix_length]] = True
         if window is not None:
-            swa[source[positions >= birth[queries[0]]-(window-1)]] = True
+            index = LogicalSWAWindowIndex(pos[prefix])
+            for offset, chosen in index.prefix_reads(int(birth[a]), b-a, window):
+                if selected[a+offset]:
+                    read = source[chosen]
+                    swa[read[read < prefix_length]] = True
         own = np.arange(a, min(queries[-1], prefix_length))
         full[own] = True
         if window is not None and len(own):
@@ -300,6 +304,8 @@ def _insert_read_masks(layout, expiry, intervals, prefix_length, window=None):
 
 def _plan_insert_recovery(resident, expiry, layout, rewind, incompatible,
                           swa_resident, window, terminal, source_positions):
+    from .window import LogicalSWAWindowIndex
+
     n, matched = len(expiry), len(resident)
     if not 0 <= matched < n:
         raise ValueError("Insert recovery must leave an uncached query suffix")
@@ -334,10 +340,19 @@ def _plan_insert_recovery(resident, expiry, layout, rewind, incompatible,
             readers[source].append((a, b))
             if a < matched and positions[occurrence] != stored_positions[source]:
                 old_version_readers[source].append((a, min(b, matched)))
-            if window is not None:
-                end = min(b, a+int(positions[occurrence])+window-int(birth[a]))
-                if a < end:
-                    swa_readers[source].append((a, end))
+        if window is not None:
+            prefix = keys[x:y-(b-a)]
+            index = LogicalSWAWindowIndex(positions[prefix])
+            for offset, chosen in index.prefix_reads(int(birth[a]), b-a, window):
+                query = a + offset
+                for occurrence in prefix[chosen]:
+                    source = int(raw[occurrence])
+                    if source < matched:
+                        intervals = swa_readers[source]
+                        if intervals and intervals[-1][1] == query:
+                            intervals[-1] = (intervals[-1][0], query+1)
+                        else:
+                            intervals.append((query, query+1))
         for source in range(a, min(b, matched)):
             if source+1 < b:
                 readers[source].append((source+1, b))

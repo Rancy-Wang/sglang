@@ -38,11 +38,14 @@ def test_insert_segment_batch(context_modules, attention_plan, native_attention,
     k, v = pool_k[slots[births]], pool_v[slots[births]]
     actual, frozen = native_attention
     output = metadata.forward(actual, q, k, v, torch.empty_like(q), pool_k, pool_v,
-                              page_size=1, sliding_window_size=window_size)
+                              birth_slots=slots[births], page_size=1, sliding_window_size=window_size)
     prefix, offsets = [], [0]
     for row in all_reads(context_modules, p).values():
         pos = row[-1][1]
-        prefix.extend(index[pair] for pair in row[:-1] if window_size < 0 or pos <= pair[1]+window_size)
+        chosen = [pair for pair in row if window_size < 0 or pos <= pair[1]+window_size]
+        if window_size >= 0:
+            chosen = chosen[-(window_size+1):]
+        prefix.extend(index[pair] for pair in chosen if pair != row[-1])
         offsets.append(len(prefix))
     expected = torch.empty_like(q)
     frozen(q, k, v, expected, pool_k, pool_v,
@@ -50,6 +53,30 @@ def test_insert_segment_batch(context_modules, attention_plan, native_attention,
            torch.tensor(offsets, device="cuda"), slots[torch.tensor(prefix, device="cuda")],
            None, True, None, 1, 1.0, 1.0, page_size=1, extend_seq_lens_cpu=[1]*len(q))
     torch.testing.assert_close(output, expected, rtol=.0078125, atol=.0078125)
+
+    # Reordering whole independent Q segments changes storage order only. Each
+    # segment keeps its own logical KV order, causal extent, positions and sinks.
+    # Reordering Q without those associations would describe a different mask.
+    from dataclasses import replace
+    import numpy as np
+
+    qo, kv, occurrences, qpos, kpos = metadata.cpu_fields
+    order = list(reversed(range(len(qo)-1)))
+    qtake = np.concatenate([np.arange(qo[i], qo[i+1]) for i in order])
+    ktake = np.concatenate([np.arange(kv[i], kv[i+1]) for i in order])
+    qptr = np.r_[0, np.cumsum([qo[i+1]-qo[i] for i in order])]
+    kptr = np.r_[0, np.cumsum([kv[i+1]-kv[i] for i in order])]
+    qi, ki = torch.from_numpy(qtake).cuda(), torch.from_numpy(ktake).cuda()
+    reordered = replace(metadata, qo_indptr=torch.from_numpy(qptr).cuda(),
+                        kv_indptr=torch.from_numpy(kptr).cuda(),
+                        kv_indices=metadata.kv_indices[ki], query_positions=metadata.query_positions[qi],
+                        kv_positions=metadata.kv_positions[ki],
+                        query_lengths=tuple(int(x) for x in np.diff(qptr)),
+                        cpu_fields=(qptr, kptr, occurrences[ktake], qpos[qtake], kpos[ktake]),
+                        native_plans={})
+    permuted = reordered.forward(actual, q[qi], k[qi], v[qi], torch.empty_like(q), pool_k, pool_v,
+                                 birth_slots=slots[births][qi], page_size=1, sliding_window_size=window_size)
+    torch.testing.assert_close(permuted, output[qi], rtol=.0078125, atol=.0078125)
 
 
 @pytest.mark.parametrize("tail_dropped", [False, True])
@@ -90,6 +117,7 @@ def test_nonmonotone_swa_gather_graph(context_modules, tail_dropped):
         lower = p.layout.next_position + generated - 1 - window_size
         raw = [r for r, pos in zip(view.raw_indices.tolist(), view.positions.tolist()) if pos >= lower]
         raw += [len(p.input_ids)+i for i in range(generated) if p.layout.next_position+i >= lower]
+        raw = raw[-(window_size+1):]
         assert ptr[-1].item() == len(raw)
         assert out[:len(raw)].tolist() == [256+r for r in raw]
 
@@ -142,6 +170,8 @@ def test_insert_saved_model_attention(rank, layer, mode, kind):
                 y-x+torch.arange(start-a, end-a, device="cuda"))[:, None]
             if data["window"] is not None and data["window"] >= 0:
                 visible &= qp[start:end, None] <= positions[None, :]+data["window"]
+                from_right = visible.flip(-1).int().cumsum(-1).flip(-1)
+                visible &= from_right <= data["window"]+1
             scores.masked_fill_(~visible[None, :, :], -float("inf"))
             scores = torch.cat((scores, sinks[:, None, None].expand(-1, end-start, 1)), dim=-1)
             expected[start:end] = torch.einsum("hqk,khd->qhd", scores.softmax(-1)[..., :-1], vv)
@@ -175,17 +205,17 @@ def test_native_decode_adapters_oversized_window(context_modules, mixed):
     for i in range(4):
         raw = (list(range(897, 1026)) if mixed and i == 3 else
                [j for j, p in enumerate(positions) if p >= 385] + [1025])
-        expected.extend(i*2048+j for j in raw)
-    assert len(expected) > 4*129
+        expected.extend(i*2048+j for j in raw[-129:])
+    assert len(expected) == 4*129
     backend = SimpleNamespace(context_decode_registry=registry, sliding_window_size=128,
                               cuda_graph_kv_indices=torch.empty(8192),
                               cuda_graph_window_kv_indices=torch.empty(516))
-    assert not TritonAttnBackend.context_decode_fits_graph(backend, 4)
+    assert TritonAttnBackend.context_decode_fits_graph(backend, 4)
     backend.cuda_graph_window_kv_indices = torch.empty(len(expected))
     assert TritonAttnBackend.context_decode_fits_graph(backend, 4)
     metadata = SimpleNamespace(page_table=torch.empty((4, 2048)), pa_swa_page_table=torch.empty((4, 129)))
     backend.decode_cuda_graph_metadata = {4: metadata}
-    assert not FlashAttentionBackend.context_decode_fits_graph(backend, 4)
+    assert FlashAttentionBackend.context_decode_fits_graph(backend, 4)
     metadata.pa_swa_page_table = torch.empty((4, 257))
     assert FlashAttentionBackend.context_decode_fits_graph(backend, 4)
     # Exercise the real FlashInfer updater, stopping at the native wrapper's plan
