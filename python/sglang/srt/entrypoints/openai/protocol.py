@@ -881,6 +881,13 @@ class ChatCompletionRequest(BaseModel):
     insert: Optional[Dict[str, Annotated[int, Field(strict=True, lt=0)]]] = None
     reposition: Optional[List[Annotated[int, Field(strict=True)]]] = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def reject_unknown_drop_alias(cls, values):
+        if isinstance(values, dict) and "drop_messages" in values:
+            raise ValueError("Use drop_message; drop_messages is not a request field")
+        return values
+
     @model_validator(mode="after")
     def validate_context_indices(self):
         if self.insert is not None or any(m.index is not None for m in self.messages):
@@ -897,7 +904,10 @@ class ChatCompletionRequest(BaseModel):
             return {}
         from sglang.srt.context_system.rules import normalize_message_indices
 
-        ids = normalize_message_indices([m.model_dump() for m in self.messages])
+        messages = [m.model_dump() for m in self.messages]
+        if self.drop_rule and self.drop_rule.get("type") == "keep_text_drop":
+            messages = self.drop_rule.get("full_messages", messages)
+        ids = normalize_message_indices(messages)
         return {"context_message_indices": list(ids),
                 "context_next_message_index": sum(i >= 0 for i in ids)}
 

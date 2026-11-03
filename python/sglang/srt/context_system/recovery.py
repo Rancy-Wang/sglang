@@ -420,6 +420,10 @@ def plan_recovery(
                 "Recovery source masks must match the CPU residency vector."
             )
     if layout is not None and layout.insert_spans.numel():
+        if input_length != len(visible_until) or input_length != len(layout.positions):
+            raise ValueError("Insert recovery metadata must cover the complete input")
+        if swa_resident is not None and (swa_window is None or swa_window <= 0):
+            raise ValueError("Insert SWA recovery requires a positive inclusive window")
         return _plan_insert_recovery(resident, visible_until, layout, rewind_sources,
                                      incompatible_sources, swa_resident, swa_window,
                                      swa_terminal_required)
