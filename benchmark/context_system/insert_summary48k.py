@@ -11,6 +11,7 @@ import copy
 import gzip
 import hashlib
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -183,6 +184,32 @@ def run(args):
         ids, owners, _ = HarmonyEncoder("low").render_tokens(clean, tools)
         return ids, owners
 
+    def compare_summary(payload, label):
+        """Freeze this event's text/tokens and compare warm/exact/cold logits."""
+        import torch
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test/registered/context_system"))
+        from serving_logits_probe import serialized_probe
+        logits, hashes, usage = {}, {}, {}
+        for mode in ("warm", "exact", "cold"):
+            if mode == "cold":
+                session.post(args.url + "/flush_cache", timeout=30).raise_for_status()
+            path = (out / f"{label}-{mode}.pt").resolve()
+            probe = dict(payload, max_tokens=1, custom_logit_processor=serialized_probe(),
+                         custom_params={"context_trace_path": str(path), "context_trace_count": 1})
+            response = call(probe, label+"-"+mode)
+            logits[mode] = torch.load(path, weights_only=True)
+            hashes[mode] = digest(response["sglext"]["input_ids"])
+            usage[mode] = response["usage"]
+        if len(set(hashes.values())) != 1:
+            raise ValueError("Frozen Insert replay changed execution tokens")
+        for mode in ("warm", "exact"):
+            difference = (logits[mode]-logits["cold"]).abs()
+            metrics = {"max_abs": difference.max().item(), "mean_abs": difference.mean().item(),
+                       "p99_abs": torch.quantile(difference.float(), .99).item()}
+            emit({"kind": "summary_numeric", "label": label, "mode": mode, "metrics": metrics, "usage": usage[mode]})
+            if metrics["max_abs"] > .15 or metrics["mean_abs"] > .02 or metrics["p99_abs"] > .0625:
+                raise ValueError(f"Insert numerical mismatch: {label} {mode} {metrics}")
+
     for case, source_hash in cases:
         state, summaries = History(), 0
         case_id = case["case_id"]
@@ -190,6 +217,7 @@ def run(args):
         emit({"kind": "case_start", "case_id": case_id, "source_sha256": source_hash})
         try:
             for turn in case["turns"]:
+                inserted = False
                 trigger = state.append(turn["new_messages"])
                 active = state.active()
                 ids, owners = render(active)
@@ -205,6 +233,7 @@ def run(args):
                         raise ValueError("Processed summary did not reduce active input below 48K")
                     state = candidate
                     summaries += 1
+                    inserted = True
                     emit({"kind": "summary_commit", "case_id": case_id, "turn": turn["turn"],
                               "before_tokens": len(ids), "after_tokens": len(active_ids),
                               "anchor": anchor, "trigger": trigger, "summary_sha256": digest(text)})
@@ -214,6 +243,8 @@ def run(args):
                     emit({"kind": "argument_wrapper", "case_id": case_id, "turn": turn["turn"], "changes": changes})
                 payload.update(tools=tools, max_tokens=args.probe_tokens or turn["max_new_tokens"],
                                ignore_eos=True, reasoning_effort="low")
+                if inserted and not args.skip_numeric:
+                    compare_summary(payload, f"{case_id}-event-{summaries}")
                 body = call(payload, f"{case_id}-turn-{turn['turn']}")
                 assistant = body["choices"][0]["message"]
                 state.append([assistant])
@@ -245,4 +276,5 @@ if __name__ == "__main__":
     parser.add_argument("--timeout", type=int, default=1800)
     parser.add_argument("--probe-tokens", type=int, default=0,
                         help="Diagnostic budget override; zero uses original per-turn budgets")
+    parser.add_argument("--skip-numeric", action="store_true", help="Skip frozen warm/exact/cold logit checks")
     run(parser.parse_args())

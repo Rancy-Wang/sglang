@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-pytest_plugins = ("test_rules",)
+pytest_plugins = ("test_rules", "test_context_attention_plan")
 
 
 def program(context_modules, *, nested=False, repos=True, redundant=False, width=1):
@@ -102,6 +102,31 @@ def test_exact_and_retrigger_positions(context_modules):
     # Different historical R operations must not become equivalent by retry.
     a, b = ir.ContextKeyData.from_layout(before.layout), ir.ContextKeyData.from_layout(after.layout)
     assert a.match(b, 0, 0, len(before.input_ids), retry=True) < len(before.input_ids)
+
+
+@pytest.mark.parametrize("repos", [False, True])
+def test_ragged_native_adapter_preserves_logical_window(context_modules, attention_plan, repos):
+    p = program(context_modules, nested=True, repos=repos, width=37)
+    occ = importlib.import_module(context_modules[2].__package__ + ".occurrence")
+    w = occ.compile_occurrence_window(p.layout, p.visible_until, p.layout.positions,
+                                     query_start=0, query_end=len(p.input_ids))
+    plan = attention_plan.ContextAttentionPlan.merge([attention_plan.ContextSequence.from_window(w)])
+    slots = torch.randperm(plan.occurrence_count)
+    metadata = plan.bind(slots)
+    pairs = list(zip(w.occurrence_raw_tokens.tolist(), w.occurrence_positions.tolist()))
+    by_pair = {pair: i for i, pair in enumerate(pairs)}
+    by_slot = {int(slot): pairs[i] for i, slot in enumerate(slots)}
+    birth_slots = slots[[by_pair[(q, int(pos))] for q, pos in enumerate(p.layout.birth_positions)]]
+    expected = all_reads(context_modules, p)
+    for window in (3, 17, 128):
+        qo, kv, _, _, selected, _, _ = metadata.native_plan(birth_slots, window)
+        for a, b, x, y in zip(qo[:-1].tolist(), qo[1:].tolist(), kv[:-1].tolist(), kv[1:].tolist()):
+            row = [by_slot[int(slot)] for slot in selected[x:y]]
+            prefix = len(row)-(b-a)
+            for q in range(a, b):
+                lower = int(p.layout.birth_positions[q])-window
+                actual = [pair for pair in row[:prefix+q-a+1] if pair[1] >= lower]
+                assert actual == [pair for pair in expected[q] if pair[1] >= lower]
 
 
 @pytest.mark.parametrize("seed", range(60))

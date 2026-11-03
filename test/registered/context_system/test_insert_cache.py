@@ -117,3 +117,16 @@ def test_insert_http_summary_lifecycle(tmp_path, request):
     print("INSERT_LATER_LOGITS", error.max().item(), error.mean().item(), flush=True)
     assert error.max() < .15 and error.mean() < .015
     assert later["usage"]["prompt_tokens_details"]["cached_tokens"] > 0
+
+
+@pytest.mark.skipif(not os.environ.get("CONTEXT_INSERT_BCP_OUTPUT"), reason="explicit ten-case BCP output required")
+def test_insert_bcp48k(request, monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3] / "benchmark/context_system"))
+    from insert_summary48k import CASES, run
+    run(SimpleNamespace(
+        url=request.getfixturevalue("server"), model=os.environ["CONTEXT_SERVER_MODEL"],
+        data=os.environ["CONTEXT_BCP_ROOT"], output=os.environ["CONTEXT_INSERT_BCP_OUTPUT"],
+        cases=list(CASES), keep_recent=20000, summary_tokens=4096, timeout=1800,
+        probe_tokens=int(os.environ.get("CONTEXT_INSERT_PROBE_TOKENS", "0")), skip_numeric=False,
+    ))
