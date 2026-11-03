@@ -74,16 +74,19 @@ def create_decode_read_probe(config):
         expected = torch.einsum("hqk,khd->qhd", scores.softmax(-1)[..., :-1],
                                 vv.repeat_interleave(groups, 1))
         error = (output.reshape_as(expected).float()-expected).abs()
+        stored_k_ok = torch.equal(kp[actual[-1].long()].reshape_as(k[-1]), k[-1])
+        stored_v_ok = torch.equal(vp[actual[-1].long()].reshape_as(v[-1]), v[-1])
         report = dict(layer=layer.layer_id, rank=rank, position=pos,
                       rule="native-capacity" if req.context_program is None else "context-inclusive-distance",
                       window=window,
                       read_count=len(actual), expected_count=len(pairs), slots_ok=slots_ok,
+                      stored_k_ok=stored_k_ok, stored_v_ok=stored_v_ok,
                       max_abs=float(error.max()), mean_abs=float(error.mean()),
                       fp32_close=bool(torch.all(error <= .0078125 + .0078125*expected.abs())))
         destination = Path(params[0]["context_trace_path"]+f".reads.rank{rank}.jsonl")
         with destination.open("a") as target:
             target.write(json.dumps(report)+"\n")
-        if not slots_ok:
+        if not slots_ok or not stored_k_ok or not stored_v_ok:
             raise AssertionError(f"Decode physical read oracle failed: {report}")
 
     return hook

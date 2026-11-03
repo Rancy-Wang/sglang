@@ -415,8 +415,8 @@ def replay(args):
 def timing(args):
     """Uninstrumented HTTP timings; run against isolated baseline/current servers.
 
-    Each round has twelve cached ordinary 128-token decodes, three cold ordinary
-    prefills, and one frozen 48K summary warm prefill. Server restart/JIT/source
+    Each round has twelve cached ordinary and Drop/R 128-token decodes, three
+    cold prefills per type, and one frozen 48K summary warm prefill. JIT/source
     population are excluded. Combine three interleaved rounds on the same GPUs.
     """
     import copy
@@ -491,13 +491,19 @@ def timing(args):
         {"role": "system", "content": "Read the reference and continue with a detailed explanation."},
         {"role": "user", "content": ("The archive lists dates, places, names, and supporting evidence. "*512)
          + "Explain how to compare and organize the evidence."}]}
-    flush()
-    call(ordinary, "ordinary-warmup", 128, True)
-    for i in range(12):
-        call(ordinary, f"ordinary-decode-{i}", 128, True)
-    for i in range(3):
+    drop = {"messages": [ordinary["messages"][0],
+                         {"role": "user", "content": "Discard this earlier reference. "*256},
+                         {"role": "assistant", "content": "Acknowledged."},
+                         ordinary["messages"][1]],
+            "drop_message": {"2": [1]}, "reposition": [2]}
+    for name, request in (("ordinary", ordinary), ("drop-r", drop)):
         flush()
-        call(ordinary, f"ordinary-cold-{i}", 128, True)
+        call(request, f"{name}-warmup", 128, True)
+        for i in range(12):
+            call(request, f"{name}-decode-{i}", 128, True)
+        for i in range(3):
+            flush()
+            call(request, f"{name}-cold-{i}", 128, True)
     source, target = load(args.source), load(args.target)
     # Compile the Context shape once before the measured, independently warmed
     # request. Flush makes the measured source/target relationship reproducible.
