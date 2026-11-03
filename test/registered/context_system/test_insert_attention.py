@@ -123,7 +123,8 @@ def test_nonmonotone_swa_gather_graph(context_modules, tail_dropped):
 
 
 @pytest.mark.parametrize("window_size", [0, 3, 128])
-def test_random_swa_graph_matches_logical_tail(window_size):
+@pytest.mark.parametrize("length_dtype", [torch.int32, torch.int64])
+def test_random_swa_graph_matches_logical_tail(window_size, length_dtype):
     from sglang.srt.context_system.occurrence import ContextDecodeLayout
     from sglang.srt.layers.attention.context_backend import ContextDecodeRegistry
 
@@ -139,6 +140,7 @@ def test_random_swa_graph_matches_logical_tail(window_size):
         view = ContextDecodeLayout.from_layout(layout, "cuda")
         req = SimpleNamespace(context_program=SimpleNamespace(layout=layout), context_decode_layout=view)
         _, lengths, _, _ = registry.bind_batch([req], [258], rows)
+        lengths = lengths.to(length_dtype)
         ptr = torch.zeros(2, device="cuda", dtype=torch.int32)
         output = torch.empty(256, device="cuda", dtype=torch.int64)
         def run():

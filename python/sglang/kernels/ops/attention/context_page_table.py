@@ -51,7 +51,9 @@ def _prompt_window_count(Index, lower, budget):
 def context_window_lengths(Registry, Rows, Lengths, Output, WINDOW: tl.constexpr):
     b = tl.program_id(0)
     row = tl.load(Rows + b)
-    length = tl.load(Lengths + b)
+    # Eager batches carry int64 lengths; graph buffers use int32. Registry
+    # positions and supported token capacities are int32 in both paths.
+    length = tl.load(Lengths + b).to(tl.int32)
     entry = Registry + row * 8
     pointer = tl.load(entry)
     result = tl.minimum(length, WINDOW + 1)
@@ -101,7 +103,7 @@ def context_decode_indices(
 ):
     b = tl.program_id(0)
     row = tl.load(Rows + b)
-    length = tl.load(Lengths + b)
+    length = tl.load(Lengths + b).to(tl.int32)
     offset = tl.load(Indptr + b)
     start = tl.load(Starts + b) if HAS_START else 0
     entry = Registry + row * 8
@@ -115,7 +117,7 @@ def context_decode_indices(
         raw_row = row_pointer.to(tl.pointer_type(tl.int32))
     unordered = tl.load(entry + 6) != 0
     if WINDOW >= 0 and unordered:
-        full_length = tl.load(FullLengths + b)
+        full_length = tl.load(FullLengths + b).to(tl.int32)
         next_pos = tl.load(entry + 4).to(tl.int32)
         generated = full_length - active
         lower = next_pos + generated - 1 - WINDOW
