@@ -2,7 +2,12 @@
 import copy
 
 import pytest
-from insert_summary48k import History, native_logit_bounds, process_summary, select_summary
+from insert_summary48k import (
+    History,
+    native_logit_bounds,
+    process_summary,
+    select_summary,
+)
 
 
 def test_numeric_bounds_use_only_native_controls_and_reject_invalid_controls():

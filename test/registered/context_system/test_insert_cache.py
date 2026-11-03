@@ -12,6 +12,54 @@ pytest_plugins = ("test_rules", "test_serving_runtime")
 pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="native SRT requires Linux")
 
 
+def create_insert_cache_probe(config):
+    """Opt-in read-only cache tracing through native --forward-hooks."""
+    import json
+
+    from sglang.srt.mem_cache.unified_radix_cache import UnifiedRadixCache
+
+    def walk(cache, key):
+        node, cursor = cache.tree_core.root_node, 0
+        edges = []
+        while cursor < len(key):
+            child = node.children.get(key.child_key_at(cursor, cache.page_size))
+            if child is None:
+                return cursor, "no-child", edges[-4:]
+            length = child.key.match_at(key, cursor, cache.page_size)
+            edges.append((cursor, len(child.key), length, child.evicted, child.context_hole))
+            cursor += length
+            if length < len(child.key):
+                return cursor, "edge-mismatch", edges[-4:]
+            node = child
+        return cursor, "complete", edges[-4:]
+
+    def emit(event):
+        if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
+            print("INSERT_CACHE_PROBE", json.dumps(event), flush=True)
+
+    native_match = UnifiedRadixCache.match_prefix
+    native_finished = UnifiedRadixCache._cache_finished_req_native
+
+    def match(cache, params):
+        result = native_match(cache, params)
+        if params.key.context is not None and not params.context_cache_publication:
+            emit({"kind": "match", "length": len(params.key), "hit": len(result.device_indices),
+                      "exact": result.context_exact_prefix_len, "retry": result.context_retry,
+                      "topology": walk(cache, params.key)})
+        return result
+
+    def finished(cache, req, *args, **kwargs):
+        result = native_finished(cache, req, *args, **kwargs)
+        if req.context_program is not None:
+            key = req.make_prefix_key(req.origin_input_ids)
+            emit({"kind": "finished", "rid": req.rid, "input": len(key),
+                      "output": len(req.output_ids), "topology": walk(cache, key)})
+        return result
+
+    UnifiedRadixCache.match_prefix = match
+    UnifiedRadixCache._cache_finished_req_native = finished
+
+
 def create_insert_kv_probe(config):
     """Opt-in RadixAttention forward hook; never enabled in timing runs.
 
@@ -40,13 +88,13 @@ def create_insert_kv_probe(config):
         if slots is None:
             slots = backend.kv_index_translator.translate_full_attn_ids(batch.out_cache_loc)
         kp, vp = backend.token_to_kv_pool.get_kv_buffer(layer.layer_id)
-        data = dict(
-            input_ids=batch.input_ids.detach().cpu(), positions=batch.positions.detach().cpu(),
-            q=q.detach().cpu(), k=k.detach().cpu(), v=v.detach().cpu(),
-            slots=slots.detach().cpu(), stored_k=kp[slots.long()].detach().cpu(),
-            stored_v=vp[slots.long()].detach().cpu(), output=output.detach().cpu(),
-            window=window,
-        )
+        data = {
+            "input_ids": batch.input_ids.detach().cpu(), "positions": batch.positions.detach().cpu(),
+            "q": q.detach().cpu(), "k": k.detach().cpu(), "v": v.detach().cpu(),
+            "slots": slots.detach().cpu(), "stored_k": kp[slots.long()].detach().cpu(),
+            "stored_v": vp[slots.long()].detach().cpu(), "output": output.detach().cpu(),
+            "window": window,
+        }
         if context is not None:
             cm = context.for_layer(layer)
             for name in ("qo_indptr", "kv_indptr", "kv_indices", "query_positions", "kv_positions"):
@@ -209,11 +257,11 @@ def test_insert_long_overlap_decode(tmp_path, request):
     requests.post(server+"/flush_cache", timeout=30).raise_for_status()
     for mode in ("cold", "warm"):
         path = root / f"long-overlap-{mode}.pt"
-        response = requests.post(server+"/v1/chat/completions", json=dict(
-            model=os.environ["CONTEXT_SERVER_MODEL"], messages=messages, insert={"2": -1},
-            reposition=[], temperature=0, max_tokens=4, ignore_eos=True,
-            custom_logit_processor=serialized_probe(), custom_params={
-                "context_trace_path": str(path), "context_trace_count": 4}), timeout=600)
+        response = requests.post(server+"/v1/chat/completions", json={
+            "model": os.environ["CONTEXT_SERVER_MODEL"], "messages": messages, "insert": {"2": -1},
+            "reposition": [], "temperature": 0, "max_tokens": 4, "ignore_eos": True,
+            "custom_logit_processor": serialized_probe(), "custom_params": {
+                "context_trace_path": str(path), "context_trace_count": 4}}, timeout=600)
         (root / f"long-overlap-{mode}.json").write_text(response.text)
         assert response.status_code == 200, response.text
         assert response.json()["usage"]["completion_tokens"] == 4
