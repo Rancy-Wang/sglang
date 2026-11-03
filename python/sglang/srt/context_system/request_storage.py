@@ -8,7 +8,7 @@ admission and contains page IDs, not extra model KV.
 import torch
 
 
-def context_publish_length(req, length):
+def context_publish_length(req, length, *, preserve_state_boundary=False):
     """Largest prefix whose absent terminal rows have an on-path Drop proof.
 
     A Drop at raw boundary b belongs to token b, so a b-token key does not
@@ -34,6 +34,11 @@ def context_publish_length(req, length):
     required = np.maximum.accumulate(np.where(missing, proof_end, 0))
     if required[-1] <= length:
         return length
+    if preserve_state_boundary:
+        # A recurrent state describes exactly `length` processed tokens. A
+        # shorter Full-only publication would mislabel that state. Defer this
+        # cache publication; the request keeps its live state and keeps going.
+        return 0
     valid = np.flatnonzero(required <= np.arange(1, len(rows) + 1))
     return int(valid[-1] + 1) if len(valid) else 0
 
@@ -57,10 +62,20 @@ def prefill_progress_reserve(req, query_end):
     """Reserve singleton progress through future repair stages and final decode.
 
     Existing owners are already excluded from allocator availability. Future
-    birth KV survives only to its Drop; intermediate copies coexist with those
-    sources for one forward. Final-position copies are deferred until needed.
+    birth KV survives while future queries read it; target versions are prepared
+    at every chunk and transferred to Radix before Drop makes them evictable.
     Cache the CPU stage demand once per match, with no device page inspection.
     """
+    # After admission, the scheduler owns one chunked-prefill continuation.
+    # Its current canonical/target owners are already excluded from allocator
+    # availability, and later Drops retire them. Adding the original future
+    # peak on every chunk counts these owners as if they survived forever.
+    # Continuations use the exact next-forward union in _fit_context_admission;
+    # running decoders have their complete remaining output budget reserved
+    # there, so they can finish while the continuation waits for shared space.
+    if getattr(req, "context_prefill_started", False):
+        return 0
+
     import numpy as np
 
     program = req.context_recompute_program or req.context_program
@@ -109,8 +124,13 @@ def prefill_progress_reserve(req, query_end):
             offsets[:-1], offsets[1:], strict=True,
         ):
             selected = keys[x:y]
-            copies[a:b] = np.count_nonzero(pos[selected] != canonical[raw[selected]])
-        terminal = program.layout.keep_mask.numpy() & (
+            # Reads at a target position use the retained target itself. Only
+            # a third, intermediate position needs another transient version.
+            copies[a:b] = np.count_nonzero(
+                (pos[selected] != canonical[raw[selected]])
+                & (pos[selected] != program.layout.positions.numpy()[raw[selected]])
+            )
+        terminal = (
             (program.layout.positions.numpy() != canonical)
             | (
                 (np.arange(n) < (len(positions) if positions is not None else start))
@@ -125,26 +145,37 @@ def prefill_progress_reserve(req, query_end):
         ))
         cached = req._context_progress_demand = (
             program, recovery, pending, copies, terminal, final_intermediate,
+            window.terminal_ready_after.numpy(),
         )
-    _, _, pending, copies, terminal, final_intermediate = cached
+    _, _, pending, copies, terminal, final_intermediate, terminal_ready = cached
     future = pending.copy()
     future[:query_end] = False
     expiry = np.minimum(program.visible_until.numpy(), n)
+    # Once a token reaches its last position transition, canonical reads alias
+    # its target owner. Do not reserve an obsolete birth version until Drop.
+    birth_expiry = np.where(
+        terminal, np.minimum(expiry, np.maximum(np.arange(n) + 1, terminal_ready)),
+        expiry,
+    )
     live = np.cumsum(future, dtype=np.int64) - np.bincount(
-        expiry[future], minlength=n + 1,
+        birth_expiry[future], minlength=n + 1,
     ).cumsum()[:n]
-    demand = live + copies
-    # Active terminal copies coexist with the last query's reads, but a
-    # final-stage read at the terminal position uses that same occurrence.
-    # The union is bounded by terminal copies plus nonterminal read copies.
-    terminal = terminal.copy()
-    terminal[:query_end] &= (
-        req.context_window_plan[1].terminal_occurrences.numpy() < 0
-    )
+    # New target versions coexist with birth/read versions until their Drop.
+    # Already published dropped targets are eviction candidates, not private
+    # lifetime reservations. The current forward's exact union is charged by
+    # admission separately; do not reserve the entire historical cache forever.
+    future_terminal = terminal & future
+    terminal_live = np.cumsum(future_terminal, dtype=np.int64) - np.bincount(
+        expiry[future_terminal], minlength=n + 1,
+    ).cumsum()[:n]
+    demand = live + copies + terminal_live
+    # Final-position reads alias target versions rather than adding a third copy.
     demand[-1] = max(
-        demand[-1], live[-1] + int(terminal.sum()) + final_intermediate,
+        live[-1] + terminal_live[-1] + final_intermediate, live[-1],
     )
-    return persistent + int(demand[query_end:].max()) + output
+    # This request decodes only after prefill has released historical versions.
+    # Reserve both phases, not the sum of two peaks that cannot coexist.
+    return persistent + max(int(demand[query_end:].max()), int(demand[-1]) + output)
 
 
 def handle_prefill_capacity_pressure(req, capacity, needed, tree_cache=None):
@@ -153,9 +184,9 @@ def handle_prefill_capacity_pressure(req, capacity, needed, tree_cache=None):
     Called only after the smallest permitted forward failed, without other
     reservations. Full-pool Context cache rows have one owner per resident raw
     token. Inspect CPU residency, never copy physical page IDs back from CUDA.
-    A failed initial match owns no pages: its temporary lease can be released
-    and the next pass can match from the root. Continuations must instead use
-    the scheduler's deferred abort to drain work and release their ownership.
+    Never discard a successful prefix match to retry from the root. Requests
+    whose own required owners cannot fit fail explicitly; external pressure
+    waits for the other owners to finish.
     """
     if req.context_prefill_started:
         state = req.context_state
@@ -191,16 +222,15 @@ def handle_prefill_capacity_pressure(req, capacity, needed, tree_cache=None):
         else (req.prefix_indices, req.context_resident)
     )
     pinned = len(slots) if resident is None else int(resident.count_nonzero())
+    if tree_cache is not None and getattr(req, "_context_admission_receipt", None) is not None:
+        pinned = tree_cache.context_leased_page_count(req)
     # Admission uses strict '<' for its total reservation, including its guard.
     if needed < capacity - pinned:
         return
-    if pinned:
-        req.context_force_miss = True
-    else:
-        req.context_admission_error = (
-            f"Context prefill needs {needed} reserved KV tokens even without "
-            f"a cached prefix, but the KV pool holds {capacity}"
-        )
+    req.context_admission_error = (
+        f"Context prefill retains {pinned} required cached KV tokens and needs "
+        f"{needed} reserved KV tokens, but the KV pool holds {capacity}"
+    )
 
 
 def prefill_capacity_error(req, capacity):

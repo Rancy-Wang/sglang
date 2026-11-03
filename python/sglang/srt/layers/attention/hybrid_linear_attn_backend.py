@@ -393,7 +393,6 @@ class MambaAttnBackendBase(AttentionBackend):
         dst_masked = mamba_track_indices[mamba_track_mask]
 
         is_aligned = (lens_masked % state_chunk_size) == 0
-
         # Aligned: last_recurrent_state from ssm_states.
         track_ssm_final_src = mamba_cache_indices[mamba_track_mask][is_aligned]
         track_ssm_final_dst = dst_masked[is_aligned]
@@ -1096,6 +1095,15 @@ class HybridLinearAttnBackend(AttentionBackend):
         self.extend_dummy_seqs_capped_by_req_pool = getattr(
             full_attn_backend, "extend_dummy_seqs_capped_by_req_pool", False
         ) or getattr(linear_attn_backend, "extend_dummy_seqs_capped_by_req_pool", False)
+
+    @property
+    def context_decode_registry(self):
+        return getattr(self.full_attn_backend, "context_decode_registry", None)
+
+    @context_decode_registry.setter
+    def context_decode_registry(self, registry):
+        # Context changes Full KV reads only. GDN keeps its native state slots.
+        self.full_attn_backend.context_decode_registry = registry
 
     @property
     def data_type(self):

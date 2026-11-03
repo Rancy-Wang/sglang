@@ -1013,6 +1013,13 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
 
         if model_runner.model_config.model_is_mrope:
             if (
+                ret.context_attention is not None
+                or any(req.context_program is not None for req in batch.reqs)
+            ):
+                # Context is text-only. Its positions describe births/repositions,
+                # not raw history length or the compact Full-attention KV count.
+                ret.mrope_positions = ret.positions.to(torch.int64).unsqueeze(0).repeat(3, 1)
+            elif (
                 ret.spec_info is not None
                 and getattr(ret.spec_info, "positions", None) is not None
             ):

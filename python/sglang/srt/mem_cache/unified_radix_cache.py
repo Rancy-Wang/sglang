@@ -966,6 +966,25 @@ class UnifiedRadixCache(BasePrefixCache):
             raise ValueError("Context Drop leases require the Python tree core")
         return self.tree_core.configure_context_drop_lock(node_id, receipt, required_raw)
 
+    def configure_context_prefill_drop_lock(self, req, receipt):
+        """Do not pin already cached, proven-unread Drop pages at admission.
+
+        This changes eviction eligibility only. The source tree keeps its KV
+        until real allocator pressure; Mamba's endpoint lock stays untouched.
+        The proof is checked against the matched source branch, not a future
+        Drop event that exists only in this request's target key.
+        """
+        if self.disable or get_memory().disable_drop_aware_eviction:
+            return
+        program = req.context_recompute_program or req.context_program
+        if program is None or req.context_prefill_started:
+            return
+        recovery = req.context_recovery_plan
+        length = recovery.matched_length if recovery is not None else len(req.prefix_indices)
+        start = recovery.start if recovery is not None else len(req.prefix_indices)
+        required = program.visible_until[:length] > start
+        self.configure_context_drop_lock(req.last_node, receipt, required)
+
     def context_leased_page_count(self, req):
         """Count this request's Full leases on the capacity-failure path.
 
@@ -976,7 +995,7 @@ class UnifiedRadixCache(BasePrefixCache):
         """
         if self.disable:
             return 0
-        leases = [(req.last_node, req.lock_receipt)]
+        leases = [(req.last_node, getattr(req, "_context_admission_receipt", None) or req.lock_receipt)]
         if req.context_source_lease is not None:
             leases.append(req.context_source_lease)
         seen, count = set(), 0
@@ -1101,7 +1120,9 @@ class UnifiedRadixCache(BasePrefixCache):
                     effective_cache_len = min(effective_cache_len, cl)
 
             if getattr(req, "context_state", None) is not None:
-                effective_cache_len = context_publish_length(req, effective_cache_len)
+                effective_cache_len = context_publish_length(
+                    req, effective_cache_len, preserve_state_boundary=self.is_mamba_enabled
+                )
 
             # Truncate if needed; the tail free is deferred and batched with
             # the unaligned tail below so a shared boundary page is emitted once.
@@ -1225,11 +1246,11 @@ class UnifiedRadixCache(BasePrefixCache):
             return
         state = getattr(req, "context_state", None)
         if state is not None:
-            self._prepare_context_cache_row(req, retain_source=True)
+            prepared_len = self._prepare_context_cache_row(req, retain_source=True)
             length = len(req.get_fill_ids())
             if (
                 not self.disable
-                and context_publish_length(req, length) < req.kv.cache_protected_len
+                and context_publish_length(req, length) < prepared_len
             ):
                 # A borrowed sparse prefix can rely on a later Drop marker.
                 # Until deferred copies reach that marker, keep the original
@@ -1239,8 +1260,17 @@ class UnifiedRadixCache(BasePrefixCache):
                     self.req_to_token_pool, req.kv.req_pool_idx
                 )[:length].to(dtype=torch.int64, copy=True)
                 return
-        self._cache_unfinished_req_native(req, chunked=chunked, **kwargs)
-        if state is not None and not self.disable:
+        checkpoint_len = req.kv.mamba_last_track_seqlen if self.is_mamba_enabled else None
+        old_protected_len = req.kv.cache_protected_len
+        published = self._cache_unfinished_req_native(req, chunked=chunked, **kwargs)
+        if state is not None:
+            logger.debug(
+                "Context cache publication rid=%s raw_end=%d checkpoint=%s "
+                "published=%s protected=%d->%d",
+                req.rid, len(req.get_fill_ids()), checkpoint_len, published,
+                old_protected_len, req.kv.cache_protected_len,
+            )
+        if published and state is not None and not self.disable:
             req.context_state = state.publish(
                 req.prefix_indices, cache_len=req.kv.cache_protected_len,
                 swa_resident=req.context_swa_resident,
@@ -1308,6 +1338,7 @@ class UnifiedRadixCache(BasePrefixCache):
 
     def _prepare_context_cache_row(self, req: Req, *, retain_source: bool):
         state = req.context_state
+        prepared_len = req.kv.cache_protected_len
         if req.session is not None or req.kv_rotation_base is not None:
             raise ValueError("Context cache does not support session/ring KV layouts")
         if not req.context_cache_published and not self.disable:
@@ -1329,13 +1360,17 @@ class UnifiedRadixCache(BasePrefixCache):
                         req.last_node, receipt, req.context_swa_source_required
                     )
                 req.context_source_lease = (req.last_node, receipt)
-            req.kv.cache_protected_len = min(
-                req.kv.cache_protected_len, req.context_exact_prefix_len
-            )
+            prepared_len = min(prepared_len, req.context_exact_prefix_len)
+            # Unfinished publication may defer. Keep the old lease length until
+            # native insert/rematch installs its replacement. Finished cleanup
+            # still needs the target ownership boundary for private-page release.
+            if not retain_source:
+                req.kv.cache_protected_len = prepared_len
         terminal = state.terminal_slots()
         self.req_to_token_pool.write(
             (req.kv.req_pool_idx, slice(0, len(terminal))), terminal
         )
+        return prepared_len
 
     @staticmethod
     def _context_cache_residency(req, length):
@@ -1430,22 +1465,27 @@ class UnifiedRadixCache(BasePrefixCache):
             self.dec_lock_ref(node, receipt)
             req.context_source_lease = None
 
-    def _cache_unfinished_req_native(self, req: Req, chunked: bool = False, **kwargs) -> None:
+    def _cache_unfinished_req_native(self, req: Req, chunked: bool = False, **kwargs) -> bool:
         if self.session.try_cache_unfinished_req(req, chunked=chunked, **kwargs):
-            return
+            return False
 
         token_ids = req.get_fill_ids()
 
         if self.disable:
             kv_indices = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[: len(token_ids)]
             req.prefix_indices = kv_indices.to(dtype=torch.int64, copy=True)
-            return
+            return False
 
         kv_indices_orig = request_row(self.req_to_token_pool, req.kv.req_pool_idx)[: len(token_ids)]
 
+        # This is a proposed insertion boundary, not the still-held lease length.
+        prev_prefix_len = req.kv.cache_protected_len
+        if req.context_state is not None and not req.context_cache_published:
+            prev_prefix_len = min(prev_prefix_len, req.context_exact_prefix_len)
+
         # components prepare insert data + return effective cache_len
         insert_params = InsertParams(
-            prev_prefix_len=req.kv.cache_protected_len,
+            prev_prefix_len=prev_prefix_len,
             chunked=chunked,
             priority=getattr(req, "priority", 0) or 0,
             session_id=req.session_id,
@@ -1463,7 +1503,9 @@ class UnifiedRadixCache(BasePrefixCache):
                 effective_cache_len = min(effective_cache_len, cl)
 
         if getattr(req, "context_state", None) is not None:
-            effective_cache_len = context_publish_length(req, effective_cache_len)
+            effective_cache_len = context_publish_length(
+                req, effective_cache_len, preserve_state_boundary=self.is_mamba_enabled
+            )
 
         radix_key = req.make_prefix_key(
             token_ids[:effective_cache_len], is_bigram=self.tree_core.is_eagle
@@ -1484,7 +1526,7 @@ class UnifiedRadixCache(BasePrefixCache):
                 comp.cleanup_after_caching_req(
                     req, is_finished=False, insert_params=insert_params
                 )
-            return
+            return False
 
         kv_indices = kv_indices_orig[:effective_cache_len]
 
@@ -1519,7 +1561,7 @@ class UnifiedRadixCache(BasePrefixCache):
                 comp.cleanup_after_caching_req(
                     req, is_finished=False, insert_params=insert_params
                 )
-            return
+            return False
 
         # Match prefix. SWA insertion retains one extra window before the
         # page-aligned boundary, so the normal match remains safe to repoint.
@@ -1534,15 +1576,15 @@ class UnifiedRadixCache(BasePrefixCache):
         new_indices = match_result.device_indices
         new_last_node = match_result.last_device_node
         new_prefix_len = result.prefix_len
-        assert req.kv.cache_protected_len <= len(new_indices) + self.page_size - 1, (
-            f"{req.kv.cache_protected_len=}, {len(new_indices)=}, {page_aligned_len=}"
+        assert prev_prefix_len <= len(new_indices) + self.page_size - 1, (
+            f"{prev_prefix_len=}, {len(new_indices)=}, {page_aligned_len=}"
         )
         assert new_prefix_len <= len(new_indices), (
             f"{new_prefix_len=}, {len(new_indices)=}"
         )
         self.req_to_token_pool.write(
-            (req.kv.req_pool_idx, slice(req.kv.cache_protected_len, len(new_indices))),
-            new_indices[req.kv.cache_protected_len :],
+            (req.kv.req_pool_idx, slice(prev_prefix_len, len(new_indices))),
+            new_indices[prev_prefix_len :],
         )
 
         self._dec_req_lock(req, skip_swa=req.swa_prefix_lock_released)
@@ -1594,6 +1636,7 @@ class UnifiedRadixCache(BasePrefixCache):
                 insert_result=result,
                 insert_params=insert_params,
             )
+        return True
 
     # ---- Internal Helpers ----
 

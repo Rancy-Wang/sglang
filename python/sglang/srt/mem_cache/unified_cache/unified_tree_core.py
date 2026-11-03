@@ -682,8 +682,12 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             raise ValueError(
                 "Context Drop leases require page_size=1 device-only Python Radix"
             )
-        if set(self.component_types) - {ComponentType.FULL, ComponentType.SWA}:
-            raise ValueError("Context Drop leases support Full/SWA KV components only")
+        if set(self.component_types) - {
+            ComponentType.FULL, ComponentType.SWA, ComponentType.MAMBA
+        }:
+            raise ValueError("Context Drop leases support Full/SWA/Mamba components only")
+        # Only Full references below are released. The native Mamba state lock
+        # stays on its endpoint; Drop never changes the live recurrent state.
         anchor = self.node_by_id(node_id)
         self._assert_receipt_anchor(anchor, receipt)
         if (
@@ -803,7 +807,11 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             and node.context_drop_eligible
             and node.full_page_count
             and not node.backuped
-            and not any(cd.lock_ref or cd.host_lock_ref for cd in node.component_data)
+            and not any(
+                node.component_data[ct].lock_ref or node.component_data[ct].host_lock_ref
+                for ct in (ComponentType.FULL, ComponentType.SWA)
+                if ct in self.component_types
+            )
         ):
             kind = 1
         elif node in self.evictable_device_leaves:
@@ -817,13 +825,17 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         )
 
     def evict_context_pages(self, node, tracker, device_frees, host_frees):
-        """Free an unread edge while retaining its path for live/retry users."""
+        """Evict unread attention KV, preserving independent recurrent states."""
         assert node.context_drop_eligible and node.full_page_count
         assert not node.backuped and not any(
-            cd.lock_ref or cd.host_lock_ref for cd in node.component_data
+            node.component_data[ct].lock_ref or node.component_data[ct].host_lock_ref
+            for ct in (ComponentType.FULL, ComponentType.SWA)
+            if ct in self.component_types
         )
         value = node.component_data[BASE_COMPONENT_TYPE].value
         for component in self.components:
+            if component.component_type == ComponentType.MAMBA:
+                continue
             self._evict_component_and_detach_lru(
                 node,
                 component,
@@ -845,6 +857,11 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             and not node.children
             and not node.context_path_ref
             and not any(cd.lock_ref or cd.host_lock_ref for cd in node.component_data)
+            and not any(
+                cd.value is not None or cd.host_value is not None
+                for ct, cd in enumerate(node.component_data)
+                if ct != BASE_COMPONENT_TYPE
+            )
         ):
             parent = node.parent
             self.evictable_device_leaves.discard(node)
@@ -999,12 +1016,12 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             or self.kv_events.enabled
             or self.is_eagle
             or any(
-                ct not in (ComponentType.FULL, ComponentType.SWA)
+                ct not in (ComponentType.FULL, ComponentType.SWA, ComponentType.MAMBA)
                 for ct in self.component_types
             )
         ):
             raise ValueError(
-                "Context Radix currently requires device-only Full/SWA cache, "
+                "Context Radix currently requires device-only Full/SWA/Mamba cache, "
                 "without speculative decoding or KV cache event export"
             )
 
@@ -1049,10 +1066,17 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         if not len(key):
             return self._empty_match_result
         swa = self.components_by_type.get(ComponentType.SWA)
+        mamba = self.components_by_type.get(ComponentType.MAMBA)
 
         def advance(node, length, suffix):
             if node.evicted:
                 return None
+            if mamba is not None and not params.context_cache_publication:
+                # Preserve native hybrid prefix admission: a partial edge has no
+                # state at its new boundary. Do not COW a later state into it.
+                # Context never rewinds or transforms the selected linear state.
+                if length != len(node.key) or node.component_data[ComponentType.MAMBA].value is None:
+                    return False, suffix
             if swa is None or params.context_cache_publication:
                 return True, suffix
             if node.component_data[ComponentType.SWA].value is None:
@@ -1810,6 +1834,8 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             # Restore the insertion's original matched prefix after the loop.
             state.result.prefix_len = base + start
             for component in self.components:
+                if component.component_type == ComponentType.MAMBA:
+                    continue
                 component.commit_insert_component_data(
                     node=node,
                     is_new_leaf=True,
@@ -1817,6 +1843,18 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                     result=state.result,
                     cache_actions=state.pending_actions,
                 )
+        # Unlike per-token Full/SWA KV, one recurrent state belongs only to
+        # the complete prefix endpoint. Sharing it across resident runs would
+        # invent earlier states and donate/free the same slot more than once.
+        mamba = self.components_by_type.get(ComponentType.MAMBA)
+        if mamba is not None:
+            mamba.commit_insert_component_data(
+                node=node,
+                is_new_leaf=True,
+                params=state.params,
+                result=state.result,
+                cache_actions=state.pending_actions,
+            )
         state.target_node = node
         state.is_new_leaf = True
         state.result.prefix_len = base
@@ -2613,10 +2651,18 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         Only the Full (base) component is required; auxiliary components
         (Mamba, SWA) are not mandatory for D-leaf membership."""
         ct = BASE_COMPONENT_TYPE
-        if node is self.root_node or node.evicted or node.context_hole:
+        if node is self.root_node or node.evicted:
             return False
         if any(cd.lock_ref > 0 for cd in node.component_data):
             return False
+        if node.context_hole:
+            # Drop-only eviction retains a checkpoint-only edge. If ordinary
+            # LRU eviction later removes this entire unused branch, it must be
+            # able to walk through that edge (zero Full pages) to its parent.
+            # Otherwise the Full ledger advertises ancestors as evictable but
+            # the allocator can never reclaim them. Live path/state leases
+            # still protect the checkpoint; Drop-first eviction never deletes it.
+            return not node.children and not node.context_path_ref
         if any(
             child.component_data[ct].value is not None
             for child in node.children.values()
@@ -3255,8 +3301,11 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                     E(f"node {nid} invalid Context hole state")
                 elif not torch.all(node.component_data[FCT].value == -1):
                     E(f"node {nid} Context hole contains a physical page")
-                if any(node.component_data[ct].value is not None for ct in self.component_types if ct != FCT):
-                    E(f"node {nid} Context hole still owns auxiliary pages")
+                # Full holes may retain an independent raw-prefix recurrent
+                # checkpoint. Attention components must still release their KV.
+                if any(node.component_data[ct].value is not None for ct in self.component_types
+                       if ct not in (FCT, ComponentType.MAMBA)):
+                    E(f"node {nid} Context hole still owns auxiliary attention pages")
 
             # Full is the tree backbone, so aux data requires Full data.
             for ct in self.component_types:

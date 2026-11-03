@@ -1752,7 +1752,9 @@ class Req(ReqDllmMixin):
             query_start=start,
             query_end=query_end,
         )
-        keep = self.context_state.prefill_terminal_keep(program.layout, query_end)
+        keep = self.context_state.prefill_terminal_keep(
+            program.layout, query_end, program.visible_until
+        )
         plan = self.context_state.plan(window, keep)
         self.context_window_plan = (window, plan)
         return plan.extra_page_count
@@ -3250,6 +3252,11 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             if step.unused_swa_slots is not None:
                 self.token_to_kv_pool_allocator.free_swa(step.unused_swa_slots)
             req.context_state = step.state
+            logger.debug(
+                "Context KV versions rid=%s raw=%d:%d new=%d copies=%d retained=%d retired=%d",
+                req.rid, req.extend_range.start, req.extend_range.end, length,
+                len(step.copy_destination_slots), len(step.state.slots), len(step.retired_slots),
+            )
             program = req.context_recompute_program or req.context_program
             if req.extend_range.end == len(program.layout.positions):
                 # Overlap can launch decode before prefill result processing

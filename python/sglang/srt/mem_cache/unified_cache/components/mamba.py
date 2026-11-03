@@ -547,6 +547,16 @@ class MambaComponent(TreeComponent):
                     cache_len -= int(write_pos_buf[req.kv.mamba_pool_idx].item())
                     write_pos_buf[req.kv.mamba_pool_idx] = 0
 
+        if (
+            getattr(req, "context_state", None) is not None
+            and cache_len is not None
+            and not 0 <= cache_len <= token_ids_len
+        ):
+            raise ValueError(
+                f"Context checkpoint raw length {cache_len} is outside the "
+                f"completed token prefix {token_ids_len}; never relabel its state"
+            )
+
         if is_finished:
             if cache_len is None:
                 cache_len = 0

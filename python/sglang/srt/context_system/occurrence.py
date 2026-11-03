@@ -99,6 +99,7 @@ class OccurrenceWindow:
     segment_query_ends: torch.Tensor
     segment_key_offsets: torch.Tensor
     segment_key_occurrences: torch.Tensor
+    terminal_ready_after: torch.Tensor
 
     @property
     def occurrence_count(self) -> int:
@@ -177,6 +178,7 @@ def compile_occurrence_window(
     bounds = np.searchsorted(stages, np.arange(stage_count + 2))
     current_ids = raw.copy()
     current_pos = birth.copy()
+    terminal_ready_after = raw.copy()
     materialized_pos = birth.copy()
     raw_parts, pos_parts = [raw], [birth]
     next_id = n
@@ -214,6 +216,7 @@ def compile_occurrence_window(
                     "Reposition transition old positions do not match current state."
                 )
             current_pos[ids] = new[begin:end]
+            terminal_ready_after[ids] = bounds[stage]
         local_start = max(query_start, int(bounds[stage]))
         local_end = min(query_end, int(bounds[stage + 1]))
         if local_start >= local_end:
@@ -262,6 +265,7 @@ def compile_occurrence_window(
         segment_query_ends=torch.from_numpy(np.asarray(ends, dtype=np.int32)),
         segment_key_offsets=torch.from_numpy(np.asarray(key_offsets, dtype=np.int32)),
         segment_key_occurrences=torch.from_numpy(np.concatenate(keys)),
+        terminal_ready_after=torch.from_numpy(terminal_ready_after),
     )
 
 
@@ -585,30 +589,27 @@ class OccurrenceState:
             else None,
         )
 
-    def prefill_terminal_keep(self, layout, query_end):
+    def prefill_terminal_keep(self, layout, query_end, visible_until=None):
+        """Cache every computed token, independently of attention visibility.
+
+        An already evicted source stays absent: publishing a later chunk must
+        not reconstruct dropped history just to fill a cache hole. New queries
+        always have a birth KV and receive a target-position cache version in
+        this forward, including queries that a later Drop makes invisible.
+        """
         start = len(self.canonical_rows)
-        # Match mini's recovery policy: historical queries may read a dropped
-        # token's birth KV, but no future decode needs its terminal cache copy.
-        # advance() retains those birth sources until their final query and
-        # retires private pages only after the completed forward.
-        keep = layout.keep_mask[:query_end].clone()
-        keep[:start] &= (self.canonical_rows >= 0) | (
-            self.terminal_rows >= 0
-        )
-        if query_end < len(layout.positions):
-            # Do not keep a third (final-position) version while a historical
-            # stage still needs birth and intermediate-position KV. Publish
-            # holes until the final forward; active birth sources stay private
-            # and live, so the final copy still rotates directly from its source.
-            available = (
-                layout.birth_positions[:query_end]
-                == layout.positions[:query_end]
-            )
-            available[:start] = (
-                self.canonical_positions
-                == layout.positions[:start]
-            ) | (self.terminal_rows >= 0)
-            keep &= available
+        keep = torch.ones(query_end, dtype=torch.bool)
+        keep[:start] = (self.canonical_rows >= 0) | (self.terminal_rows >= 0)
+        if visible_until is not None:
+            # These borrowed tokens were already published by an earlier
+            # request/chunk. Leave their cache owners on that branch instead
+            # of copying unread dropped history into every new position key.
+            # Private rows still need publication; every new query is kept.
+            private = torch.zeros(start, dtype=torch.bool)
+            for rows in (self.canonical_rows, self.terminal_rows):
+                present = rows >= 0
+                private[present] |= self.owned[rows[present]]
+            keep[:start] &= (visible_until[:start] > start) | private
         return keep
 
     def plan(self, window, terminal_keep):
@@ -699,9 +700,17 @@ class OccurrenceState:
             positions.numpy()
             == window.occurrence_positions[window.terminal_occurrences[:end]].numpy()
         )
-        # A same-position COW is bit-identical. Future reads can use the target
-        # owner instead of pinning a second borrowed copy on the Retry branch.
-        canonical = np.where(kept & same_position, terminal, canonical)
+        # Once the final transition for this token has passed, every future
+        # query reads its target version. Keep the birth source only while a
+        # future historical stage/copy needs it. This forward still owns its
+        # immutable occurrence reads until its completion receipt retires them.
+        use_terminal = kept & (
+            same_position | (window.terminal_ready_after.numpy()[:end] <= end)
+        )
+        canonical = np.where(use_terminal, terminal, canonical)
+        positions[torch.from_numpy(use_terminal)] = window.occurrence_positions[
+            window.terminal_occurrences[:end][torch.from_numpy(use_terminal)]
+        ]
         # Drops are monotonic. A source that no later prefill query can read is
         # no longer needed. Decode reads terminal positions, not birth versions.
         future_read = visible_until.numpy()[:end] > end
