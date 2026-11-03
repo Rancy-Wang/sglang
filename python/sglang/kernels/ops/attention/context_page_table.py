@@ -11,7 +11,7 @@ def context_window_lengths(Registry, Rows, Lengths, Output, WINDOW: tl.constexpr
     length = tl.load(Lengths + b)
     entry = Registry + row * 7
     pointer = tl.load(entry)
-    result = tl.minimum(length, WINDOW)
+    result = tl.minimum(length, WINDOW + 1)
     if pointer != 0:
         positions = tl.load(entry + 1).to(tl.pointer_type(tl.int32))
         active = tl.load(entry + 3).to(tl.int32)
