@@ -355,8 +355,12 @@ def validate_positions(program, limit):
                 "An occurrence execution position exceeds the model/RoPE limit"
             )
     active = int(layout.keep_mask.count_nonzero())
-    if not active or layout.next_position <= int(
-        layout.positions[layout.keep_mask].max()
+    # Insert preserves the ordinary append cursor until an effective R. A long
+    # inserted span may therefore overlap later append/decode positions. The
+    # per-occurrence RoPE bound above still applies to every retained token.
+    if not active or layout.next_position < 0 or (
+        not len(getattr(layout, "insert_spans", ()))
+        and layout.next_position <= int(layout.positions[layout.keep_mask].max())
     ):
         raise ValueError("Context next position must cover a nonempty active prompt")
     if layout.next_position >= limit:

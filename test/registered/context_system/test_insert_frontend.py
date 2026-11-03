@@ -66,6 +66,22 @@ def test_indexed_future_drop_rejected_before_tokenization(context_modules):
         context_modules[0].parse_drop_rule(None, ms, legacy_drop_message={0: [1]})
 
 
+def test_long_insert_without_reposition_can_overlap_append_positions(context_modules):
+    import importlib
+
+    _, _, planner = context_modules
+    ms = [{"role": "user", "content": "x", **({"index": -1} if i == 1 else {})}
+          for i in range(4)]
+    trace = SimpleNamespace(input_ids=list(range(11)), owners=[0]+[1]*8+[2, 3])
+    program = planner.compile_chat_program(ms, trace, None, [], {2: -1})
+    assert program.layout.birth_positions.tolist() == [0, 1, *range(1, 9), 2]
+    assert program.layout.next_position == 3
+    storage = importlib.import_module(planner.__package__ + ".request_storage")
+    assert storage.validate_positions(program, 16) == 11
+    with pytest.raises(ValueError, match="RoPE limit"):
+        storage.validate_positions(program, 8)
+
+
 @pytest.mark.skipif(sys.platform != "linux", reason="native SRT runtime requires Linux")
 def test_native_frontend_and_qwen_rejection(chat):
     from sglang.srt.context_system.planner import ContextProgram

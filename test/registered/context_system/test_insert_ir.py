@@ -199,6 +199,9 @@ def test_random_mixed_turns_against_state_machine(context_modules, seed):
         p = planner.compile_chat_program(ms, trace, rule, repos, inserts)
         assert all_reads(context_modules, p) == reads, (seed, turn)
         assert p.layout.positions.tolist() == [positions[r] for r in range(len(token_owner))]
+        if active:
+            storage = importlib.import_module(planner.__package__ + ".request_storage")
+            assert storage.validate_positions(p, 1 << 20) == len(active)
         key = ir.ContextKeyData.from_layout(p.layout)
         if previous is not None:
             # A future final-position rewrite may reduce exact matching,

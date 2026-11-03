@@ -14,8 +14,14 @@ pytestmark = pytest.mark.skipif(os.environ.get("RUN_CONTEXT_GPU") != "1", reason
 
 @pytest.mark.parametrize("repos", [False, True])
 @pytest.mark.parametrize("window_size", [-1, 16])
-def test_insert_segment_batch(context_modules, attention_plan, native_attention, repos, window_size):
+@pytest.mark.parametrize("long_insert", [False, True])
+def test_insert_segment_batch(context_modules, attention_plan, native_attention, repos, window_size, long_insert):
     p = program(context_modules, nested=True, repos=repos, width=19)
+    if long_insert:
+        ms = [{"role": "user", "content": "x", **({"index": -1} if i == 1 else {})}
+              for i in range(4)]
+        trace = SimpleNamespace(input_ids=list(range(86)), owners=[0]+[1]*80+[2]*2+[3]*3)
+        p = context_modules[2].compile_chat_program(ms, trace, None, [-1] if repos else [], {2: -1})
     occ = importlib.import_module(context_modules[2].__package__ + ".occurrence")
     w = occ.compile_occurrence_window(p.layout, p.visible_until, p.layout.positions,
                                       query_start=0, query_end=len(p.input_ids))

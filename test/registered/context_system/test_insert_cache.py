@@ -191,3 +191,33 @@ def test_insert_bcp48k(request, monkeypatch):
         cases=list(CASES), keep_recent=20000, summary_tokens=4096, timeout=1800,
         probe_tokens=int(os.environ.get("CONTEXT_INSERT_PROBE_TOKENS", "0")), skip_numeric=False,
     ))
+
+
+@pytest.mark.skipif(not os.environ.get("CONTEXT_SERVER_MODEL"), reason="isolated model server required")
+def test_insert_long_overlap_decode(tmp_path, request):
+    """An Insert beyond the ordinary cursor remains legal without Reposition."""
+    import requests
+    from serving_logits_probe import serialized_probe
+
+    server = os.environ.get("CONTEXT_EXISTING_SERVER") or request.getfixturevalue("server")
+    root = Path(os.environ.get("CONTEXT_TRACE_DIR", str(tmp_path)))
+    root.mkdir(parents=True, exist_ok=True)
+    messages = [{"role": "user", "content": "Remember red and blue."},
+                {"index": -1, "role": "user", "content": "red blue " * 80},
+                {"role": "assistant", "content": "Understood."},
+                {"role": "user", "content": "Which colors?"}]
+    requests.post(server+"/flush_cache", timeout=30).raise_for_status()
+    for mode in ("cold", "warm"):
+        path = root / f"long-overlap-{mode}.pt"
+        response = requests.post(server+"/v1/chat/completions", json=dict(
+            model=os.environ["CONTEXT_SERVER_MODEL"], messages=messages, insert={"2": -1},
+            reposition=[], temperature=0, max_tokens=4, ignore_eos=True,
+            custom_logit_processor=serialized_probe(), custom_params={
+                "context_trace_path": str(path), "context_trace_count": 4}), timeout=600)
+        (root / f"long-overlap-{mode}.json").write_text(response.text)
+        assert response.status_code == 200, response.text
+        assert response.json()["usage"]["completion_tokens"] == 4
+        logits = torch.load(path, weights_only=True)
+        assert len(logits) == 4 and torch.isfinite(logits).all()
+        if mode == "warm":
+            assert response.json()["usage"]["prompt_tokens_details"]["cached_tokens"] > 0
