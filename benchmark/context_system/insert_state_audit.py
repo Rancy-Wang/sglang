@@ -412,6 +412,105 @@ def replay(args):
     return report
 
 
+def timing(args):
+    """Uninstrumented HTTP timings; run against isolated baseline/current servers.
+
+    Each round has twelve cached ordinary 128-token decodes, three cold ordinary
+    prefills, and one frozen 48K summary warm prefill. Server restart/JIT/source
+    population are excluded. Combine three interleaved rounds on the same GPUs.
+    """
+    import copy
+    import gzip
+    import time
+
+    import requests
+    from insert_summary48k import digest, validate_completion
+
+    output = Path(args.output)
+    output.mkdir(parents=True, exist_ok=False)
+    session = requests.Session()
+    session.trust_env = False
+    records = []
+
+    def load(path):
+        opener = gzip.open if str(path).endswith(".gz") else open
+        with opener(path, "rt") as source:
+            return json.load(source)["request"]
+
+    def flush():
+        session.post(args.url+"/flush_cache", timeout=60).raise_for_status()
+
+    def call(payload, label, tokens, stream=False):
+        payload = copy.deepcopy(payload)
+        for field in ("custom_logit_processor", "custom_params", "return_meta_info",
+                      "return_input_ids_in_sglext", "return_output_ids_in_sglext"):
+            payload.pop(field, None)
+        payload.update(model=args.model, n=1, temperature=0, max_tokens=tokens,
+                       ignore_eos=True, stream=stream)
+        if stream:
+            payload["stream_options"] = {"include_usage": True}
+        started = time.perf_counter()
+        response = session.post(args.url+"/v1/chat/completions", json=payload,
+                                timeout=args.timeout, stream=stream)
+        response.raise_for_status()
+        first, usage = None, None
+        if stream:
+            for line in response.iter_lines(chunk_size=1):
+                if not line.startswith(b"data: ") or line == b"data: [DONE]":
+                    continue
+                body = json.loads(line[6:])
+                if body.get("usage"):
+                    usage = body["usage"]
+                for choice in body.get("choices", []):
+                    delta = choice.get("delta", {})
+                    if first is None and any(delta.get(k) for k in
+                                              ("content", "reasoning_content", "tool_calls")):
+                        first = time.perf_counter()
+                    if choice.get("finish_reason") in ("abort", "error"):
+                        raise ValueError(body)
+        else:
+            body = response.json()
+            validate_completion(body)
+            usage = body["usage"]
+        ended = time.perf_counter()
+        if not usage or usage["completion_tokens"] != tokens:
+            raise ValueError(f"Timing sample did not complete {tokens} tokens: {usage}")
+        row = dict(label=label, seconds=ended-started, usage=usage,
+                   payload_sha256=digest(payload))
+        if stream:
+            if first is None:
+                raise ValueError("No streamed token arrived")
+            row.update(ttft_seconds=first-started,
+                       decode_seconds_per_token=(ended-first)/(tokens-1))
+        records.append(row)
+        with (output/"samples.jsonl").open("a") as target:
+            target.write(json.dumps(row)+"\n")
+        print(json.dumps(row), flush=True)
+
+    ordinary = {"messages": [
+        {"role": "system", "content": "Read the reference and continue with a detailed explanation."},
+        {"role": "user", "content": ("The archive lists dates, places, names, and supporting evidence. "*512)
+         + "Explain how to compare and organize the evidence."}]}
+    flush()
+    call(ordinary, "ordinary-warmup", 128, True)
+    for i in range(12):
+        call(ordinary, f"ordinary-decode-{i}", 128, True)
+    for i in range(3):
+        flush()
+        call(ordinary, f"ordinary-cold-{i}", 128, True)
+    source, target = load(args.source), load(args.target)
+    # Compile the Context shape once before the measured, independently warmed
+    # request. Flush makes the measured source/target relationship reproducible.
+    flush()
+    call(source, "summary-source-warmup", 1)
+    call(target, "summary-target-warmup", 1)
+    flush()
+    call(source, "summary-source", 1)
+    call(target, "summary-warm-prefill", 1)
+    (output/"report.json").write_text(json.dumps(records, indent=2))
+    return records
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -428,7 +527,13 @@ if __name__ == "__main__":
     parser.add_argument("--steps", type=int, default=8)
     parser.add_argument("--timeout", type=int, default=1800)
     parser.add_argument("--layer-probe", action="store_true")
+    parser.add_argument("--timing", action="store_true", help="No probes; isolated performance round")
     arguments = parser.parse_args()
     if not 1 <= arguments.steps <= 32:
         parser.error("--steps must be between 1 and 32")
-    replay(arguments)
+    if arguments.timing:
+        if not arguments.source or arguments.layer_probe:
+            parser.error("Timing requires --source and forbids --layer-probe")
+        timing(arguments)
+    else:
+        replay(arguments)
