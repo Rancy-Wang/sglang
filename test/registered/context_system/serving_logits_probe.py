@@ -20,8 +20,10 @@ def create_decode_read_probe(config):
     weights = json.loads((model / "model.safetensors.index.json").read_text())["weight_map"]
     layers = set(config.get("layers", [0, 1, 2, 3]))
     sinks_cache = {}
+    read_cache, read_epoch = {}, None
 
     def hook(layer, args, output):
+        nonlocal read_epoch
         if layer.layer_id not in layers or len(args) < 4:
             return
         q, k, v, batch = args[:4]
@@ -35,25 +37,34 @@ def create_decode_read_probe(config):
         window = layer.sliding_window_size
         window = -1 if window is None else window
         pos = int(batch.positions[0])
-        if req.context_program is None:
-            pairs = [(i, i) for i in range(pos+1)]
+        epoch = (req.rid, pos)
+        if epoch != read_epoch:
+            read_cache.clear()
+            read_epoch = epoch
+        if window not in read_cache:
+            if req.context_program is None:
+                pairs = [(i, i) for i in range(pos+1)]
+                if window >= 0:
+                    # Native Triton treats window as total capacity. Keep its
+                    # unchanged control distinct from Context's distance rule.
+                    pairs = pairs[-window:] if window else []
+            else:
+                layout = req.context_program.layout
+                pairs = brute_decode_reads(layout, pos-int(layout.next_position)+1, window)
+            row = request_row(backend.req_to_token_pool, req.kv.req_pool_idx)
+            raw = torch.tensor([i for i, _ in pairs], device=row.device, dtype=torch.long)
+            wanted = row[raw]
             if window >= 0:
-                # The unchanged native Triton decode helper treats its window
-                # argument as total capacity, unlike the inclusive position
-                # predicate used by Context. Keep this control distinct; do
-                # not silently change production native behavior in a probe.
-                pairs = pairs[-window:] if window else []
-        else:
-            layout = req.context_program.layout
-            pairs = brute_decode_reads(layout, pos-int(layout.next_position)+1, window)
-        row = request_row(backend.req_to_token_pool, req.kv.req_pool_idx)
-        raw = torch.tensor([i for i, _ in pairs], device=row.device, dtype=torch.long)
-        wanted = row[raw]
+                wanted = backend.token_to_kv_pool.translate_loc_from_full_to_swa(wanted)
+            else:
+                wanted = backend.kv_index_translator.translate_full_attn_ids(wanted)
+            # One independent scan per query/pool, shared by all sampled layers.
+            # The cache never outlives this query's read-only physical mapping.
+            read_cache[window] = (len(pairs), wanted)
+        expected_count, wanted = read_cache[window]
         if window >= 0:
-            wanted = backend.token_to_kv_pool.translate_loc_from_full_to_swa(wanted)
             indptr, indices = metadata.window_kv_indptr, metadata.window_kv_indices
         else:
-            wanted = backend.kv_index_translator.translate_full_attn_ids(wanted)
             indptr, indices = metadata.kv_indptr, metadata.kv_indices
         actual = indices[int(indptr[0]):int(indptr[1])]
         slots_ok = torch.equal(actual, wanted)
@@ -79,7 +90,7 @@ def create_decode_read_probe(config):
         report = dict(layer=layer.layer_id, rank=rank, position=pos,
                       rule="native-capacity" if req.context_program is None else "context-inclusive-distance",
                       window=window,
-                      read_count=len(actual), expected_count=len(pairs), slots_ok=slots_ok,
+                      read_count=len(actual), expected_count=expected_count, slots_ok=slots_ok,
                       stored_k_ok=stored_k_ok, stored_v_ok=stored_v_ok,
                       max_abs=float(error.max()), mean_abs=float(error.mean()),
                       fp32_close=bool(torch.all(error <= .0078125 + .0078125*expected.abs())))
