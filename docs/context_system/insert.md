@@ -1,6 +1,6 @@
 # Execution-order Insert
 
-实现计划：`PLAN-CS-20261103-R1`。本实现保留 `drop_message`，允许重复 Drop，
+实现计划：`PLAN-CS-20261103-R1`，以及已批准的容量补充计划 `PLAN-CS-20261103-R2`。本实现保留 `drop_message`，允许重复 Drop，
 SWA 沿用原来的位置窗口条件。Qwen3.8/Qwen3.5 的 Linear/Full hybrid 模型暂不支持 Insert，
 请求会返回格式/能力错误；其原有 Drop/Reposition 路径保留。
 
@@ -50,9 +50,9 @@ Insert 锚点由 logical 顺序中第一个已出生且未 Drop 的后继 token 
 响应 `sglext.context_message_indices` 给出规范化消息编号，
 `context_next_message_index` 给出下一个普通编号。
 
-实现入口：`python/sglang/srt/context_system/rules.py:54-124`
+实现入口：`python/sglang/srt/context_system/rules.py:54-119`
 （`normalize_message_indices`、`InsertRule`）；
-`python/sglang/srt/entrypoints/openai/protocol.py:884-915`
+`python/sglang/srt/entrypoints/openai/protocol.py:892-912`
 （`validate_context_indices`、`context_index_metadata`）。
 
 ## 从逻辑文本到 Radix
@@ -65,7 +65,8 @@ IB 为 `(3, birth_depth, 0)`，IE 为 `(4,0,0)`。birth depth 从 1 开始，计
 真实 token，包括已删除 token 和先前 Insert 的 token；虚拟节点不计数。
 IB 不包含 final span。TOKEN 记录仍包含最终位置，D/R 仍使用原有编码。
 普通 Append 的位置游标不被 Insert 改写；Drop 不改变幸存位置；有效 R 按 active logical
-顺序压缩位置。原有无效 R/tail Drop 的游标行为保留。
+顺序压缩位置。原有无效 R/tail Drop 的游标行为保留。长 Insert 可以越过普通 Append 游标，
+因此在显式 R 之前允许位置重叠；所有实际 birth、中间旋转和 terminal 位置仍受 RoPE 上限约束。
 
 同样的 execution prefix、操作和锚点产生相同历史语义。Exact matching 比较完整记录；
 retrigger 只忽略 TOKEN 最终位置，不忽略 D/R/IB/IE 或锚点。匹配后延用现有 COW 旋转，
@@ -75,10 +76,10 @@ retrigger 只忽略 TOKEN 最终位置，不忽略 D/R/IB/IE 或锚点。匹配�
 张量 wire 的 Insert 版本为 5，JSON wire 为 6；无 Insert 保持原版本 3/4 和字段集合。
 需要所有 worker 使用相同实现，不可将 Insert 请求发给旧 worker。
 
-实现入口：`python/sglang/srt/context_system/planner.py:317-545`（`ContextProgram`）、
+实现入口：`python/sglang/srt/context_system/planner.py:317-544`（`ContextProgram`）、
 `planner.py:547-664`（`_compile_insert_program`）；
-`python/sglang/srt/context_system/ir.py:293-350`（`compile_execution_layout`）、
-`ir.py:371-505`（`ContextKeyData`）。
+`python/sglang/srt/context_system/ir.py:293-348`（`compile_execution_layout`）、
+`ir.py:371-502`（`ContextKeyData`）。
 
 ## 复用、恢复、attention 与回填
 
@@ -93,11 +94,33 @@ execution 尾部连续区间；实际 Full/SWA residency 由恢复规划和 leas
 完成后的 terminal rows 按 execution 顺序发布回原生 Radix，保留所有已完成事件。
 原有 Drop proof、source lease、共享页所有权和回收规则继续适用。
 
-实现入口：`python/sglang/srt/context_system/occurrence.py:142-305`
-（`compile_occurrence_window`）；`python/sglang/srt/context_system/recovery.py:301-379`
+SWA 缺页不等于所有已旋转的 Full KV 都必须重算。恢复规划按 query 真正需要的 occurrence
+位置判断旧版本需求：query 位于最后一次 R 之后、且缓存 Full KV 已在对应位置时，仍可直接
+复用。只有被选中的历史 query 需要其他位置版本，才进入原有的 rewind 恢复规则。
+`Req.prepare_context_recovery` 传入匹配得到的源位置；不能只用“曾经 R 过”作为全局失效条件
+（`python/sglang/srt/managers/schedule_batch.py:1577-1665`）。
+匹配点之后的新 query 可以通过后续 R/COW 获得目标位置版本；不能因为未来旋转，
+反过来把正在修复的历史 query 所使用的正确源 KV 标为失效。
+
+Decode 的 SWA 条件为 `q_pos-k_pos <= window`，在已经满足因果可见性的 logical KV 中筛选。
+位置重叠时，读数可大于 `window+1`。例如两段位置均为 1…512、query 位置为 513，
+距离窗口 128 需要 257 个 KV；四条这样的请求需要 1028 个索引，超过原来的 516 个槽。
+R2 按实际读数分配 eager 缓冲；CUDA graph 仅在 Full/SWA 读数超过已捕获容量时回退至
+原生 eager，不截断 KV。普通单调 summary 保留 graph 路径。普通请求与 Context 混批时，
+普通 lane 同样使用包含边界的 `window+1` 语义。
+
+容量入口为 `python/sglang/srt/layers/attention/triton_backend.py:1104-1112`、
+`flashinfer_backend.py:1038-1045`、`flashattention_backend.py:2230-2238` 的
+`context_decode_fits_graph`；准入位于
+`python/sglang/srt/model_executor/runner/decode_cuda_graph_runner.py:635-726`（`can_run_graph`）。
+FlashInfer 将 window 和完整 logical 长度传入 gather，避免把非单调窗口当作连续尾部
+（`python/sglang/srt/layers/attention/flashinfer_backend.py:1751-1871`，`call_begin_forward`）。
+
+实现入口：`python/sglang/srt/context_system/occurrence.py:146-308`
+（`compile_occurrence_window`）；`python/sglang/srt/context_system/recovery.py:301-385`
 （`_plan_insert_recovery`）；
-`python/sglang/srt/mem_cache/unified_cache/unified_tree_core.py:1059-1182`
-（`_match_context_retry`）；`python/sglang/srt/layers/attention/context_backend.py:678-833`
+`python/sglang/srt/mem_cache/unified_cache/unified_tree_core.py:1059-1178`
+（`_match_context_retry`）；`python/sglang/srt/layers/attention/context_backend.py:678-865`
 （`ContextDecodeRegistry`）。
 
 ## 性能边界
@@ -106,6 +129,9 @@ execution 尾部连续区间；实际 Full/SWA residency 由恢复规划和 leas
 - logical/execution 逆映射线性构建。匹配使用预计算 `has_insert`，不复制扫描完整 key。
 - decode 的位置单调性、排序位置和 raw 后缀最小值只计算一次。
   CPU 窗口计数/安全回收边界用二分查找，不在每轮 decode 扫描整个历史。
+- 已绑定批次缓存 Full 总读数和最大行宽。普通单调 summary 的 graph 容量判断为 O(1)；
+  重叠位置才计算 O(batch × log N) 的窗口读数，并在同一 forward 内复用计数结果。
+  不进行 GPU→CPU 同步，不统一扩大所有请求的 graph 缓冲。
 - Reposition 后的位置单调路径继续原生快速窗口 gather。未 Reposition 的非单调路径
   按 logical 顺序压紧选中的 KV；该 GPU 分支仍需扫描非单调列表。
 - 非连续位置的原生 ragged SWA adapter 保留单调二分路径；非单调段先筛出首窗口候选，
@@ -131,7 +157,12 @@ python -m pytest -q benchmark/context_system/test_insert_summary48k.py
 阈值是 `active logical input >= 49152`；保留约 20000 tokens 的完整近期协议组。
 旧 summary 可被下一次 summary 总结并 Drop。每次 summary 使用同一被测模型新生成，
 提示格式参考原 SWE trajectory 的 Goal/Constraints/Progress/Decisions/Next Steps/Critical Context。
-summary 截断、缺少标题或压缩后仍达到阈值时，不提交历史变更。
+summary 截断、缺少标题或没有缩短 active input 时，不提交历史变更。
+48K 是触发阈值；保留约 20K 是目标，完整的超大历史消息组不能强制后续请求一直超限。
+选择范围时预留 summary 预算，并保留已计算的 Insert 锚点。若单次 pending 输入本身已
+超过 48K，则尽量压缩旧历史、记录 `oversized_pending`，交由原生准入检查实际模型上限；
+下一 turn 再总结这段已计算的输入。普通 pending 输入压缩后仍超过 48K 继续判为失败。
+这些驱动边界修正在 `26eabc33e6`，没有改变 `4c26d4713c` 的生产运行代码。
 
 ```bash
 python benchmark/context_system/insert_summary48k.py \
@@ -146,28 +177,132 @@ python benchmark/context_system/insert_summary48k.py \
 不能代替完整预算验收。原始数据 SHA256、请求/响应、summary 文本、输入 hash、耗时和
 服务端 usage 都留档。每道题必须实际触发 summary 才算覆盖；Qwen Insert 仅验拒绝行为。
 
-默认在每个 summary 事件后冻结同一请求，比较 warm、exact、flush 后 cold 的全词表 logits。
+默认在每个 summary 事件后冻结同一请求，比较 warm、exact、flush 后 cold 的首个解码步
+全词表 logits（`context_trace_count=1`）；这不是逐个生成 token 的输出一致性验证。
+每个事件先保存 Insert 的 warm/exact 结果，再用普通 active 文本请求测量 native 的
+warm/cold 与 exact/cold 差异；按照预先固定的 `max(BF16 floor, 2 × native envelope)`
+生成容差，之后才比较 Insert，不能根据 Insert 结果放宽容差。普通 active 文本只用于
+数值重复性校准，不是 cache engineering 的语义参考。
+数值失败会保留证据并将该题标记为 failed，同时继续后续 turn，覆盖重复 summary。
+HTTP 200 携带 `finish_reason=abort/error` 或零生成 token 时直接判为失败，不追加空 assistant。
 因此服务端需开启 `--enable-custom-logit-processor`，且驱动与服务端能访问相同的输出路径。
 `--skip-numeric` 只供独立性能实验使用；验收不能跳过数值比较。包含 flush 的整轮耗时
 不是纯吞吐测试结果，不能据此声称端到端无性能回退。
 
 ## 已完成验证与待验收项
 
-生产实现检查点为 `26ab16e3df`；`99aa76ad9c` 增加 frozen replay 验收与文档。
-以下不同命令的用例有重叠，不应把通过数简单相加。
+当前实现检查点为 `4c26d4713c`；R2 容量修改为 `bcdf3ff33d`、`f72a1e9636`。
+下列命令之间存在用例重叠，不应把通过数相加。
 
 | 验证 | 结果 | 范围 |
 | --- | --- | --- |
-| 本地 CPU 混合回归 | 427 passed / 13 skipped | Insert、IR、rules、attention plan、decode |
-| 本地最新新增测试与 benchmark 测试 | 94 passed / 10 skipped | 增加 ragged adapter 窗口 oracle |
-| InfiniAI-BUS-2 原生回归 | 295 passed / 13 skipped | frontend、unified cache、ownership、admission、storage、GPU |
-| Tengxuan-BUS-2 GPU 3 | 11 passed | Insert segment attention、非单调 SWA gather、decode CUDA graph |
+| 早期本地 CPU 混合回归 | 427 passed / 13 skipped | Insert、IR、rules、attention plan、decode |
+| 早期 InfiniAI-BUS-2 原生回归 | 295 passed / 13 skipped | frontend、unified cache、ownership、admission、storage、GPU |
+| Tengxuan-BUS-2，`a89fc3fe4f` | 60 passed | GPU attention、实际模型 FP32 oracle、校准 HTTP 请求链、长 Insert |
+| 本地 R2 CPU 回归 | 108 passed / 3 skipped | 容量、重复位置、IR、frontend、decode、benchmark |
+| R2 原生 GPU 首次验证 | 66 passed / 1 failed | 混批普通 lane 少读边界 1 个 KV；失败后修正 |
+| `f72a1e9636` GPU 复验 | 2 passed | 四条重叠请求、普通/Context 混批；Triton/FA 容量与 FlashInfer 实际 gather |
+| `f72a1e9636` GPT-OSS HTTP | 2 passed | 短/长 Insert，无 R，cold/warm decode；长例超过 graph SWA 缓冲容量 |
+| `c53276cca3` 本地恢复回归 | 110 passed / 3 skipped | 位置版本依赖 oracle、IR、planner、raw storage、benchmark |
+| `4c26d4713c` 原生 CPU 回归 | 169 passed / 3 skipped（两次运行） | 17 项先因原生测试工具不接受空 CUDA_VISIBLE_DEVICES 而初始化失败；改为不可见设备 99 后全部通过，无源码修改 |
+| `4c26d4713c` GPT-OSS HTTP | 3 passed / 3 deselected | 热 retrigger、exact、在旧 Insert 前再次 Insert、短/长重叠位置 decode |
+| `26eabc33e6` summary 驱动 | 本地和 Linux 各 13 passed；ruff 通过 | 超长 pending 保留已出生锚点、下一 turn 删除超大历史协议组、不截断或伪造 summary |
 
-本地 49152-token 合成程序（嵌套 Insert、Drop、R；12 次取后 10 次中位数）中，
+GPT-OSS 使用模型原始权重、BF16、MXFP4、TP2、Triton attention 和 triton_kernel MoE。
+小型 probe 在两个 TP rank 的前四层检查实际 query、存储 KV、prefix KV、positions 和
+attention 输出；独立 FP32 attention oracle 使用实际 sinks、GQA 和位置窗口。
+这个检查通过不等价于已经证明所有长上下文的最终 logits 一致。
+
+在相同配置下，基线 `05dc3b7d1b` 与 Insert 版本的普通/identity/drop 数值诊断结果相同。
+例如普通 native warm/cold logits 最大绝对差约 2.05、均值约 0.293；因此固定的微小
+BF16 logits 容差不适用于这个 MXFP4/MoE 配置。上述校准沿用 native 误差包络规则，
+另外保留实际 KV/FP32 attention oracle，不能只靠最终 logits 的宽容差宣称语义正确。
+
+本地 49152-token 合成程序的旧测量（嵌套 Insert、Drop、R；12 次取后 10 次中位数）为：
 编译约 10.29 ms、key 构建约 0.74 ms、warm recovery 规划约 1.47 ms。
 这是 CPU 元数据测量，不含 tokenizer、模型 forward 或网络，不代表端到端速度。
-前后样本存在噪声，不能据该测量声称编译/恢复有稳定百分比加速。
 
-GPT-OSS HTTP 请求链、10 题 48K summary、完整预算及实际性能验收仍待完成。
-InfiniAI-BUS-2 的两次长上下文启动受到其他作业显存占用影响；相关失败归为
-`ENVIRONMENT_BLOCKER`，不计通过。已改用用户指定的 Tengxuan-BUS-2 GPU 0/1。
+早期 10 题运行 `bcp48k-full-v2` 尚未通过：238 第二次 summary 的数值检查超出固定容差；
+241 两次 summary 数值检查通过，但 turn 29 在准入队列停留 453 秒、GPU 空闲，随后中止。
+该轮中止响应为 HTTP 200/finish_reason=abort，不能计为已完成 turn。
+诊断确认 Radix 命中了 84768 token；仅缺少 9 个 SWA token，却被旧恢复规则扩展成
+37027 个 query。`c53276cca3` 对保存下来的同一状态规划出 2929 个 query，
+即 9 个修复 query 加 2920 个新 query，不改变 KV 池容量。原请求端到端复验在同一配置下
+实际 prefill 2929 token、11.046 秒返回，未再出现该准入阻塞。其冷 source 重新生成了输出，
+匹配点与保存的旧快照略有差别，不能把这次耗时当作所有场景的加速比。
+`4c26d4713c` 进一步把新 query 的未来 R/COW 旋转与历史修复分开，覆盖热 summary 触发时
+旧尾部缺页的情形。最新真模型 HTTP 请求链为 3 passed；最终 V4 中 241 的 turn 29
+实际 prefill 2934 token、10.63 秒完成。中途的 v3 运行用于诊断，未完成，不计为验收通过。
+
+### 最终 10 题结果：数值验收未通过
+
+`bcp48k-v4-a` 至 `f` 共完成所选 10 题的 393 个 turn、28 次真实 summary。
+最终选定轨迹共 617 次模型请求（含 summary 和数值对照），均正常返回；56 项首步全词表
+logits 比较中 46 项通过、10 项超过预先固定的 native-control 门槛，涉及 6 题。
+整体结果为 **FAIL**，不能据此宣布完整数值等价或“完成无误”。
+
+| BCP | 完成 turn | Summary | 数值结果 | 最终记录 |
+| --- | ---: | ---: | --- | --- |
+| 238 | 45 | 3 | 通过 | V4-A |
+| 241 | 40 | 3 | 第 1 次 warm/exact 超限 | V4-A |
+| 775 | 44 | 3 | 第 3 次 warm 超限 | V4-A |
+| 786 | 40 | 3 | 第 2 次 warm/exact 超限 | V4-C |
+| 787 | 44 | 3 | 通过 | V4-C |
+| 822 | 39 | 3 | 第 2 次 warm 超限 | V4-B |
+| 844 | 41 | 3 | 通过；独立补跑 | V4-D |
+| 864 | 31 | 3 | 第 1 次 warm/exact 超限；策略补跑 | V4-F |
+| 870 | 35 | 2 | 通过 | V4-C |
+| 875 | 34 | 2 | 第 1 次 warm/exact 超限 | V4-E |
+
+例如 241 第 1 次 exact 的最大绝对差为 1.6875，门槛为 1.0；平均绝对差约 0.2643，
+门槛约 0.1820。不能因为采样 token 相同、普通模型也存在浮点波动、或 key 检查通过，
+就将这些失败改判为通过。尚未将长上下文差异归因于数值路径或缓存复用错误。
+后续需要在相同逐 turn 执行划分下补充 native 对照，并定位更深层的 KV/attention 误差。
+
+844 首次运行在 4096-token summary 预算处截断，未提交 D/I/R；V4-D 以 8192 预算重新
+执行完整轨迹。864 首次运行遇到单条 pending tool 输入 51762 token，压缩后仍超过
+48K，旧驱动停止；V4-F 使用 `26eabc33e6` 的策略修正及 8192 summary 预算完成补跑。
+两次补跑都会重新生成 agent/summary 文本，不能将结果变化仅归因于预算差异；旧失败
+请求和报告均保留。其余运行使用 4096 summary 预算，原 turn 的生成预算始终未缩减。
+所有服务端运行时代码均为 `4c26d4713c`；`26eabc33e6` 只修改 benchmark 和对应测试。
+
+864 的 turn 24 在压缩旧历史后保留 53578-token active input，由原生模型上下文上限
+进行准入。turn 25 再总结该超大历史组，active input 从 55525 降到 3379；热请求实际
+prefill 2915 token、7.35 秒完成。它验证了“超长 pending 先计算、下一 turn 再总结”的
+边界，未截断录制的 tool 内容。策略实现见
+`benchmark/context_system/insert_summary48k.py:126-174`（`select_summary`、`validate_summary_size`）。
+
+### 匹配与性能证据的范围
+
+对全部实际 turn 重建 execution tokens，均与原请求记录一致；383 个相邻 turn 的
+exact/retrigger key 比较均与独立逐记录 LCP 扫描一致。所有 retrigger 长度都达到实际
+execution token 序列的 LCP，没有发现新增 D/R/IB/IE 编码造成额外前缀损失。
+这验证 key 的比较规则，不是对所有实际缓存 residency 或深层 KV 数值的等价证明。
+
+其中 13 个相邻 turn 的历史输入前缀损失超过 32 token。它们的历史 messages 未改变，
+但原生 Harmony 模板在出现新 final 后移除了此前的 analysis；保留 analysis 的对照
+在全部 13 处都恢复了完整历史输入匹配。864 的 turn 29 已经历三次 Insert，仍因同一
+模板行为损失 6556 个历史输入 token，turn 30 的历史输入前缀损失恢复为 0。
+因此实际运行确有较大失配，但这些样本没有显示由 Insert 操作编码造成的持续失配。
+模板行为没有在本实现中修改，见 `python/sglang/srt/parser/gpt_oss_encoding.py:264-295`
+（`_drop_harmony_analysis_before_last_final`）；对照见 `bcp48k-v4-template-diagnostic.json`。
+
+28 次热 summary 请求的实际 prefill 中位数为 3590 token，HTTP 耗时中位数约 9.08 秒；
+28 次 exact 请求均只计算 1 个 prefill token。最大的热请求计算 53115 token，耗时
+89.70 秒，对应 864 的 51762-token 全新 pending 输入。真实 summary 生成本身的
+耗时中位数为 59.84 秒，应与 Insert 开销分开统计。
+这些时间包含验证用 logits 保存和完整 token 返回，没有进行生产吞吐或无功能路径的
+统计显著性比较，不能据此宣称全部配置无性能回退。
+
+最终报告及逐请求计数保存在实验根目录 `/home/wangruoxi/insert-20261103/`：
+`bcp48k-v4-final-report.json`、`bcp48k-v4-prefill-accounting.json`、
+`bcp48k-v4-key-audit.json`、`bcp48k-v4-template-diagnostic.json`；
+原始请求/响应、logits、配置和日志保留在各分组目录。
+每个分组配置记录源码 hash、GPU、完整客户端/服务端参数。A/B/C 在其分配题目完成后
+停止，日志中下一题的 case_start 不计为完成结果。
+
+GPU 主机为用户指定的 Tengxuan-BUS-2；测试使用 0/1、3/4、5/6 三个隔离 TP2 实例，
+GPU 2 的既有其他任务未操作。0/1 用于主验证、2 被占用，后续实例使用剩余空闲的 3/4、5/6。
+每个并行实例分离端口、checkout、cache、日志和输出；运行时代码、模型及容量一致。
+补跑仅在前一实例退出后复用其 GPU/端口/cache，单独记录日志及输出。实验结束后已释放本次 GPU。
+Qwen3.8-27B 不进行 Insert 成功路径验收，仍按用户要求保持不支持。
