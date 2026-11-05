@@ -72,3 +72,9 @@
 - A10经现有X5 ControlMaster转发访问，会话97155、账号ruoxi07、shell3448157，未启动A10 GPU任务。训练fallback transformers.py SHA256=1dafbdcf828a62c1d60e5ba1760187e927c7e03aec00920b0c023ed4b81aaf5c。
 - 已核实capture hook按物理layer ID覆盖存储，最终保留最后循环的layer输出，循环末norm之前。配置SHA74cb...与训练元数据相同，X5 target config/tokenizer_config SHA与训练provenance相同。
 - SpecForge参考SHA af1c3f3868e0ad1d1bc4a3bc4c577f2c9d3fa7b5；CPU materialize_draft严格加载58/58 tensors通过，全BF16；fc shape2048×10240。未导出、未运行DFlash推理。
+
+### 候选3结果与候选4/10
+
+- SHA41d6e408d，round-3/bs1.exit=1；AR完成64 token请求、flush成功，但HTTP客户端将空成功body当作JSON解析失败。不是算法验收通过。
+- 第4轮范围仅verify_server.py：允许空HTTP body，比较finish_reason，并在token/text/stop不等价时assert失败，避免假阳性exit0。
+- 目的/步骤：恢复配对验收，先bs1、再bs1/2/4/8/16及overlap；运行时不变。成功标准、风险与环境沿用实施计划，保持严格token ID等价；启动4/10。

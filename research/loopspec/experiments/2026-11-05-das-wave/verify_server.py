@@ -16,7 +16,8 @@ def http(url, path, payload=None):
     req=urllib.request.Request(url+path, data=None if payload is None else json.dumps(payload).encode(),
                                headers={'Content-Type':'application/json'})
     with urllib.request.urlopen(req, timeout=600) as r:
-        return json.loads(r.read())
+        body = r.read()
+        return json.loads(body) if body else None
 
 
 def main():
@@ -92,9 +93,12 @@ def main():
                 comparisons.append({'algorithm':algorithm,'bs':candidate['bs'],'turn':candidate['turn'],'i':candidate['i'],
                     'text_equal':l['text']==r['text'], 'tokens_equal':l.get('output_ids')==r.get('output_ids'),
                     'token_ids_available':'output_ids' in l and 'output_ids' in r,
+                    'stop_equal':l['meta_info']['finish_reason']==r['meta_info']['finish_reason'],
                     'baseline_tokens':l['meta_info']['completion_tokens'],
                     'candidate_tokens':r['meta_info']['completion_tokens']})
     (a.output/'comparison.json').write_text(json.dumps(comparisons,indent=2))
     print(json.dumps({'completed':True,'comparisons':comparisons}),flush=True)
+    assert all(c['text_equal'] and c['tokens_equal'] and c['token_ids_available']
+               and c['stop_equal'] for c in comparisons), 'AR equivalence failed; see comparison.json'
 
 if __name__=='__main__':main()
