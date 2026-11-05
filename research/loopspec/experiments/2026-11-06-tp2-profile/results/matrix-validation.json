@@ -1,0 +1,168 @@
+{
+  "cells": [
+    {
+      "batch_size": 1,
+      "method": "ar",
+      "questions": 30,
+      "tokens": 30720,
+      "length_stops": 30,
+      "peak_client_outstanding": 1,
+      "retractions": 0,
+      "graph_false_lines": 0
+    },
+    {
+      "batch_size": 1,
+      "method": "dflash",
+      "questions": 30,
+      "tokens": 30720,
+      "length_stops": 30,
+      "peak_client_outstanding": 1,
+      "retractions": 0,
+      "graph_false_lines": 0
+    },
+    {
+      "batch_size": 1,
+      "method": "loopspec1",
+      "questions": 30,
+      "tokens": 30720,
+      "length_stops": 30,
+      "peak_client_outstanding": 1,
+      "retractions": 0,
+      "graph_false_lines": 0,
+      "rank_counts_equal": true,
+      "depth3_accepted_and_proposed_zero": true
+    },
+    {
+      "batch_size": 16,
+      "method": "ar",
+      "questions": 30,
+      "tokens": 30720,
+      "length_stops": 30,
+      "peak_client_outstanding": 16,
+      "retractions": 0,
+      "graph_false_lines": 0
+    },
+    {
+      "batch_size": 16,
+      "method": "dflash",
+      "questions": 30,
+      "tokens": 30720,
+      "length_stops": 30,
+      "peak_client_outstanding": 16,
+      "retractions": 0,
+      "graph_false_lines": 0
+    },
+    {
+      "batch_size": 16,
+      "method": "loopspec1",
+      "questions": 30,
+      "tokens": 30720,
+      "length_stops": 30,
+      "peak_client_outstanding": 16,
+      "retractions": 0,
+      "graph_false_lines": 0,
+      "rank_counts_equal": true,
+      "depth3_accepted_and_proposed_zero": true
+    },
+    {
+      "batch_size": 2,
+      "method": "ar",
+      "questions": 30,
+      "tokens": 30720,
+      "length_stops": 30,
+      "peak_client_outstanding": 2,
+      "retractions": 0,
+      "graph_false_lines": 0
+    },
+    {
+      "batch_size": 2,
+      "method": "dflash",
+      "questions": 30,
+      "tokens": 30720,
+      "length_stops": 30,
+      "peak_client_outstanding": 2,
+      "retractions": 0,
+      "graph_false_lines": 0
+    },
+    {
+      "batch_size": 2,
+      "method": "loopspec1",
+      "questions": 30,
+      "tokens": 30720,
+      "length_stops": 30,
+      "peak_client_outstanding": 2,
+      "retractions": 0,
+      "graph_false_lines": 0,
+      "rank_counts_equal": true,
+      "depth3_accepted_and_proposed_zero": true
+    },
+    {
+      "batch_size": 4,
+      "method": "ar",
+      "questions": 30,
+      "tokens": 30720,
+      "length_stops": 30,
+      "peak_client_outstanding": 4,
+      "retractions": 0,
+      "graph_false_lines": 0
+    },
+    {
+      "batch_size": 4,
+      "method": "dflash",
+      "questions": 30,
+      "tokens": 30720,
+      "length_stops": 30,
+      "peak_client_outstanding": 4,
+      "retractions": 0,
+      "graph_false_lines": 0
+    },
+    {
+      "batch_size": 4,
+      "method": "loopspec1",
+      "questions": 30,
+      "tokens": 30720,
+      "length_stops": 30,
+      "peak_client_outstanding": 4,
+      "retractions": 0,
+      "graph_false_lines": 0,
+      "rank_counts_equal": true,
+      "depth3_accepted_and_proposed_zero": true
+    },
+    {
+      "batch_size": 8,
+      "method": "ar",
+      "questions": 30,
+      "tokens": 30720,
+      "length_stops": 30,
+      "peak_client_outstanding": 8,
+      "retractions": 0,
+      "graph_false_lines": 0
+    },
+    {
+      "batch_size": 8,
+      "method": "dflash",
+      "questions": 30,
+      "tokens": 30720,
+      "length_stops": 30,
+      "peak_client_outstanding": 8,
+      "retractions": 0,
+      "graph_false_lines": 0
+    },
+    {
+      "batch_size": 8,
+      "method": "loopspec1",
+      "questions": 30,
+      "tokens": 30720,
+      "length_stops": 30,
+      "peak_client_outstanding": 8,
+      "retractions": 0,
+      "graph_false_lines": 0,
+      "rank_counts_equal": true,
+      "depth3_accepted_and_proposed_zero": true
+    }
+  ],
+  "total_questions": 450,
+  "total_output_tokens": 460800,
+  "runtime_sha": "af7eb8ee264ed88ca45752c53d69a35077acd08b",
+  "strict_ar_equivalence": false
+}

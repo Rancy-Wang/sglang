@@ -22,6 +22,8 @@ def main():
     spec.loader.exec_module(metrics)
     cells = []
     for run in sorted(a.directory.glob('bs*')):
+        if not run.is_dir():
+            continue
         manifest = json.loads((run/'manifest.json').read_text())
         assert manifest['args']['tp_size'] == 2
         prompts = json.loads((run/'prompts.json').read_text())
@@ -36,6 +38,15 @@ def main():
             assert sorted(i for c in cohorts for i in c['ids']) == sorted(r['id'] for r in rows)
             wall = sum(c['wall_ms'] for c in cohorts)
             tokens = sum(len(r['output_ids']) for r in rows)
+            # Client outstanding requests include admission/queueing. They are
+            # not the GPU batch; LoopSpec logs split request callbacks as bs1.
+            boundaries = [(r['sent_ns'], 1) for r in rows]
+            boundaries += [(r['events'][-1]['ns'], -1) for r in rows]
+            inflight = peak_client = 0
+            for _, delta in sorted(boundaries):
+                inflight += delta
+                peak_client = max(peak_client, inflight)
+            assert inflight == 0
             assert tokens == sum(c['output_tokens'] for c in cohorts)
             assert all(len(r['output_ids']) == r['meta_info']['completion_tokens'] for r in rows)
             log = (method_dir/'server.log').read_bytes()
@@ -51,6 +62,8 @@ def main():
                 'mean_ttft_ms': statistics.mean(r['ttft_ms'] for r in rows),
                 'weighted_request_tpot_ms': ratio(sum(r['decode_ms'] for r in rows), sum(r['decode_tokens'] for r in rows)),
                 'observed_peak_running_requests': peak,
+                'peak_client_outstanding': peak_client,
+                'mean_client_outstanding': sum(r['e2e_ms'] for r in rows) / wall,
                 'retractions': sum(r['meta_info']['num_retractions'] for r in rows),
                 'cuda_graph_true_log_lines': measured_log.count('cuda graph: True'),
                 'cuda_graph_false_log_lines': measured_log.count('cuda graph: False'),
