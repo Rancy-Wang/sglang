@@ -15,7 +15,7 @@ from sglang.srt.managers.utils import GenerationBatchResult
 from sglang.srt.mem_cache.memory_pool import ReqToTokenPool
 from sglang.srt.model_executor.forward_batch_info import CaptureHiddenMode, ForwardBatch, ForwardMode
 from sglang.srt.model_executor.recurrent_runner import RecurrentRunner, RecurrentState
-from sglang.srt.runtime_context import get_exec, get_observability, get_serving, get_spec
+from sglang.srt.runtime_context import get_exec, get_observability, get_parallel, get_serving, get_spec
 from sglang.srt.speculative.base_spec_worker import BaseSpecWorker
 from sglang.srt.speculative.spec_info import SpeculativeAlgorithm
 from sglang.srt.utils.device_timer import device_timer_ctx
@@ -135,6 +135,7 @@ class LoopSpecWorker(BaseSpecWorker):
 
     @span("loopspec.prefill_complete")
     def finish_recurrent_prefill(self, batch, result):
+        self._sync_decisions(result.next_token_ids)
         ids = result.next_token_ids.tolist()
         rows = batch.req_pool_indices.tolist()
         lengths = batch.seq_lens.tolist()
@@ -241,10 +242,20 @@ class LoopSpecWorker(BaseSpecWorker):
             for j, (context, lane) in enumerate(endpoint_rows):
                 context.logits[lane.uid] = logits[j]
             decisions, distributions = decide_endpoints(logits, endpoint_rows)
+            self._sync_decisions(decisions)
             decisions = self._read_decisions(decisions)
             for (context, lane), decision, distribution in zip(endpoint_rows, decisions, distributions, strict=True):
                 context.decisions[lane.uid] = decision, distribution
         return used_graph
+
+    @staticmethod
+    @span("loopspec.tp_sync")
+    def _sync_decisions(decisions):
+        # Branch/KV ownership must agree even when per-rank RNG states differ.
+        # Broadcast one small packet before any host branch mutation.
+        parallel = get_parallel()
+        if parallel.tp_size > 1:
+            parallel.tp_group.broadcast(decisions, src=0)
 
     @staticmethod
     @span("loopspec.decision_readback", gpu=False)

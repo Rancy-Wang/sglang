@@ -36,8 +36,13 @@ def stop(directory, profile_id):
         torch.cuda.synchronize()
     path = Path(directory) / f"{profile_id}-recurrent-{os.getpid()}.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
+    from sglang.srt.runtime_context import get_parallel
+
+    parallel = get_parallel()
     with path.open("w") as stream:
         for row in _records:
+            row["pid"] = os.getpid()
+            row["tp_rank"] = parallel.tp_rank
             events = row.pop("events", None)
             if events is not None:
                 row["gpu_stream_ms"] = events[0].elapsed_time(events[1])

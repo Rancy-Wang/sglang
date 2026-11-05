@@ -78,7 +78,7 @@ def command(method, a):
         '--context-length', str(a.context), '--max-running-requests', '1',
         '--max-total-tokens', str(a.capacity), '--mem-fraction-static', '.85',
         '--return-output-ids', '--incremental-streaming-output', '--stream-interval', '1', '--cuda-graph-max-bs-decode', '1',
-        '--chunked-prefill-size', '512']
+        '--chunked-prefill-size', '512', '--tp-size', str(a.tp_size)]
     if method != 'ar':
         cmd += ['--speculative-algorithm', 'LOOPSPEC' if method.startswith('loopspec') else method.upper()]
     if method.startswith('loopspec'):
@@ -178,8 +178,12 @@ def run_method(method, repeat, a, rows, prompts, warmups):
 
 
 def main():
+    global MODEL, DRAFT
     p = argparse.ArgumentParser()
     p.add_argument('--output', type=Path, required=True)
+    p.add_argument('--model', default=MODEL)
+    p.add_argument('--draft-model', default=DRAFT)
+    p.add_argument('--tp-size', type=int, choices=(1, 2), default=1)
     p.add_argument('--dataset', type=Path, default=Path('/results/aime25-matharena.jsonl'))
     p.add_argument('--methods', nargs='+', choices=METHODS, default=list(METHODS))
     p.add_argument('--repeat', type=int, default=1)
@@ -192,6 +196,7 @@ def main():
     p.add_argument('--profile-ids', nargs='+', default=['0','14','29'])
     p.add_argument('--profile-tokens', type=int, default=32)
     a = p.parse_args()
+    MODEL, DRAFT = a.model, a.draft_model
     assert a.repeat > 0 and (not a.profile_reference or a.repeat == 1)
     a.output.mkdir(parents=True, exist_ok=False)
     raw = a.dataset.read_bytes()

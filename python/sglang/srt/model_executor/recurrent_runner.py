@@ -7,6 +7,7 @@ equivalent of vllm-rlt's StateSpan/ExecutionBatch execution metadata.
 """
 
 import copy
+from contextlib import nullcontext
 from dataclasses import dataclass
 
 import torch
@@ -32,8 +33,9 @@ def use_recurrent_execution(model, server_args):
     return (
         getattr(model, "supports_recurrent_execution", False)
         and server_args.speculative_algorithm in (None, "LOOPSPEC")
-        and (server_args.tp_size, server_args.pp_size, server_args.dp_size,
-             server_args.attn_cp_size) == (1, 1, 1, 1)
+        and server_args.tp_size in (1, 2)
+        and (server_args.pp_size, server_args.dp_size,
+             server_args.attn_cp_size) == (1, 1, 1)
         and server_args.attention_backend == "triton"
         and server_args.device.startswith("cuda")
         and all(backend in (None, "triton") for backend in (
@@ -217,8 +219,15 @@ class RecurrentCoreGraph:
                 self.run()
         stream.synchronize()
         self.graph = torch.cuda.CUDAGraph()
-        with model_capture_mode(), torch.cuda.graph(self.graph, stream=stream, pool=recurrent.graph_pool):
-            self.run()
+        from sglang.srt.distributed.parallel_state import graph_capture
+        from sglang.srt.runtime_context import get_parallel
+
+        # Register collective graph buffers and enable graph-safe NCCL. Keep
+        # TP1's capture path unchanged; each TP rank captures the same buckets.
+        communication = graph_capture(stream=stream) if get_parallel().tp_size > 1 else nullcontext()
+        with communication, model_capture_mode():
+            with torch.cuda.graph(self.graph, stream=stream, pool=recurrent.graph_pool):
+                self.run()
         torch.cuda.current_stream(device).wait_stream(stream)
 
     def run(self):

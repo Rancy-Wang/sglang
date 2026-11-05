@@ -28,8 +28,8 @@ def handle_server_args(server_args):
     if model.architectures != ["OuroForCausalLM"]:
         raise ValueError("LoopSpec CDB currently requires native Ouro; Raven CDB is unvalidated")
     depths = validate_depths(cfg.speculative_draft_depth or [1], model.total_ut_steps)
-    if (cfg.tp_size, cfg.pp_size, cfg.dp_size, cfg.attn_cp_size) != (1, 1, 1, 1):
-        raise ValueError("LoopSpec currently requires TP=PP=DP=CP=1")
+    if cfg.tp_size not in (1, 2) or (cfg.pp_size, cfg.dp_size, cfg.attn_cp_size) != (1, 1, 1):
+        raise ValueError("LoopSpec currently requires TP=1 or 2 and PP=DP=CP=1")
     if not cfg.device.startswith("cuda") or cfg.attention_backend != "triton":
         raise ValueError(
             "LoopSpec currently requires CUDA and --attention-backend triton"
