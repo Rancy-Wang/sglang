@@ -1,3 +1,4 @@
+# Retains read-only DAS-Wave parsing for archived pre-removal results.
 """Inclusive intervals, direct-child exclusive estimates and kernel categories."""
 import collections
 import gzip

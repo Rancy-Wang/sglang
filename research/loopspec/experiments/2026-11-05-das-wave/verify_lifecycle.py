@@ -1,4 +1,4 @@
-"""V2 greedy lifetime checks; unsupported sampling must be rejected explicitly."""
+"""Native V2 greedy lifetime checks."""
 import concurrent.futures
 import time
 from urllib.error import HTTPError
@@ -50,13 +50,5 @@ def verify(url, prompts, algorithm):
             live = survivor.result(timeout=120)
             assert live['meta_info']['completion_tokens']==12, live
         records.append({'delay':delay,'aborted':aborted,'survivor':live});flush()
-    if algorithm=='DAS_WAVE':
-        for label, kwargs in [('sampling',{'sampling':{'temperature':.8}}),
-                              ('logprob',{'return_logprob':True})]:
-            try: generate(0,2,rid=f'unsupported-{label}',**kwargs)
-            except HTTPError as e:
-                assert e.code==400, e.code
-                records.append({'unsupported':label,'status':e.code,'body':e.read().decode()})
-            else: raise AssertionError(f'{label} must be explicitly rejected')
     flush()
     return {'passed':True,'cases':records}

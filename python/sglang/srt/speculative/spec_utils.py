@@ -1190,7 +1190,7 @@ def spec_prepare_for_decode(batch: ScheduleBatch) -> None:
     """eagle/ngram share a stateless free function; dflash keeps stateful
     prep on its draft input -- the dispatcher routes.
     """
-    if batch.spec_algorithm.is_loopspec() or batch.spec_algorithm.is_das_wave():
+    if batch.spec_algorithm.is_loopspec():
         batch.spec_info.prepare_for_decode(batch)
         return
     if get_exec().mamba.enable_mamba_extra_buffer_lazy:

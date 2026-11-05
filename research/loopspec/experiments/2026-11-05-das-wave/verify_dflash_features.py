@@ -6,7 +6,10 @@ from pathlib import Path
 
 import torch
 
-from probe_wave import error
+def error(x, y):
+    d = x.float() - y.float()
+    return {'max_abs': float(d.abs().max()), 'rmse': float(d.square().mean().sqrt()),
+            'exact': bool(torch.equal(x, y))}
 
 
 @torch.inference_mode()

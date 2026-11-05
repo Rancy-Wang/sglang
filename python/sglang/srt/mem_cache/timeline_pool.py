@@ -383,29 +383,3 @@ class MixedTimelineRuntime:
         translator.bind_own_plan(mapped)
         backend.init_forward_metadata(mapped)
         return mapped, backend
-
-    def draft_batch(self, batch, prefix_lens):
-        """DAS: mature verified prefix + current-round provisional suffix.
-
-        Draft slots are private logical allocations. Only prefix positions map
-        to R-1; active writes always use plane zero, never a mature target slot.
-        The resulting single row is normalized by one causal attention call.
-        """
-        count = batch.batch_size
-        if count > self.max_rows or prefix_lens.shape != (count,):
-            raise ValueError("Invalid DAS draft row layout")
-        table, translator, backend = self.views["core"]
-        mapping = self.pool.timeline.maps["core"]
-        logical = self.source[batch.req_pool_indices.long()].long()
-        valid = self.columns[None, :] < batch.seq_lens[:, None]
-        logical = torch.where(valid, logical, 0)
-        depths = torch.where(self.columns[None, :] < prefix_lens[:, None],
-                             self.pool.repeats - 1, 0)
-        table[1:count + 1].copy_(mapping[depths, logical])
-        mapped = copy.copy(batch)
-        mapped.req_pool_indices = self.rows[:count]
-        mapped.seq_lens_sum = count * self.source.shape[1]
-        mapped.out_cache_loc = mapping[0, batch.out_cache_loc.long()]
-        translator.bind_own_plan(mapped)
-        backend.init_forward_metadata(mapped)
-        return mapped, backend

@@ -1,3 +1,5 @@
+> 历史归档（2026-11-06）：DAS-Wave 已按用户要求撤除；本文描述撤除前的实现和结果，不代表当前可用算法。DFlash/LoopSpec 公共工具与修复保留。见 [撤除记录](../2026-11-06-remove-das-wave/record.md)。
+
 # bs1 详细 Profile：Ouro-2.6B-Thinking / CUDA Graph
 
 45窗口全部完成：AR、DFlash、LoopSpec D1、LoopSpec D1/3、DAS-Wave各9个窗口；题ID0/2/20，原始输入54/137/804 tokens，分别在各自主轨迹0%/50%/90%处重建前缀，再生成32 tokens。有效前缀长度54–1725，使用完整R4/BF16、CUDA Graph和原生V2，生成长度与前缀位置之外的主参数与bs1一致。每个窗口包含独立prefill，因此不是主运行原位置的无扰动延续。**本报告仅bs1；其他batch仅完成无Profile主对比。**

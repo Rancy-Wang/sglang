@@ -1,3 +1,5 @@
+> 历史归档（2026-11-06）：DAS-Wave 已按用户要求撤除；本文描述撤除前的实现和结果，不代表当前可用算法。DFlash/LoopSpec 公共工具与修复保留。见 [撤除记录](../2026-11-06-remove-das-wave/record.md)。
+
 # AIME25 全30题：1024输出上限与 CUDA Graph 实测
 
 实验源码 `da86ebecb1bccfa6aea1e73812e38cefa5c2a05a`，X5 RTX5090 32GB，SGLang v0.5.22 fork。**25组全部完成，750个请求，共768000个输出tokens；每组30题、每题恰好1024 tokens，最终有效组均0 retraction。** 这里“全30题”指完整覆盖题目集合；所有输出都触及长度上限，不是自然完成的解题实验。bs1全部30题均未解析到最终boxed答案，不能将这些吞吐结果当作AIME准确率结论。

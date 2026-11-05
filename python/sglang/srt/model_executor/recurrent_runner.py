@@ -31,7 +31,7 @@ def use_recurrent_execution(model, server_args):
     server_args = resolved_view(server_args)
     return (
         getattr(model, "supports_recurrent_execution", False)
-        and server_args.speculative_algorithm in (None, "LOOPSPEC", "DAS_WAVE")
+        and server_args.speculative_algorithm in (None, "LOOPSPEC")
         and (server_args.tp_size, server_args.pp_size, server_args.dp_size,
              server_args.attn_cp_size) == (1, 1, 1, 1)
         and server_args.attention_backend == "triton"

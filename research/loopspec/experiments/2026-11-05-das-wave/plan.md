@@ -1,3 +1,5 @@
+> 历史归档（2026-11-06）：DAS-Wave 已按用户要求撤除；本文描述撤除前的实现和结果，不代表当前可用算法。DFlash/LoopSpec 公共工具与修复保留。见 [撤除记录](../2026-11-06-remove-das-wave/record.md)。
+
 # DAS-Wave 原生实现与 AIME25 实验计划
 
 日期：2026-11-05（Asia/Shanghai）。目标是在 SGLang v0.5.22 fork 中增加独立的 `DAS_WAVE` speculative algorithm，先验收单请求，再验收连续多请求，最后在 X5 上用 Ouro-2.6B-Thinking 完成 AIME25 全30题、bs=1 的 AR、DFlash、LoopSpec、DAS-Wave 对比和逐阶段 profiling。本文保留最初的设计与验收口径；实施后的最新结果见 [status.md](status.md) 和 [record.md](record.md)。已用10/10轮，原生V2与graph路径、DFlash导出/接入已验证；AIME25 25组全30题已完成，见最新报告。严格生成数值一致性仍未通过；下文的起始配置与预算为历史计划，不代表当前状态。

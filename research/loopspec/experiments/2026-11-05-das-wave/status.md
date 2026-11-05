@@ -1,3 +1,5 @@
+> 历史归档（2026-11-06）：DAS-Wave 已按用户要求撤除；本文描述撤除前的实现和结果，不代表当前可用算法。DFlash/LoopSpec 公共工具与修复保留。见 [撤除记录](../2026-11-06-remove-das-wave/record.md)。
+
 # DAS-Wave V2 与 Ouro DFlash 实施结果
 
 2026-11-05。当前实验提交：`da86ebecb1bccfa6aea1e73812e38cefa5c2a05a`，分支 `loopspec-test`，已同步 X5。已用 **10/10** 轮（完整主矩阵与45个Profile窗口已运行完毕）。原先授权的正式多 batch 晋升提交为 `82a851f6fe12c6e17354054fd7b160594f203b66`，标题 `[update] Support LoopSpec for bs>1`；本次 DAS-Wave 仍只在实验分支。

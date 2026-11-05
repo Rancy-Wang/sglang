@@ -45,7 +45,6 @@ class SpeculativeAlgorithm(Enum):
     STANDALONE = auto()
     NGRAM = auto()
     LOOPSPEC = auto()
-    DAS_WAVE = auto()
     NONE = auto()
 
     @classmethod
@@ -136,9 +135,6 @@ class SpeculativeAlgorithm(Enum):
 
     def is_loopspec(self) -> bool:
         return self == SpeculativeAlgorithm.LOOPSPEC
-
-    def is_das_wave(self) -> bool:
-        return self == SpeculativeAlgorithm.DAS_WAVE
 
     def supports_target_verify_for_draft(self) -> bool:
         return self.is_dflash_family()
@@ -271,10 +267,6 @@ class SpeculativeAlgorithm(Enum):
             _handle_eagle_family(server_args)
         elif self.is_ngram():
             _handle_ngram(server_args)
-        elif self.is_das_wave():
-            from sglang.srt.speculative.das_wave.config import handle_server_args
-
-            handle_server_args(server_args)
         elif self.is_loopspec():
             from sglang.srt.speculative.loopspec.config import handle_server_args
 
@@ -323,11 +315,6 @@ class SpeculativeAlgorithm(Enum):
         assert not self.is_none(), (
             "Cannot create worker for NONE speculative algorithm."
         )
-
-        if self.is_das_wave():
-            from sglang.srt.speculative.das_wave.worker import DASWaveWorker
-
-            return DASWaveWorker
 
         if self.is_loopspec():
             from sglang.srt.speculative.loopspec.worker import LoopSpecWorker
@@ -400,7 +387,6 @@ class SpecInputType(IntEnum):
     NGRAM_VERIFY = auto()
     UNO_STATE = auto()
     LOOPSPEC_STATE = auto()
-    DAS_WAVE_STATE = auto()
     UNO_DRAFT = auto()
     UNO_VERIFY = auto()
     # Carried between rounds under PP: the tree the last stage drafted, which
@@ -454,7 +440,6 @@ class SpecInput(ABC):
             SpecInputType.DFLASH_DRAFT,
             SpecInputType.UNO_DRAFT,
             SpecInputType.LOOPSPEC_STATE,
-            SpecInputType.DAS_WAVE_STATE,
         }
 
     def is_verify_input(self) -> bool:

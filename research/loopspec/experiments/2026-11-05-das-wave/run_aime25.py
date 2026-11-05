@@ -17,7 +17,7 @@ import sys
 import time
 import urllib.request
 
-METHODS = ('ar', 'dflash', 'loopspec1', 'loopspec13', 'das_wave')
+METHODS = ('ar', 'dflash', 'loopspec1', 'loopspec13')
 MODEL = '/home/ruoxi/models/Ouro-2.6B-Thinking'
 DRAFT = MODEL + '-DFlash'
 DATA_HASH = 'b1cb6f70eb12b5a0e68f9ea88be9a35c6a3c66f0d00112b5b26160b042326b19'

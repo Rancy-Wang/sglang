@@ -25,13 +25,13 @@ def http(url, path, payload=None):
 def main():
     p=argparse.ArgumentParser()
     p.add_argument('--output',type=Path,required=True)
-    p.add_argument('--algorithms',nargs='+',default=['ar','DAS_WAVE'])
+    p.add_argument('--algorithms',nargs='+',choices=['ar','DFLASH','LOOPSPEC'],default=['ar','DFLASH'])
     p.add_argument('--batches',nargs='+',type=int,default=[1])
     p.add_argument('--tokens',type=int,default=32)
     p.add_argument('--port',type=int,default=30215)
     p.add_argument('--graph',action='store_true')
     p.add_argument('--overlap',action='store_true')
-    p.add_argument('--draft-model', default='/results/dflash-inference-step10000')
+    p.add_argument('--draft-model', default='/home/ruoxi/models/Ouro-2.6B-Thinking-DFlash')
     p.add_argument('--lifecycle',action='store_true')
     a=p.parse_args();a.output.mkdir(parents=True,exist_ok=False)
     model='/home/ruoxi/models/Ouro-2.6B-Thinking'
@@ -70,7 +70,7 @@ def main():
                 except Exception:time.sleep(1)
             else:raise TimeoutError('startup')
             if a.lifecycle:
-                from verify_wave_lifecycle import verify
+                from verify_lifecycle import verify
                 checks = verify(url,prompts,algorithm)
                 (a.output/f'{algorithm}-lifecycle.json').write_text(json.dumps(checks,indent=2))
                 continue

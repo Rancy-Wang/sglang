@@ -1,3 +1,4 @@
+# Retains read-only DAS-Wave parsing for archived pre-removal results.
 """Recompute paired metrics from full outputs and real request counters."""
 import argparse
 import json

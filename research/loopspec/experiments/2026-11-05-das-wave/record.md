@@ -1,3 +1,5 @@
+> 历史归档（2026-11-06）：DAS-Wave 已按用户要求撤除；本文描述撤除前的实现和结果，不代表当前可用算法。DFlash/LoopSpec 公共工具与修复保留。见 [撤除记录](../2026-11-06-remove-das-wave/record.md)。
+
 # DAS-Wave 复现与 AIME25 对比任务
 
 日期：2026-11-05（Asia/Shanghai）。
