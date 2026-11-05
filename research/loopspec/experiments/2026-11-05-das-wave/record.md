@@ -125,3 +125,15 @@
 - 范围：models/ouro.py及本记录。成功标准：DFLASH prefill/verify/draft graph启动并完成真实请求；eager特征语义和target logits不变；保留跨shape数值差异。
 - 风险：嵌套body输出结构、timeline手动路径；保持无capture时原返回类型，timeline分支显式组装aux。
 - 验证：AST/diff/CPU契约；Git同步同SHA后DFlash graph bs1与多请求生命周期，重跑feature对照；Wave未改数值路径，按需服务回归。启动8/10。
+
+### 候选8结果和当前交付状态
+
+- 验证SHA fa023257486d319c9be18c0673e5ff56664f6447，本地/origin/X5一致；生产源码工作树干净。
+- round-8/dflash-graph exit0：prefill breakable、target verify full、draft full图均运行，两个64-token请求与同配置AR的IDs/text/stop严格相同。
+- round-8/dflash-lifecycle exit0：graph/overlap bs8，零/短输出、stop、取消、survivor、flush/复用通过；round-8/dflash-features exit0，capture hook契约和target logits不变，HF四点argmax一致。
+- 推理checkpoint落于X5 /home/ruoxi/models/Ouro-2.6B-Thinking-DFlash-inference-step10000。首次host copytree因容器root创建的safetensors读取权限失败；随后仅用docker cp复制该导出artifact，host逐项hash核对全部通过。未更改源训练文件或其权限。
+- 数值口径已向用户异步澄清：保留原BF16并披露分歧，或先要求确定性逐token一致。尚未收到答复，不能将超时当作批准；AIME25完整30题和性能profile尚未启动。
+- 冻结MathArena数据artifact SHA256 b1cb6f70eb12b5a0e68f9ea88be9a35c6a3c66f0d00112b5b26160b042326b19，HF revision c94da77eb22bbd6439e62a323bec18493a421302，源题面原样保留。旧aime.jsonl未改，数据不进Git。
+- 轻量证据已复制至results/：validation-summary、Wave固定prefix探针、DFlash feature/export manifest及数据manifest。完整tokens/logs/native features留在X5 raw root，不把大文件提交Git。
+- 收尾检查：GPU0/1均8MiB，无compute processes；30215/30216无监听。本任务服务均退出，两个隔离容器仅sleep；X5会话92524和A10会话97155未主动断开。
+- 已用8/10轮，剩余2轮；没有重置计数，也未把DAS-Wave自动晋升到loopspec。后续文档/证据提交不改变已验证runtime tree。

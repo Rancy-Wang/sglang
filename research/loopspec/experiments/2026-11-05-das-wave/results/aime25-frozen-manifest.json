@@ -1,0 +1,9 @@
+{
+  "dataset": "MathArena/aime_2025",
+  "sha256": "b1cb6f70eb12b5a0e68f9ea88be9a35c6a3c66f0d00112b5b26160b042326b19",
+  "count": 30,
+  "source_response_sha256": "98c5c90c82464441e48ccb6bf0af85464febf2cdd064d3d85eb6137b64536908",
+  "original_local_file_unchanged": true,
+  "reason": "Original local data contains malformed LaTeX control characters; preserve public source verbatim.",
+  "hf_revision": "c94da77eb22bbd6439e62a323bec18493a421302"
+}

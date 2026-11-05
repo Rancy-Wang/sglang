@@ -1,0 +1,108 @@
+{
+  "runtime_sha": "fa023257486d319c9be18c0673e5ff56664f6447",
+  "rounds_used": 8,
+  "max_rounds": 10,
+  "tests": {
+    "wave_bs1_eager64": {
+      "comparison": "round-5/bs1/comparison.json",
+      "counts": {
+        "1": {
+          "requests": 2,
+          "strict_matches": 2
+        }
+      },
+      "sha": "fdab7708798527136b03012e53ad78f8a9d805fe"
+    },
+    "wave_multi_eager": {
+      "comparison": "round-5/multi-eager/comparison.json",
+      "counts": {
+        "1": {
+          "requests": 2,
+          "strict_matches": 2
+        },
+        "2": {
+          "requests": 4,
+          "strict_matches": 4
+        },
+        "4": {
+          "requests": 8,
+          "strict_matches": 6
+        },
+        "8": {
+          "requests": 16,
+          "strict_matches": 4
+        },
+        "16": {
+          "requests": 32,
+          "strict_matches": 8
+        }
+      },
+      "sha": "fdab7708798527136b03012e53ad78f8a9d805fe"
+    },
+    "wave_bs1_graph128": {
+      "comparison": "round-5/bs1-graph/comparison.json",
+      "counts": {
+        "1": {
+          "requests": 2,
+          "strict_matches": 0
+        }
+      },
+      "sha": "fdab7708798527136b03012e53ad78f8a9d805fe"
+    },
+    "wave_bs1_eager128": {
+      "comparison": "round-5/bs1-eager128/comparison.json",
+      "counts": {
+        "1": {
+          "requests": 2,
+          "strict_matches": 0
+        }
+      },
+      "sha": "fdab7708798527136b03012e53ad78f8a9d805fe"
+    },
+    "dflash_bs1_eager64": {
+      "comparison": "round-5/dflash-bs1/comparison.json",
+      "counts": {
+        "1": {
+          "requests": 2,
+          "strict_matches": 2
+        }
+      },
+      "sha": "fdab7708798527136b03012e53ad78f8a9d805fe"
+    },
+    "dflash_bs1_graph64": {
+      "comparison": "round-8/dflash-graph/comparison.json",
+      "counts": {
+        "1": {
+          "requests": 2,
+          "strict_matches": 2
+        }
+      },
+      "sha": "fa023257486d319c9be18c0673e5ff56664f6447"
+    },
+    "wave_lifecycle_eager": {
+      "passed": true,
+      "case_groups": 7,
+      "sha": "ba0e772d79f4914b2804c48155c27d8779a6c82c"
+    },
+    "wave_lifecycle_graph": {
+      "passed": true,
+      "case_groups": 7,
+      "sha": "ba0e772d79f4914b2804c48155c27d8779a6c82c"
+    },
+    "dflash_lifecycle_graph": {
+      "passed": true,
+      "case_groups": 5,
+      "sha": "fa023257486d319c9be18c0673e5ff56664f6447"
+    }
+  },
+  "aime25_executed": false,
+  "profile_executed": false,
+  "wave_probe": {
+    "groups": 24,
+    "positions": 440,
+    "argmax_flips": 1,
+    "same_shape_graph_logits_all_exact": true,
+    "max_logits_abs": 0.5
+  },
+  "raw_root": "/home/ruoxi/experiments/loopspec/2026-11-05-das-wave"
+}
