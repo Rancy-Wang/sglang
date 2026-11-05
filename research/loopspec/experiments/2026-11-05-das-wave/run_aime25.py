@@ -5,6 +5,7 @@ Profile prefixes come from the corresponding unprofiled trajectory, never from
 an answer key. Profile windows are diagnostics, not end-to-end benchmark times.
 """
 import argparse
+import concurrent.futures
 import hashlib
 import importlib.metadata
 import json
@@ -75,9 +76,9 @@ def command(method, a):
     cmd = [sys.executable, '-m', 'sglang.launch_server', '--model-path', MODEL,
         '--host', '127.0.0.1', '--port', str(a.port), '--dtype', 'bfloat16',
         '--attention-backend', 'triton', '--page-size', '1', '--disable-radix-cache',
-        '--context-length', str(a.context), '--max-running-requests', '1',
+        '--context-length', str(a.context), '--max-running-requests', str(a.batch_size),
         '--max-total-tokens', str(a.capacity), '--mem-fraction-static', '.85',
-        '--return-output-ids', '--incremental-streaming-output', '--stream-interval', '1', '--cuda-graph-max-bs-decode', '1',
+        '--return-output-ids', '--incremental-streaming-output', '--stream-interval', '1', '--cuda-graph-max-bs-decode', str(a.batch_size),
         '--chunked-prefill-size', '512', '--tp-size', str(a.tp_size)]
     if method != 'ar':
         cmd += ['--speculative-algorithm', 'LOOPSPEC' if method.startswith('loopspec') else method.upper()]
@@ -118,8 +119,39 @@ def run_method(method, repeat, a, rows, prompts, warmups):
         else:
             raise TimeoutError('Server startup')
         save(output/'server-info.json', info)
-        for i, ids in enumerate(warmups):
-            save(output/f'warmup-{i}.json', generate(url, ids, f'warmup-{method}-{i}', 64))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=a.batch_size) as pool:
+            futures = [pool.submit(generate, url, warmups[i % len(warmups)],
+                       f'warmup-{method}-{i}', 64) for i in range(max(2, a.batch_size))]
+            for i, future in enumerate(futures):
+                save(output/f'warmup-{i}.json', future.result())
+        if not a.profile_reference:
+            cohorts = []
+            pairs = list(zip(rows, prompts, strict=True))
+            for offset in range(0, len(pairs), a.batch_size):
+                group = pairs[offset:offset + a.batch_size]
+                log_start = (output/"server.log").stat().st_size
+                started = time.perf_counter_ns()
+                def run_one(pair):
+                    row, prompt = pair
+                    qid = str(row['id'])
+                    result = generate(url, prompt['input_ids'], f'{method}-r{repeat}-q{qid}', a.tokens)
+                    save(output/f'q{qid}.json', result | {'id': qid, 'answer': row['answer']})
+                    print(json.dumps({'method': method, 'repeat': repeat, 'id': qid,
+                        'tokens': len(result['output_ids']), 'seconds': result['e2e_ms']/1000,
+                        'finish': result['meta_info']['finish_reason']}), flush=True)
+                    return result
+                with concurrent.futures.ThreadPoolExecutor(max_workers=a.batch_size) as pool:
+                    completed = list(pool.map(run_one, group))
+                elapsed = (time.perf_counter_ns() - started) / 1e6
+                cohorts.append({'ids': [str(row['id']) for row, _ in group],
+                    'log_start': log_start, 'log_end': (output/'server.log').stat().st_size,
+                    'wall_ms': elapsed, 'output_tokens': sum(len(r['output_ids']) for r in completed)})
+                save(output/'cohorts.json', cohorts)
+                with http(url, '/flush_cache?timeout=30', {}) as response:
+                    response.read()
+            save(output/'status.json', {'execution_complete': True, 'questions': len(rows),
+                'full30': len(rows) == 30, 'profile': False})
+            return
         count = 0
         for row, prompt in zip(rows, prompts, strict=True):
             qid = str(row['id'])
@@ -145,12 +177,6 @@ def run_method(method, repeat, a, rows, prompts, warmups):
                     save(output/label/'request.json', result | {'id': qid, 'prefix_tokens': len(ids),
                         'trajectory_offset': offset, 'reference': str(a.profile_reference)})
                     print(json.dumps({'method': method, 'profile': label, 'tokens': len(result['output_ids'])}), flush=True)
-            else:
-                result = generate(url, prompt['input_ids'], f'{method}-r{repeat}-q{qid}', a.tokens)
-                save(output/f'q{qid}.json', result | {'id': qid, 'answer': row['answer']})
-                print(json.dumps({'method': method, 'repeat': repeat, 'id': qid,
-                    'tokens': len(result['output_ids']), 'seconds': result['e2e_ms']/1000,
-                    'finish': result['meta_info']['finish_reason']}), flush=True)
             count += 1
             with http(url, '/flush_cache?timeout=30', {}) as response:
                 response.read()
@@ -184,6 +210,7 @@ def main():
     p.add_argument('--model', default=MODEL)
     p.add_argument('--draft-model', default=DRAFT)
     p.add_argument('--tp-size', type=int, choices=(1, 2), default=1)
+    p.add_argument('--batch-size', type=int, choices=(1, 2, 4, 8, 16), default=1)
     p.add_argument('--dataset', type=Path, default=Path('/results/aime25-matharena.jsonl'))
     p.add_argument('--methods', nargs='+', choices=METHODS, default=list(METHODS))
     p.add_argument('--repeat', type=int, default=1)
@@ -197,7 +224,7 @@ def main():
     p.add_argument('--profile-tokens', type=int, default=32)
     a = p.parse_args()
     MODEL, DRAFT = a.model, a.draft_model
-    assert a.repeat > 0 and (not a.profile_reference or a.repeat == 1)
+    assert a.repeat > 0 and (not a.profile_reference or (a.repeat == 1 and a.batch_size == 1))
     a.output.mkdir(parents=True, exist_ok=False)
     raw = a.dataset.read_bytes()
     assert hashlib.sha256(raw).hexdigest() == DATA_HASH

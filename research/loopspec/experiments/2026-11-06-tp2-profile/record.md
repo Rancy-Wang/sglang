@@ -33,3 +33,10 @@
 
 - 跨本地SSH中转资产传输实测约1MiB/s，不适合22GiB依赖；停止本任务传输通道，保留SSH master和部分文件。增加serve_artifacts.py作为一次性TLS白名单资产流：仅A12源IP+随机Bearer认证、固定四个只读路由，证书/凭据通过已认证SSH传递；A12直接从X5读取环境/模型/数据，完成后停止服务。源码仍通过Git同步。
 - 本地候选1静态检查：AST、git diff --check、Profile区间重叠union/通信分类/request+decode过滤断言通过。
+
+## 候选2/10：加入用户确认的batch矩阵
+
+- 候选1提交428bf92ab4169d4c598f6414054b82201ec2f277；本地静态及X5既有CDB/LoopSpec CPU测试9项通过，退出0。A12 GPU验证尚未执行，环境仍在传输，不标通过。
+- 用户确认重跑bs1/2/4/8/16，详细Profile聚焦bs1。因此在同一TP2任务加入cohort并发驱动与矩阵统计，开始候选2/10；运行时代码仍沿用候选1。
+- 新增范围：run_aime25.py支持batch-size，按cohort记录wall time，分母为并发组实际elapsed而不是逐请求延迟之和；新增summarize_matrix.py输出同batch相对AR加速、逐请求TPOT、acceptance和实际峰值batch。full30用统一context65536、KVcapacity40000（是否可用需GPU短测），避免旧X5 capacity导致bs16缩批。
+- A12模型/数据hash核对通过：target c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080，draft d7757a0958fe3d62df63baf3451457df4f0f05f0a3f949cf9ca70e44cbf9067c，dataset b1cb6f70eb12b5a0e68f9ea88be9a35c6a3c66f0d00112b5b26160b042326b19。
