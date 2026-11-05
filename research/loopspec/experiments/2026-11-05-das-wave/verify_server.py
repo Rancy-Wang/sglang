@@ -34,7 +34,7 @@ def main():
     tokenizer=AutoTokenizer.from_pretrained(model,trust_remote_code=True)
     problems=['Compute 7 times 8.','What is 13 plus 21?','Solve x + 9 = 17.','What is the capital of France?']
     prompts=[tokenizer.apply_chat_template([{'role':'user','content':s}],tokenize=True,
-             enable_thinking=True,add_generation_prompt=True) for s in problems]
+             enable_thinking=True,add_generation_prompt=True,return_dict=False) for s in problems]
     manifest={'sha':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
               'prompt_ids':prompts,'args':vars(a)|{'output':str(a.output)}}
     (a.output/'manifest.json').write_text(json.dumps(manifest,indent=2))

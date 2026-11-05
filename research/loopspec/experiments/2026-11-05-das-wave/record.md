@@ -55,3 +55,10 @@
 - 已用轮次：开始1/10，未验证。
 - 原SSH句柄61213已由工具确认不存在；建立新长连接92524，x5/ruoxi，shell691889，ControlPath=/tmp/loopspec-das-%r-%h-%p；后续复用。
 - X5可直接读取用户指定脚本及训练JSON/YAML，尚未访问A10–A13，也未运行训练脚本。
+
+### 候选1结果与候选2/10
+
+- SHA1df94409c412ec4c192e962fc11a2d78891c51d0，本地AST/diff通过，5项CPU契约通过。
+- X5同SHA，新容器loopspec-das-wave-20261105，GPU0；显式PYTHONPATH=/workspace/sglang/python后确认导入当前源码。
+- 首次测试退出1：容器Git safe.directory缺失，已仅在新隔离容器配置。重试退出1：AutoTokenizer.apply_chat_template返回BatchEncoding无法JSON序列化；未启动GPU模型，不视为算法失败或通过。
+- 候选2修改范围：verify_server.py显式return_dict=False，保留原日志。目的/标准/风险/验证沿用第一轮，同SHA重跑bs1和后续矩阵；启动2/10。
