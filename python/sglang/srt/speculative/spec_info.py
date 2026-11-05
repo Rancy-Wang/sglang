@@ -439,6 +439,7 @@ class SpecInput(ABC):
             SpecInputType.FROZEN_KV_MTP_DRAFT,
             SpecInputType.DFLASH_DRAFT,
             SpecInputType.UNO_DRAFT,
+            SpecInputType.LOOPSPEC_STATE,
         }
 
     def is_verify_input(self) -> bool:

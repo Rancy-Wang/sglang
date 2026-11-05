@@ -17,6 +17,7 @@ from sglang.srt.mem_cache.memory_pool import KvBufferDesc, MHATokenToKVPool
 
 
 class TimelineSlots:
+    static = False
     def __init__(self, size, repeats, roles, device):
         self.size, self.repeats, self.roles, self.device = size, repeats, roles, device
         self.maps = {
@@ -90,8 +91,39 @@ class TimelineSlots:
         return len(self.entries)
 
 
+class FixedDepthSlots:
+    """Ordinary full-depth AR reserves every plane with its logical token.
+
+    Address availability is NOT materialization. The recurrent scheduler must
+    still finish the prefix at every depth before exposing its next token.
+    Logical allocation/free remains entirely in TokenToKVPoolAllocator.
+    """
+
+    static = True
+
+    def __init__(self, size, repeats, roles, device):
+        ids = torch.arange(size + 1, dtype=torch.int64, device=device)
+        self.maps = {}
+        for role, count in roles.items():
+            if count:
+                depths = 1 if role == "pre" else repeats
+                self.maps[role] = ids[None, :] + size * torch.arange(depths, device=device)[:, None]
+                self.maps[role][:, 0] = 0
+
+    def clear(self):
+        pass
+
+    def release(self, logical_ids):
+        pass
+
+    def ensure(self, logical_ids, role, depth):
+        # No host readback or map mutation at token boundaries.
+        if role in self.maps and not 0 <= depth < len(self.maps[role]):
+            raise ValueError("Invalid fixed KV plane")
+
+
 class TimelineTokenToKVPool(MHATokenToKVPool):
-    def __init__(self, size, *, recurrent_config, **kwargs):
+    def __init__(self, size, *, recurrent_config, fixed_depth_slots=False, **kwargs):
         self.logical_size = size
         self.repeats = recurrent_config.total_ut_steps
         if recurrent_config.model_type == "ouro":
@@ -125,9 +157,10 @@ class TimelineTokenToKVPool(MHATokenToKVPool):
             kv_cache_layout="nhd",
         )
         super().__init__(size * self.repeats, **kwargs)
-        self.timeline = TimelineSlots(size, self.repeats, self.roles, self.device)
+        slots_cls = FixedDepthSlots if fixed_depth_slots else TimelineSlots
+        self.timeline = slots_cls(size, self.repeats, self.roles, self.device)
         logging.getLogger(__name__).info(
-            "LoopSpec timeline KV: physical_layers=%d logical_layers=%d full_depth_capacity=%d core_slots=%d",
+            "Recurrent timeline KV: physical_layers=%d logical_layers=%d full_depth_capacity=%d core_slots=%d",
             p + c + o,
             len(self.logical_to_physical),
             size,
@@ -244,7 +277,7 @@ class TimelineRuntime:
                 self.backends[key] = TritonAttnBackend(view)
 
     def ensure_prefill(self, slots, endpoints):
-        values = slots.tolist()
+        values = slots if self.pool.timeline.static else slots.tolist()
         self.pool.timeline.ensure(values, "pre", 0)
         for depth in range(self.pool.repeats):
             self.pool.timeline.ensure(values, "core", depth)
@@ -267,5 +300,86 @@ class TimelineRuntime:
             return batch, self.backend
         mapped = self.bind(batch, role, depth)
         backend = self.backends[(role, depth)]
+        backend.init_forward_metadata(mapped)
+        return mapped, backend
+
+
+class MixedTimelineRuntime:
+    """A compact execution view, with one KV plane per row.
+
+    Like vllm-rlt's MetadataBuilder, row identity and recurrence are inputs,
+    not graph layout. The native allocator still owns logical tokens; this
+    object only translates already-reserved timelines. Different branch rows
+    may name the same source request without overwriting each other's view.
+    """
+
+    def __init__(self, runner, request_pool, max_rows):
+        from sglang.srt.layers.attention.triton_backend import TritonAttnBackend
+
+        self.pool = runner.token_to_kv_pool
+        if not isinstance(self.pool, TimelineTokenToKVPool):
+            raise TypeError("Mixed recurrence requires timeline KV storage")
+        self.source = request_pool.req_to_token
+        self.max_rows = max_rows
+        self.rows = torch.arange(1, max_rows + 1, device=self.source.device)
+        self.columns = torch.arange(self.source.shape[1], device=self.source.device)
+        self.views = {}
+        for role in self.pool.timeline.maps:
+            table = torch.zeros(
+                (max_rows + 1, self.source.shape[1]),
+                dtype=self.source.dtype,
+                device=self.source.device,
+            )
+            translator = KVIndexTranslator(
+                req_to_token=table,
+                token_to_kv_pool_allocator=runner.token_to_kv_pool_allocator,
+                token_to_kv_pool=self.pool,
+                page_size=1,
+                device=runner.device,
+            )
+            view = copy.copy(runner)
+            view.req_to_token_pool = copy.copy(request_pool)
+            view.req_to_token_pool.req_to_token = table
+            view.kv_index_translator = translator
+            self.views[role] = table, translator, TritonAttnBackend(view)
+        self.default_backend = runner.attn_backend
+
+    def target_batch(self, batch, role, depths, token_rows=None):
+        """Bind active rows only; no host readback of depth/length is needed.
+
+        ``depths`` has one entry per sequence. For extend, ``token_rows`` maps
+        packed query tokens to those sequences. All referenced role/depth
+        slots must have been reserved by the owner before submission.
+        """
+        if batch.batch_size > self.max_rows:
+            raise ValueError("Recurrent execution exceeds row capacity")
+        if role not in self.views:
+            return batch, self.default_backend
+        table, translator, backend = self.views[role]
+        count = batch.batch_size
+        if depths.shape != (count,):
+            raise ValueError("One recurrent depth is required per sequence")
+        mapping = self.pool.timeline.maps[role]
+        if role == "pre":
+            depths = torch.zeros_like(depths)
+        # The scratch rows are execution-row identities, not source Req ids.
+        # Mask stale cells beyond the current prefix before using them as ids.
+        logical = self.source[batch.req_pool_indices.long()].long()
+        valid = self.columns[None, :] < batch.seq_lens[:, None]
+        logical = torch.where(valid, logical, 0)
+        table[1 : count + 1].copy_(mapping[depths[:, None], logical])
+        if token_rows is None:
+            if not batch.forward_mode.is_decode_or_idle():
+                raise ValueError("Packed extend requires token-to-row indices")
+            write_depths = depths
+        else:
+            write_depths = depths[token_rows]
+        mapped = copy.copy(batch)
+        mapped.req_pool_indices = self.rows[:count]
+        # A row plan can repeat source requests (different depths/branches).
+        # Its parent's CPU length sum is not a valid CSR allocation bound.
+        mapped.seq_lens_sum = count * self.source.shape[1]
+        mapped.out_cache_loc = mapping[write_depths, batch.out_cache_loc.long()]
+        translator.bind_own_plan(mapped)
         backend.init_forward_metadata(mapped)
         return mapped, backend

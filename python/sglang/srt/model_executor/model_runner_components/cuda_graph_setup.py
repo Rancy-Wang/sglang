@@ -397,7 +397,7 @@ def capture_cuda_graphs(
     # cuda-graph capture: prefill before decode, so both coalesce onto the
     # eager buffer allocated above. (capture_prefill_graph routes prefill
     # to the eager runner when the prefill graph is disabled.)
-    if model_runner.spec_algorithm.is_loopspec():
+    if model_runner.spec_algorithm.is_loopspec() or model_runner.recurrent_runner is not None:
         # LoopSpec captures recurrent cores in its worker. A whole-model
         # decode/verify graph would run the wrong recurrence schedule.
         capture_decode_cuda_graph = False

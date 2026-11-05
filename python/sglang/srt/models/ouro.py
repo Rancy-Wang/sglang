@@ -23,6 +23,7 @@ from sglang.srt.model_loader.weight_utils import default_weight_loader
 from sglang.srt.models.llama import LlamaAttention, LlamaMLP
 from sglang.srt.runtime_context import get_parallel
 from sglang.srt.utils import add_prefix
+from sglang.srt.utils.recurrent_trace import span
 
 
 def _norm(config):
@@ -31,8 +32,7 @@ def _norm(config):
         config.hidden_size,
         eps=config.rms_norm_eps,
         cast_x_before_out_mul=True,
-        # Match the checkpoint reduction order at BF16 rounding boundaries.
-        force_native=True,
+        # Use the native HF-semantics fused kernel, preserving this cast.
     )
 
 
@@ -145,6 +145,9 @@ class OuroModel(nn.Module):
             prefix=add_prefix("early_exit_gate", prefix),
         )
 
+    @span("ouro.loop", before=lambda self, hidden, positions, forward_batch, depth: {
+        "depth": depth, "rows": len(hidden), "mode": forward_batch.forward_mode.name,
+    })
     def advance_loop(self, hidden, positions, forward_batch, depth):
         """Materialize one recurrence; never read KV from another depth."""
         if not 0 <= depth < self.config.total_ut_steps:
@@ -159,6 +162,9 @@ class OuroModel(nn.Module):
             hidden = self.advance_loop(hidden, positions, forward_batch, depth)
         return hidden
 
+    @span("ouro.mixed_core", before=lambda self, hidden, positions, groups: {
+        "groups": [(d, a, b) for d, a, b, _, _ in groups],
+    })
     def advance_batch(self, hidden, positions, groups):
         """One core invocation, shared projections across recurrent depths.
 
@@ -181,7 +187,8 @@ class OuroModel(nn.Module):
                             q[start:end], k[start:end], v[start:end], batch
                         )
                     )
-            attention = layer.self_attn.o_proj(torch.cat(parts, dim=0))[0]
+            joined = parts[0] if len(parts) == 1 else torch.cat(parts, dim=0)
+            attention = layer.self_attn.o_proj(joined)[0]
             hidden = hidden + layer.input_layernorm_2(attention)
             mlp = layer.mlp(layer.post_attention_layernorm(hidden))
             hidden = hidden + layer.post_attention_layernorm_2(mlp)
@@ -190,6 +197,7 @@ class OuroModel(nn.Module):
 
 class OuroForCausalLM(nn.Module):
     has_injection = False
+    supports_recurrent_execution = True
 
     def __init__(self, config, quant_config=None, prefix=""):
         super().__init__()
@@ -261,6 +269,9 @@ class OuroForCausalLM(nn.Module):
         from sglang.srt.layers.quantization.unquant import bf16_gemm_dispatch
 
         return bf16_gemm_dispatch(hidden, self.lm_head.weight, None).float()
+
+    def finish_recurrent(self, hidden, positions, groups):
+        return hidden
 
     def get_embed_and_head(self):
         return self.model.embed_tokens.weight, self.lm_head.weight

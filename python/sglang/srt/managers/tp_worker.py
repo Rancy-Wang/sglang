@@ -664,58 +664,7 @@ class TpModelWorker(BaseTpWorker):
 
             capture_pre_sample_logits(batch, forward_batch, logits_output)
 
-            if is_verify:
-                # Skip sampling; spec_v2 worker fires its own publish post-verify.
-                return batch_result
-
-            # Delay sampling only for normal generation requests.
-            # Keep the existing grammar behavior unchanged.
-            if (
-                self.enable_overlap
-                and not self.enable_spec
-                and (
-                    forward_batch.sampling_info.grammars is not None
-                    or (
-                        envs.SGLANG_ENABLE_DELAY_SAMPLE.get()
-                        and not forward_batch.is_prefill_only
-                    )
-                )
-            ):
-
-                def sample_batch_func():
-                    batch_result.next_token_ids = self.model_runner.sample(
-                        logits_output, forward_batch
-                    )
-                    self._maybe_finalize_elastic_cuda_graph_scale()
-                    return batch_result
-
-                batch_result.delay_sample_func = sample_batch_func
-                return batch_result
-
-            if not forward_batch.is_prefill_only:
-                # For normal requests, sample the next token ids.
-                batch_result.next_token_ids = self.model_runner.sample(
-                    logits_output, forward_batch
-                )
-            else:
-                # For prefill-only requests, create dummy token IDs on CPU
-                # The size should match the batch size (number of sequences), not total tokens
-                batch_result.next_token_ids = torch.zeros(
-                    len(forward_batch.seq_lens),
-                    dtype=torch.long,
-                    device=forward_batch.input_ids.device,
-                )
-                if (
-                    forward_batch.return_logprob
-                    and logits_output.next_token_logits is not None
-                ):
-                    # NOTE: Compute logprobs without full sampling
-                    self.model_runner.compute_logprobs_only(
-                        logits_output, forward_batch
-                    )
-
-            self._maybe_finalize_elastic_cuda_graph_scale()
-            return batch_result
+            return self.sample_generation(batch_result, forward_batch, is_verify=is_verify)
         else:
             out = self.model_runner.forward(
                 forward_batch,
@@ -727,6 +676,62 @@ class TpModelWorker(BaseTpWorker):
                 can_run_cuda_graph=can_run_cuda_graph,
                 expert_distribution_metrics=out.expert_distribution_metrics,
             )
+
+    def sample_generation(self, batch_result, forward_batch, *, is_verify=False):
+        """Complete native sampling after either a full or recurrent target pass."""
+        logits_output = batch_result.logits_output
+        if is_verify:
+            # Skip sampling; spec_v2 worker fires its own publish post-verify.
+            return batch_result
+
+        # Delay sampling only for normal generation requests.
+        # Keep the existing grammar behavior unchanged.
+        if (
+            self.enable_overlap
+            and not self.enable_spec
+            and (
+                forward_batch.sampling_info.grammars is not None
+                or (
+                    envs.SGLANG_ENABLE_DELAY_SAMPLE.get()
+                    and not forward_batch.is_prefill_only
+                )
+            )
+        ):
+
+            def sample_batch_func():
+                batch_result.next_token_ids = self.model_runner.sample(
+                    logits_output, forward_batch
+                )
+                self._maybe_finalize_elastic_cuda_graph_scale()
+                return batch_result
+
+            batch_result.delay_sample_func = sample_batch_func
+            return batch_result
+
+        if not forward_batch.is_prefill_only:
+            # For normal requests, sample the next token ids.
+            batch_result.next_token_ids = self.model_runner.sample(
+                logits_output, forward_batch
+            )
+        else:
+            # For prefill-only requests, create dummy token IDs on CPU
+            # The size should match the batch size (number of sequences), not total tokens
+            batch_result.next_token_ids = torch.zeros(
+                len(forward_batch.seq_lens),
+                dtype=torch.long,
+                device=forward_batch.input_ids.device,
+            )
+            if (
+                forward_batch.return_logprob
+                and logits_output.next_token_logits is not None
+            ):
+                # NOTE: Compute logprobs without full sampling
+                self.model_runner.compute_logprobs_only(
+                    logits_output, forward_batch
+                )
+
+        self._maybe_finalize_elastic_cuda_graph_scale()
+        return batch_result
 
     def forward_batch_split_prefill(self, batch: ScheduleBatch):
         if batch.split_index == 0:

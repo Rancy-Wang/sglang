@@ -55,6 +55,8 @@ suppress_noisy_warnings()
 import psutil  # isort: skip
 import setproctitle
 import torch
+
+from sglang.srt.utils.recurrent_trace import batch_metadata, span
 import torch.distributed
 from torch.distributed import barrier
 
@@ -638,6 +640,13 @@ class Scheduler(
 
         # Init running status
         self.init_running_status()
+
+        self.recurrent_scheduler = None
+        if self.tp_worker.model_runner.recurrent_runner is not None:
+            from sglang.srt.managers.scheduler_components.recurrent import RecurrentScheduler
+
+            self.recurrent_scheduler = RecurrentScheduler(self)
+            logger.info("Native recurrent continuous depth batching enabled")
 
         # Init chunked prefill
         self.init_chunked_prefill()
@@ -2438,8 +2447,9 @@ class Scheduler(
             req_to_token_pool=self.req_to_token_pool,
             pool_stats_observer=self.pool_stats_observer,
             get_last_batch=lambda: self.last_batch,
-            get_running_batch=lambda: self.running_batch,
+            get_running_batch=self.running_batch_for_observation,
             get_chunked_req=lambda: self.chunked_req,
+            get_extra_owned_slots=lambda: getattr(self.model_worker, "extra_owned_slots", lambda: ())(),
             scheduler_stage_metrics=self.scheduler_stage_metrics,
         )
 
@@ -2495,7 +2505,7 @@ class Scheduler(
             tp_worker=self.tp_worker,
             token_to_kv_pool_allocator=self.token_to_kv_pool_allocator,
             spec_algorithm=self.spec_algorithm,
-            get_running_batch=lambda: self.running_batch,
+            get_running_batch=self.running_batch_for_observation,
             get_waiting_queue=lambda: self.waiting_queue,
             waiting_queue_prefix_matched=lambda: (
                 self.policy.waiting_queue_prefix_matched(self.waiting_queue)
@@ -2821,6 +2831,9 @@ class Scheduler(
             mm_inputs.release_features()
             req.multimodal_inputs = None
 
+    @span("scheduler.receive", before=lambda self, recv_req, **kwargs: {
+        "rid": recv_req.rid,
+    }, gpu=False)
     def handle_generate_request(
         self,
         recv_req: TokenizedGenerateReqInput,
@@ -3770,6 +3783,8 @@ class Scheduler(
     def get_next_batch_to_run(
         self, running_batch: ScheduleBatch, last_batch: Optional[ScheduleBatch]
     ) -> NextBatchPlan:
+        if self.recurrent_scheduler is not None:
+            return self.recurrent_scheduler.next_batch(running_batch)
         self.process_pending_chunked_abort()
         self._process_hicache_events()
 
@@ -4371,6 +4386,9 @@ class Scheduler(
                 else None
             )
             retracted_reqs, new_token_ratio, reqs_to_abort = batch.retract_decode()
+            if isinstance(self.model_worker, BaseSpecWorker):
+                for req in retracted_reqs + reqs_to_abort:
+                    self.model_worker.note_request_retracted(rid=req.rid)
             new_available_tokens = self.token_to_kv_pool_allocator.available_size()
             new_token_gained = new_available_tokens - old_available_tokens
             mamba_num_gained = (
@@ -4491,6 +4509,7 @@ class Scheduler(
                 batch.sampling_info = sched_sampling_info
 
     @scheduler_stage_method(SCHEDULER_STAGE_RUN_BATCH)
+    @span("scheduler.forward", before=batch_metadata)
     def run_batch(
         self,
         batch: ScheduleBatch,
@@ -4520,6 +4539,9 @@ class Scheduler(
         if self.forward_sleep_time is not None:
             logger.info(f"Scheduler.run_batch sleep {self.forward_sleep_time}s")
             time.sleep(self.forward_sleep_time)
+
+        if batch.recurrent_plan is not None:
+            return self.recurrent_scheduler.forward(batch)
 
         # Place holder handling for pd-disagg decode event loop
         if batch.forward_mode.is_prebuilt():
@@ -4890,6 +4912,9 @@ class Scheduler(
         # TODO(lsyin): make the delayed sample a default behavior after
         # unifying the forward_batch_generation interface (related to spec V2).
         if batch_result is None or batch_result.delay_sample_func is None:
+            if batch_result is not None and batch_result.recurrent_outputs is not None:
+                for completed_batch, completed_result in batch_result.recurrent_outputs:
+                    self.launch_batch_sample_if_needed(completed_result, completed_batch)
             return
 
         with self.forward_stream_ctx:
@@ -4922,11 +4947,17 @@ class Scheduler(
             batch_result.logits_output.next_token_logits = None
 
     @scheduler_stage_method(SCHEDULER_STAGE_PROCESS_BATCH_RESULT)
+    @span("scheduler.result", before=batch_metadata, gpu=False)
     def process_batch_result(
         self,
         batch: ScheduleBatch,
         result: Union[GenerationBatchResult, EmbeddingBatchResult],
     ):
+        if isinstance(result, GenerationBatchResult) and result.recurrent_outputs is not None:
+            for completed_batch, completed_result in result.recurrent_outputs:
+                self.process_batch_result(completed_batch, completed_result)
+            self.maybe_send_health_check_signal()
+            return
         # Flush async trace ops here: in overlap mode this CPU work runs while
         # the next batch's GPU forward is in flight, giving free overlap.
         flush_trace_batch(batch.reqs)
@@ -5169,6 +5200,11 @@ class Scheduler(
         else:
             self.metrics_reporter.record_scheduler_active(time.monotonic_ns())
 
+    def running_batch_for_observation(self):
+        if self.recurrent_scheduler is None:
+            return self.running_batch
+        return ScheduleBatch(reqs=list(self.collect_inflight_reqs()))
+
     def is_fully_idle(self, for_health_check=False, ignore_waiting=False) -> bool:
         # Health check piggybacks on running requests in process_output.
         # Only running_batch + waiting_queue guarantee active GPU processing;
@@ -5178,6 +5214,7 @@ class Scheduler(
         # Batch running status
         idle = (
             self.running_batch.is_empty()
+            and (self.recurrent_scheduler is None or not self.recurrent_scheduler.inflight_batches())
             and self.chunked_req is None
             and not self.dllm_manager.any_staging_reqs()
             and (self.last_batch is None or self.last_batch.is_empty())
@@ -5457,6 +5494,8 @@ class Scheduler(
         if self.enable_continuous_input_polling and self.result_queue:
             # Polling can run intake before the newest queued batch becomes last_batch.
             inflight_batches.extend(batch for batch, _ in self.result_queue)
+        if self.recurrent_scheduler is not None:
+            inflight_batches.extend(self.recurrent_scheduler.inflight_batches())
         return inflight_batches
 
     def abort_request(self, recv_req: AbortReq):

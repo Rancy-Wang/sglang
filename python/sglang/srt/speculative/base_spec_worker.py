@@ -349,6 +349,10 @@ class BaseSpecWorker(ABC):
         """
         pass
 
+    def note_request_retracted(self, *, rid: str) -> None:
+        """Release carried private state before native re-prefill."""
+        pass
+
     def note_request_finished(self, *, rid: str, natural_stop: bool) -> None:
         """Hook called by the batch-result processor when a request finishes.
 

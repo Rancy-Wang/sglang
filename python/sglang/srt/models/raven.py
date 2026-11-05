@@ -167,6 +167,9 @@ class RavenForCausalLM(nn.Module):
         hidden = self.post_hidden(hidden, positions, groups)
         return bf16_gemm_dispatch(hidden, self.lm_head.weight, None).float()
 
+    def finish_recurrent(self, hidden, positions, groups):
+        return self.post_hidden(hidden, positions, groups)
+
     @torch.no_grad()
     def forward(self, input_ids, positions, forward_batch, input_embeds=None, **kwargs):
         endpoints = (

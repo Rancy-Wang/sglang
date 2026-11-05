@@ -26,6 +26,8 @@ from sglang.srt.runtime_context import get_device, get_parallel
 from sglang.srt.utils import is_mps, is_npu
 from sglang.srt.utils.profile_merger import ProfileMerger
 from sglang.srt.utils.profile_utils import ProfileManager
+from sglang.srt.utils.recurrent_trace import start as start_recurrent_trace
+from sglang.srt.utils.recurrent_trace import stop as stop_recurrent_trace
 from sglang.srt.utils.torch_npu_patch_utils import apply_torch_npu_patches
 
 if TYPE_CHECKING:
@@ -281,6 +283,7 @@ class SchedulerProfilerManager:
             self.profile_in_progress = True
 
         self._apply_detailed_annotations(self.detailed_annotations)
+        start_recurrent_trace()
         return ProfileReqOutput(success=True, message="Succeeded")
 
     def _merge_profile_traces(self) -> str:
@@ -408,6 +411,7 @@ class SchedulerProfilerManager:
         self.profiler_start_forward_ct = None
 
         self._apply_detailed_annotations(False)
+        stop_recurrent_trace(self.torch_profiler_output_dir, self.profile_id)
         return ProfileReqOutput(success=True, message=f"Succeeded.{merge_message}")
 
     def _profile_batch_predicate(self, batch: ScheduleBatch):
