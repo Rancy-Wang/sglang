@@ -62,3 +62,13 @@
 - X5同SHA，新容器loopspec-das-wave-20261105，GPU0；显式PYTHONPATH=/workspace/sglang/python后确认导入当前源码。
 - 首次测试退出1：容器Git safe.directory缺失，已仅在新隔离容器配置。重试退出1：AutoTokenizer.apply_chat_template返回BatchEncoding无法JSON序列化；未启动GPU模型，不视为算法失败或通过。
 - 候选2修改范围：verify_server.py显式return_dict=False，保留原日志。目的/标准/风险/验证沿用第一轮，同SHA重跑bs1和后续矩阵；启动2/10。
+
+### 候选2结果与候选3/10
+
+- SHA5e55a7bd1，GPU AR启动被缺失Rust扩展阻塞；隔离容器设置SGLANG_RUST_BUILD_MODE=auto后编译成功（环境修复，未改源码）。
+- 同候选AR和DAS均完成真实32-token Thinking请求；DAS V2日志cycles16/proposed74/tested31/accepted16/emitted32，尚非完整正确性验收。
+- 测试因立即GET flush收到400失败；原生flush支持timeout等待，旧项目生命周期脚本已有同用法。保留round-2全部日志。
+- 候选3：测试脚本改用POST /flush_cache?timeout=15，显式--return-output-ids，逐cohort保存partial以保留失败证据；Rust自动编译环境写入复现命令。runtime代码不变，继续bs1后多batch，严格token IDs/stop验证；启动3/10。
+- A10经现有X5 ControlMaster转发访问，会话97155、账号ruoxi07、shell3448157，未启动A10 GPU任务。训练fallback transformers.py SHA256=1dafbdcf828a62c1d60e5ba1760187e927c7e03aec00920b0c023ed4b81aaf5c。
+- 已核实capture hook按物理layer ID覆盖存储，最终保留最后循环的layer输出，循环末norm之前。配置SHA74cb...与训练元数据相同，X5 target config/tokenizer_config SHA与训练provenance相同。
+- SpecForge参考SHA af1c3f3868e0ad1d1bc4a3bc4c577f2c9d3fa7b5；CPU materialize_draft严格加载58/58 tensors通过，全BF16；fc shape2048×10240。未导出、未运行DFlash推理。

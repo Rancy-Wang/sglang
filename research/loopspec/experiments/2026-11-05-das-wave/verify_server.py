@@ -45,12 +45,12 @@ def main():
         command=[sys.executable,'-m','sglang.launch_server','--model-path',model,'--host','127.0.0.1',
             '--port',str(a.port),'--dtype','bfloat16','--attention-backend','triton','--page-size','1',
             '--disable-radix-cache','--context-length','2048','--max-running-requests',str(max(a.batches)),
-            '--max-total-tokens','6000','--mem-fraction-static','.70','--stream-interval','1']
+            '--return-output-ids','--max-total-tokens','6000','--mem-fraction-static','.70','--stream-interval','1']
         if not a.graph:command+=['--disable-cuda-graph']
         else:command+=['--cuda-graph-max-bs-decode',str(max(a.batches))]
         if not a.overlap:command+=['--disable-overlap-schedule']
         if algorithm!='ar':command+=['--speculative-algorithm',algorithm]
-        env=dict(os.environ,SGLANG_ENABLE_STRICT_MEM_CHECK_DURING_BUSY='1')
+        env=dict(os.environ,SGLANG_ENABLE_STRICT_MEM_CHECK_DURING_BUSY='1',SGLANG_RUST_BUILD_MODE='auto')
         log=(a.output/f'{algorithm}.log').open('w')
         proc=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT,env=env,start_new_session=True)
         (a.output/f'{algorithm}-process.json').write_text(json.dumps({'pid':proc.pid,'command':command}))
@@ -73,7 +73,8 @@ def main():
                                 'wall_ms':1000*(time.perf_counter()-started)}
                     with concurrent.futures.ThreadPoolExecutor(max_workers=bs) as pool:
                         cases+=list(pool.map(generate,range(bs)))
-                    http(url,'/flush_cache')
+                    (a.output/f'{algorithm}-partial.json').write_text(json.dumps(cases,indent=2))
+                    http(url,'/flush_cache?timeout=15',{})
             result[algorithm]=cases
             (a.output/f'{algorithm}.json').write_text(json.dumps(cases,indent=2))
         finally:
