@@ -150,3 +150,16 @@
 6. 验证：本地语法及统计契约检查，提交push/pull同SHA；X5 GPU0同容器短生成和profile smoke；正式run_aime25各算法30题，profiling单独运行，raw保存/results。
 
 开始候选9/10。X5规范替换已完成：旧训练目录备份为`/home/ruoxi/models/Ouro-2.6B-Thinking-DFlash-training-backup-20261105T115931Z`；导出目录rename到`/home/ruoxi/models/Ouro-2.6B-Thinking-DFlash`，config和safetensors SHA256替换前后均通过。原训练文件、raw导出均保留。
+
+第9轮验证：提交`79806c4943caa152c408eab1fdab0482ece5e22a`，本地py_compile、6项unittest、5项统计契约退出0。X5同SHA、当前源码import核实。`run_aime25.py --output /results/round9-smoke --smoke --tokens 64`五方法各2题完成，退出0；`summarize_aime25.py`退出0。规范DFlash路径已实际加载。独立`--profile-reference /results/round9-smoke --profile-ids 0 --profile-tokens 16 --tokens 12288 --context 14336 --capacity 13312`五方法各3窗口完成，退出0；GPU图和trace可用。raw位于round9-smoke和round9-profile-smoke。短负载不是全30题结果。
+
+## 第10/10轮：长输出测量开销与Profile归因
+
+1. 目的：避免累计SSE输出的二次方传输影响长答案计时，补齐明确的DFlash prepare/commit与kernel阶段归因。
+2. 步骤：增量SSE拼接并逐事件核对token总数；添加关闭时无wrapper的prepare/commit spans；用CUDA correlation关联runtime launch和kernel，再按CPU span包含关系分类；短生成/Profile验证后完整30题。
+3. 范围：run_aime25.py、summarize_profile.py，dflash_worker_v2.py、dflash_info.py的诊断标记；无算法变化。
+4. 标准：增量输出长度与completion_tokens逐事件相等；各方法输出/计数可汇总；所有graph kernels通过correlation归因并明确无法映射部分；全部30题每方法完整保存。
+5. 风险：SSE最后事件重复/空增量，GPU多stream无法按CPU墙钟直接切分，Profiler扰动。使用API增量开关和严格长度断言；kernel归属按launch correlation而非时间重叠；保留未归属项。
+6. 验证：本地语法、现有6项测试，X5同步同SHA五方法64token，独立16token Profile；正式统一max_new=12288/context14336/KV13312，同GPU0串行。若此轮仍有源码问题，不进行第11轮。
+
+开始候选10/10。

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 import torch
 import torch.distributed as dist
 
-from sglang.srt.utils.recurrent_trace import span, batch_metadata
+from sglang.srt.utils.recurrent_trace import batch_metadata, span
 
 from sglang.kernels.ops.speculative.cache_locs import (
     assign_extend_cache_locs_func,
@@ -16,6 +16,11 @@ from sglang.kernels.ops.speculative.dflash import (
     _compute_dflash_accept_bonus_triton_unchecked,
     _prepare_dflash_draft_block_unchecked,
 )
+# Decorator is an identity unless diagnostic tracing is enabled.
+_prepare_dflash_draft_block_unchecked = span("dflash.prepare_block")(
+    _prepare_dflash_draft_block_unchecked
+)
+
 from sglang.kernels.ops.speculative.dspark.dspark_accept import (
     accept_sampling,
 )
@@ -203,6 +208,7 @@ class _DflashDraftSampler:
         self.out[:n].copy_(selected.view(-1))
 
 
+@span("dflash.commit_tokens")
 def _commit_accept(candidates, accept_len, bonus_tokens):
     """The committed block: drafted tokens shifted left, the bonus at the accept
     boundary. Returns it with the commit lengths."""

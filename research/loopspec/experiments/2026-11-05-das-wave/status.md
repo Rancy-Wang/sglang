@@ -1,6 +1,6 @@
 # DAS-Wave V2 与 Ouro DFlash 实施结果
 
-2026-11-05。运行时验证提交：`fa023257486d319c9be18c0673e5ff56664f6447`，分支 `loopspec-test`，已同步 X5。已用 **8/10** 轮。原先授权的正式多 batch 晋升提交为 `82a851f6fe12c6e17354054fd7b160594f203b66`，标题 `[update] Support LoopSpec for bs>1`；本次 DAS-Wave 仍只在实验分支。
+2026-11-05。运行时验证提交：`fa023257486d319c9be18c0673e5ff56664f6447`，分支 `loopspec-test`，已同步 X5。已用 **9/10** 轮（第9轮完整负载验证进行中）。原先授权的正式多 batch 晋升提交为 `82a851f6fe12c6e17354054fd7b160594f203b66`，标题 `[update] Support LoopSpec for bs>1`；本次 DAS-Wave 仍只在实验分支。
 
 ## 实现
 
@@ -29,7 +29,7 @@
 
 ## DFlash checkpoint
 
-X5 推理目录：`/home/ruoxi/models/Ouro-2.6B-Thinking-DFlash-inference-step10000`。
+X5 规范推理目录：`/home/ruoxi/models/Ouro-2.6B-Thinking-DFlash`。2026-11-05按用户明确要求替换，原训练态目录备份为`Ouro-2.6B-Thinking-DFlash-training-backup-20261105T115931Z`，替换前后hash均核对通过。新路径已实际完成原生DFLASH graph生成，见[替换记录](results/canonical-dflash-replacement.json)。
 
 - 使用用户给定训练脚本对应的 SpecForge 配置和 step10000 checkpoint；5层、block size16、mask ID16、target layers `[1,12,23,34,45]`。
 - 严格 materialize/load，导出后 **58/58 BF16 tensors逐元素一致**；新目录所有artifact再次按hash核对。原训练文件不变。
@@ -44,8 +44,8 @@ X5 推理目录：`/home/ruoxi/models/Ouro-2.6B-Thinking-DFlash-inference-step10
 
 **AIME25全30题、加速比、平均acceptance rate和详细profile均尚未执行，不能把smoke测试代替这些结果。**
 
-待确认数值验收口径后继续：保留原R4/BF16并完整披露数值分歧，或先做确定性算子研究以满足逐token严格一致。当前不擅自更换AR参考、改数学target或把超时当批准。
+用户已明确要求继续全30题与Profile。当前保留原R4/BF16、完整披露数值分歧；第9轮运行器已完成五种配置各2×64 tokens短负载，正式全题和独立Profile进行准备/验证，未完成前不报告其结果。
 
 公开AIME25题面已冻结在X5 `aime25-matharena.jsonl`，共30题；旧文件存在LaTeX控制字符错误，因此原文件保留、正式输入另存。数据来源为 [MathArena/aime_2025](https://huggingface.co/datasets/MathArena/aime_2025)，版本和hash见 [数据清单](results/aime25-frozen-manifest.json)。数据不进入Git。
 
-完整原始证据位于X5 `/home/ruoxi/experiments/loopspec/2026-11-05-das-wave/`。两张GPU与测试端口已释放；持久SSH会话保留。
+完整原始证据位于X5 `/home/ruoxi/experiments/loopspec/2026-11-05-das-wave/`。当前GPU0用于第9轮实验；X5原会话已被工具回收，确认旧ControlMaster不存在后重建持久连接，session 84278，shell PID880167。

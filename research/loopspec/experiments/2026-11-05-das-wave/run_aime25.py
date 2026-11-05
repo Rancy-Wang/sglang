@@ -38,6 +38,7 @@ def http(url, route, payload=None, timeout=3600):
 def generate(url, ids, rid, limit):
     start = time.perf_counter_ns()
     events, final, first, last_count = [], None, None, 0
+    output, text_parts = [], []
     with http(url, '/generate', {'rid': rid, 'input_ids': ids, 'stream': True,
             'sampling_params': {'temperature': 0, 'max_new_tokens': limit, 'ignore_eos': False}}) as response:
         for line in response:
@@ -51,17 +52,19 @@ def generate(url, ids, rid, limit):
                 raise RuntimeError(final)
             now = time.perf_counter_ns()
             count = final['meta_info']['completion_tokens']
+            output.extend(final.get('output_ids', []))
+            text_parts.append(final.get('text', ''))
+            assert len(output) == count, (rid, len(output), count)
             assert count >= last_count
             last_count = count
             if count and first is None:
                 first = now
             events.append({'ns': now, 'tokens': count})
     assert final is not None and final['meta_info'].get('finish_reason'), rid
-    output = final.get('output_ids', [])
     assert len(output) == final['meta_info']['completion_tokens'], (rid, len(output), final['meta_info'])
     assert first is not None
     end = events[-1]['ns']
-    return {'rid': rid, 'output_ids': output, 'text': final.get('text', ''),
+    return {'rid': rid, 'output_ids': output, 'text': ''.join(text_parts),
         'meta_info': final['meta_info'], 'events': events, 'sent_ns': start,
         'ttft_ms': (first-start)/1e6, 'decode_ms': (end-first)/1e6,
         'e2e_ms': (end-start)/1e6, 'decode_tokens': max(0, len(output)-events[next(i for i,e in enumerate(events) if e['tokens'])]['tokens']),
@@ -74,7 +77,7 @@ def command(method, a):
         '--attention-backend', 'triton', '--page-size', '1', '--disable-radix-cache',
         '--context-length', str(a.context), '--max-running-requests', '1',
         '--max-total-tokens', str(a.capacity), '--mem-fraction-static', '.85',
-        '--return-output-ids', '--stream-interval', '1', '--cuda-graph-max-bs-decode', '1',
+        '--return-output-ids', '--incremental-streaming-output', '--stream-interval', '1', '--cuda-graph-max-bs-decode', '1',
         '--chunked-prefill-size', '512']
     if method != 'ar':
         cmd += ['--speculative-algorithm', 'LOOPSPEC' if method.startswith('loopspec') else method.upper()]

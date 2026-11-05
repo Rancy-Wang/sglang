@@ -1,0 +1,10 @@
+{
+  "model": "/home/ruoxi/models/Ouro-2.6B-Thinking-DFlash",
+  "training_backup": "/home/ruoxi/models/Ouro-2.6B-Thinking-DFlash-training-backup-20261105T115931Z",
+  "artifacts": {
+    "config.json": "53f5bda531f90430a379a69a4ee68df1ffbe5e09ca96d00225bce6e3843d418d",
+    "model.safetensors": "d7757a0958fe3d62df63baf3451457df4f0f05f0a3f949cf9ca70e44cbf9067c"
+  },
+  "verified_tensors": 58,
+  "utc": "2026-11-05T11:59:31.405597+00:00"
+}
