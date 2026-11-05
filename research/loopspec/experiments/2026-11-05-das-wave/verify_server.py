@@ -32,6 +32,7 @@ def main():
     p.add_argument('--graph',action='store_true')
     p.add_argument('--overlap',action='store_true')
     p.add_argument('--draft-model', default='/results/dflash-inference-step10000')
+    p.add_argument('--lifecycle',action='store_true')
     a=p.parse_args();a.output.mkdir(parents=True,exist_ok=False)
     model='/home/ruoxi/models/Ouro-2.6B-Thinking'
     from transformers import AutoTokenizer
@@ -57,6 +58,7 @@ def main():
         if algorithm=='DFLASH':
             command+=['--speculative-draft-model-path',a.draft_model,
                       '--speculative-dflash-block-size','16']
+        if a.lifecycle:command+=['--chunked-prefill-size','64']
         env=dict(os.environ,SGLANG_ENABLE_STRICT_MEM_CHECK_DURING_BUSY='1',SGLANG_RUST_BUILD_MODE='auto')
         log=(a.output/f'{algorithm}.log').open('w')
         proc=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT,env=env,start_new_session=True)
@@ -67,6 +69,11 @@ def main():
                 try:http(url,'/get_server_info');break
                 except Exception:time.sleep(1)
             else:raise TimeoutError('startup')
+            if a.lifecycle:
+                from verify_wave_lifecycle import verify
+                checks = verify(url,prompts,algorithm)
+                (a.output/f'{algorithm}-lifecycle.json').write_text(json.dumps(checks,indent=2))
+                continue
             cases=[]
             for bs in a.batches:
                 for turn in range(2):

@@ -15,7 +15,7 @@ def main():
     p.add_argument('--reference', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
     a = p.parse_args(); a.output.mkdir(parents=True, exist_ok=False)
-    from transformers import AutoModelForCausalLM
+    from transformers import AutoConfig, AutoModelForCausalLM
     from sglang.benchmark.one_batch import load_model, _init_process_global_configs
     from sglang.srt.models.ouro import OuroForCausalLM
     from sglang.srt.managers.schedule_batch import Req
@@ -67,7 +67,11 @@ def main():
         assert torch.equal(logits,without), 'Aux capture changed target logits'
         native.append({'ids':ids,'features':[f.cpu() for f in features],'logits':logits.cpu()[0]})
     for handle in handles: handle.remove()
-    hf = AutoModelForCausalLM.from_pretrained(model_path, trust_remote_code=True,
+    # Transformers 4 supplied this default; Transformers 5 no longer does.
+    # No checkpoint file or mathematical target parameter is changed.
+    hf_config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
+    if not hasattr(hf_config, 'pad_token_id'): hf_config.pad_token_id = None
+    hf = AutoModelForCausalLM.from_pretrained(model_path, config=hf_config, trust_remote_code=True,
         torch_dtype=torch.bfloat16, attn_implementation='eager').cuda().eval()
     assert hf.config.total_ut_steps == 4
     captured = {}; calls = {}
@@ -75,7 +79,11 @@ def main():
     records = []
     for index, row in enumerate(native):
         captured.clear(); calls.clear()
-        _, depths, _ = hf.model(input_ids=torch.tensor([row['ids']],device='cuda'),use_cache=False)
+        count = len(row['ids'])
+        causal = torch.triu(torch.full((1,1,count,count), torch.finfo(torch.bfloat16).min,
+                                      device='cuda',dtype=torch.bfloat16), diagonal=1)
+        _, depths, _ = hf.model(input_ids=torch.tensor([row['ids']],device='cuda'),use_cache=False,
+                               attention_mask={'full_attention':causal})
         assert len(depths)==4 and calls == dict.fromkeys(layers,4), calls
         logits = hf.lm_head(depths[-1][:,-1]).float()[0].cpu()
         record = {'case':index,'tokens':len(row['ids']),
@@ -87,6 +95,7 @@ def main():
     for handle in handles: handle.remove()
     report = {'capture_hook_contract':True,'target_logits_unchanged':True,
               'layers':layers,'recurrence':4,'before_loop_norm':True,
+              'hf_compatibility':{'missing_pad_token_id':None,'mask':'explicit full causal additive BF16'},
               'hf_argmax_equal':all(r['native_argmax']==r['hf_argmax'] for r in records), 'records':records}
     (a.output/'report.json').write_text(json.dumps(report,indent=2))
     torch.save(native,a.output/'native-features.pt')

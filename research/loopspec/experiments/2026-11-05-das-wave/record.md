@@ -103,3 +103,15 @@
 - 成功标准：graph/eager同shape输出、prefix写隔离、feature最终物理层语义通过；逐token数值翻转如实记录，不放宽原严格门槛。风险：诊断重建prefix与原线上KV轨迹不同，必须明确它是隔离实验，不能替代线上失败。
 - 验证：AST/CPU后Git同步同SHA，单独GPU运行探针；记录差异/argmax margin和每层KV误差，保留原候选日志。启动6/10（第5轮已发出的作业继续用原SHA完成后才pull）。
 - 候选5收尾：DFLASH native V2/eager/overlap两次64tokens严格等于AR，exit0；bs1-eager128仍与AR不一致，exit1。AR自身graph/eager128也不一致，Wave亦不一致；graph中首次AR/Wave差异在0-based token104。这提示shape数值问题，但尚非根因证明。
+
+### 候选6结果与候选7/10六项计划
+
+- SHAde497046da3f4fe7f9080dc76a94daa4daebe04a；wave-probe完成24组(bs1/4 × width1/5/16 ×4prompts)。同shape graph/eager logits全部逐位一致，width1单行与串行logits/KV逐位一致，所检查成熟prefix KV未被draft改写。
+- 跨shape logits最大绝对差0.5，1处argmax翻转；exit1保留严格失败。此为重新prefill同一prefix的隔离诊断，不替代线上轨迹。
+- dflash-features完成native捕获与hook一致、capture on/off logits一致的断言，但HF构造失败：Transformers5.19删除未显式设置的pad_token_id默认属性。尚未保存完整HF对照report。
+- A10训练环境Transformers5.12.1；target modeling_ouro.py只与X5相差causal-mask API参数拼写/位置参数，配置代码相同。权重/config/tokenizer匹配不等于HF代码版本一致，区别记录在此。
+- 第7轮目的：完成HF特征对照与V2生命周期验收。步骤：仅诊断中补回历史pad=None默认值，显式传入完整causal mask以跨版本调用原模型；增加零/短尾/stop/取消/slot复用/unsupported-request拒绝测试。
+- 范围：verify_dflash_features.py、verify_server.py、新verify_wave_lifecycle.py；不改权重、原始config或生产模型数学算子。
+- 标准：native特征为最终循环物理层输出且target logits不变，HF误差完整报告；生命周期完成后flush且无严格KV错误；多batch数值失败不因此抹去。
+- 风险：HTTP取消时序、旧HF masking API、chunk/padding导致shape不同；记录所有payload/output，诊断与主性能计时分开。
+- 验证：本地HTTP/算法契约和AST，Git同步后X5 GPU0 lifecycle eager/graph overlap，GPU1 feature对照与DFlash graph smoke；启动7/10。
