@@ -1,0 +1,210 @@
+{
+  "full30": false,
+  "runs": {
+    "ar-r0": {
+      "e2e_ms": 3698.3860299999997,
+      "decode_ms": 3522.944106,
+      "ttft_ms": 175.441924,
+      "decode_tokens": 126,
+      "output_tokens": 128,
+      "questions": 2,
+      "correct": 0,
+      "unparsed": 2,
+      "truncated": 2,
+      "e2e_tokens_s": 34.60969162269954,
+      "decode_tokens_s": 35.76554047093928,
+      "paired_ar": {
+        "mismatches": [],
+        "same_workload": true,
+        "e2e_elapsed_ratio": 1.0,
+        "decode_throughput_speedup": 1.0,
+        "e2e_throughput_speedup": 1.0,
+        "per_question_decode_speedup_mean": 1.0
+      }
+    },
+    "das_wave-r0": {
+      "e2e_ms": 4991.446969,
+      "decode_ms": 4675.734088,
+      "ttft_ms": 315.71288100000004,
+      "decode_tokens": 126,
+      "output_tokens": 128,
+      "questions": 2,
+      "correct": 0,
+      "unparsed": 2,
+      "truncated": 2,
+      "e2e_tokens_s": 25.643866557124593,
+      "decode_tokens_s": 26.947640226883664,
+      "acceptance": {
+        "0": {
+          "accepted": 59,
+          "tested": 126,
+          "proposed": 330,
+          "tested_acceptance_micro": 0.46825396825396826,
+          "tested_acceptance_macro": 0.46825396825396826,
+          "draft_utilization_micro": 0.1787878787878788,
+          "draft_utilization_macro": 0.17913494427893634,
+          "accepted_per_verify_macro": 0.8688311688311688
+        }
+      },
+      "paired_ar": {
+        "mismatches": [
+          {
+            "id": "0",
+            "first_difference": 2
+          },
+          {
+            "id": "1",
+            "first_difference": 20
+          }
+        ],
+        "same_workload": false,
+        "e2e_elapsed_ratio": 0.7409446705472952,
+        "decode_throughput_speedup": 0.7534526214913357,
+        "e2e_throughput_speedup": 0.7409446705472951,
+        "per_question_decode_speedup_mean": 0.7498104614205435
+      }
+    },
+    "dflash-r0": {
+      "e2e_ms": 2573.072548,
+      "decode_ms": 2390.519605,
+      "ttft_ms": 182.552943,
+      "decode_tokens": 126,
+      "output_tokens": 128,
+      "questions": 2,
+      "correct": 0,
+      "unparsed": 2,
+      "truncated": 2,
+      "e2e_tokens_s": 49.74597397165966,
+      "decode_tokens_s": 52.708206088943584,
+      "acceptance": {
+        "0": {
+          "accepted": 64,
+          "tested": 126,
+          "proposed": 930,
+          "tested_acceptance_micro": 0.5079365079365079,
+          "tested_acceptance_macro": 0.5079365079365079,
+          "draft_utilization_micro": 0.06881720430107527,
+          "draft_utilization_macro": 0.07009803921568628,
+          "accepted_per_verify_macro": 1.0514705882352942
+        }
+      },
+      "paired_ar": {
+        "mismatches": [
+          {
+            "id": "0",
+            "first_difference": 2
+          },
+          {
+            "id": "1",
+            "first_difference": 20
+          }
+        ],
+        "same_workload": false,
+        "e2e_elapsed_ratio": 1.4373423061369506,
+        "decode_throughput_speedup": 1.4737147934831518,
+        "e2e_throughput_speedup": 1.4373423061369506,
+        "per_question_decode_speedup_mean": 1.4890458419235748
+      }
+    },
+    "loopspec1-r0": {
+      "e2e_ms": 2058.774664,
+      "decode_ms": 1561.648547,
+      "ttft_ms": 497.126117,
+      "decode_tokens": 126,
+      "output_tokens": 128,
+      "questions": 2,
+      "correct": 0,
+      "unparsed": 2,
+      "truncated": 2,
+      "e2e_tokens_s": 62.17290422221749,
+      "decode_tokens_s": 80.68396710774131,
+      "acceptance": {
+        "0": {
+          "accepted": 113,
+          "tested": 126,
+          "proposed": 165,
+          "tested_acceptance_micro": 0.8968253968253969,
+          "tested_acceptance_macro": 0.8968253968253967,
+          "draft_utilization_micro": 0.6848484848484848,
+          "draft_utilization_macro": 0.6851851851851851,
+          "accepted_per_verify_macro": 0.8968253968253967
+        }
+      },
+      "paired_ar": {
+        "mismatches": [
+          {
+            "id": "0",
+            "first_difference": 2
+          },
+          {
+            "id": "1",
+            "first_difference": 20
+          }
+        ],
+        "same_workload": false,
+        "e2e_elapsed_ratio": 1.7964015657810717,
+        "decode_throughput_speedup": 2.2559135426263106,
+        "e2e_throughput_speedup": 1.7964015657810715,
+        "per_question_decode_speedup_mean": 2.250710763809895
+      }
+    },
+    "loopspec13-r0": {
+      "e2e_ms": 1920.190517,
+      "decode_ms": 1438.2708830000001,
+      "ttft_ms": 481.919634,
+      "decode_tokens": 126,
+      "output_tokens": 128,
+      "questions": 2,
+      "correct": 0,
+      "unparsed": 2,
+      "truncated": 2,
+      "e2e_tokens_s": 66.66005214939825,
+      "decode_tokens_s": 87.60519418788789,
+      "acceptance": {
+        "0": {
+          "accepted": 116,
+          "tested": 126,
+          "proposed": 157,
+          "tested_acceptance_micro": 0.9206349206349206,
+          "tested_acceptance_macro": 0.9206349206349206,
+          "draft_utilization_micro": 0.7388535031847133,
+          "draft_utilization_macro": 0.7442922374429224,
+          "accepted_per_verify_macro": 0.9206349206349206
+        },
+        "1": {
+          "accepted": 8,
+          "tested": 9,
+          "proposed": 13,
+          "tested_acceptance_micro": 0.8888888888888888,
+          "tested_acceptance_macro": 0.8333333333333333,
+          "draft_utilization_micro": 0.6153846153846154,
+          "draft_utilization_macro": 0.5833333333333333,
+          "accepted_per_verify_macro": 0.06349206349206349
+        }
+      },
+      "paired_ar": {
+        "mismatches": [
+          {
+            "id": "0",
+            "first_difference": 2
+          },
+          {
+            "id": "1",
+            "first_difference": 20
+          }
+        ],
+        "same_workload": false,
+        "e2e_elapsed_ratio": 1.9260516064719215,
+        "decode_throughput_speedup": 2.44943017872385,
+        "e2e_throughput_speedup": 1.9260516064719213,
+        "per_question_decode_speedup_mean": 2.459225706137574
+      }
+    }
+  },
+  "notes": [
+    "Output divergences preclude a lossless same-workload speedup claim.",
+    "Decode timing uses observed first SSE batch; its token count is excluded.",
+    "DFLASH counters describe raw verification; Wave counts are stop-trimmed.",
+    "Acceptance keys 0/1 mean LoopSpec depth 1/3; AR acceptance is N/A."
+  ]
+}

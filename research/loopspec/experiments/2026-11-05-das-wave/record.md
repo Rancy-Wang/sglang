@@ -163,3 +163,76 @@
 6. 验证：本地语法、现有6项测试，X5同步同SHA五方法64token，独立16token Profile；正式统一max_new=12288/context14336/KV13312，同GPU0串行。若此轮仍有源码问题，不进行第11轮。
 
 开始候选10/10。
+
+第10轮短验证：`da86ebecb1bccfa6aea1e73812e38cefa5c2a05a`，本地py_compile、6项unittest退出0；X5五方法各2×64 tokens生成及summarize退出0。AR/DFlash/LoopSpec1增量输出与第9轮IDs/text逐项相同。DFlash新增prepare_block/prepare_verify的3个Profile窗口退出0、标记实际存在。kernel归因分析退出0，未映射kernel计数保留（不是全部映射率100%）。正式运行于2026-11-05约12:18 UTC开始：`run_aime25.py --output /results/aime25-full-v1 --tokens 12288 --context 14336 --capacity 13312`，GPU0，五方法按固定顺序各30题。截止记录时仍在运行，不标完成。
+
+只读性能线索（非新的实现/验证轮）：当前Ouro attention为保留checkpoint的BF16 QK/scale/normalized-probability舍入，执行两遍prefix扫描。`python/sglang/kernels/ops/attention/ouro_attention.py`的grid为(batch_size, heads, ceil(query_len/16))，decode bs1时只有16个head程序，未沿KV长度split；每程序以N=32遍历完整KV，M=16但decode仅1个有效query。这为长前缀AR速率下降提供了代码层面的假设，须用正式Profile核实。DFlash block query packing、LoopSpec分支并行和Wave多行会改变有效工作/occupancy，因此加速比包含当前后端执行形状收益，不能外推到优化split-KV基线。此处不擅自替换舍入语义或在10轮外改kernel。
+
+第10轮短负载的正确性口径补充：执行/流式契约通过不等于严格AR一致。AIME前两题各64 tokens中，四个spec配置都在index2和index20首次与AR分歧，详见results/round10-smoke.json；各算法的增量/累计接口对照仍一致。该结果延续既有BF16 shape数值问题，未把它改标为无损通过。正式实验遵照用户最新要求继续，报告吞吐比、完整输出差异、准确率和截断，不能把不同输出的耗时比解释为同工作量无损加速。
+
+## 用户调整实验口径：总上下文1024，所有方法CUDA Graph
+
+用户最新明确要求限制上下文1024并全部开启CUDA Graph。停止原长上下文运行（保留aime25-full-v1原始目录，其不计作全30题完成）。不改源码，沿用第10轮候选`da86ebecb1bccfa6aea1e73812e38cefa5c2a05a`。30题最长prompt804 tokens，统一max_new_tokens128，为verify临时窗口保留至少92 tokens；context_length1024，capacity4096，bs1。所有方法启动参数仍为`--cuda-graph-max-bs-decode 1`，无disable-cuda-graph；实际capture/replay由server日志和Profile核实。新输出aime25-context1024-graph-v1，不能把128token截断测试称为完整自然解题或与旧长上下文结果混合。
+
+## 用户澄清：每题最多输出1024 tokens（主口径）
+
+上一条“上下文1024”被助手误解为总上下文上限；用户纠正为每题最多输出1024 tokens。已承认理解错误，停止128-output运行。该目录仅保留诊断数据，不能作为最终主结果。正确主参数：max_new_tokens1024，context_length2048（最长prompt804+输出1024+verify余量32<2048），capacity4096，bs1，完整R4/BF16，全方法CUDA Graph开启。沿用同一第10轮候选，无源码修改。新目录aime25-output1024-graph-v1，先完成五种配置全30题，再按计划检查重复与独立Profile。
+
+
+## 最新主实验口径与 bs=2/4/8/16 扩展（同一候选，无新增修改轮）
+
+用户进一步明确“不要管总上下文多少”：仅限制每题 max_new_tokens=1024。模型原生 max_position_embeddings=65536，实验不额外缩短上下文；物理 KV 池是 GPU 容量约束，不作为题目截断策略。bs1 已用 unchanged run_aime25.py --tokens 1024 --context 65536 --capacity 13312 --repeat 1 启动，目录 aime25-output1024-graph-bs1/run，host driver PID926309，X5 同 SHA da86ebecb1bccfa6aea1e73812e38cefa5c2a05a。
+
+扩展实验计划（不改运行时代码或测试工具）：
+1. 目的：测完整30题在并发/调度上限 bs=2/4/8/16 下的同配置 AR、DFlash、LoopSpec depth1、LoopSpec depth1/3、DAS-Wave 对比。
+2. 步骤：复用已有 profile_workload.py 的 --external-server 通用 HTTP cohort；30题同时提交，由实际 server --max-running-requests B 控制，记录排队和实际活跃 batch；同 GPU 串行各方法；独立 Profile。
+3. 范围：现有工具 CLI 调用、原始实验产物及研究记录；无推理源码/脚本修改。外部服务模式下旧 harness 的 algorithm 参数仅用于构造未执行的 command，真实算法以另存实际 launch、get_server_info 和 server.log 为准，汇总不可把占位 ar 当实际算法。
+4. 标准：每配置30个唯一题目完整 HTTP 响应、每题至多1024输出、原始输入 IDs/输出 IDs/停止条件和最后 meta_info 可复算，CUDA Graph 实际执行，和相同 B 的 AR 对比吞吐/延迟/接受率。
+5. 风险：32GiB 卡的完整 R4 KV 在 B16 可能不够；实际动态 batch、回退/重新调度、CUDA Graph 覆盖、失败须显式报告；已有跨 shape BF16 分歧不视为已解决。
+6. 验证：核对 prompts.json 与 bs1 完全相同，所有响应数/唯一题 ID/finish/max tokens；日志实际图/批大小/计数，指标按 sum(output_tokens)/cohort makespan，TTFT 含 server 排队，单请求 decode 与总体吞吐分开。详细 Profile 与无 Profile 性能隔离。
+
+执行资源补充：X5 GPU0 跑 bs1，空闲 GPU1 跑 bs2/4/8/16；每个 B 的五方法在同一 GPU 上顺序配对。两卡共享 CPU/主机，记录为并行独立 GPU 条件，不能把它当隔离单卡测量。GPU1 外部服务不传 --context-length，使用模型默认65536。KV pool13312 全方法一致；profile 仍单独进行。
+
+
+Profile 分组只读核对：pipeline._child 在 parent.depth=d 时创建 depth0 分支；根完成 R4 时该分支已执行4-d次。故接受 draft depth1 后下一输出验证区间 entry_depth3，仅需1次新core；接受 draft depth3 后 entry_depth1，需3次新core；拒绝/启动 entry_depth0，需4次。analyze_profile.py 的 entry_depth 是待验证 token 已计算深度，不是 proposal origin。最终报告须明确区间条件是“前一个输出接受哪个草稿后”的流水线增量成本，不能将 entry_depth3 标为 draft depth3。bs1 LS13 全30题第二候选接受次数29–181/题，默认q0/14/29的短窗口有望覆盖该路径，最终按实际样本数报告。
+
+正式Profile抽样选定q0/q2/q20（输入54/137/804 tokens），覆盖短、典型和最长输入；每方法在自身1024-token主轨迹的0%/50%/90%位置，独立重建prefix后测32输出token，共45窗口。替代工具默认q0/q14/q29，仅改变已有CLI选择，不改源码。Profile前缀重建是独立诊断，不替代主运行的接受率/耗时，也不保证与增量KV轨迹逐位相同。
+
+为复用空闲资源，bs1完成后GPU0执行bs16五配置；GPU1继续bs4/8。每个B内部仍同物理GPU配对，跨B的绝对吞吐曲线需标注GPU分配（B1/16=GPU0，B2/4/8=GPU1），不能把跨卡差异当纯batch扩展收益。双卡同时运行条件与telemetry一并保留。详细bs1 Profile仍在GPU0，且与其主吞吐运行分离。
+
+
+bs16 默认调度失败及现有参数实验：ar-b16 driver退出1，`Incomplete output IDs for run-0-q17`；server出现多次KV满重调度，原始目录完整保留，不能将该cell计为成功。只读检查发现LS/Wave上下文统计也会在重调度后重置，因此不能把最后一段计数冒充完整请求接受率。
+
+1. 目的：在32GiB卡完整R4/BF16容量限制下完成可审计的限并发16负载，避免重调度导致的流式/计数问题。
+2. 步骤：沿用同一未修改候选，使用现有环境参数SGLANG_INIT_NEW_TOKEN_RATIO=1及SGLANG_MIN_NEW_TOKEN_RATIO_FACTOR=1，对全部五方法预留完整1024输出预算，重新从AR开始配对。
+3. 范围：仅已有server CLI启动环境与新的raw目录aime25-output1024-matrix-reserved；不改源码/权重/输出上限，原失败目录不覆盖。
+4. 标准：全30题完整IDs和stop，0重调度，实际admission/batch分布公开；此数据明确标为并发上限16且受显存约束，不能当全程固定bs16。
+5. 风险：物理KV无法容纳16条完整序列，实际活跃请求会低于16；与bs2/4/8的默认admission策略不同，跨B扩展曲线不能无条件解释；如仍失败保持失败证据。
+6. 验证：核对进程环境中上述两项为1、同SHA和CUDA Graph启用；所有响应IDs数量等于completion_tokens且<=1024，metrics num_retractions为0；各方法同GPU0、相同容量13312、同admission设置。该操作为已有候选的运行参数实验，没有新增代码修改轮，预算仍10/10。
+
+
+bs16资源复测：13312 KV池下，Wave在verify CUDA Graph capture时报OOM，尚未生成；当时GPU31.25GiB占用，图私有池3.55GiB，原日志保留。预留预算AR虽然30题IDs完整，仍有1次retraction，最后metrics快照为0不能替代每请求累计num_retractions；原“0重调度”标准未满足，未改标为通过。DFlash/LS1/LS13则无retraction且完整30题通过。
+
+现有CLI参数计划：1目的：保留全方法CUDA Graph并建立共同可容纳的bs16容量条件；2步骤：先核实Wave捕获能在12000-token KV池完成，再同GPU0重测五配置全30题；3范围：新raw目录aime25-output1024-matrix-b16-kv12000、max-total-tokens=12000，保留full-budget admission环境，源码不变；4标准：全30题严格IDs/stop通过，图开启，计数覆盖可审计，实际并发披露；5风险：实际并发低于16、仍可能retraction，原13312结果只作资源诊断，不能混入新矩阵；6验证：相同候选、dtype/R4/template/输出上限1024，全部五方法用相同12000 KV容量，按每请求num_retractions和原始日志判断，而非最后Gauge快照。预算仍10/10，无新源码候选。
+
+
+## 全30题主矩阵完成（沿用候选10/10）
+
+最终25组全部完成，5方法×B1/2/4/8/16，每组30题、每题1024 tokens，共750请求/768000输出tokens。bs1 raw `aime25-output1024-graph-bs1/run`；B2/4/8 raw `aime25-output1024-matrix`；最终B16 raw `aime25-output1024-matrix-b16-kv12000`。各driver exit0，逐请求最终meta核对0 retraction、完整IDs和length stop，所有输入IDs与冻结Thinking prompts一致。B16旧13312容量结果和失败不混入主表。实际B16活跃生成峰值AR/Wave/LS1/LS13为10、DFlash为9，不能称全程固定batch16。
+
+B1 E2E tokens/s：AR30.5069，DF52.5318，LS1 71.1782，LS13 75.9316，Wave24.5868。相同B吞吐比完整见benchmark-report.md和results/aime25-output1024-matrix.csv。所有输出均1024截断，长输出严格AR等价未通过，未改标为无损。单pass无重复置信区间；部分时段另一GPU同时负载，后期GPU1空闲，跨B扩展性能存在资源/调度混杂。
+
+图日志复核：external harness会在计时前访问/health，源码health_generate(input_ids=[0], max_new_tokens=1)。DFlash的B2/4/8/16各一次False恰对应这个1-token prefill，早于GET/get_server_info与正式cohort提交；20组正式请求阶段日志均True。证据aime25-output1024-graph-audit.json保留原False行，不能删除它们或谎报整份日志全部True。20组manifest同SHA da86ebecb1bccfa6aea1e73812e38cefa5c2a05a、正确源码import及数据hash通过，actual-launch与server_info另存环境audit。
+
+详细Profile于主测完成且GPU0清空后启动，host driver1041636，沿用已记录命令与q0/2/20×三个轨迹位置×32输出，独立目录aime25-output1024-profile-bs1。分析仅后处理既有trace/日志，不改运行时代码或测试工具；仍10/10。
+
+
+## Profile与结果后处理完成
+
+run_aime25 Profile driver1041636退出0，45窗口全部32输出，无retraction。summarize_profile退出0；进一步只读后处理按request ID过滤CPU区间和CUDA launch，显式补齐scheduler.forward下AR finish的decode归因。发现LoopSpec首窗口含各7个其他rid的启动探活decode输出，原trace/summary完整保留，过滤后每方法279个decode输出区间；D1/3的D3条件样本16个。Wave150次callback中4次为空，周期均值只计146个真实draft/verify；DFlash132周期。GPU kernel未归因时间DFlash5.381%，其他方法<=0.825%，未硬分配未知项。全部算法trace实际包含CUDA Graph launch。详见profile-report.md和profile-aggregate-filtered.json，未修改任何运行时/测试源码。
+
+关键结果：AR主测32.755ms/token；DF42.797ms/周期；Wave78.007ms/周期。Profile D1/3接受D1后的GPU区间12.486ms（252样本），接受D3后34.993ms（16样本），重启49.395ms（11样本）。DF target verify占其GPU stream周期约97.04%；Wave draft/verify占51.43%/47.65%。已归因decode kernel中GEMM/GEMV约47–51%、attention约26–30%，未将attention单独描述为全部瓶颈。
+
+收尾：主测与Profile进程结束，telemetry930126已停止；两卡均8MiB/0%且30215/30216无监听，两个容器仅保留本任务环境，SSH会话84278保持。轻量JSON/CSV/PNG与报告本地核对后提交loopspec-test，原始tokens/trace留X5。10/10轮预算未重置，DAS-Wave严格无损与实际加速仍未通过；不进行第11轮、不自动晋升正式分支。
+
+交付前只读校验退出0：25个唯一method/B组合、每组30×1024、0 retraction；45个Profile窗口、各方法graph launches>0、过滤后的AR/LS各279个decode区间；全部JSON解析与报告相对链接通过；两张PNG已渲染检查。仅提交本任务报告和轻量结果，不改runtime tree。

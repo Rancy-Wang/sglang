@@ -1,0 +1,189 @@
+{
+  "cells": {
+    "aime25-output1024-matrix/ar-b2": {
+      "post_server_info_graph_log_counts": {
+        "True": 521
+      },
+      "false_lines_in_whole_log": [],
+      "decode_graph_capture_max_bs": 2,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix/ar-b4": {
+      "post_server_info_graph_log_counts": {
+        "True": 517
+      },
+      "false_lines_in_whole_log": [],
+      "decode_graph_capture_max_bs": 4,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix/ar-b8": {
+      "post_server_info_graph_log_counts": {
+        "True": 328
+      },
+      "false_lines_in_whole_log": [],
+      "decode_graph_capture_max_bs": 8,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix/das_wave-b2": {
+      "post_server_info_graph_log_counts": {
+        "True": 433
+      },
+      "false_lines_in_whole_log": [],
+      "decode_graph_capture_max_bs": 2,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix/das_wave-b4": {
+      "post_server_info_graph_log_counts": {
+        "True": 433
+      },
+      "false_lines_in_whole_log": [],
+      "decode_graph_capture_max_bs": 4,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix/das_wave-b8": {
+      "post_server_info_graph_log_counts": {
+        "True": 430
+      },
+      "false_lines_in_whole_log": [],
+      "decode_graph_capture_max_bs": 8,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix/dflash-b2": {
+      "post_server_info_graph_log_counts": {
+        "True": 208
+      },
+      "false_lines_in_whole_log": [
+        {
+          "line": 144,
+          "text": "[2026-11-05 13:15:48] Prefill batch, #new-seq: 1, #new-token: 1, #cached-token: 0, token usage: 0.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 0.04",
+          "before_measured_requests": true
+        }
+      ],
+      "decode_graph_capture_max_bs": 2,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix/dflash-b4": {
+      "post_server_info_graph_log_counts": {
+        "True": 124
+      },
+      "false_lines_in_whole_log": [
+        {
+          "line": 150,
+          "text": "[2026-11-05 13:59:49] Prefill batch, #new-seq: 1, #new-token: 1, #cached-token: 0, token usage: 0.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 0.03",
+          "before_measured_requests": true
+        }
+      ],
+      "decode_graph_capture_max_bs": 4,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix/dflash-b8": {
+      "post_server_info_graph_log_counts": {
+        "True": 75
+      },
+      "false_lines_in_whole_log": [
+        {
+          "line": 162,
+          "text": "[2026-11-05 14:48:16] Prefill batch, #new-seq: 1, #new-token: 1, #cached-token: 0, token usage: 0.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 0.02",
+          "before_measured_requests": true
+        }
+      ],
+      "decode_graph_capture_max_bs": 8,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix/loopspec1-b2": {
+      "post_server_info_graph_log_counts": {
+        "True": 801
+      },
+      "false_lines_in_whole_log": [],
+      "decode_graph_capture_max_bs": 2,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix/loopspec1-b4": {
+      "post_server_info_graph_log_counts": {
+        "True": 800
+      },
+      "false_lines_in_whole_log": [],
+      "decode_graph_capture_max_bs": 4,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix/loopspec1-b8": {
+      "post_server_info_graph_log_counts": {
+        "True": 798
+      },
+      "false_lines_in_whole_log": [],
+      "decode_graph_capture_max_bs": 8,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix/loopspec13-b2": {
+      "post_server_info_graph_log_counts": {
+        "True": 801
+      },
+      "false_lines_in_whole_log": [],
+      "decode_graph_capture_max_bs": 2,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix/loopspec13-b4": {
+      "post_server_info_graph_log_counts": {
+        "True": 799
+      },
+      "false_lines_in_whole_log": [],
+      "decode_graph_capture_max_bs": 4,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix/loopspec13-b8": {
+      "post_server_info_graph_log_counts": {
+        "True": 798
+      },
+      "false_lines_in_whole_log": [],
+      "decode_graph_capture_max_bs": 8,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix-b16-kv12000/ar-b16": {
+      "post_server_info_graph_log_counts": {
+        "True": 304
+      },
+      "false_lines_in_whole_log": [],
+      "decode_graph_capture_max_bs": 16,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix-b16-kv12000/das_wave-b16": {
+      "post_server_info_graph_log_counts": {
+        "True": 428
+      },
+      "false_lines_in_whole_log": [],
+      "decode_graph_capture_max_bs": 16,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix-b16-kv12000/dflash-b16": {
+      "post_server_info_graph_log_counts": {
+        "True": 73
+      },
+      "false_lines_in_whole_log": [
+        {
+          "line": 176,
+          "text": "[2026-11-05 15:15:27] Prefill batch, #new-seq: 1, #new-token: 1, #cached-token: 0, token usage: 0.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 0.04",
+          "before_measured_requests": true
+        }
+      ],
+      "decode_graph_capture_max_bs": 16,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix-b16-kv12000/loopspec1-b16": {
+      "post_server_info_graph_log_counts": {
+        "True": 797
+      },
+      "false_lines_in_whole_log": [],
+      "decode_graph_capture_max_bs": 16,
+      "disable_cuda_graph": false
+    },
+    "aime25-output1024-matrix-b16-kv12000/loopspec13-b16": {
+      "post_server_info_graph_log_counts": {
+        "True": 797
+      },
+      "false_lines_in_whole_log": [],
+      "decode_graph_capture_max_bs": 16,
+      "disable_cuda_graph": false
+    }
+  },
+  "note": "External harness calls /health before /get_server_info and cohort submission. http_server.py health_generate uses input_ids=[0], max_new_tokens=1. DFlash's one False prefill line per external cell is this health request before timed workload, not AIME decode. Post-server-info generation log entries all True."
+}
