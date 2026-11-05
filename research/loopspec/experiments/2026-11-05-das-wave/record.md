@@ -78,3 +78,13 @@
 - SHA41d6e408d，round-3/bs1.exit=1；AR完成64 token请求、flush成功，但HTTP客户端将空成功body当作JSON解析失败。不是算法验收通过。
 - 第4轮范围仅verify_server.py：允许空HTTP body，比较finish_reason，并在token/text/stop不等价时assert失败，避免假阳性exit0。
 - 目的/步骤：恢复配对验收，先bs1、再bs1/2/4/8/16及overlap；运行时不变。成功标准、风险与环境沿用实施计划，保持严格token ID等价；启动4/10。
+
+### 候选4结果与候选5/10六项计划
+
+- SHAed497e478，round-4/bs1.exit=1；flush返回的是纯文本200，不是空body。上一轮判断不完整；HTTP接口源码已核对，不把AR完成请求误记为配对通过。
+- 目的：恢复可信验收，减少Wave逐层CPU launch开销，并将已核对训练语义的DFlash接入真正推理。
+- 步骤：按端点区分文本响应并做本地HTTP契约测试；Wave draft更新+readout、独立R4 verify+readout捕获；Ouro最终循环物理层特征捕获；SpecForge严格导出和逐tensor核对。
+- 范围：verify_server.py/test_http.py、das_wave/graph.py/worker.py、models/ouro.py、新export_dflash_checkpoint.py；不改原模型或训练文件。
+- 标准：eager/graph分别与AR核对IDs/stop，graph实际命中；多请求无KV告警；导出58项逐元素相等且metadata/hash可追溯；feature捕获保持target logits。
+- 风险：共享graph pool输出覆盖、padding污染、导出配置不兼容、feature归一化位置错误；独立clone输出、discard slot和严格权重核对，保留全部失败。
+- 验证：CPU契约/AST/diff，本地push→X5同SHA；先eager bs1后graph及overlap/多batch；DFlash CPU导出后GPU启动与配对。同一候选测多矩阵不重计，后续源码修改再进入6/10。启动5/10。

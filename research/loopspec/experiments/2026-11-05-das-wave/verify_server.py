@@ -17,6 +17,8 @@ def http(url, path, payload=None):
                                headers={'Content-Type':'application/json'})
     with urllib.request.urlopen(req, timeout=600) as r:
         body = r.read()
+        if path.startswith('/flush_cache'):
+            return body.decode()
         return json.loads(body) if body else None
 
 
@@ -29,6 +31,7 @@ def main():
     p.add_argument('--port',type=int,default=30215)
     p.add_argument('--graph',action='store_true')
     p.add_argument('--overlap',action='store_true')
+    p.add_argument('--draft-model', default='/results/dflash-inference-step10000')
     a=p.parse_args();a.output.mkdir(parents=True,exist_ok=False)
     model='/home/ruoxi/models/Ouro-2.6B-Thinking'
     from transformers import AutoTokenizer
@@ -51,6 +54,9 @@ def main():
         else:command+=['--cuda-graph-max-bs-decode',str(max(a.batches))]
         if not a.overlap:command+=['--disable-overlap-schedule']
         if algorithm!='ar':command+=['--speculative-algorithm',algorithm]
+        if algorithm=='DFLASH':
+            command+=['--speculative-draft-model-path',a.draft_model,
+                      '--speculative-dflash-block-size','16']
         env=dict(os.environ,SGLANG_ENABLE_STRICT_MEM_CHECK_DURING_BUSY='1',SGLANG_RUST_BUILD_MODE='auto')
         log=(a.output/f'{algorithm}.log').open('w')
         proc=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT,env=env,start_new_session=True)

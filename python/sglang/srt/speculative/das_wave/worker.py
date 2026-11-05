@@ -7,6 +7,7 @@ is read back after target verification to settle native allocation ownership.
 """
 
 import logging
+import time
 from dataclasses import dataclass
 
 import torch
@@ -17,7 +18,7 @@ from sglang.srt.mem_cache.memory_pool import ReqToTokenPool
 from sglang.srt.model_executor.forward_batch_info import CaptureHiddenMode, ForwardBatch, ForwardMode
 from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
 from sglang.srt.model_executor.recurrent_runner import RecurrentRunner, RecurrentState
-from sglang.srt.runtime_context import get_spec
+from sglang.srt.runtime_context import get_exec, get_spec
 from sglang.srt.speculative.base_spec_worker import BaseSpecWorker
 from sglang.srt.speculative.loopspec.utils import split_batch
 from sglang.srt.speculative.spec_info import SpeculativeAlgorithm
@@ -62,6 +63,9 @@ class DASWaveWorker(BaseSpecWorker):
         self.adaptive_controller = None
         self.contexts = {}
         self.temporary = None
+        self.draft_graphs = {}
+        self.verify_graphs = {}
+        self.graph_replays = 0
 
     @property
     def recurrent_policy(self):
@@ -85,10 +89,28 @@ class DASWaveWorker(BaseSpecWorker):
         self.executor = RecurrentRunner(self.model_runner, max_rows=self.max_rows,
                                         request_pool=self.private_pool)
 
+    @torch.no_grad()
     def init_cuda_graphs(self):
-        # Native prefill graphs remain owned by the target recurrent runner.
-        # Wave graph capture is added only after the eager KV contract passes.
-        pass
+        from sglang.srt.model_executor.cuda_graph_config import check_cuda_graph_backend
+        from .graph import WaveGraph
+
+        if check_cuda_graph_backend("decode", "disabled"):
+            return
+        started, allocated = time.perf_counter(), torch.cuda.memory_allocated()
+        request_sizes = get_exec().graph.cuda_graph_config.decode.bs
+        sizes = set(range(1, self.width + 1)) | {
+            b * w for b in request_sizes for w in self.widths if b * w <= self.max_rows
+        }
+        self.executor.graph_pool = torch.cuda.graph_pool_handle()
+        for rows in sorted(sizes):
+            self.draft_graphs[rows] = WaveGraph(self, rows, draft=True)
+            self.verify_graphs[rows] = WaveGraph(self, rows, draft=False)
+        self._additional_graph_memory_usage["draft_decode"] = (torch.cuda.memory_allocated() - allocated) / 2**30
+        self._additional_graph_time_usage["draft_decode"] = time.perf_counter() - started
+        logger.info("DAS_WAVE native V2 graphs: packed row buckets=%s", sorted(sizes))
+
+    def _graph(self, graphs, rows):
+        return next((g for size, g in graphs.items() if size >= rows), None)
 
     def extra_owned_slots(self):
         return [] if self.temporary is None else self.temporary.tolist()
@@ -104,8 +126,8 @@ class DASWaveWorker(BaseSpecWorker):
     def note_request_finished(self, *, rid, natural_stop):
         c = self.contexts.pop(rid, None)
         if c is not None:
-            logger.info("DAS_WAVE rid=%s cycles=%d proposed=%d tested=%d accepted=%d emitted=%d",
-                        rid, c.cycles, c.proposed, c.tested, c.accepted, c.emitted)
+            logger.info("DAS_WAVE rid=%s cycles=%d proposed=%d tested=%d accepted=%d emitted=%d graph_replays_total=%d",
+                        rid, c.cycles, c.proposed, c.tested, c.accepted, c.emitted, self.graph_replays)
 
     def split_recurrent_batch(self, batch):
         return split_batch(batch)
@@ -178,10 +200,16 @@ class DASWaveWorker(BaseSpecWorker):
             fresh = columns >= torch.tensor(previous, device=self.device)[owners]
             initialized = self.model.get_input_embeddings()(batch.input_ids)
             carried = torch.where(fresh[:, None], initialized, hidden[owners, columns])
-            for _ in range(self.updates):
-                carried = self._draft_core(batch, carried, prefix)
+            graph = self._graph(self.draft_graphs, batch.batch_size)
+            if graph is not None:
+                carried, predictions = graph.replay_wave(batch, carried, prefix)
+                self.graph_replays += 1
+            else:
+                for _ in range(self.updates):
+                    carried = self._draft_core(batch, carried, prefix)
+                predictions = self._readout(batch, carried).argmax(-1)
             hidden[owners, columns] = carried
-            guesses[owners, columns + 1] = self._readout(batch, carried).argmax(-1)
+            guesses[owners, columns + 1] = predictions
             previous = widths
         return guesses
 
@@ -189,17 +217,22 @@ class DASWaveWorker(BaseSpecWorker):
     def _verify(self, contexts, widths, slots, guesses):
         batch, _, owners, columns = self._prepare(contexts, widths, slots, guesses)
         hidden = self.model.get_input_embeddings()(batch.input_ids)
+        graph = self._graph(self.verify_graphs, batch.batch_size)
+        if graph is not None:
+            _, predictions = graph.replay_wave(batch, hidden, torch.zeros_like(batch.req_pool_indices))
+            self.graph_replays += 1
+            return predictions, owners, columns
         for depth in range(self.total):
             state = self.executor.advance(batch, RecurrentState(hidden),
                                           torch.full_like(batch.req_pool_indices, depth))
             hidden = state.hidden
         logits = self._readout(batch, hidden)
-        return logits, owners, columns
+        return logits.argmax(-1), owners, columns
 
     @span("das_wave.decision")
-    def _decision(self, contexts, widths, guesses, logits, owners, columns):
+    def _decision(self, contexts, widths, guesses, target_ids, owners, columns):
         predictions = torch.full((len(contexts), self.width), -1, dtype=torch.int64, device=self.device)
-        predictions[owners, columns] = logits.argmax(-1)
+        predictions[owners, columns] = target_ids
         positions = torch.arange(self.width, device=self.device)[None, :]
         width_tensor = torch.tensor(widths, device=self.device)[:, None]
         mismatches = guesses[:, 1:] != predictions
@@ -241,7 +274,7 @@ class DASWaveWorker(BaseSpecWorker):
             ids = predictions[i, :count].clone()
             result = GenerationBatchResult(
                 logits_output=LogitsProcessorOutput(next_token_logits=None),
-                next_token_ids=ids, can_run_cuda_graph=False,
+                next_token_ids=ids, can_run_cuda_graph=bool(self.verify_graphs),
                 accept_lens=torch.full_like(lengths, count, dtype=torch.int32),
                 new_seq_lens=lengths, next_draft_input=DASWaveInput(c.anchor, lengths),
                 speculative_num_draft_tokens=self.speculative_num_draft_tokens,

@@ -127,6 +127,8 @@ class OuroModel(nn.Module):
     def __init__(self, config, quant_config, prefix):
         super().__init__()
         self.config = config
+        self.dflash_layer_ids = ()
+        self.dflash_features = {}
         self.embed_tokens = VocabParallelEmbedding(
             config.vocab_size,
             config.hidden_size,
@@ -152,8 +154,12 @@ class OuroModel(nn.Module):
         """Materialize one recurrence; never read KV from another depth."""
         if not 0 <= depth < self.config.total_ut_steps:
             raise ValueError(f"Invalid Ouro recurrence: {depth}")
-        for layer in self.layers:
+        for index, layer in enumerate(self.layers):
             hidden = layer(positions, hidden, forward_batch, depth)
+            if depth == self.config.total_ut_steps - 1 and index in self.dflash_layer_ids:
+                # Training's Transformers hook overwrites each physical layer
+                # on every recurrence: its final value is BEFORE loop-end norm.
+                self.dflash_features[index] = hidden.clone()
         return self.norm(hidden)
 
     def forward(self, input_ids, positions, forward_batch, input_embeds=None):
@@ -233,6 +239,7 @@ class OuroForCausalLM(nn.Module):
     ):
         if get_embedding:
             raise ValueError("Ouro embedding serving is not implemented")
+        self.model.dflash_features = {}
         if hasattr(self, "timeline_runtime"):
             from sglang.srt.model_executor.forward_context import (
                 ForwardContext,
@@ -254,7 +261,17 @@ class OuroForCausalLM(nn.Module):
                     hidden = self.model.advance_loop(hidden, positions, batch, depth)
         else:
             hidden = self.model(input_ids, positions, forward_batch, input_embeds)
-        return self.logits_processor(input_ids, hidden, self.lm_head, forward_batch)
+        aux = ([self.model.dflash_features[i] for i in self.model.dflash_layer_ids]
+               if self.model.dflash_layer_ids else None)
+        return self.logits_processor(input_ids, hidden, self.lm_head, forward_batch, aux)
+
+    def set_dflash_layers_to_capture(self, layer_ids):
+        """Physical layer outputs from the final recurrence, in trained order."""
+        if (not layer_ids or len(set(layer_ids)) != len(layer_ids)
+                or any(type(i) is not int or not 0 <= i < self.config.num_hidden_layers
+                       for i in layer_ids)):
+            raise ValueError("Ouro DFlash requires unique physical layer IDs in range")
+        self.model.dflash_layer_ids = tuple(layer_ids)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
