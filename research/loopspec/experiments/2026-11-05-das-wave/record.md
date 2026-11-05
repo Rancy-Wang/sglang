@@ -88,3 +88,18 @@
 - 标准：eager/graph分别与AR核对IDs/stop，graph实际命中；多请求无KV告警；导出58项逐元素相等且metadata/hash可追溯；feature捕获保持target logits。
 - 风险：共享graph pool输出覆盖、padding污染、导出配置不兼容、feature归一化位置错误；独立clone输出、discard slot和严格权重核对，保留全部失败。
 - 验证：CPU契约/AST/diff，本地push→X5同SHA；先eager bs1后graph及overlap/多batch；DFlash CPU导出后GPU启动与配对。同一候选测多矩阵不重计，后续源码修改再进入6/10。启动5/10。
+
+### 候选5已取得证据与候选6/10计划
+
+- SHAfdab7708798527136b03012e53ad78f8a9d805fe；CPU5项算法+1项HTTP契约通过，AST11文件通过。
+- X5 round-5/bs1：两次64-token eager请求IDs/text/stop全部等于AR，exit0。
+- multi-eager --batches 1 2 4 8 16 --tokens64 --overlap：62请求全部完成，24严格匹配，38不匹配，exit1。bs1/2通过；bs4开始有分歧，不能称多batch正确性通过。
+- bs1-graph --tokens128 --overlap：图桶1..5实际命中，每次主请求62cycles，310次replay；与AR序列有差异，exit1。eager128对照及DFlash启动测试仍在收尾。
+- DFlash严格导出exit0，58/58 BF16 tensors逐元素一致；新artifact /results/dflash-inference-step10000；原checkpoint未变。A10和X5 target model.safetensors SHA256均c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080。
+- 新隔离容器loopspec-dflash-audit-20261105使用GPU1、同镜像/源码、port30216，仅正确性测试；不得把双GPU并行诊断时长用于性能结论。
+- AIME旧文件30个答案与MathArena对应，但存在LaTeX控制字符错误和题面/图示表示差异；source-check保留，正式实验需冻结公开原始题面并记录版本，不能默默修旧文件。
+- 第6轮目的：定位严格差分失败，独立验证KV与feature语义。步骤：同一已物化prefix下串行R4与并行verify比较logits/KV，graph同shape比较，DAS draft写隔离检查；对照训练HF最终循环feature。
+- 范围：新增probe_wave.py、verify_dflash_features.py，生产运行时暂不修改。
+- 成功标准：graph/eager同shape输出、prefix写隔离、feature最终物理层语义通过；逐token数值翻转如实记录，不放宽原严格门槛。风险：诊断重建prefix与原线上KV轨迹不同，必须明确它是隔离实验，不能替代线上失败。
+- 验证：AST/CPU后Git同步同SHA，单独GPU运行探针；记录差异/argmax margin和每层KV误差，保留原候选日志。启动6/10（第5轮已发出的作业继续用原SHA完成后才pull）。
+- 候选5收尾：DFLASH native V2/eager/overlap两次64tokens严格等于AR，exit0；bs1-eager128仍与AR不一致，exit1。AR自身graph/eager128也不一致，Wave亦不一致；graph中首次AR/Wave差异在0-based token104。这提示shape数值问题，但尚非根因证明。
