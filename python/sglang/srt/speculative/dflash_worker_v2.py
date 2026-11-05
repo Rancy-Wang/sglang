@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 import torch
 import torch.distributed as dist
 
+from sglang.srt.utils.recurrent_trace import span, batch_metadata
+
 from sglang.kernels.ops.speculative.cache_locs import (
     assign_extend_cache_locs_func,
     rebuild_compact_draft_req_to_token_func,
@@ -1769,6 +1771,7 @@ class DFlashWorkerV2(BaseSpecWorker):
         physical ids for a fused draft, the virtual ids for a private one."""
         return plan.write_ids(self.draft_model_runner.kv_index_translator)
 
+    @span("dflash.commit_features")
     def _append_target_hidden_to_draft_kv_by_loc(
         self,
         *,
@@ -2135,6 +2138,7 @@ class DFlashWorkerV2(BaseSpecWorker):
             self._new_seq_lens_bufs[slot][:bs],
         )
 
+    @span("dflash.accept")
     def _accept_block(
         self,
         *,
@@ -2284,6 +2288,18 @@ class DFlashWorkerV2(BaseSpecWorker):
     ) -> DFlashDraftInputV2:
         return make_draft_input_v2(bonus_tokens=bonus_tokens, new_seq_lens=new_seq_lens)
 
+    @span("dflash.draft_forward")
+    def _profile_draft_forward(self, forward_batch):
+        return self.draft_model_runner.forward(forward_batch)
+
+    @span("dflash.target_verify")
+    def _profile_target_verify(self, forward_batch):
+        return self.target_worker.forward_batch_generation(
+            batch=None, forward_batch=forward_batch, is_verify=True,
+            skip_attn_backend_init=True if not _is_npu else None,
+        )
+
+    @span("dflash.cycle", before=batch_metadata)
     def forward_batch_generation(
         self,
         batch: ScheduleBatch,
@@ -2632,7 +2648,7 @@ class DFlashWorkerV2(BaseSpecWorker):
             torch.inference_mode(),
             draft_tp_context(self.draft_owns_attention),
         ):
-            draft_out = self.draft_model_runner.forward(forward_batch)
+            draft_out = self._profile_draft_forward(forward_batch)
         draft_logits_output = draft_out.logits_output
 
         if (
@@ -2817,12 +2833,7 @@ class DFlashWorkerV2(BaseSpecWorker):
         if get_parallel().attn_dp_enabled and batch.is_extend_in_batch:
             verify_forward_batch.can_run_decode_cuda_graph = False
 
-        target_out = self.target_worker.forward_batch_generation(
-            batch=None,
-            forward_batch=verify_forward_batch,
-            is_verify=True,
-            skip_attn_backend_init=True if not _is_npu else None,
-        )
+        target_out = self._profile_target_verify(verify_forward_batch)
         logits_output = target_out.logits_output
         can_run_cuda_graph = target_out.can_run_cuda_graph
 

@@ -121,8 +121,9 @@ class LoopSpecWorker(BaseSpecWorker):
         if context is None:
             return
         p = context.pipeline
-        logger.info("LoopSpec rid=%s cycles=%d reused=%d restarts=%d accepted=%s rejected=%d",
-                    rid, p.cycles, p.reused, p.restarts, context.accepted, context.rejected)
+        logger.info("LoopSpec rid=%s cycles=%d reused=%d restarts=%d accepted=%s rejected=%d proposed=%s tested=%s",
+                    rid, p.cycles, p.reused, p.restarts, context.accepted, context.rejected,
+                    context.proposed, context.tested)
         if self.metrics:
             # Each GPU replay is charged once globally, not once per owner.
             self.metrics.finish(context, p, self.role_replays, natural_stop)

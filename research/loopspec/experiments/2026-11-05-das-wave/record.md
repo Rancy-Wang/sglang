@@ -137,3 +137,16 @@
 - 轻量证据已复制至results/：validation-summary、Wave固定prefix探针、DFlash feature/export manifest及数据manifest。完整tokens/logs/native features留在X5 raw root，不把大文件提交Git。
 - 收尾检查：GPU0/1均8MiB，无compute processes；30215/30216无监听。本任务服务均退出，两个隔离容器仅sleep；X5会话92524和A10会话97155未主动断开。
 - 已用8/10轮，剩余2轮；没有重置计数，也未把DAS-Wave自动晋升到loopspec。后续文档/证据提交不改变已验证runtime tree。
+
+## 第9/10轮：规范模型路径、全30题与独立Profile
+
+用户已明确要求继续完整AIME25和Profile，并将正确推理模型替换到规范名称。保留R4/BF16，严格token数值验收仍标为未通过，不再等待口径确认。
+
+1. 目的：完成全部30题的bs1实测并补齐可复算的接受率和阶段时间。
+2. 步骤：核对导出hash并备份替换规范目录；补齐运行器/轻量计数/可关闭trace；短运行验证；同GPU串行完整负载；独立Profile与汇总。
+3. 范围：本目录run_aime25.py、summarize_aime25.py；loopspec/utils.py和worker.py的计数；dflash_worker_v2.py的opt-in阶段span；不改变算法数学。
+4. 标准：各method重复覆盖30个唯一题ID并保存全部token和终止原因；规范DFlash目录实际加载；指标分母可审计；Profile区分inclusive span与kernel busy，LS depth1/3分别报告。
+5. 风险：长前缀显存、BF16分歧、8192上限截断、profile开销；保留失败和截断，不能声称无损或所有题自然结束。
+6. 验证：本地语法及统计契约检查，提交push/pull同SHA；X5 GPU0同容器短生成和profile smoke；正式run_aime25各算法30题，profiling单独运行，raw保存/results。
+
+开始候选9/10。X5规范替换已完成：旧训练目录备份为`/home/ruoxi/models/Ouro-2.6B-Thinking-DFlash-training-backup-20261105T115931Z`；导出目录rename到`/home/ruoxi/models/Ouro-2.6B-Thinking-DFlash`，config和safetensors SHA256替换前后均通过。原训练文件、raw导出均保留。

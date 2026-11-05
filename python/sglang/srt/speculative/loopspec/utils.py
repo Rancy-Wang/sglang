@@ -41,6 +41,7 @@ class RequestContext:
         self.owned, self.materialized, self.logits = set(), {}, {}
         self.decisions = {}
         self.accepted, self.proposed = [0, 0], [0, 0]
+        self.tested = [0, 0]
         self.rejected = 0
         self.peak_slots = self.committed_length * self.total
         self.stop_ids = set(self.params.stop_token_ids or ()) | set(req.eos_token_ids or ())
@@ -93,6 +94,9 @@ class RequestContext:
 
     def verify(self, lane):
         (token, accepted), _ = self.decisions.pop(lane.uid)
+        self.tested[0] += 1
+        if accepted != 0 and len(self.depths) == 2 and self.depths[1] in lane.proposals:
+            self.tested[1] += 1
         if accepted < 0:
             self.rejected += 1
         else:
