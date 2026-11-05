@@ -4,7 +4,7 @@
 
 - 用户明确要求：DFlash修复后在A系列单机TP2重新比较AR/DFlash/LoopSpec，输出加速比、acceptance及详细Profile；LoopSpec仅一个proposal位置。
 - 基线：935d48ddbf0a0f6763f6afcd00cded318f206ad2（Wave撤除已通过X5回归）。分支loopspec-test，正式loopspec不动。
-- 状态：进行中，候选3/10。TP2接入是新的用户任务，不重开原DAS-Wave优化预算。
+- 状态：进行中，候选4/10。TP2接入是新的用户任务，不重开原DAS-Wave优化预算。
 - 口径：bs1/2/4/8/16、每格全30题AIME25、max_new_tokens1024，Thinking模板、R4、BF16、greedy、CUDA Graph全开。LoopSpec depths=[1]，只保留第一proposal分支；流水线仍可有不同token的在途lane。用户已确认完整batch矩阵，详细Profile聚焦bs1。
 
 ## 修改前计划
@@ -85,3 +85,9 @@
 
 - 候选3本地后处理验证退出0：15格450请求/460800输出tokens，全部length=1024，全部0 retraction、实测日志0 graph=False，客户端峰值=设置bs；bs1既有吞吐比逐值一致。五个batch下LS两rank各30请求计数一致，D3 accepted/proposed均0。结果见results/matrix-summary.{json,csv}及matrix-validation.json。AST/diff检查通过。
 - 修正日志解读：AR大batch日志峰值也会少于客户端总在途请求，LS按拆分视图记录；7/14等数值只能称scheduler日志观测值，不能据此断言GPU固定batch或硬性上限。客户端在途含排队，亦不是GPU固定batch。本矩阵定义为cohort并发测试。
+
+## 候选4/10：双rank Profile标记类型与归因修正
+
+- 候选3提交c035c432cb3db5ff71d67129be41a0d7922d3cea，A12已在Profile全部结束后pull同SHA。正式矩阵后处理远端退出0。Profile三方法各9窗口全部完成，driver退出0，runtime仍af7。
+- 首次analyze_tp2.py退出1：AssertionError(recurrent.start,32,32)。q0-p0-TP-0中同名标记64条，其中user_annotation 32条(pid3337818)、gpu_user_annotation32条(pid0)；rank0导出只有32个对应span。不是缺少推理结果，而是重复匹配GPU标记。
+- 六项计划：1目的：避免CPU/GPU标记重复计费，准确解释decode周期；2步骤：过滤user_annotation且pid匹配，分开未映射/有意排除kernel，增加LS输出链分阶段累计；3范围：analyze_tp2.py及记录，不改推理代码或重跑基准；4标准：27窗口54rank trace全部完成逐stage数量对齐，AR readout/LS输出链与31 decode tokens/窗口核对，kernel分类与已归因总时长守恒；5风险：GPU stream区间包含等待、嵌套不能相加，未知kernel不能强行归因，scheduler.result含递归容器调用不可当token数；6验证：静态检查、样本CPU/GPU标记过滤、全真实trace重算与完整性校验。

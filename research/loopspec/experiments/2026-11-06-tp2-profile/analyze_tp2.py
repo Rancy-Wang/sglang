@@ -75,17 +75,19 @@ def summarize_rank(rows, events, rid):
         by_stage[row['stage']].append(row)
     indices = Counter()
     spans = defaultdict(list)
+    pid = rows[0]['pid']
     for event in sorted(events, key=lambda e: e.get('ts', 0)):
         name = event.get('name', '')
-        if not name.startswith('recurrent::') or 'dur' not in event:
+        if (not name.startswith('recurrent::') or 'dur' not in event
+                or event.get('cat') != 'user_annotation' or event.get('pid') != pid):
             continue
         stage = name.removeprefix('recurrent::')
         index = indices[stage]
         indices[stage] += 1
         assert index < len(by_stage[stage]), (stage, index, len(by_stage[stage]))
         row = by_stage[stage][index]
-        if row['id'] in selected:
-            spans[(event['pid'], event['tid'])].append(event)
+        event['_selected_decode'] = row['id'] in selected
+        spans[(event['pid'], event['tid'])].append(event)
     assert all(indices[stage] == len(group) for stage, group in by_stage.items())
     launches = defaultdict(list)
     for event in events:
@@ -103,19 +105,29 @@ def summarize_rank(rows, events, rid):
             active = [e for e in active if e['ts'] + e['dur'] >= t + call.get('dur', 0)]
             if active:
                 owner = min(active, key=lambda e: e['dur'])
-                owners[call['args']['correlation']] = owner['name'].removeprefix('recurrent::')
+                owners[call['args']['correlation']] = (
+                    owner['name'].removeprefix('recurrent::'), owner['_selected_decode'])
     kernels = defaultdict(float)
     kernel_names = defaultdict(float)
     stage_kernels = defaultdict(lambda: defaultdict(float))
     intervals = []
     unassigned = 0
+    unassigned_ms = excluded_ms = 0.0
+    excluded = assigned = 0
     for event in events:
         if event.get('cat') != 'kernel' or 'dur' not in event:
             continue
         owner = owners.get(event.get('args', {}).get('correlation'))
         if owner is None:
-            unassigned += 1  # Includes intentionally excluded prefill/probe work.
+            unassigned += 1
+            unassigned_ms += event['dur'] / 1000
             continue
+        owner, is_selected = owner
+        if not is_selected:
+            excluded += 1
+            excluded_ms += event['dur'] / 1000
+            continue
+        assigned += 1
         kind, ms = category(event['name']), event['dur'] / 1000
         kernels[kind] += ms
         kernel_names[event['name']] += ms
@@ -132,16 +144,36 @@ def summarize_rank(rows, events, rid):
             if rid in step.get('output', {}).get('committed', []):
                 chain = chains.pop(item['output_index'])
                 entry = next(i for i in chain[0]['input']['requests'] if i['rid'] == rid)
+                chain_stages = defaultdict(lambda: defaultdict(float))
+                for root in chain:
+                    pending = list(children[root['id']])
+                    while pending:
+                        child = pending.pop()
+                        pending.extend(children[child['id']])
+                        group = chain_stages[child['stage']]
+                        group['n'] += 1
+                        for field in ('cpu_ms', 'gpu_stream_ms'):
+                            if field in child:
+                                group[field] += child[field]
+                                group['exclusive_' + field] += child[field] - sum(
+                                    c.get(field, 0) for c in children[child['id']])
                 token_chains.append({'loops': len(chain), 'entry_depth': entry['entry_depth'],
                     'cpu_ms': sum(r['cpu_ms'] for r in chain),
-                    'gpu_stream_ms': sum(r.get('gpu_stream_ms', 0) for r in chain)})
+                    'gpu_stream_ms': sum(r.get('gpu_stream_ms', 0) for r in chain),
+                    'stages': {s: dict(v) for s, v in chain_stages.items()}})
+    by_id = {r['id']: r for r in rows}
     return {'stages': {s: {k: stats(v) for k, v in group.items()} for s, group in stages.items()},
         'decode_result_callbacks': len(output_rows), 'loopspec_output_chains': token_chains,
+        'recurrent_completed_result_callbacks': sum(
+            by_id.get(r['parent'], {}).get('stage') == 'scheduler.result' for r in output_rows),
         'kernel_ms': dict(kernels), 'kernel_busy_union_ms': union_ms(intervals),
         'kernel_sum_ms': sum(kernels.values()),
         'kernel_ms_by_launch_stage': {s: dict(v) for s, v in stage_kernels.items()},
         'kernel_ms_by_name': dict(sorted(kernel_names.items(), key=lambda x: -x[1])),
-        'excluded_or_unmapped_kernel_count': unassigned,
+        'assigned_decode_kernel_count': assigned,
+        'intentionally_excluded_kernel_count': excluded,
+        'intentionally_excluded_kernel_ms': excluded_ms,
+        'unmapped_kernel_count': unassigned, 'unmapped_kernel_ms': unassigned_ms,
         'cuda_graph_launches': sum('cudaGraphLaunch' in e.get('name', '') for e in events)}
 
 
@@ -175,7 +207,9 @@ def main():
         'notes': ['Ranks reported separately: do not sum their times as wall latency.',
                   'Inclusive spans overlap; direct-child subtraction is only an interval estimate.',
                   'Kernels are attributed by CPU launch correlation and filtered by request/decode.',
-                  'Excluded kernel count includes prefill and unmapped launches; not claimed fully mapped.']}, indent=2))
+                  'Only CPU user annotations from the matching process are aligned to exported spans.',
+                  'Intentionally excluded kernels and unmapped launches are reported separately.',
+                  'Scheduler result callbacks include recurrent containers; they are not token counts.']}, indent=2))
 
 
 if __name__ == '__main__':
