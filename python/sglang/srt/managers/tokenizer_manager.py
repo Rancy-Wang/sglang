@@ -1577,6 +1577,11 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
 
             validate_request(sampling_params, obj)
 
+        if get_spec().speculative_algorithm == "DAS_WAVE":
+            from sglang.srt.speculative.das_wave.config import validate_request
+
+            validate_request(sampling_params, obj)
+
         # Build return object
         if isinstance(obj, GenerateReqInput):
             session_params = (
@@ -3151,7 +3156,7 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
         i: int,
     ) -> None:
         """Calculate speculative decoding metrics, such as acceptance rate and acceptance length metrics."""
-        if get_spec().speculative_algorithm == "LOOPSPEC":
+        if get_spec().speculative_algorithm in ("LOOPSPEC", "DAS_WAVE"):
             # Its draft-token width reserves live branch storage, not a linear
             # proposal block. The formula below would fabricate an acceptance
             # denominator. The worker logs actual cycles/accepts/state reuse.

@@ -30,12 +30,16 @@ class Spec(msgspec.Struct):
     # -------------------------------------------------------------------------
     speculative_algorithm: A[
         Optional[str],
-        "Speculative algorithm. Builtins: EAGLE, EAGLE3, NEXTN, STANDALONE, NGRAM, DFLASH, DSPARK, UNO, LOOPSPEC. Or any name registered via `SpeculativeAlgorithm.register`.",
+        "Speculative algorithm. Builtins: EAGLE, EAGLE3, NEXTN, STANDALONE, NGRAM, DFLASH, DSPARK, UNO, LOOPSPEC, DAS_WAVE. Or any name registered via `SpeculativeAlgorithm.register`.",
     ] = None
     speculative_draft_depth: A[
         Optional[list[int]],
         Arg(help="LoopSpec readout depths: one depth, or first and second depths.", nargs="+"),
     ] = None
+    speculative_das_wave_max_width: A[int, "DAS_WAVE: Maximum parallel draft width including anchor."] = 16
+    speculative_das_wave_rounds: A[int, "DAS_WAVE: Number of carried refinement rounds."] = 4
+    speculative_das_wave_updates: A[int, "DAS_WAVE: Core updates per refinement round."] = 1
+    speculative_das_wave_initial_width: A[int, "DAS_WAVE: Initial active width including anchor."] = 2
     uno_lora_path: A[Optional[str], "Path to the UNO draft LoRA checkpoint."] = None
     speculative_draft_model_path: A[
         Optional[str],

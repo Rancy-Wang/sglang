@@ -96,6 +96,9 @@ class CustomSpecAlgo:
     def is_ngram(self) -> bool:
         return False
 
+    def is_das_wave(self) -> bool:
+        return False
+
     def is_loopspec(self) -> bool:
         return False
 
