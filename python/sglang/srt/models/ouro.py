@@ -163,9 +163,14 @@ class OuroModel(nn.Module):
         return self.norm(hidden)
 
     def forward(self, input_ids, positions, forward_batch, input_embeds=None):
+        self.dflash_features = {}
         hidden = self.embed_tokens(input_ids) if input_embeds is None else input_embeds
         for depth in range(self.config.total_ut_steps):
             hidden = self.advance_loop(hidden, positions, forward_batch, depth)
+        if self.dflash_layer_ids:
+            # Breakable prefill replays this module body without executing its
+            # Python side effects. Aux tensors must be explicit graph outputs.
+            return hidden, [self.dflash_features[i] for i in self.dflash_layer_ids]
         return hidden
 
     @span("ouro.mixed_core", before=lambda self, hidden, positions, groups: {
@@ -239,7 +244,7 @@ class OuroForCausalLM(nn.Module):
     ):
         if get_embedding:
             raise ValueError("Ouro embedding serving is not implemented")
-        self.model.dflash_features = {}
+        aux = None
         if hasattr(self, "timeline_runtime"):
             from sglang.srt.model_executor.forward_context import (
                 ForwardContext,
@@ -247,6 +252,7 @@ class OuroForCausalLM(nn.Module):
             )
 
             runtime = self.timeline_runtime
+            self.model.dflash_features = {}
             runtime.ensure_prefill(
                 forward_batch.out_cache_loc, {self.config.total_ut_steps}
             )
@@ -259,10 +265,12 @@ class OuroForCausalLM(nn.Module):
                 batch, backend = runtime.target_batch(forward_batch, "core", depth)
                 with forward_context(ForwardContext(backend)):
                     hidden = self.model.advance_loop(hidden, positions, batch, depth)
+            if self.model.dflash_layer_ids:
+                aux = [self.model.dflash_features[i] for i in self.model.dflash_layer_ids]
         else:
             hidden = self.model(input_ids, positions, forward_batch, input_embeds)
-        aux = ([self.model.dflash_features[i] for i in self.model.dflash_layer_ids]
-               if self.model.dflash_layer_ids else None)
+            if self.model.dflash_layer_ids:
+                hidden, aux = hidden
         return self.logits_processor(input_ids, hidden, self.lm_head, forward_batch, aux)
 
     def set_dflash_layers_to_capture(self, layer_ids):

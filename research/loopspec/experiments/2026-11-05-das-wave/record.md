@@ -115,3 +115,13 @@
 - 标准：native特征为最终循环物理层输出且target logits不变，HF误差完整报告；生命周期完成后flush且无严格KV错误；多batch数值失败不因此抹去。
 - 风险：HTTP取消时序、旧HF masking API、chunk/padding导致shape不同；记录所有payload/output，诊断与主性能计时分开。
 - 验证：本地HTTP/算法契约和AST，Git同步后X5 GPU0 lifecycle eager/graph overlap，GPU1 feature对照与DFlash graph smoke；启动7/10。
+
+### 候选7结果与候选8/10六项计划
+
+- SHAba0e772d79f4914b2804c48155c27d8779a6c82c；Wave lifecycle eager和graph均exit0：两组8请求不同长度(含0/1/短尾)、token stop、两次取消与survivor、sampling/logprob拒绝、重复flush，严格KV检查未失败。
+- DFlash native feature与最终物理层hook逐位相同，开启capture不改target logits；HF4个检查点argmax一致，数值误差完整保留round-7/dflash-features/report.json，exit0。HF不是逐位相同，不能误报。
+- DFlash graph服务在首次prefill触发KeyError1，exit1。确定根因：breakable prefill只replay内部OuroModel body，Python属性字典不恢复，而顶层forward清空字典后查找feature。
+- 第8轮目的：使aux feature成为prefill body图的真实输出。步骤：OuroModel在启用capture时返回(hidden, aux)，顶层消费显式返回值；不依赖replay恢复Python side effect。
+- 范围：models/ouro.py及本记录。成功标准：DFLASH prefill/verify/draft graph启动并完成真实请求；eager特征语义和target logits不变；保留跨shape数值差异。
+- 风险：嵌套body输出结构、timeline手动路径；保持无capture时原返回类型，timeline分支显式组装aux。
+- 验证：AST/diff/CPU契约；Git同步同SHA后DFlash graph bs1与多请求生命周期，重跑feature对照；Wave未改数值路径，按需服务回归。启动8/10。
