@@ -4,7 +4,7 @@
 
 - 用户明确要求：DFlash修复后在A系列单机TP2重新比较AR/DFlash/LoopSpec，输出加速比、acceptance及详细Profile；LoopSpec仅一个proposal位置。
 - 基线：935d48ddbf0a0f6763f6afcd00cded318f206ad2（Wave撤除已通过X5回归）。分支loopspec-test，正式loopspec不动。
-- 状态：进行中，候选4/10。TP2接入是新的用户任务，不重开原DAS-Wave优化预算。
+- 状态：测量与报告完成，使用4/10轮；严格AR token等价仍未通过。TP2接入是新的用户任务，不重开原DAS-Wave优化预算。
 - 口径：bs1/2/4/8/16、每格全30题AIME25、max_new_tokens1024，Thinking模板、R4、BF16、greedy、CUDA Graph全开。LoopSpec depths=[1]，只保留第一proposal分支；流水线仍可有不同token的在途lane。用户已确认完整batch矩阵，详细Profile聚焦bs1。
 
 ## 修改前计划
@@ -91,3 +91,13 @@
 - 候选3提交c035c432cb3db5ff71d67129be41a0d7922d3cea，A12已在Profile全部结束后pull同SHA。正式矩阵后处理远端退出0。Profile三方法各9窗口全部完成，driver退出0，runtime仍af7。
 - 首次analyze_tp2.py退出1：AssertionError(recurrent.start,32,32)。q0-p0-TP-0中同名标记64条，其中user_annotation 32条(pid3337818)、gpu_user_annotation32条(pid0)；rank0导出只有32个对应span。不是缺少推理结果，而是重复匹配GPU标记。
 - 六项计划：1目的：避免CPU/GPU标记重复计费，准确解释decode周期；2步骤：过滤user_annotation且pid匹配，分开未映射/有意排除kernel，增加LS输出链分阶段累计；3范围：analyze_tp2.py及记录，不改推理代码或重跑基准；4标准：27窗口54rank trace全部完成逐stage数量对齐，AR readout/LS输出链与31 decode tokens/窗口核对，kernel分类与已归因总时长守恒；5风险：GPU stream区间包含等待、嵌套不能相加，未知kernel不能强行归因，scheduler.result含递归容器调用不可当token数；6验证：静态检查、样本CPU/GPU标记过滤、全真实trace重算与完整性校验。
+
+### 最终验证与交付
+
+- 候选4提交bbba3b764e3fc61f2c6babce0e609d61fb3d4b2d，经loopspec-test push/A12 pull同SHA；CPU/GPU重复标记回归及kernel归因三分区断言退出0。全真实trace重算`profile-analysis-v2.log`退出0。
+- 完整矩阵15/15格、450/450请求、460800输出tokens全部完成，五个batch driver退出0；各格0重调度、实测日志0 graph=False，客户端峰值与设置一致。bs16 AR/DF/LS吞吐281.1830921537/336.5532698923/299.39309903266644tok/s，加速比1/1.19691858893/1.0647620976762044。
+- 27/27窗口、54rank traces、864个Profile tokens完整；每rank AR279个decode readout、LS279个输出链（244个D1接受后补1core、35个启动/重启补4core）。DFlash实际执行127个cycle、请求元数据报告120次verify，7窗口各多1个overlap尾部cycle；target_verify与cycle数量一致。此前验证假设“执行cycle数等于响应计数”不成立，按两种不同计数报告，不改原始数据。
+- 所有窗口CPU span逐stage对齐；kernel按已归因decode/有意排除/未映射分区。DFlash未映射时间约全窗口kernel的6.27%，保留unknown；AR与LS的递归scheduler.result容器调用不当作token数。
+- 已生成benchmark-report.md、profile-report.md、轻量聚合JSON/CSV、两幅图及压缩逐窗口派生汇总；大型原始trace约447MiB留A12。图已人工查看可读，文档交叉链接与数字经核对。
+- 全部正式推理使用runtime af7eb8ee264ed88ca45752c53d69a35077acd08b。候选3/4仅修分析器，不改变推理代码。矩阵全部spec序列与AR有差异（每格0/30完全匹配、30/30停止一致），只报告诊断性吞吐比，不标无损正确性通过。
+- 正式loopspec未晋升。本任务GPU服务和分析进程均退出，A12 GPU0/1无本任务遗留计算；其他用户GPU2–7任务未触碰，SSH长连接保留。
