@@ -1,5 +1,8 @@
 # 统一 staged Drop / Reposition
 
+`PLAN-CS-20261107-R4` 新增 staged 的 PD 支持，见文末。下文 R2 的版本、限制和
+数值结果保留为历史记录；mini Drop 已由后续 R3 修复，R4 使用修复后的参考。
+
 批准计划：`PLAN-CS-20261107-R2`。基线为 `system-test` 的
 `2997bc2ba466d047a4aaa8f6af4ae07fa60492f7`。调度与所有权验证已通过；
 **BCP 数值门禁尚未通过，不能据此宣布迁移验收通过。**
@@ -267,3 +270,177 @@ CUDA_VISIBLE_DEVICES=1 python -B -m pytest -s --tb=short -o addopts= \
 仍需完成：解释并解决剩余数值门禁失败；多卡、真实
 HTTP 中途 abort/retraction 和性能压力未由本轮结果覆盖。原生 allocator 中止测试
 不能替代这些模型级验证。需要回退运行行为时显式选择默认 `occurrence`。
+
+
+## R4：staged 的 PD 最终状态移交
+
+批准计划 `PLAN-CS-20261107-R4`，起点 `9c156eb1d4`。P/D 都使用
+`--context-execution-mode staged`，不增加另一种阶段协议。P 仍按 extended Radix 的
+实际命中边界及必要恢复缺页执行 StagePlan；Drop 保留幸存绝对位置，Reposition 才
+变换位置。普通请求与 occurrence 的发送路径保持原行为。
+
+`python/sglang/srt/disaggregation/prefill.py` 的
+`SchedulerDisaggregationPrefillMixin.send_kv_chunk` 对 staged 非最终 chunk 直接返回，
+不推进发送游标。最终结果处理先完成既有 `copy_done` 和 Context completion，
+再检查终态并发送。等待 bootstrap 的完成请求也复用同一个最终发送入口。
+“一次移交”是提交一个最终状态，Mooncake 仍可拆分传输块。
+
+`disaggregation/context_transfer.py::validate_staged_handoff` 只检查 CPU 元数据：
+已完成的 raw 长度、最终 active token 对应的 terminal 行、实际保存的位置版本、
+首次 decode 所需的 SWA 尾部驻留。最终 `ContextTransferPlan` 的事件签名、active
+坐标、next position 和 usage 使用原有 v2 元数据；不传递阶段执行进度。
+D 的 `allocate_context_destination` 清除 stage plan，建立最终布局。
+
+P 在最终 forward 后保留请求私有的最终 KV，直到原生 inflight 传输退休时才发布或
+释放。不能在发送前用 `cache_unfinished_req` 的 insert/rematch 将本次新算 KV
+去重成旧缓存页：虽然两者可属于相同语义键，计算形状可能使数值不同，继而改变 D
+实际接收的内容。原匹配分支的锁与请求私有页继续受既有退休机制保护。
+
+失败处理沿用原生路径：接收失败禁止插入 D 缓存；D 发起中止时，尚可能被 P 写入的
+目标页等待 drain 后才释放。P 的中间阶段由已有 unpublished-stage guard 禁止发布。
+真实 rebootstrap 使用 `Req.build_rebootstrap_payload` 携带完整历史及已生成前缀，
+由 P 按 staged 重算；D 重放已输出的边界 token，不重复提交。
+
+范围为文本 Full Attention、GPT-OSS Full/SWA、page size 1、FP16/BF16 KV、Mooncake、
+常规自回归。Insert、Linear attention、PP/CP/DCP、推测解码、KV offload/checksum 和
+Mooncake staging buffer 仍保留原限制。`staged` 执行与 Mooncake staging buffer
+是两种不同机制。D Radix 为已有可选功能，默认关闭；SWA + D Radix 的原生启动检查
+仍要求 `SGLANG_ENABLE_UNIFIED_RADIX_TREE=1`，即使当前环境提示该变量已弃用。
+
+### 验证口径
+
+`test_staged_pd.py` 以真实阶段规划及 occurrence 状态推进验证最终行、位置和 SWA，
+并验证原生发送入口在非最终 chunk 不访问发送器或推进游标。
+`test_staged_runtime.py::test_staged_native_ownership_cleanup` 额外覆盖最终发布延后、
+借用缓存、阶段中止及 Full/SWA 页释放。
+
+PD BCP 入口是 `test_bcp_pd_numeric.py`。参考为 mini R3 的真实生产 staged 输出；
+hot、Retry、连续 Reposition 使用对应缓存历史的参考。可设置
+`CONTEXT_PD_INTEGRATED_TRACES`，同时对比同一输入及固定输出前缀的一体部署 sglang
+staged logits。两条对照轴独立保留 aggregate 和逐 token 门禁，不放宽原阈值，
+所有超限写入 `gate-failures.json` 后统一失败。
+
+D Radix 开启时，D 的缓存历史不能视为与一体部署相同：D 可保留上一请求的 KV，
+P 则可能重算末尾 query。此路径与默认全量接收分别测试，不用 token 相同替代 logits
+门禁，也不把所有差异自动判作可接受浮点误差。
+
+远端使用 BUS-2 `/share/wangruoxi/repo/sglang`，GPU 0–3，独立端口和输出目录
+`/share/wangruoxi/runtime/staged-pd-20261107-r4`。现有 akv 环境的 Mooncake 通过任务
+`deps` 链接已有 `sglang-system-20260917` 的 0.3.13 安装，并仅为测试进程补充
+`pd-drop-c8-20260919/rdma/lib`；未修改公共环境或远端源码。已 push 提交通过 Git bundle
+执行 `git pull --ff-only` 同步。传输使用 `MC_FORCE_TCP=1`，不代表跨主机 RDMA 验证。
+
+截至生产修正 `c4489721c1`，原生 CPU/所有权检查为 47 passed、2 个显式模型入口
+skipped；本地 CPU 可运行子集为 18 passed。两项依赖原生 SRT 的本地测试因缺
+`orjson` 及连带导入错误失败，已由远端原生测试覆盖并通过。
+
+实测使用 Triton、BF16 activation，GPT-OSS 保留 MXFP4 权重。
+TP1、chunk=8192、D Radix 关闭时，与一体部署 staged 配对的 none、Drop、
+Drop+Reposition cold、Retry、连续 Reposition 及 none Retry source，两个模型均
+逐元素相同。hot 仍有差异：
+
+| 模型 | hot max / mean / p99 | 前两行（P 首 token 与 D 首次 decode） |
+| --- | --- | --- |
+| Qwen3-0.6B | 0.375 / 0.0347066 / 0.15625 | 逐元素一致 |
+| GPT-OSS-20B | 0.25 / 0.0156667 / 0.078125 | 逐元素一致 |
+
+修改前，即使 D Radix 关闭，hot 也分别有 max 0.44140625 / 0.78125，首次 decode
+已不同。延后 P 最终缓存发布消除了首次 decode 的差异，但不能据此声称所有后续
+残差已证明为可接受误差。D Radix 开启的早期 Qwen 实验还观察到全部 4878 个 active
+页复用、hot 的 D logits 与 cold 逐元素相同；这与 P 本次重算的计算历史不同。
+此观察保留在 `qwen-tp1`，不冒充最终修正后的结果。
+
+相对 mini 的既有数值失败继续保留，两模型的 BCP 测试均报告数值 FAIL；同次
+流式/非流式 usage roundtrip 均 PASS。测试没有通过放宽门禁得到验收结论。
+Qwen 真实 HTTP 生命周期测试 PASS，覆盖已进入 stage 后中止、decode 中止、
+一次真实 retract/rebootstrap、后续恢复以及独立 P/D 热缓存。512-token 重算场景
+返回 512 个输出，usage 为 actual_prefill_tokens=530、actual_decode_tokens=511。
+这些检查证明已覆盖请求的生命周期，不是全部输入的数值误差界。
+
+GPT-OSS Full/SWA 的同一 HTTP 生命周期用例也 PASS，开启 D Radix。容量用例最终
+使用 raw 长度 100、Drop@80、Reposition@99，P 池 110、D 池 640；旧页与旋转后新页
+的共存需求触发 P 503，D 在同次请求返回 500，随后 90-token 请求成功生成 8 tokens。
+初次 140-token 用例在 HTTP 层先返回 400，D 等待超时；该无效用例的日志保留在
+`qwen-capacity`，有效结果在 `qwen-capacity-final`，不把前者算作通过。
+
+TP2 使用 P GPU 0,1、D GPU 2,3，并分别采集同 TP2 的一体部署参考。两模型的
+none、Drop、Drop+Reposition cold、Retry、连续 Reposition 和 none Retry source
+与对应参考逐元素相同；hot 结果如下。两行的 D Radix 配置不同，不能用它们比较模型
+本身的误差大小，也不构成 D Radix 开关与模型、TP 的完整交叉矩阵。
+
+| 模型 / D Radix | hot max / mean / p99 | 已保存的门禁超限数（mini + integrated） |
+| --- | --- | --- |
+| Qwen3-0.6B / 关闭 | 0.875 / 0.0716147 / 0.40625 | 17 |
+| GPT-OSS-20B / 开启 | 0.203125 / 0.0172606 / 0.0703125 | 20 |
+
+Qwen TP2 的前两行仍逐元素相同。GPT-OSS TP2 仅 P 首 token 行相同，D hot 复用
+4334 个 Full 页，末尾 127 个页重新接收；这符合 `ContextDecodeReuse.build` 对
+SWA 尾部不借用共享目标页的约束（`context_transfer.py:190-216`）。其 Retry 和连续
+Reposition 的 D 侧记录均为 reused=0、copied=0、missing=4461；完整接收后的
+logits 与一体部署相同，但未覆盖预期的复制复用路径。现有测试在
+`test_bcp_pd_numeric.py:392` 的 `copied > 0` 断言处失败，未删除该断言；数值失败
+列表此前已写入 `gate-failures.json`。这不能报告为 SWA 复制复用验证通过，零命中的
+具体原因仍需进一步定位。两组 TP2 的独立 usage roundtrip 均 PASS（各 8 条记录）。
+
+最终生产代码为 `c4489721c1`；TP2、GPT 生命周期及有效容量测试 checkout 为
+`9a6d534889`，其后续差异仅为测试。mini 参考来自 R3 修正 `75056003`。所有 BCP
+结果仅覆盖 case 778 的冻结历史、工具及 8 个输出 token。当前结论为：终态 PD
+移交及上述生命周期用例已验证，**完整数值验收仍为 FAIL**。mini 对照轴保留既有
+失败；PD hot 残差尚未证明为有界浮点误差，不能排除剩余计算语义问题。
+
+未覆盖跨主机 RDMA、P/D 不同 TP 度数、全量 BCP 或吞吐收益。GPT-OSS SWA 的
+Retry/连续复制复用路径亦未由本次真实模型运行覆盖。运行数据摘要为 R4 目录下
+`final-summary.json`，原始比较与日志分别保存在 `qwen-final-tp1`、`gpt20-final-tp1`、
+`qwen-pd-tp2`、`gpt20-pd-tp2` 以及对应同级 `.log` 文件；保留失败证据，不以生成
+token 相同代替数值验收。
+
+### R4 复现命令
+
+以下均在 BUS-2 的已同步 checkout 执行；启动器拥有并清理自己创建的 P/D 进程。
+先核对 GPU 空闲、使用新的输出目录，避免覆盖已存证据。
+
+```bash
+source /share/wangruoxi/local/akv/activate-bus2.sh
+cd /share/wangruoxi/repo/sglang
+export LD_LIBRARY_PATH=/share/wangruoxi/runtime/pd-drop-c8-20260919/rdma/lib:$LD_LIBRARY_PATH
+export PYTHONPATH=$PWD/python:/share/wangruoxi/runtime/staged-pd-20261107-r4/deps:/share/wangruoxi/runtime/staged-20261107-r2/deps
+CUDA_VISIBLE_DEVICES=99 python -B -m pytest -o addopts= -p no:cacheprovider --tb=short -q \
+  test/registered/context_system/test_staged_pd.py \
+  test/registered/context_system/test_staged_plan.py \
+  test/registered/context_system/test_context_transfer.py \
+  test/registered/context_system/test_staged_runtime.py
+
+export MC_FORCE_TCP=1 SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
+export CONTEXT_START_TIMEOUT=600 CONTEXT_CHUNK_SIZE=8192 CONTEXT_MAX_LENGTH=24576
+export CONTEXT_P_KV=24576 CONTEXT_D_KV=24576 CONTEXT_TEST_ATTENTION_BACKEND=triton
+export CONTEXT_SERVER_MODEL=/share/public/wangruoxi/models/Qwen3-0.6B
+export CONTEXT_PD_BCP_ORACLE=/share/wangruoxi/runtime/staged-20261107-r3/mini-qwen.json
+export CONTEXT_PD_INTEGRATED_TRACES=/share/wangruoxi/runtime/staged-20261107-r3/qwen-staged
+export CONTEXT_TRACE_DIR=/isolated/new-pd-traces
+export CONTEXT_P_GPU=0 CONTEXT_D_GPU=1 CONTEXT_PD_PORT=29241 CONTEXT_PD_RADIX=0
+export CONTEXT_SERVER_EXTRA_ARGS='["--context-execution-mode","staged"]'
+python -B -m pytest -o addopts= -p no:cacheprovider -s --tb=short -q \
+  test/registered/context_system/test_bcp_pd_numeric.py
+```
+
+GPT-OSS 改用 `gpt-oss-20b`、`mini-gpt20.json`、`gpt20-staged`，并在 extra args 中
+追加 `"--moe-runner-backend","triton_kernel"`。TP2 设置 `CONTEXT_TEST_TP=2`、
+`CONTEXT_P_GPU=0,1`、`CONTEXT_D_GPU=2,3`，integrated traces 必须改用同 TP2 的参考。
+该参考由 `test_staged_runtime.py::test_bcp_staged_reference` 采集，使用相同模型、
+chunk、KV capacity、TP2 和 staged，`CONTEXT_BCP_MODE=fixed`；R4 目录中已有
+`qwen-integrated-tp2` 与 `gpt20-integrated-tp2`。
+
+生命周期测试使用同一 PD 启动器，设置 `CONTEXT_PD_LIFECYCLE=1`、
+`CONTEXT_PD_SMOKE=1`、`CONTEXT_CHUNK_SIZE=32`、`CONTEXT_PD_RADIX=1`，extra args
+增加 `"--log-level","debug"`。只选
+`test_staged_pd.py::test_http_rebootstrap_abort_and_recovery`；它通过原生日志确认
+进入中间阶段后才中止，随后验证真实 rebootstrap、decode 中止及冷热恢复。
+容量测试设置 `CONTEXT_PD_CAPACITY_PRESSURE=1`、`CONTEXT_P_KV=110`、
+`CONTEXT_D_KV=640`、chunk=32，选择 `test_serving_capacity_pd.py`。各次使用独立输出
+目录与端口，均不设置关闭 graph/overlap 的参数。
+
+R4 源码证据：`python/sglang/srt/disaggregation/prefill.py:850-856`
+（最终发布延后）、`:1328-1349`（发送门禁），
+`python/sglang/srt/disaggregation/context_transfer.py:98-119`（终态校验）、
+`:277-280`（D 阶段状态），以及已有的
+`python/sglang/srt/disaggregation/decode.py:2549-2568`（失败后的目标页释放）。
