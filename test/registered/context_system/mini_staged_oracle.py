@@ -51,6 +51,50 @@ async def main():
         return original_body(*args, **kwargs)
 
     module.request_body = body
+    diagnostic_final_warmup = (
+        os.environ.get("CONTEXT_MINI_DIAGNOSTIC_FINAL_WARMUP") == "1"
+    )
+    if diagnostic_final_warmup:
+        # Counterfactual diagnosis only, never an acceptance reference: execute
+        # the last historical message before the final Drop becomes effective.
+        # Keep the original probe and prefix warmups, tokenizer, cache and model.
+        import inspect
+
+        native_warmup = module.api.FrontendManager.run_contextual_warmup
+        signature = inspect.signature(native_warmup)
+
+        async def final_history_warmup(self, *args, **kwargs):
+            values = signature.bind(self, *args, **kwargs).arguments
+            result = await native_warmup(self, *args, **kwargs)
+            if values["drop_rule"] and not values["reposition"]:
+                uid = self.new_user()
+                await self.send_one(
+                    module.TokenizeMsg(
+                        uid=uid,
+                        text=values["messages"],
+                        sampling_params=module.api.SamplingParams(
+                            max_tokens=1, ignore_eos=True
+                        ),
+                        target_msg_id=len(values["messages"]) - 1,
+                        is_warmup=True,
+                        internal_uid=uid,
+                        **{
+                            key: values[key]
+                            for key in (
+                                "drop_rule",
+                                "reposition",
+                                "enable_thinking",
+                                "reasoning_effort",
+                                "tools",
+                                "tool_choice",
+                            )
+                        },
+                    )
+                )
+                await self.wait_for_warmup(uid)
+            return result
+
+        module.api.FrontendManager.run_contextual_warmup = final_history_warmup
     model = os.environ["CONTEXT_SERVER_MODEL"]
     runner = module.Runner(model, reference_alignment=True)
     sequences, pending = {}, []
@@ -150,7 +194,9 @@ async def main():
     result = {
         "model": model,
         "fixture": fixture,
-        "reference_mode": "staged",
+        "reference_mode": (
+            "diagnostic-final-history-warmup" if diagnostic_final_warmup else "staged"
+        ),
         "mini_commit": subprocess.check_output(
             ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
         ).strip(),

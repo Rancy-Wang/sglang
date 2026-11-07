@@ -296,6 +296,8 @@ def test_bcp_staged_reference(server):  # noqa: F811
                     "context_trace_path": str(trace),
                     "context_trace_count": len(tokens),
                     "context_forced_tokens": tokens,
+                    "context_layer_probe": os.environ.get("CONTEXT_BCP_LAYER_PROBE")
+                    == "1",
                 },
             )
         response = requests.post(
