@@ -9,6 +9,7 @@ import json
 import os
 import sys
 import time
+from contextlib import nullcontext
 
 from launch_pd_observed import install as install_timestamps
 
@@ -27,6 +28,9 @@ def batch_work(batch):
 
 def install():
     install_timestamps()
+    if os.environ.get("ABLATION_PROFILE_LOG"):
+        from observe_cache_ablation import install as install_cache_observer
+        install_cache_observer()
     if os.environ.get("PD_MATRIX_FORWARD_LOG"):
         from observe_forward import install as install_forward
         install_forward()
@@ -77,7 +81,13 @@ def install():
             )
             torch.cuda.nvtx.range_push(label)
         try:
-            result = original(self, batch, *args, **kwargs)
+            if os.environ.get("ABLATION_PROFILE_LOG"):
+                from observe_cache_ablation import batch_scope
+                scope = batch_scope(batch)
+            else:
+                scope = nullcontext()
+            with scope:
+                result = original(self, batch, *args, **kwargs)
         finally:
             if profile:
                 torch.cuda.nvtx.range_pop()

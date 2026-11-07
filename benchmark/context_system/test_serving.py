@@ -365,6 +365,10 @@ async def run(args):
     import aiohttp
 
     method = load_method(args.mini_root)
+    text_drop = getattr(args, "ablation_policy", None) == "text_drop"
+    strict_budget = getattr(args, "strict_source_completion", False)
+    if text_drop and (args.drop or args.summary_policy_dir):
+        raise ValueError("Text Drop cannot send KV operations or summary")
     if args.summary_policy_dir:
         from summary_replay import load_cases as load_summary
         if args.drop or not args.unique_cohort:
@@ -431,8 +435,21 @@ async def run(args):
                     full, owners = await loop.run_in_executor(
                         rendering, renderer.render, history, manifest["tools"]
                     )
-                    state = rolling.extend(history, owners, full) if args.drop else {}
-                    if args.unique_cohort:
+                    state = rolling.extend(history, owners, full) if (args.drop or text_drop) else {}
+                    wire_history = history
+                    canonical_full = full
+                    projection = None
+                    if text_drop:
+                        from ablation_replay import text_drop_projection
+                        wire_history, kept, removed = text_drop_projection(history, state)
+                        full, _ = await loop.run_in_executor(rendering, renderer.render, wire_history, manifest["tools"])
+                        projection = dict(canonical_tokens=canonical_full, wire_tokens=full,
+                                          kept_canonical_ids=kept, removed_canonical_ids=removed)
+                    budget_state = state if args.drop else {}
+                    if strict_budget:
+                        from ablation_replay import require_complete_budget
+                        require_complete_budget(full, turn["max_new_tokens"], budget_state, args.model_context_limit)
+                    elif args.unique_cohort:
                         reason = context_stop(full, turn["max_new_tokens"], state, args.model_context_limit)
                         if reason:
                             emit(dict(kind="context_limit", case_id=case["case_id"], instance=instance["instance"],
@@ -442,7 +459,7 @@ async def run(args):
                         check_context_budget(full, turn["max_new_tokens"], args.model_context_limit)
                     payload = {
                         "model": args.model,
-                        "messages": history,
+                        "messages": wire_history,
                         "tools": manifest["tools"],
                         "max_tokens": turn["max_new_tokens"],
                         "ignore_eos": True,
@@ -461,8 +478,10 @@ async def run(args):
                         emit(dict(kind="client_prepare", **identity, start=prepare_start,
                                   end=time.perf_counter(), wall=time.time()))
                     emit(dict(kind="turn_start", **identity, time=time.perf_counter(), full_tokens=full,
-                              active_tokens=state.get("active_tokens", full), position_tokens=state.get("position_tokens", full),
+                              active_tokens=budget_state.get("active_tokens", full), position_tokens=budget_state.get("position_tokens", full),
                               max_new_tokens=turn["max_new_tokens"]))
+                    if projection is not None:
+                        emit(dict(kind="text_drop_projection", **identity, **projection))
                     row = await transport.request(args.url, payload, identity)
                     if row["success"] and row["prompt_len"] != full:
                         row.update(
@@ -480,6 +499,8 @@ async def run(args):
                         expected_prompt_tokens=full,
                         history_sha256=method.digest(history),
                         drop_state=state,
+                        ablation_policy=getattr(args, "ablation_policy", None),
+                        text_projection=projection,
                     )
                     rows.append(row)
                     emit(dict(kind="turn_end", **row))
@@ -561,6 +582,8 @@ def parser():
     p.add_argument("--summary-smoke", action="store_true", help="Only first summary event from source prefix; never formal")
     p.add_argument("--measurement-seconds", type=float, help="Graceful cutoff preserving partial SSE and usage")
     p.add_argument("--drop", action="store_true")
+    p.add_argument("--ablation-policy", choices=["native", "text_drop", "apply", "ignore"], default="native")
+    p.add_argument("--strict-source-completion", action="store_true", help="Fail instead of accepting context-limit early completion")
     p.add_argument("--filler", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--model-context-limit", type=int)
     p.add_argument("--timeout", type=float, default=7200)
