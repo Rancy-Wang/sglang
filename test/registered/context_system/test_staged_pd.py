@@ -231,6 +231,15 @@ def test_http_rebootstrap_abort_and_recovery(pd_servers):
         evidence["recovery"] = results
         assert all(status == 200 for status, _ in results), results
         assert results[1][1]["meta_info"]["completion_tokens"] == 8
+        for name, flush_base in (("d-only-hot", p_base), ("p-only-hot", d_base), ("both-hot", None)):
+            if flush_base:
+                requests.post(flush_base + "/flush_cache", timeout=10).raise_for_status()
+            body = payload(name, 8)
+            p, d = [executor.submit(post, base, body) for base in (p_base, d_base)]
+            results = p.result(), d.result()
+            evidence[name] = results
+            assert all(status == 200 for status, _ in results), results
+            assert results[1][1]["meta_info"]["completion_tokens"] == 8
     (Path(os.environ["CONTEXT_TRACE_DIR"]) / "lifecycle.json").write_text(json.dumps(evidence, indent=2))
 
 
