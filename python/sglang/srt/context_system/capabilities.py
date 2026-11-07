@@ -24,8 +24,6 @@ def validate_context_config(args, model_config, *, has_insert=False):
     if mode == "staged":
         if has_insert or qwen_hybrid:
             raise ValueError("Context staged execution does not yet support Insert or hybrid Linear attention")
-        if args.disaggregation_mode != "null":
-            raise ValueError("Context staged execution does not yet support PD")
     if architecture not in {
         "QWenLMHeadModel",
         "Qwen2ForCausalLM",

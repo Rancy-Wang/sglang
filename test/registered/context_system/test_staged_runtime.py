@@ -223,7 +223,7 @@ def test_staged_native_ownership_cleanup(compiler, native_cache, abort, source_c
         reset_context()
 
 
-@pytest.mark.parametrize("unsupported", ["insert", "hybrid", "pd"])
+@pytest.mark.parametrize("unsupported", ["insert", "hybrid"])
 def test_staged_rejects_unsupported_execution(unsupported):
     capabilities = load_file(
         "staged_capabilities", ROOT / "python/sglang/srt/context_system/capabilities.py"
@@ -231,7 +231,7 @@ def test_staged_rejects_unsupported_execution(unsupported):
     config = SimpleNamespace(
         page_size=1,
         context_execution_mode="staged",
-        disaggregation_mode="prefill" if unsupported == "pd" else "null",
+        disaggregation_mode="null",
     )
     architecture = (
         "Qwen3_5ForCausalLM" if unsupported == "hybrid" else "Qwen3ForCausalLM"

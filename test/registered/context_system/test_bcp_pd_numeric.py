@@ -185,8 +185,9 @@ def test_bcp_pd_terminal_handoff(pd_servers):
         with lock:
             room += 1
             request_room = room
-        tokens = reference["runs"][feature]["records"][0]["tokens"]
-        if warm_source:
+        reference_key = name if name in reference["runs"] else feature
+        tokens = reference["runs"][reference_key]["records"][0]["tokens"]
+        if warm_source and reference_key == feature:
             tokens = tokens[:1]
         payload = {
             **request_for(reference["fixture"], feature),
@@ -271,12 +272,6 @@ def test_bcp_pd_terminal_handoff(pd_servers):
                 for mode in ("prefill", "decode")
             ]
         )
-        reference_key = (
-            name
-            if name in ("drop_repos-retry", "drop_repos-consecutive")
-            and name in reference_logits
-            else feature
-        )
         expected = reference_logits[reference_key]
         assert logits.shape == expected.shape and torch.isfinite(logits).all(), name
         assert response["sglext"]["output_ids"] == [tokens], response
@@ -287,6 +282,7 @@ def test_bcp_pd_terminal_handoff(pd_servers):
             "mean_abs": delta.mean().item(),
             "p99_abs": torch.quantile(delta.flatten(), 0.99).item(),
             "per_token_max": delta.max(-1).values.tolist(),
+            "per_token_mean": delta.mean(-1).tolist(),
             "context_usage": response["choices"][0]
             .get("meta_info", {})
             .get("context_usage"),
@@ -294,6 +290,23 @@ def test_bcp_pd_terminal_handoff(pd_servers):
             .get("meta_info", {})
             .get("num_retractions", 0),
         }
+        # Compare PD with the same engine's integrated staged execution as a
+        # separate axis; never replace the mini reference or relax its gates.
+        integrated = os.environ.get("CONTEXT_PD_INTEGRATED_TRACES")
+        if integrated:
+            trace_name = name + "-fixed" if name in ("none", "drop", "drop_repos") else name
+            control = torch.load(Path(integrated) / (trace_name + ".pt"), weights_only=True)
+            assert control.shape == logits.shape
+            control_response = json.loads((Path(integrated) / (trace_name + ".json")).read_text())
+            assert control_response["sglext"]["input_ids"] == response["sglext"]["input_ids"]
+            assert control_response["sglext"]["output_ids"] == response["sglext"]["output_ids"]
+            pd_delta = (logits - control).abs()
+            item["integrated"] = {
+                "max_abs": pd_delta.max().item(), "mean_abs": pd_delta.mean().item(),
+                "p99_abs": torch.quantile(pd_delta.flatten(), .99).item(),
+                "per_token_max": pd_delta.max(-1).values.tolist(),
+                "per_token_mean": pd_delta.mean(-1).tolist(),
+            }
         with lock:
             comparisons[name] = item
             (directory / "comparison.json").write_text(
@@ -351,15 +364,23 @@ def test_bcp_pd_terminal_handoff(pd_servers):
     names = ("drop_repos-consecutive",) if consecutive_only else (
         "drop", "drop_repos", "drop_repos-hot", "drop_repos-retry", "drop_repos-consecutive"
     )
-    for name in names:
-        for metric, floor in (
-            ("max_abs", 0.125),
-            ("mean_abs", 0.02),
-            ("p99_abs", 0.0625),
-        ):
-            assert comparisons[name][metric] <= max(
-                floor, 2 * baseline[metric]
-            ), (name, metric, comparisons)
+    failures = []
+    for axis in ("mini", "integrated"):
+        if axis == "integrated" and not os.environ.get("CONTEXT_PD_INTEGRATED_TRACES"):
+            continue
+        control = baseline if axis == "mini" else comparisons["none"]["integrated"]
+        for name in names:
+            value = comparisons[name] if axis == "mini" else comparisons[name]["integrated"]
+            for metric, floor in (("max_abs", .125), ("mean_abs", .02), ("p99_abs", .0625)):
+                limit = max(floor, 2 * control[metric])
+                if value[metric] > limit:
+                    failures.append((axis, name, metric, value[metric], limit))
+            for metric, floor in (("per_token_max", .125), ("per_token_mean", .02)):
+                for index, (actual, base) in enumerate(zip(value[metric], control[metric], strict=True)):
+                    limit = max(floor, 2 * base)
+                    if actual > limit:
+                        failures.append((axis, name, f"{metric}[{index}]", actual, limit))
+    (directory / "gate-failures.json").write_text(json.dumps(failures, indent=2))
     if os.environ.get("CONTEXT_PD_RADIX") == "1" and not consecutive_only:
         reused = {
             name: json.loads((directory / f"{name}-decode.pt.reuse.json").read_text())
@@ -370,6 +391,7 @@ def test_bcp_pd_terminal_handoff(pd_servers):
         assert reused["drop_repos-hot"]["missing"] < reused["drop_repos-hot"]["active"]
         assert reused["drop_repos-retry"]["copied"] > 0
         assert reused["drop_repos-consecutive"]["copied"] > 0
+    assert not failures, failures
 
 
 def test_pd_usage_roundtrip(pd_servers):
