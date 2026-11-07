@@ -31,9 +31,12 @@ async def main():
 
     def config(**kwargs):
         kwargs.update(
-            tp_info=module.DistributedInfo(int(os.environ.get("LOCAL_RANK", "0")),
-                                           int(os.environ.get("WORLD_SIZE", "1"))),
-            contextual_prefill_mode="staged", reposition_execution_mode="staged",
+            tp_info=module.DistributedInfo(
+                int(os.environ.get("LOCAL_RANK", "0")),
+                int(os.environ.get("WORLD_SIZE", "1")),
+            ),
+            contextual_prefill_mode="staged",
+            reposition_execution_mode="staged",
             max_extend_tokens=int(os.environ.get("CONTEXT_CHUNK_SIZE", "8192")),
             max_seq_len_override=int(os.environ.get("CONTEXT_MAX_LENGTH", "24576")),
             num_page_override=int(os.environ.get("CONTEXT_KV_CAPACITY", "24576")),
@@ -99,7 +102,7 @@ async def main():
         result = observed_sample(logits, args)
         for i, req in enumerate(runner.batch.reqs):
             record = runner.records[req.uid]
-            if req.sample_is_committed:
+            if req.sample_is_committed and not req.is_warmup:
                 record["logits_gpu"][-1] = raw[i]
             else:
                 record["logits_gpu"].pop()
@@ -126,35 +129,64 @@ async def main():
             runner.tokenizer._tokenize_invocations += 1
             runner.tokenizer._chat_template_invocations += 1
             runner.tokenizer._harmony_thinking_ranges = {}
-            return list(trace["input_ids"]), list(trace["owners"]), trace["generation_start"]
+            return (
+                list(trace["input_ids"]),
+                list(trace["owners"]),
+                trace["generation_start"],
+            )
 
         # Only full-history Reposition can consume this frozen-token adapter.
         # Drop prefix warmups must use mini's actual prefix template renderer.
         native_harmony = runner.tokenizer._render_harmony_message_drop
 
         def harmony(messages, **kwargs):
-            return normalized_harmony(messages, **kwargs) if messages == expected else native_harmony(messages, **kwargs)
+            return (
+                normalized_harmony(messages, **kwargs)
+                if messages == expected
+                else native_harmony(messages, **kwargs)
+            )
 
         runner.tokenizer._render_harmony_message_drop = harmony
     result = {
-        "model": model, "fixture": fixture, "reference_mode": "staged",
-        "mini_commit": subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip(),
+        "model": model,
+        "fixture": fixture,
+        "reference_mode": "staged",
+        "mini_commit": subprocess.check_output(
+            ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
+        ).strip(),
         "runs": {},
     }
     logits = {}
 
     async def run(feature, key, request=None, tokens=None):
         runner.forced_tokens = tokens
-        count = len(tokens) if tokens else int(os.environ.get("CONTEXT_NUMERIC_TOKENS", "8"))
-        value = await runner.generate("staged", [request or request_for(fixture, feature)], max_tokens=count)
+        count = (
+            len(tokens)
+            if tokens
+            else int(os.environ.get("CONTEXT_NUMERIC_TOKENS", "8"))
+        )
+        value = await runner.generate(
+            "staged", [request or request_for(fixture, feature)], max_tokens=count
+        )
         assert not sequences and not pending
         formal = [r for r in value["records"] if not r["warmup"]]
         assert len(formal) == 1 and formal[0]["tokens"]
+        if tokens is not None:
+            assert formal[0]["tokens"] == tokens, key
+        assert len(runner.full_logits[formal[0]["uid"]]) == len(
+            formal[0]["tokens"]
+        ), key
         value["warmup_records"] = [r for r in value["records"] if r["warmup"]]
         value["records"] = formal
         result["runs"][key] = value
         logits[key] = runner.full_logits[formal[0]["uid"]]
-        print("MINI_STAGED_BCP", key, len(formal[0]["stages"]), formal[0]["tokens"], flush=True)
+        print(
+            "MINI_STAGED_BCP",
+            key,
+            len(formal[0]["stages"]),
+            formal[0]["tokens"],
+            flush=True,
+        )
         return formal[0]["tokens"]
 
     for feature in ("none", "drop", "drop_repos"):
@@ -163,7 +195,11 @@ async def main():
     tokens = result["runs"]["drop_repos"]["records"][0]["tokens"]
     await run("drop_repos", "drop_repos-hot", tokens=tokens)
     runner.clear()
-    await run("none", "none-retry-source", tokens=result["runs"]["none"]["records"][0]["tokens"])
+    await run(
+        "none",
+        "none-retry-source",
+        tokens=result["runs"]["none"]["records"][0]["tokens"],
+    )
     await run("drop_repos", "drop_repos-retry", tokens=tokens)
     runner.clear()
     source = request_for(fixture, "drop_repos")

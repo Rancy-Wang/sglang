@@ -12,16 +12,22 @@ pytest_plugins = ("test_ir",)
 
 @pytest.fixture(scope="module")
 def staged():
-    return load_file("staged_plan_test", ROOT / "python/sglang/srt/context_system/staged.py")
+    return load_file(
+        "staged_plan_test", ROOT / "python/sglang/srt/context_system/staged.py"
+    )
 
 
 @pytest.fixture(scope="module")
 def ownership():
-    return load_file("staged_ownership_test", ROOT / "python/sglang/srt/context_system/occurrence.py")
+    return load_file(
+        "staged_ownership_test", ROOT / "python/sglang/srt/context_system/occurrence.py"
+    )
 
 
 @pytest.mark.parametrize("chunk", [1, 7, 100000])
-def test_staged_sequential_versions_and_page_lifetime(compiler, staged, ownership, chunk):
+def test_staged_sequential_versions_and_page_lifetime(
+    compiler, staged, ownership, chunk
+):
     for tokens, drops, repos in cases():
         n = len(tokens)
         layout = compiler(*args(tokens, drops, repos))
@@ -32,7 +38,9 @@ def test_staged_sequential_versions_and_page_lifetime(compiler, staged, ownershi
         for matched in sorted({0, n // 2, n - 1}):
             borrowed = torch.arange(1, matched + 1, dtype=torch.int64)
             state = ownership.OccurrenceState.from_match(
-                borrowed, layout.positions[:matched], exact_prefix_len=matched // 2,
+                borrowed,
+                layout.positions[:matched],
+                exact_prefix_len=matched // 2,
             )
             values = {i + 1: (i, int(layout.positions[i])) for i in range(matched)}
             private = set()
@@ -59,8 +67,12 @@ def test_staged_sequential_versions_and_page_lifetime(compiler, staged, ownershi
             while start < n:
                 end = stages.next_end(start, min(n, start + chunk))
                 window = ownership.compile_occurrence_window(
-                    layout, expiry, layout.positions, query_start=start,
-                    query_end=end, staged=True,
+                    layout,
+                    expiry,
+                    layout.positions,
+                    query_start=start,
+                    query_end=end,
+                    staged=True,
                 )
                 assert window.segment_count == 1
                 keep = state.prefill_terminal_keep(layout, end, expiry)
@@ -73,7 +85,8 @@ def test_staged_sequential_versions_and_page_lifetime(compiler, staged, ownershi
                     values[slot] = (raw, int(layout.birth_positions[raw]))
                 updates = {}
                 for src, dst, (old, new) in zip(
-                    step.copy_source_slots.tolist(), step.copy_destination_slots.tolist(),
+                    step.copy_source_slots.tolist(),
+                    step.copy_destination_slots.tolist(),
                     step.copy_position_pairs.tolist(),
                 ):
                     raw, position = values[src]
@@ -84,8 +97,10 @@ def test_staged_sequential_versions_and_page_lifetime(compiler, staged, ownershi
                 selected = window.segment_key_occurrences.tolist()
                 prefix = len(selected) - (end - start)
                 for query in range(start, end):
-                    actual = [values[int(step.occurrence_slots[i])]
-                              for i in selected[:prefix + query - start + 1]]
+                    actual = [
+                        values[int(step.occurrence_slots[i])]
+                        for i in selected[: prefix + query - start + 1]
+                    ]
                     assert actual == expected[query]
                     queried.append(query)
                 state = step.state
@@ -109,7 +124,9 @@ def test_staged_sequential_versions_and_page_lifetime(compiler, staged, ownershi
 
 
 def test_sparse_repair_preserves_cached_gaps(compiler, staged):
-    recovery = load_file("staged_recovery_test", ROOT / "python/sglang/srt/context_system/recovery.py")
+    recovery = load_file(
+        "staged_recovery_test", ROOT / "python/sglang/srt/context_system/recovery.py"
+    )
     n, matched = 20, 16
     drops = {10: [(0, 5)], 17: [(5, 8)]}
     layout = compiler(*args(list(range(n)), drops, [16]))
@@ -135,12 +152,22 @@ def test_terminal_transition_and_cache_publication_guard(compiler, staged, owner
     layout = compiler(*args(list(range(n)), {6: [(0, 4)]}, [11]))
     _, expiry = query_visibility(list(range(n)), {6: [(0, 4)]}, [11])
     window = ownership.compile_occurrence_window(
-        layout, expiry, layout.positions, query_start=6, query_end=n, staged=True,
+        layout,
+        expiry,
+        layout.positions,
+        query_start=6,
+        query_end=n,
+        staged=True,
     )
-    assert torch.equal(window.occurrence_positions[window.terminal_occurrences], layout.positions)
-    req = SimpleNamespace(context_staged=True, context_recompute_program=None,
-                          context_program=SimpleNamespace(layout=layout),
-                          context_state=SimpleNamespace(canonical_rows=torch.empty(6)))
+    assert torch.equal(
+        window.occurrence_positions[window.terminal_occurrences], layout.positions
+    )
+    req = SimpleNamespace(
+        context_staged=True,
+        context_recompute_program=None,
+        context_program=SimpleNamespace(layout=layout),
+        context_state=SimpleNamespace(canonical_rows=torch.empty(6)),
+    )
     assert staged.has_unpublished_stage(req)
     req.context_state.canonical_rows = torch.empty(n)
     assert not staged.has_unpublished_stage(req)
