@@ -847,7 +847,12 @@ class SchedulerDisaggregationPrefillMixin:
                         advance_logprob_pt(i, req)
                         continue
 
-                maybe_cache_unfinished_req(req, self.tree_cache)
+                # Preserve this forward's final KV until D receives it. An
+                # insert/rematch can deduplicate newly computed pages against
+                # an older cache version with different floating-point values.
+                # Native inflight retirement publishes/frees them after send.
+                if not req.context_staged:
+                    maybe_cache_unfinished_req(req, self.tree_cache)
                 self.disagg_prefill_inflight_queue.append(req)
                 if self.spec_algorithm.is_eagle() and draft_input is not None:
                     req.output_topk_p = draft_input.topk_p[i]

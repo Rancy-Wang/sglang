@@ -134,7 +134,10 @@ def test_native_admission_stops_at_next_event(compiler, start):
 
 @pytest.mark.parametrize("abort", [False, True])
 @pytest.mark.parametrize("source_cache", [False, True])
-def test_staged_native_ownership_cleanup(compiler, native_cache, abort, source_cache):
+@pytest.mark.parametrize("defer_final_publication", [False, True])
+def test_staged_native_ownership_cleanup(
+    compiler, native_cache, abort, source_cache, defer_final_publication
+):
     from array import array
 
     from sglang.srt.context_system.occurrence import free_context_slots
@@ -204,7 +207,12 @@ def test_staged_native_ownership_cleanup(compiler, native_cache, abort, source_c
             free_context_slots(
                 allocator, advance.retired_slots, advance.retired_swa_resident
             )
-            cache.cache_unfinished_req(req, chunked=end < 48)
+            if end < 48 or not defer_final_publication:
+                cache.cache_unfinished_req(req, chunked=end < 48)
+            else:
+                # PD keeps these private final owners until transport retires.
+                assert not req.context_cache_published
+                assert req.context_state.private_slots().numel() > 0
             cache.evict(EvictParams(num_tokens=128, swa_num_tokens=128))
             cache.sanity_check()
             if end < 48:
