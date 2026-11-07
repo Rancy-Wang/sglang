@@ -74,7 +74,7 @@ def test_native_admission_stops_at_next_event(compiler, start):
     try:
         drops = {6: [(0, 2)], 14: [(2, 4)]}
         program = ContextProgram(compiler(*args(list(range(20)), drops, [8, 13])), expiry_for(20, drops))
-        req = Req("stage", "", array("q", range(20)), SamplingParams(max_new_tokens=4), context_program=program.to_wire())
+        req = Req("stage", "", array("q", range(20)), SamplingParams(max_new_tokens=4), context_program=program.to_wire(), context_staged=True)
         req._refresh_fill_ids()
         req.prefix_indices = torch.arange(1, start + 1, dtype=torch.int64)
         req.context_source_positions = program.layout.positions[:start]

@@ -2792,6 +2792,7 @@ class Scheduler(
                 extra_key=recv_req.extra_key,
                 cache_salt=recv_req.cache_salt,
                 context_program=recv_req.context_program,
+                context_staged=get_schedule().context_execution_mode == "staged",
                 http_worker_ipc=recv_req.http_worker_ipc,
                 dllm_config=self.dllm_config,
                 time_stats=recv_req.time_stats,

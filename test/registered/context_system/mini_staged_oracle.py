@@ -107,6 +107,15 @@ async def main():
         return result
 
     sampler.sample = raw_sample
+    export = runner.export_logits
+
+    def export_logits():
+        for record in runner.records.values():
+            if record.get("logits_gpu") == []:
+                del record["logits_gpu"]
+        export()
+
+    runner.export_logits = export_logits
     fixture = load_fixture()
     if trace := fixture.get("native_sglang_trace"):
         assert runner.tokenizer.is_gpt_oss and trace["model"] == model

@@ -981,6 +981,7 @@ class Req(ReqDllmMixin):
         session_id: Optional[str] = None,
         cache_salt: Optional[str] = None,
         context_program: Optional[dict] = None,
+        context_staged: bool = False,
     ):
         # Input and output info
         self.rid = rid
@@ -1021,10 +1022,7 @@ class Req(ReqDllmMixin):
         self.context_force_miss = False
         self.context_admission_error = None
         self.context_source_lease = None
-        self.context_staged = (
-            context_program is not None
-            and get_schedule().context_execution_mode == "staged"
-        )
+        self.context_staged = context_program is not None and context_staged
         self.context_stage_plan = None
         if context_program is not None:
             from sglang.srt.context_system.ir import ContextKeyData
