@@ -18,6 +18,14 @@ def validate_context_config(args, model_config, *, has_insert=False):
         "Qwen3_5ForConditionalGeneration", "Qwen3_5MoeForConditionalGeneration",
         "Qwen3_5ForCausalLM", "Qwen3_5MoeForCausalLM",
     }
+    mode = getattr(args, "context_execution_mode", "occurrence")
+    if mode not in {"occurrence", "staged"}:
+        raise ValueError("Unknown Context execution mode")
+    if mode == "staged":
+        if has_insert or qwen_hybrid:
+            raise ValueError("Context staged execution does not yet support Insert or hybrid Linear attention")
+        if args.disaggregation_mode != "null":
+            raise ValueError("Context staged execution does not yet support PD")
     if architecture not in {
         "QWenLMHeadModel",
         "Qwen2ForCausalLM",

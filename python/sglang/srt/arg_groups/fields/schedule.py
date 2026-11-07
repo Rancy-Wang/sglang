@@ -28,6 +28,14 @@ class Schedule(msgspec.Struct):
 
     _NS_PATH = "schedule"
 
+    context_execution_mode: A[
+        str,
+        Arg(
+            help="Execute Context Drop/Reposition with occurrence windows or sequential staged cache-miss prefill.",
+            choices=["occurrence", "staged"],
+        ),
+    ] = "occurrence"
+
     # -------------------------------------------------------------------------
     # Memory and scheduling
     # -------------------------------------------------------------------------

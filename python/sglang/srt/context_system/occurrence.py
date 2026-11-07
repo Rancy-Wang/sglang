@@ -163,6 +163,7 @@ def compile_occurrence_window(
     *,
     query_start: int,
     query_end: int,
+    staged: bool = False,
 ) -> OccurrenceWindow:
     """Compile the same ordered plan using request-local native CPU arrays.
 
@@ -250,6 +251,10 @@ def compile_occurrence_window(
     order_cuts = (np.flatnonzero(np.diff(layout.logical_ranks.numpy()) != 1) + 1
                   if layout.logical_ranks.numel() else np.empty(0, dtype=np.int32))
     for stage in range(stage_count + 1):
+        # An intermediate staged forward must not pre-materialize future RoPE
+        # versions. At the final query, also consume trailing zero-query events.
+        if staged and query_end < n and bounds[stage] >= query_end:
+            break
         if stage:
             begin, end = int(offsets[stage - 1]), int(offsets[stage])
             ids = changed_raw[begin:end]
@@ -298,7 +303,7 @@ def compile_occurrence_window(
         covered = local_end
     if covered != query_end:
         raise RuntimeError("Occurrence stages do not cover the requested query window.")
-    if not np.array_equal(current_pos, terminal):
+    if (not staged or query_end == n) and not np.array_equal(current_pos, terminal):
         raise ValueError(
             "Compact occurrence transitions disagree with terminal Radix positions."
         )
@@ -405,6 +410,7 @@ def plan_occurrence_materialization(
     query_start: int,
     query_end: int,
     exact_prefix_len: int,
+    stored_terminal_positions: torch.Tensor | None = None,
 ) -> OccurrenceMaterialization:
     """Select minimum occurrence allocations under explicit native ownership.
 
@@ -451,6 +457,15 @@ def plan_occurrence_materialization(
     terminal_live = np.zeros(n, dtype=np.bool_)
     terminal_live[:query_start] = terminal_present.numpy()
     terminal_pos = position[terminal]
+    if stored_terminal_positions is not None:
+        if (
+            stored_terminal_positions.device.type != "cpu"
+            or stored_terminal_positions.dtype != torch.int32
+            or stored_terminal_positions.shape != (query_start,)
+        ):
+            raise ValueError("Stored staged positions must cover the source prefix")
+        terminal_pos = terminal_pos.copy()
+        terminal_pos[:query_start] = stored_terminal_positions.numpy()
 
     read = np.zeros(count, dtype=np.bool_)
     read[window.segment_key_occurrences.numpy()] = True
@@ -664,7 +679,7 @@ class OccurrenceState:
             keep[:start] &= (visible_until[:start] > start) | private
         return keep
 
-    def plan(self, window, terminal_keep):
+    def plan(self, window, terminal_keep, *, staged=False):
         start = len(self.canonical_rows)
         canonical = self.canonical_rows.numpy()
         present = canonical >= 0
@@ -680,6 +695,7 @@ class OccurrenceState:
             query_start=start,
             query_end=int(window.segment_query_ends[-1]),
             exact_prefix_len=self.exact_prefix_len,
+            stored_terminal_positions=self.canonical_positions if staged else None,
         )
 
     def advance(self, window, plan, query_slots, extra_slots, visible_until):

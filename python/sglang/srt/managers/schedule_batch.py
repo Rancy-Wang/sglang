@@ -1021,6 +1021,11 @@ class Req(ReqDllmMixin):
         self.context_force_miss = False
         self.context_admission_error = None
         self.context_source_lease = None
+        self.context_staged = (
+            context_program is not None
+            and get_schedule().context_execution_mode == "staged"
+        )
+        self.context_stage_plan = None
         if context_program is not None:
             from sglang.srt.context_system.ir import ContextKeyData
             from sglang.srt.context_system.planner import ContextProgram
@@ -1759,11 +1764,16 @@ class Req(ReqDllmMixin):
             program.layout.positions,
             query_start=start,
             query_end=query_end,
+            staged=self.context_staged,
         )
         keep = self.context_state.prefill_terminal_keep(
             program.layout, query_end, program.visible_until
         )
-        plan = self.context_state.plan(window, keep)
+        if self.context_staged and query_end < len(program.layout.positions):
+            # Intermediate versions are request-owned. Retire dead history now;
+            # a later final-key publication may contain proven Drop holes.
+            keep &= program.visible_until[:query_end] > query_end
+        plan = self.context_state.plan(window, keep, staged=self.context_staged)
         self.context_window_plan = (window, plan)
         return plan.extra_page_count
 

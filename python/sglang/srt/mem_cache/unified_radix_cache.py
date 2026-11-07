@@ -1055,6 +1055,12 @@ class UnifiedRadixCache(BasePrefixCache):
     def cache_finished_req(
         self, req: Req, is_insert: bool = True, *, kv_len_to_handle: int, **kwargs
     ) -> None:
+        from sglang.srt.context_system.staged import has_unpublished_stage
+
+        if has_unpublished_stage(req):
+            # Abort/retraction must release private intermediate versions, not
+            # insert them under final-position keys.
+            is_insert = False
         state = getattr(req, "context_state", None)
         if state is not None:
             self._prepare_context_cache_row(req, retain_source=False)
@@ -1080,6 +1086,7 @@ class UnifiedRadixCache(BasePrefixCache):
             req.context_window_plan = None
             req.context_prefill_started = False
             req.context_cache_published = False
+            req.context_stage_plan = None
 
     def _cache_finished_req_native(
         self, req: Req, is_insert: bool = True, *, kv_len_to_handle: int, **kwargs
@@ -1240,6 +1247,17 @@ class UnifiedRadixCache(BasePrefixCache):
 
     @rank_consensus(same_params=["req.rid", "chunked"])
     def cache_unfinished_req(self, req: Req, chunked: bool = False, **kwargs) -> None:
+        from sglang.srt.context_system.staged import has_unpublished_stage
+
+        if has_unpublished_stage(req):
+            # Continue directly from request-owned KV, keeping the original
+            # source lease (including sparse recovery gaps). No tree rematch.
+            terminal = req.context_state.terminal_slots()
+            self.req_to_token_pool.write(
+                (req.kv.req_pool_idx, slice(0, len(terminal))), terminal
+            )
+            req.prefix_indices = terminal.to(dtype=torch.int64, copy=True)
+            return
         if getattr(req, "context_gap_prefix", None) is not None:
             # The preceding repair chunk is already published. Gap adoption
             # alone has neither computed nor materialized target-version KV.
