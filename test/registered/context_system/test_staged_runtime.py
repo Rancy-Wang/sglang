@@ -248,9 +248,13 @@ def test_staged_rejects_unsupported_execution(unsupported):
     reason="explicit BCP staged oracle required",
 )
 def test_bcp_staged_reference(server):  # noqa: F811
-    from test_bcp_numeric import test_bcp_default_reference
+    import requests
 
-    reference = json.loads(Path(os.environ["CONTEXT_BCP_ORACLE"]).read_text())
+    from bcp_numeric_fixture import request_for
+    from serving_logits_probe import serialized_probe
+
+    reference_path = Path(os.environ["CONTEXT_BCP_ORACLE"])
+    reference = json.loads(reference_path.read_text())
     assert reference["reference_mode"] == "staged"
     extra = json.loads(os.environ.get("CONTEXT_SERVER_EXTRA_ARGS", "[]"))
     assert "--context-execution-mode" in extra
@@ -258,23 +262,129 @@ def test_bcp_staged_reference(server):  # noqa: F811
         "staged",
         "occurrence",
     )
-    test_bcp_default_reference(server)
-    if os.environ.get("CONTEXT_BCP_MODE", "all") != "actual":
-        results = json.loads(
-            (Path(os.environ["CONTEXT_TRACE_DIR"]) / "comparison.json").read_text()
+    mode = os.environ.get("CONTEXT_BCP_MODE", "all")
+    assert mode in ("all", "fixed", "actual")
+    expected_logits = torch.load(str(reference_path) + ".pt", weights_only=True)
+    directory = Path(os.environ["CONTEXT_TRACE_DIR"])
+    directory.mkdir(parents=True, exist_ok=True)
+    comparisons = {}
+    expected_input = reference["runs"]["none"]["records"][0]["input"]["ids"]
+
+    def flush():
+        assert requests.post(server + "/flush_cache", timeout=5).status_code == 200
+
+    def call(feature, name, reference_key, *, fixed=True, source=False):
+        (record,) = reference["runs"][reference_key]["records"]
+        tokens = record["tokens"]
+        payload = {
+            **request_for(reference["fixture"], feature),
+            "model": os.environ["CONTEXT_SERVER_MODEL"],
+            "temperature": 0,
+            "max_tokens": len(tokens),
+            "ignore_eos": True,
+            "return_meta_info": True,
+            "return_input_ids_in_sglext": True,
+            "return_output_ids_in_sglext": True,
+        }
+        if source:
+            payload["reposition"] = reference["fixture"]["reposition"][:1]
+        trace = directory / (name + ".pt")
+        if fixed:
+            payload.update(
+                custom_logit_processor=serialized_probe(),
+                custom_params={
+                    "context_trace_path": str(trace),
+                    "context_trace_count": len(tokens),
+                    "context_forced_tokens": tokens,
+                },
+            )
+        response = requests.post(
+            server + "/v1/chat/completions", json=payload, timeout=300
         )
-        baseline = results["none-fixed"]
-        for name, value in results.items():
-            if not name.startswith("drop") or "per_token_max" not in value:
-                continue
-            for metric, floor in (("per_token_max", 0.125), ("per_token_mean", 0.02)):
-                for index, (actual, control) in enumerate(
-                    zip(value[metric], baseline[metric], strict=True)
-                ):
-                    assert actual <= max(floor, 2 * control), (
-                        name,
-                        metric,
-                        index,
-                        actual,
-                        control,
-                    )
+        (directory / (name + ".json")).write_text(response.text)
+        assert response.status_code == 200, response.text
+        response = response.json()
+        assert response["sglext"]["input_ids"] == expected_input, name
+        (actual_tokens,) = response["sglext"]["output_ids"]
+        assert len(actual_tokens) == len(tokens), (name, actual_tokens, tokens)
+        value = {
+            "reference_key": reference_key,
+            "context_usage": response["choices"][0]
+            .get("meta_info", {})
+            .get("context_usage"),
+            "input_tokens": len(expected_input),
+            "tokens": len(tokens),
+            "exact_token_match": actual_tokens == tokens,
+        }
+        if fixed:
+            assert actual_tokens == tokens, name
+            actual, expected = (
+                torch.load(trace, weights_only=True),
+                expected_logits[reference_key],
+            )
+            assert actual.shape == expected.shape and torch.isfinite(actual).all(), name
+            delta = (actual - expected).abs()
+            value.update(
+                max_abs=delta.max().item(),
+                mean_abs=delta.mean().item(),
+                p99_abs=torch.quantile(delta.flatten(), 0.99).item(),
+                per_token_max=delta.max(-1).values.tolist(),
+                per_token_mean=delta.mean(-1).tolist(),
+                raw_argmax_matching_tokens=int(
+                    (actual.argmax(-1) == expected.argmax(-1)).sum()
+                ),
+            )
+        else:
+            value.update(
+                comparison_kind="native_generation_observation",
+                message=response["choices"][0]["message"],
+                reference_message=reference["runs"][reference_key]["responses"][0][
+                    "choices"
+                ][0]["message"],
+            )
+        comparisons[name] = value
+        (directory / "comparison.json").write_text(json.dumps(comparisons, indent=2))
+        print("BCP_STAGED_COMPARE", name, json.dumps(value), flush=True)
+
+    for feature in ("none", "drop", "drop_repos"):
+        if mode != "fixed":
+            flush()
+            call(feature, feature + "-actual", feature, fixed=False)
+        if mode != "actual":
+            flush()
+            call(feature, feature + "-fixed", feature)
+    if mode == "actual":
+        return
+    # Pair each reuse run with the same mini cache history, including hot reuse.
+    call("drop_repos", "drop_repos-hot", "drop_repos-hot")
+    flush()
+    call("none", "none-retry-source", "none-retry-source")
+    call("drop_repos", "drop_repos-retry", "drop_repos-retry")
+    flush()
+    call("drop_repos", "consecutive-source", "consecutive-source", source=True)
+    call("drop_repos", "drop_repos-consecutive", "drop_repos-consecutive")
+    usage = comparisons["drop_repos-consecutive"]["context_usage"]
+    assert usage["cached_tokens"] + usage["repos_tokens"] > 0
+    assert usage["actual_prefill_tokens"] < len(expected_input)
+
+    baseline, failures = comparisons["none-fixed"], []
+    for name, value in comparisons.items():
+        if not name.startswith("drop") or "max_abs" not in value:
+            continue
+        for metric, floor in (
+            ("max_abs", 0.125),
+            ("mean_abs", 0.02),
+            ("p99_abs", 0.0625),
+        ):
+            limit = max(floor, 2 * baseline[metric])
+            if value[metric] > limit:
+                failures.append((name, metric, value[metric], limit))
+        for metric, floor in (("per_token_max", 0.125), ("per_token_mean", 0.02)):
+            for index, (actual, control) in enumerate(
+                zip(value[metric], baseline[metric], strict=True)
+            ):
+                limit = max(floor, 2 * control)
+                if actual > limit:
+                    failures.append((name, f"{metric}[{index}]", actual, limit))
+    (directory / "gate-failures.json").write_text(json.dumps(failures, indent=2))
+    assert not failures, failures
