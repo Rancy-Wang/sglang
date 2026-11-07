@@ -32,17 +32,17 @@ def test_capacity_rejection_releases_both_sides(pd_servers):
     assert os.environ["CONTEXT_CHUNK_SIZE"] == "32"
     p_base, d_base, bootstrap = pd_servers
     prewarm_context_layout()
-    # The historical read set reaches 120 live keys before Drop. This
-    # exceeds P's 110 slots even when staged avoids future-version copies.
-    tokens = [785] * 140
+    # Raw input fits the frontend's 110-token bound. The final Reposition
+    # needs both old and rotated owners, exceeding the scheduler's KV pool.
+    tokens = [785] * 100
     layout = compile_context_layout(
         *(
             torch.tensor(value, dtype=torch.int32)
-            for value in (tokens, [120], [0, 1], [0, 40], [138], [139])
+            for value in (tokens, [80], [0, 1], [0, 40], [98], [99])
         )
     )
-    expiry = torch.full((140,), torch.iinfo(torch.int32).max, dtype=torch.int32)
-    expiry[:40] = 120
+    expiry = torch.full((100,), torch.iinfo(torch.int32).max, dtype=torch.int32)
+    expiry[:40] = 80
     sampling = {"temperature": 0, "max_new_tokens": 8, "ignore_eos": True}
     room = time.time_ns() % (1 << 52)
     evidence = {}
