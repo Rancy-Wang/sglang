@@ -161,7 +161,9 @@ def test_staged_native_ownership_cleanup(compiler, native_cache, abort, source_c
         )
         if source_cache:
             cache.insert(
-                InsertParams(key=RadixKey(tokens[:20]), value=allocator.alloc(20))
+                InsertParams(
+                    key=RadixKey(array("q", tokens[:20])), value=allocator.alloc(20)
+                )
             )
         req = Req(
             "staged-owners",
