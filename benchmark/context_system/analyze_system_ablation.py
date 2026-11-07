@@ -65,7 +65,8 @@ def profile(root, start, cutoff):
                 gpu_span_total_ms=gpu['total'] if gpu['n'] else None,gpu_span_mean_ms=gpu['mean'],gpu_span_p90_ms=gpu['p90'],
                 effective_free_count=sum(x>0 for x in freed) if freed else (0 if not rs else None),
                 freed_component_tokens=sum(freed) if freed else (0 if not rs else None),
-                hit_tokens=sum(r.get('after',{}).get('hit_tokens',0) for r in rs) if cat=='cache_lookup_inclusive' else None,
+                hit_tokens_unknown_calls=sum(r.get('after',{}).get('hit_tokens') is None for r in rs) if cat=='cache_lookup_inclusive' else None,
+                hit_tokens=sum(r.get('after',{}).get('hit_tokens') or 0 for r in rs) if cat=='cache_lookup_inclusive' else None,
                 compute_tokens=sum(r.get('prefill_tokens',0)+r.get('decode_tokens',0) for r in rs) if cat in ('extend','decode') else None))
     out=dict(rows=rows,dispatched=len(dispatched),completed=len(completed),missing_gpu_records=len(dispatched-completed),
              missing_batch_identity=missing_batch,

@@ -132,7 +132,11 @@ def lookup(self, args, result, before):
                     context=getattr(key, 'context', None) is not None,
                     context_retry=bool(getattr(p, 'context_retry', False)))
     if result is None: return {}
-    return dict(hit_tokens=len(result.device_indices), **numeric_result(result))
+    resident = getattr(result, 'context_resident', None)
+    physical = len(result.device_indices) if resident is None else (
+        int(resident.sum().item()) if resident.device.type == 'cpu' else None)
+    return dict(matched_raw_tokens=len(result.device_indices), hit_tokens=physical,
+                residency_count_known=physical is not None, **numeric_result(result))
 
 
 def tracker(self, args, result, before):
