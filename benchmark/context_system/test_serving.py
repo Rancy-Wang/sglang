@@ -112,7 +112,7 @@ class NativeTemplateAdapter:
             detect_jinja_template_content_format,
         )
         from sglang.srt.parser.template_manager import TemplateManager
-        from transformers import AutoTokenizer
+        from transformers import AutoConfig, AutoTokenizer
 
         class Renderer(OpenAIServingChat):
             def _render_and_encode_chat_template(self, messages, **kwargs):
@@ -139,6 +139,9 @@ class NativeTemplateAdapter:
         )
         template._run_template_detection(tokenizer.chat_template, tokenizer)
         self.renderer = Renderer.__new__(Renderer)
+        self.renderer.is_gpt_oss = (
+            AutoConfig.from_pretrained(path, local_files_only=True).model_type == "gpt_oss"
+        )
         self.renderer.tokenizer_manager = SimpleNamespace(
             tokenizer=tokenizer, served_model_name=path
         )
@@ -153,6 +156,28 @@ class NativeTemplateAdapter:
         request = ChatCompletionRequest(
             messages=messages, tools=tools, chat_template_kwargs=self.template_kwargs
         )
+        if self.renderer.is_gpt_oss:
+            from sglang.srt.parser.gpt_oss_encoding import HarmonyEncoder
+
+            # Mirror the native server path, including retained-history opt-in.
+            # Jinja is not used by GPT-OSS; its owners would misplace Drop events.
+            kwargs = request.chat_template_kwargs or {}
+            if kwargs.get("chat_template") is not None:
+                raise ValueError("GPT-OSS uses native Harmony, not a custom Jinja template")
+            encoder = HarmonyEncoder(
+                kwargs.get("reasoning_effort", request.reasoning_effort),
+                preserve_thinking=kwargs.get("preserve_thinking_history") is True,
+            )
+            native_messages = [
+                {k: v for k, v in m.model_dump(exclude_none=True).items() if k != "index"}
+                for m in request.messages
+            ]
+            self.renderer.trace = encoder.render(
+                native_messages,
+                [tool.model_dump() for tool in request.tools],
+                enable_thinking=kwargs.get("enable_thinking"),
+            )
+            return len(self.renderer.trace.input_ids), self.renderer.trace.owners
         # Reordering would change semantic message IDs. Reject this benchmark
         # configuration rather than silently schedule Drop against another ID.
         if self.renderer.template_manager.jinja_template_may_reorder_tool_results:

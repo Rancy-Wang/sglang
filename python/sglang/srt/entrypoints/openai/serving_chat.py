@@ -1521,8 +1521,10 @@ class OpenAIServingChat(OpenAIServingBase):
             ]
             encoder = HarmonyEncoder(
                 kwargs.get("reasoning_effort", request.reasoning_effort),
-                preserve_thinking=getattr(context_rule, "type", None)
-                == "thinking_drop",
+                preserve_thinking=(
+                    kwargs.get("preserve_thinking_history") is True
+                    or getattr(context_rule, "type", None) == "thinking_drop"
+                ),
             )
             ids, owners, _ = encoder.render_tokens(
                 [{k: v for k, v in m.items() if k != "index"} for m in messages],

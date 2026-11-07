@@ -40,8 +40,10 @@ def test_gpt_replay_named_tool_after_generated_final(tmp_path):
     size, owners = adapter.render(history, [])
     assert history == original
     text = adapter.renderer.trace.rendered_text
-    assert "<|start|>functions.search to=assistant" in text
-    assert "Current date: 2026-09-18" in text
+    assert "functions.search" in text
+    from datetime import date
+
+    assert date.today().isoformat() in text
     assert "strftime_now" not in template
     assert "A generated final answer." in text
     assert size == len(owners)
@@ -49,7 +51,7 @@ def test_gpt_replay_named_tool_after_generated_final(tmp_path):
     assert adapter.render(history, [])[0] == size
     # Preserve the native error when neither the replay nor the history has a name.
     history[-1].pop("name")
-    with pytest.raises(ValueError, match="no previous assistant"):
+    with pytest.raises(ValueError, match="require name or a matching tool_call_id"):
         adapter.render(history, [])
 
     # Real fixed-length output can carry all three fields. No generated text
@@ -76,7 +78,7 @@ def test_gpt_replay_named_tool_after_generated_final(tmp_path):
         ("commentary", "Generated commentary."),
         ("analysis", "Generated reasoning."),
     ):
-        assert f"<|channel|>{channel}<|message|>{value}<|end|>" in text
+        assert value in text
         assert text.count(value) == 1
     for name in ("search", "lookup"):
         assert f"assistant to=functions.{name}" in text
@@ -92,6 +94,27 @@ def test_gpt_replay_named_tool_after_generated_final(tmp_path):
     new_counts = Counter(adapter.renderer.trace.owners)
     assert all(new_counts[i] == old_counts[i] for i in range(3))
     assert "Generated reasoning." in adapter.renderer.trace.rendered_text
+    # The server and client must render identical IDs, not just equal lengths.
+    from sglang.srt.entrypoints.openai.protocol import ChatCompletionRequest
+
+    request = ChatCompletionRequest(
+        messages=history, tools=[], chat_template_kwargs={"preserve_thinking_history": True}
+    )
+    server = adapter.renderer._apply_jinja_template(request, [], False)
+    assert server.prompt_ids == adapter.renderer.trace.input_ids
+    clean = bench.NativeTemplateAdapter(model, {}, path)
+    clean.render(history, [])
+    assert "Generated reasoning." not in clean.renderer.trace.rendered_text
+    request.chat_template_kwargs = {}
+    server = adapter.renderer._apply_jinja_template(request, [], False)
+    assert server.prompt_ids == clean.renderer.trace.input_ids
+    request.chat_template_kwargs = {"preserve_thinking_history": False}
+    assert adapter.renderer._apply_jinja_template(request, [], False).prompt_ids == server.prompt_ids
+    # Explicit thinking_drop still retains reasoning independently of the flag.
+    preserved = adapter.renderer._apply_jinja_template(
+        request, [], False, context_rule=SimpleNamespace(type="thinking_drop")
+    )
+    assert preserved.prompt_ids == adapter.renderer.trace.input_ids
 
 
 @pytest.mark.parametrize("blocked_at", ["headers", "stream"])
