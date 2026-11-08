@@ -145,6 +145,8 @@ def tracker(self, args, result, before):
 
 
 def install():
+    if os.environ.get("ABLATION_OPERATION_CAPTURE"):
+        install_operation_capture()
     from sglang.srt.mem_cache.unified_radix_cache import UnifiedRadixCache
     from sglang.srt.mem_cache.unified_cache.unified_tree_core import UnifiedTreeCore
     from sglang.srt.managers.scheduler import Scheduler
@@ -173,3 +175,98 @@ def install():
             emit(dict(record='idle_flush', time_perf=time.perf_counter(), profile_enabled=_enabled))
         return result
     Scheduler.flush_cache = flush
+
+
+# Deliberately intrusive, separate-run instrumentation. Never enabled in the
+# formal performance matrix: tensor snapshots synchronize the current stream.
+_operation_sink = None
+_operation_layers = {}
+_operation_ids = itertools.count()
+
+
+def operation_counts(source, destination, positions, skip_unmapped):
+    if not (len(source) == len(destination) == len(positions)):
+        raise ValueError("Operation snapshot lengths differ")
+    valid = [i for i, (a, b) in enumerate(zip(source, destination))
+             if not skip_unmapped or (a > 0 and b > 0)]
+    moved = [i for i in valid if positions[i][0] != positions[i][1]]
+    return dict(token_events=len(source), valid_token_events=len(valid),
+                skipped_token_events=len(source)-len(valid),
+                moved_token_events=len(moved), same_position_events=len(valid)-len(moved),
+                unique_source_slots_in_launch=len({source[i] for i in valid}))
+
+
+def operation_emit(row):
+    global _operation_sink
+    prefix = os.environ['ABLATION_OPERATION_CAPTURE']
+    if _operation_sink is None:
+        _operation_sink = Sink(f"{prefix}-{os.environ.get('ABLATION_STAGE')}-rank{rank()}")
+        atexit.register(_operation_sink.close)
+    _operation_sink.emit(dict(row, pid=os.getpid(), rank=rank(),
+                              stage=os.environ.get('ABLATION_STAGE')))
+
+
+def install_operation_capture():
+    import hashlib
+    import numpy as np
+    import torch
+    from sglang.srt.layers.attention.context_backend import ContextModelBinding
+    from sglang.kernels.ops.attention import context_reposition as kernel
+    init = ContextModelBinding.__init__
+
+    @functools.wraps(init)
+    def bind(self, *args, **kwargs):
+        init(self, *args, **kwargs)
+        for layer in self.layers:
+            pointer = int(layer.k_buffer.data_ptr())
+            _operation_layers[pointer] = dict(layer_id=int(layer.layer_id),
+                                              sliding_window=bool(layer.sliding_window))
+        operation_emit(dict(record='model_binding', time_perf=time.perf_counter(),
+                            layers=list(_operation_layers.values())))
+    ContextModelBinding.__init__ = bind
+    original = kernel.reposition_kv_layers
+
+    @functools.wraps(original)
+    def capture(kp, vp, k, v, src, dst, pos, rope, **kwargs):
+        if torch.cuda.is_current_stream_capturing():
+            # A Python hook cannot count graph replay launches. Mark the gap;
+            # do not silently present capture-time calls as actual executions.
+            operation_emit(dict(record='graph_capture_uncovered', time_perf=time.perf_counter()))
+            return original(kp, vp, k, v, src, dst, pos, rope, **kwargs)
+        started = time.perf_counter()
+        arrays = {name: tensor.detach().cpu().numpy().copy()
+                  for name, tensor in [('source', src), ('destination', dst), ('positions', pos)]}
+        pointers = kp.detach().cpu().tolist()
+        # Content-addressed snapshots deduplicate repeated per-layer launches;
+        # each actual launch still gets a separate event (including repeats).
+        digest = hashlib.sha256()
+        for name, value in arrays.items():
+            digest.update(name.encode()); digest.update(str(value.dtype).encode())
+            digest.update(str(value.shape).encode()); digest.update(value.tobytes())
+        blob_id = digest.hexdigest()
+        directory = Path(os.environ['ABLATION_OPERATION_CAPTURE'] + f'-blobs-{os.getpid()}')
+        directory.mkdir(parents=True, exist_ok=True)
+        blob = directory / (blob_id + '.npz')
+        if not blob.exists():
+            np.savez_compressed(blob, **arrays)
+        counts = operation_counts(arrays['source'].tolist(), arrays['destination'].tolist(),
+                                  arrays['positions'].tolist(), kwargs.get('skip_unmapped', False))
+        row = dict(record='reposition_launch', event_id=next(_operation_ids),
+                   start_perf=started, kernel_call_perf=time.perf_counter(),
+                   snapshot=str(blob), snapshot_hash=blob_id,
+                   counts=counts, layers=[_operation_layers.get(int(x)) for x in pointers],
+                   layer_count=len(pointers), local_kv_heads=int(k.shape[1]),
+                   head_dim=int(k.shape[2]), rotary_dim=kwargs.get('rotary_dim') or int(k.shape[2]),
+                   kv_element_bytes=k.element_size(), rope_element_bytes=rope.element_size(),
+                   kv_shape=list(k.shape), kv_stride=list(k.stride()), rope_shape=list(rope.shape),
+                   is_neox_style=kwargs.get('is_neox_style', True),
+                   skip_unmapped=kwargs.get('skip_unmapped', False), batch=dict(current_batch()),
+                   timing_usable_for_baseline=False)
+        try:
+            result = original(kp, vp, k, v, src, dst, pos, rope, **kwargs)
+        except BaseException as error:
+            operation_emit(dict(row, error=repr(error), end_perf=time.perf_counter()))
+            raise
+        operation_emit(dict(row, error=None, end_perf=time.perf_counter()))
+        return result
+    kernel.reposition_kv_layers = capture

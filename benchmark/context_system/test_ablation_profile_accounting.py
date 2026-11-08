@@ -35,4 +35,17 @@ class Profile(unittest.TestCase):
     def test_empty_is_not_fabricated_mean(self):
         self.assertEqual(stats([]),dict(n=0,total=0,mean=None,p90=None))
 
+class OperationCounts(unittest.TestCase):
+    def test_skip_same_position_and_repeated_sources(self):
+        result=obs.operation_counts([0,5,5,6], [9,10,11,12],
+                                    [[1,2],[3,3],[4,9],[5,8]], True)
+        self.assertEqual(result, dict(token_events=4,valid_token_events=3,
+            skipped_token_events=1,moved_token_events=2,same_position_events=1,
+            unique_source_slots_in_launch=2))
+    def test_full_pool_zero_slot_not_assumed_unmapped(self):
+        result=obs.operation_counts([0],[2],[[10,20]],False)
+        self.assertEqual(result['moved_token_events'],1)
+    def test_mismatched_snapshot_rejected(self):
+        with self.assertRaises(ValueError):obs.operation_counts([1],[],[],True)
+
 if __name__=='__main__':unittest.main()
