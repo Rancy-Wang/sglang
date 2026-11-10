@@ -1026,6 +1026,7 @@ class Req(ReqDllmMixin):
         session_id: Optional[str] = None,
         cache_salt: Optional[str] = None,
         context_program: Optional[dict] = None,
+        context_staged: bool = False,
     ):
         # Input and output info
         self.rid = rid
@@ -1065,6 +1066,8 @@ class Req(ReqDllmMixin):
         self.context_force_miss = False
         self.context_admission_error = None
         self.context_source_lease = None
+        self.context_staged = context_program is not None and context_staged
+        self.context_stage_plan = None
         if context_program is not None:
             from sglang.srt.context_system.ir import ContextKeyData
             from sglang.srt.context_system.planner import ContextProgram
@@ -1797,9 +1800,12 @@ class Req(ReqDllmMixin):
             program.layout.positions,
             query_start=start,
             query_end=query_end,
+            staged=self.context_staged,
         )
         keep = self.context_state.prefill_terminal_keep(program.layout, query_end)
-        plan = self.context_state.plan(window, keep)
+        if self.context_staged and query_end < len(program.layout.positions):
+            keep &= program.visible_until[:query_end] > query_end
+        plan = self.context_state.plan(window, keep, staged=self.context_staged)
         self.context_window_plan = (window, plan)
         return plan.extra_page_count
 

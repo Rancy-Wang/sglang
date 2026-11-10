@@ -95,6 +95,30 @@ def transfer_plan(req, device):
     return current
 
 
+def validate_staged_handoff(req, plan, *, window=None):
+    """Validate CPU state after the final forward's completion fence.
+
+    The caller retains the native inflight lease until transport retirement.
+    Full row presence alone is insufficient: an earlier stage can have the
+    same rows but a different position version, including a zero-query tail.
+    """
+    state = req.context_state
+    n = plan.decode.prompt_length
+    if state is None or len(state.terminal_rows) != n or len(state.canonical_rows) != n:
+        raise ValueError("Context staged handoff requires completed prefill")
+    raw = plan.decode.raw_indices
+    rows = state.terminal_rows.numpy()[raw]
+    if np.any(rows < 0):
+        raise ValueError("Context staged handoff has missing final KV")
+    if not np.array_equal(state.canonical_positions.numpy()[raw], plan.decode.positions):
+        raise ValueError("Context staged handoff has unfinished position transitions")
+    if state.swa_resident is not None:
+        if window is None or window < 0:
+            raise ValueError("Context staged SWA handoff requires a window")
+        if not state.swa_resident.numpy()[rows[plan.swa_start(window):]].all():
+            raise ValueError("Context staged handoff has missing final SWA KV")
+
+
 def prepare_decode_transfer_plan(req, device, raw_length):
     base = len(req.origin_input_ids)
     if raw_length > base and (
@@ -235,6 +259,8 @@ def allocate_context_destination(req, allocator, pool, *, window=None):
         swa,
     )
     req.context_decode_layout = plan.decode
+    # D owns the final layout; it must not inherit P's execution frontier.
+    req.context_stage_plan = None
     req.context_prefill_started = True
     req.context_cache_published = reuse is None
     terminal = req.context_state.terminal_slots()

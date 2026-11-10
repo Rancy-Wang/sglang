@@ -793,6 +793,15 @@ class PrefillAdder:
             if start != admission.prefix_len:
                 raise RuntimeError("Context recovery gap was not adopted before admission")
             length = min(length, end - start)
+        if getattr(req, "context_staged", False):
+            from sglang.srt.context_system.staged import StagePlan
+
+            program = req.context_recompute_program or req.context_program
+            if req.context_stage_plan is None or req.context_stage_plan[0] is not program:
+                req.context_stage_plan = (program, StagePlan.from_program(program))
+            length = req.context_stage_plan[1].next_end(
+                admission.prefix_len, admission.prefix_len + length
+            ) - admission.prefix_len
         while length > 0:
             truncated = (
                 admission.is_chunked

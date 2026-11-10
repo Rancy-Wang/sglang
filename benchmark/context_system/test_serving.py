@@ -167,6 +167,13 @@ class NativeTemplateAdapter:
 
 def compute_metrics(event):
     """Translate only reported physical counters, never logical usage."""
+    details = (event.get("usage") or {}).get("prompt_tokens_details")
+    if details is not None and "repos_tokens" in details:
+        # The public usage schema reports cache savings, not physical compute.
+        # Actual forward counts come from the existing server-side probes.
+        return {key: details[key] for key in
+                ("cached_tokens", "repos_tokens", "drop_skipped_tokens")}
+    # Retain compatibility when replaying historical benchmark responses.
     choices = (event.get("sglext") or {}).get("context_usage")
     if not choices:
         return None
@@ -333,9 +340,20 @@ async def run(args):
     import aiohttp
 
     method = load_method(args.mini_root)
-    cases, manifest = method.load_cases(
-        args.requests_path, args.source_tasks or args.num_tasks, args.seed, args.case_id
-    )
+    text_drop = getattr(args, "ablation_policy", None) == "text_drop"
+    strict_budget = getattr(args, "strict_source_completion", False)
+    if text_drop and (args.drop or args.summary_policy_dir):
+        raise ValueError("Text Drop cannot send KV operations or summary")
+    if args.summary_policy_dir:
+        from summary_replay import load_cases as load_summary
+        if args.drop or not args.unique_cohort:
+            raise ValueError("Summary replay requires unique cohort and no Drop")
+        cases, manifest = load_summary(args.requests_path, args.source_tasks or args.num_tasks,
+                                       args.seed, args.case_id, args.summary_policy_dir)
+    else:
+        cases, manifest = method.load_cases(
+            args.requests_path, args.source_tasks or args.num_tasks, args.seed, args.case_id
+        )
     renderer = NativeTemplateAdapter(
         args.tokenizer, json.loads(args.template_kwargs), args.chat_template
     )
@@ -345,6 +363,7 @@ async def run(args):
         method.write_json(root / "selection.json", dict(seed=args.seed, primary_count=args.num_tasks,
                           source_order=[case["case_id"] for case in cases]))
     rows = []
+    user_turns = []
     writes = []
     raw_journal = Journal(root) if args.raw_sse else None
     loop = asyncio.get_running_loop()
@@ -380,14 +399,32 @@ async def run(args):
             )
 
             async def execute(case, instance):
+                if args.summary_policy_dir:
+                    from summary_replay import execute_case
+                    return await execute_case(case, instance, args=args, renderer=renderer,
+                        rendering=rendering, transport=transport, emit=emit, rows=rows, user_turns=user_turns)
                 history, rolling = [], method.RollingState(keep=12, threshold=96 * 1024)
                 for turn in case["turns"]:
+                    prepare_start = time.perf_counter()
                     history.extend(copy.deepcopy(turn["new_messages"]))
                     full, owners = await loop.run_in_executor(
                         rendering, renderer.render, history, manifest["tools"]
                     )
-                    state = rolling.extend(history, owners, full) if args.drop else {}
-                    if args.unique_cohort:
+                    state = rolling.extend(history, owners, full) if (args.drop or text_drop) else {}
+                    wire_history = history
+                    canonical_full = full
+                    projection = None
+                    if text_drop:
+                        from ablation_replay import text_drop_projection
+                        wire_history, kept, removed = text_drop_projection(history, state)
+                        full, _ = await loop.run_in_executor(rendering, renderer.render, wire_history, manifest["tools"])
+                        projection = dict(canonical_tokens=canonical_full, wire_tokens=full,
+                                          kept_canonical_ids=kept, removed_canonical_ids=removed)
+                    budget_state = state if args.drop else {}
+                    if strict_budget:
+                        from ablation_replay import require_complete_budget
+                        require_complete_budget(full, turn["max_new_tokens"], budget_state, args.model_context_limit)
+                    elif args.unique_cohort:
                         reason = context_stop(full, turn["max_new_tokens"], state, args.model_context_limit)
                         if reason:
                             emit(dict(kind="context_limit", case_id=case["case_id"], instance=instance["instance"],
@@ -397,7 +434,7 @@ async def run(args):
                         check_context_budget(full, turn["max_new_tokens"], args.model_context_limit)
                     payload = {
                         "model": args.model,
-                        "messages": history,
+                        "messages": wire_history,
                         "tools": manifest["tools"],
                         "max_tokens": turn["max_new_tokens"],
                         "ignore_eos": True,
@@ -412,9 +449,14 @@ async def run(args):
                             reposition=state["reposition"],
                         )
                     identity = dict(case_id=case["case_id"], instance=instance["instance"], turn=turn["turn"], filler=instance["filler"])
+                    if getattr(args, "e2e_timing", False):
+                        emit(dict(kind="client_prepare", **identity, start=prepare_start,
+                                  end=time.perf_counter(), wall=time.time()))
                     emit(dict(kind="turn_start", **identity, time=time.perf_counter(), full_tokens=full,
-                              active_tokens=state.get("active_tokens", full), position_tokens=state.get("position_tokens", full),
+                              active_tokens=budget_state.get("active_tokens", full), position_tokens=budget_state.get("position_tokens", full),
                               max_new_tokens=turn["max_new_tokens"]))
+                    if projection is not None:
+                        emit(dict(kind="text_drop_projection", **identity, **projection))
                     row = await transport.request(args.url, payload, identity)
                     if row["success"] and row["prompt_len"] != full:
                         row.update(
@@ -432,6 +474,8 @@ async def run(args):
                         expected_prompt_tokens=full,
                         history_sha256=method.digest(history),
                         drop_state=state,
+                        ablation_policy=getattr(args, "ablation_policy", None),
+                        text_projection=projection,
                     )
                     rows.append(row)
                     emit(dict(kind="turn_end", **row))
@@ -440,21 +484,28 @@ async def run(args):
                     history.append(copy.deepcopy(row["assistant"]))
                 return "all_turns_completed"
 
-            scheduler = (UniqueCohort(cases, args.concurrency, args.num_tasks, execute, emit)
+            scheduler = (UniqueCohort(cases if args.filler else cases[:args.num_tasks], args.concurrency, args.num_tasks, execute, emit,
+                max_seconds=args.measurement_seconds, stop_file=root / "STOP.json",
+                source_terminal_ok=bool(args.summary_policy_dir))
                          if args.unique_cohort else method.Scheduler(cases, args.concurrency, execute, emit, filler=args.filler))
             await scheduler.run()
     for future in writes:
         future.result()
     count = sum(
-        item["instance"]["status"] in COMPLETED
+        item["instance"]["status"] in (COMPLETED | {"source_terminal_replayed"})
         for item in scheduler.completed
     )
     result = {
-        "valid": count == args.num_tasks,
+        "valid": (count == args.num_tasks or getattr(scheduler, "stop_reason", None) in
+                  ("measurement_time_limit", "cache_pressure_after_1h")) and not getattr(scheduler, "failure", None),
+        "stop_reason": getattr(scheduler, "stop_reason", None),
+        "logical_user_turns": user_turns,
+        "source_terminal_tasks": sum(t["status"] == "source_terminal_replayed" for t in scheduler.instances),
         "cohort_failure": getattr(scheduler, "failure", None),
         "successful_tasks": count,
         "args": vars(args),
         "mini_method_head": MINI_HEAD,
+        "benchmark_head": subprocess.check_output(["git", "-C", str(Path(__file__).resolve().parent), "rev-parse", "HEAD"], text=True).strip(),
         "overall": method.summary(rows, scheduler.start, scheduler.cutoff),
         "user_e2e_latency_s": method.stats([r["latency"] for r in rows if r["success"]]),
         "cleanup_time_s": method.stats([r["cleanup_time_s"] for r in rows if r["success"]]),
@@ -500,8 +551,14 @@ def parser():
     p.add_argument("--source-tasks", type=int)
     p.add_argument("--unique-cohort", action="store_true")
     p.add_argument("--raw-sse", action="store_true")
+    p.add_argument("--e2e-timing", action="store_true", help="Record client preparation outside user latency")
     p.add_argument("--case-id", action="append")
+    p.add_argument("--summary-policy-dir", help="Hashed original pi compaction helpers for full summary replay")
+    p.add_argument("--summary-smoke", action="store_true", help="Only first summary event from source prefix; never formal")
+    p.add_argument("--measurement-seconds", type=float, help="Graceful cutoff preserving partial SSE and usage")
     p.add_argument("--drop", action="store_true")
+    p.add_argument("--ablation-policy", choices=["native", "text_drop", "apply", "ignore"], default="native")
+    p.add_argument("--strict-source-completion", action="store_true", help="Fail instead of accepting context-limit early completion")
     p.add_argument("--filler", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--model-context-limit", type=int)
     p.add_argument("--timeout", type=float, default=7200)

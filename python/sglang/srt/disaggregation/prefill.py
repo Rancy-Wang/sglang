@@ -872,7 +872,12 @@ class SchedulerDisaggregationPrefillMixin:
                         advance_logprob_pt(i, req)
                         continue
 
-                maybe_cache_unfinished_req(req, self.tree_cache)
+                # Preserve this forward's final KV until D receives it. An
+                # insert/rematch can deduplicate newly computed pages against
+                # an older cache version with different floating-point values.
+                # Native inflight retirement publishes/frees them after send.
+                if not req.context_staged:
+                    maybe_cache_unfinished_req(req, self.tree_cache)
                 self.disagg_prefill_inflight_queue.append(req)
                 if self.spec_algorithm.is_eagle() and draft_input is not None:
                     req.output_topk_p = draft_input.topk_p[i]
@@ -1367,6 +1372,11 @@ class SchedulerDisaggregationPrefillMixin:
         """
         Send a prefilled chunk to the decode server
         """
+        # Stage-local terminal rows may still rotate or disappear. Unlike
+        # occurrence execution, no prefix is safe to stream before the final
+        # forward has completed. Do not advance the native send cursor here.
+        if getattr(req, "context_staged", False) and not last_chunk:
+            return
         page_size = self.token_to_kv_pool_allocator.page_size
         start_idx = req.start_send_idx
         context_plan = None
@@ -1374,6 +1384,10 @@ class SchedulerDisaggregationPrefillMixin:
             from sglang.srt.disaggregation.context_transfer import transfer_plan
 
             context_plan = transfer_plan(req, self.token_to_kv_pool_allocator.device)
+            if req.context_staged:
+                from sglang.srt.disaggregation.context_transfer import validate_staged_handoff
+
+                validate_staged_handoff(req, context_plan, window=self.sliding_window_size)
         transfer_input_len = len(req.origin_input_ids)
         end_idx = (
             end_idx

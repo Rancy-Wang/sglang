@@ -10,6 +10,9 @@ from __future__ import annotations
 def validate_context_request(args, model_config, request):
     if args.page_size != 1:
         raise ValueError("Context Drop/Reposition requires page_size=1")
+    mode = getattr(args, "context_execution_mode", "occurrence")
+    if mode not in {"occurrence", "staged"}:
+        raise ValueError("Unknown Context execution mode")
     architectures = set(model_config.hf_config.architectures or ())
     if not architectures or not architectures <= {
         "Qwen3ForCausalLM",
