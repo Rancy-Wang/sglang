@@ -1004,7 +1004,6 @@ class ContextPrefillCompletion:
     usage: object
     read_cached: torch.Tensor
     repositioned_cached: torch.Tensor
-    staged: bool = False
     query_count: int
     completed: bool = False
     retired_swa_resident: torch.Tensor | None = None
