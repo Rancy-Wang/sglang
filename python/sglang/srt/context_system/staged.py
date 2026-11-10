@@ -20,8 +20,7 @@ class StagePlan:
     @classmethod
     def from_program(cls, program):
         layout = program.layout
-        if layout.insert_spans.numel():
-            raise ValueError("Staged execution does not support Insert")
+        # The frozen old ContextLayout supports Drop/Reposition only.
         n = len(layout.positions)
         if n < 1:
             raise ValueError("Staged execution requires a query token")

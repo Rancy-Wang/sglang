@@ -46,7 +46,8 @@ def profile(root, start, cutoff):
                     completed.add(key);groups[stage,'decode' if r.get('decode_tokens',0)>0 else 'extend'].append(r)
     rows=[]
     categories=('cache_lookup_inclusive','cache_tree_lookup','eviction_pressure','eviction_alloc_inclusive',
-                'ordinary_leaf_eviction','dropaware_page_eviction','dropaware_admission_check',
+                'ordinary_leaf_eviction','dropaware_page_eviction','dropaware_lock_configuration',
+                'cache_back_finished','cache_back_unfinished',
                 'dropaware_eligibility_update','extend','decode')
     for stage in ('prefill','decode'):
         for cat in categories:
@@ -95,12 +96,14 @@ def account(root, report_tasks):
         if e['data']=='[DONE]':done[key]=t;continue
         value=json.loads(e['data'])
         if value.get('usage'):usage[key]=dict(usage=value['usage'],received_perf=t)
-    samples=[dict(instance=k[0],turn=k[1],latency=t-reqs[k]['start_time'],ttft=reqs[k]['ttft']) for k,t in done.items() if reqs[k]['success']]
+    samples=[dict(instance=k[0],turn=k[1],latency=t-reqs[k]['start_time'],ttft=reqs[k]['ttft'],
+                       tpot=(t-reqs[k]['start_time']-reqs[k]['ttft'])/(reqs[k]['output_len']-1)
+                       if reqs[k].get('ttft') is not None and reqs[k].get('output_len',0)>1 else None) for k,t in done.items() if reqs[k]['success']]
     mismatches=[(r['instance'],r['turn']) for r in d['turns'] if r['success'] and (r.get('usage') or {}).get('completion_tokens')!=r['requested_max_tokens']]
     inp=sum(v['usage']['prompt_tokens'] for v in usage.values());out=sum(v['usage']['completion_tokens'] for v in usage.values())
     result=dict(case=root.name,valid=not mismatches,report_tasks=report_tasks,start=start,cutoff=end,duration_s=seconds,
                 input_tokens=inp,output_tokens=out,input_throughput=inp/seconds,output_throughput=out/seconds,
-                throughput=(inp+out)/seconds,latency_s=stats([r['latency'] for r in samples]),ttft_s=stats([r['ttft'] for r in samples]),
+                throughput=(inp+out)/seconds,latency_s=stats([r['latency'] for r in samples]),ttft_s=stats([r['ttft'] for r in samples]),tpot_s=stats([r['tpot'] for r in samples]),
                 known_usage_calls=len(usage),unknown_usage_calls=len(reqs)-len(usage),output_budget_mismatches=mismatches,
                 primary_tasks=len(primary),primary_statuses=[t['status'] for t in primary],cohort_duration_s=d['cutoff']-start)
     write(root/'window-metrics.json',result)

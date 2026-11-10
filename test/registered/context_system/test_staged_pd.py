@@ -37,7 +37,7 @@ def test_only_final_stage_is_valid_handoff(compiler, transfer_modules, chunk, ta
             layout, expiry, layout.positions, query_start=start, query_end=end, staged=True
         )
         state = req.context_state
-        keep = state.prefill_terminal_keep(layout, end, expiry)
+        keep = state.prefill_terminal_keep(layout, end)
         if end < n:
             keep &= expiry[:end] > end
         materialization = state.plan(window, keep, staged=True)
@@ -84,7 +84,7 @@ def test_native_sender_defers_every_intermediate_stage():
     # has already advanced the request state to its final overlapping forward.
     req = SimpleNamespace(context_staged=True, start_send_idx=7)
     for end in (8, 100):
-        SchedulerDisaggregationPrefillMixin.send_kv_chunk(
+        SchedulerDisaggregationPrefillMixin._send_kv_chunk(
             SimpleNamespace(), req, last_chunk=False, end_idx=end
         )
         assert req.start_send_idx == 7
@@ -92,8 +92,9 @@ def test_native_sender_defers_every_intermediate_stage():
 
 @pytest.mark.skipif(sys.platform != "linux", reason="native SRT runtime")
 @pytest.mark.parametrize("role", ["prefill", "decode"])
-def test_staged_pd_capability(role):
-    from sglang.srt.context_system.capabilities import validate_context_config
+def test_staged_pd_capability(role, monkeypatch):
+    from sglang.srt.context_system.capabilities import validate_context_request
+    from sglang.srt.context_system.planner import ContextProgram
     from sglang.srt.server_args import ServerArgs
     from sglang.srt.environ import envs
 
@@ -106,8 +107,13 @@ def test_staged_pd_capability(role):
         hf_config=SimpleNamespace(architectures=["Qwen3ForCausalLM"]),
         is_multimodal=False, dtype=torch.bfloat16,
     )
+    req = SimpleNamespace(input_ids=[1], input_embeds=None, contains_mm_input=lambda:False,
+                          session_id=None, session_params=None, lora_path=None,
+                          sampling_params={}, context_program={})
+    sentinel = object()
+    monkeypatch.setattr(ContextProgram, 'from_wire', lambda *a: sentinel)
     with envs.SGLANG_DISAGG_STAGING_BUFFER.override(False):
-        validate_context_config(config, model)
+        assert validate_context_request(config, model, req) is sentinel
         config.disaggregation_transfer_backend = "fake"
         with pytest.raises(ValueError, match="Mooncake"):
-            validate_context_config(config, model)
+            validate_context_request(config, model, req)

@@ -150,6 +150,8 @@ def install():
     from sglang.srt.managers.scheduler import Scheduler
     observe(UnifiedRadixCache, 'match_prefix', 'cache_lookup_inclusive', lookup)
     observe(UnifiedTreeCore, 'match_prefix', 'cache_tree_lookup')
+    observe(UnifiedRadixCache, 'cache_finished_req', 'cache_back_finished')
+    observe(UnifiedRadixCache, 'cache_unfinished_req', 'cache_back_unfinished')
     observe(UnifiedRadixCache, '_evict', 'eviction_pressure')
     observe(UnifiedRadixCache, 'evict_for_alloc', 'eviction_alloc_inclusive')
     observe(UnifiedRadixCache, '_evict_device_leaf', 'ordinary_leaf_eviction', tracker)

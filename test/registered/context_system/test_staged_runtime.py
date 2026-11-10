@@ -116,8 +116,7 @@ def test_native_admission_stops_at_next_event(compiler, start):
             _context_decode_reserved=True,
             page_size=1,
             dllm_config=None,
-            rem_total_tokens=4096,
-            cur_rem_tokens=4096,
+            memory_budget=SimpleNamespace(remaining_total=4096, remaining_current=4096),
             is_hybrid_swa=False,
         )
         admission = PrefillAdder._fit_context_admission(
