@@ -288,6 +288,7 @@ class OccurrenceMaterialization:
     terminal_occurrences: torch.Tensor
     read_cached: torch.Tensor
     repositioned_cached: torch.Tensor
+    staged: bool = False
 
     @property
     def extra_page_count(self) -> int:
@@ -478,6 +479,7 @@ def plan_occurrence_materialization(
         torch.from_numpy(retained),
         torch.from_numpy(read_cached),
         torch.from_numpy(rotated_cached),
+        staged=stored_terminal_positions is not None,
     )
 
 
@@ -600,8 +602,14 @@ class OccurrenceState:
             else None,
         )
 
-    def prefill_terminal_keep(self, layout, query_end):
+    def prefill_terminal_keep(self, layout, query_end, *, staged=False):
         start = len(self.canonical_rows)
+        if staged and query_end < len(layout.positions):
+            # Intermediate versions remain private. Keep the current version,
+            # including tokens whose final positions have not been reached yet.
+            keep = torch.ones(query_end, dtype=torch.bool)
+            keep[:start] = (self.canonical_rows >= 0) | (self.terminal_rows >= 0)
+            return keep
         # Match mini's recovery policy: historical queries may read a dropped
         # token's birth KV, but no future decode needs its terminal cache copy.
         # advance() retains those birth sources until their final query and
@@ -718,6 +726,14 @@ class OccurrenceState:
         # A same-position COW is bit-identical. Future reads can use the target
         # owner instead of pinning a second borrowed copy on the Retry branch.
         canonical = np.where(kept & same_position, terminal, canonical)
+        if plan.staged:
+            # Every next staged query reads this stage's current version.
+            # Occurrence execution retains its original birth-version policy.
+            canonical = np.where(kept, terminal, canonical)
+            mask = torch.from_numpy(kept)
+            positions[mask] = window.occurrence_positions[
+                window.terminal_occurrences[:end][mask]
+            ]
         # Drops are monotonic. A source that no later prefill query can read is
         # no longer needed. Decode reads terminal positions, not birth versions.
         future_read = visible_until.numpy()[:end] > end
@@ -988,6 +1004,7 @@ class ContextPrefillCompletion:
     usage: object
     read_cached: torch.Tensor
     repositioned_cached: torch.Tensor
+    staged: bool = False
     query_count: int
     completed: bool = False
     retired_swa_resident: torch.Tensor | None = None

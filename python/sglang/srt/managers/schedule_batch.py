@@ -1802,7 +1802,7 @@ class Req(ReqDllmMixin):
             query_end=query_end,
             staged=self.context_staged,
         )
-        keep = self.context_state.prefill_terminal_keep(program.layout, query_end)
+        keep = self.context_state.prefill_terminal_keep(program.layout, query_end, staged=self.context_staged)
         if self.context_staged and query_end < len(program.layout.positions):
             keep &= program.visible_until[:query_end] > query_end
         plan = self.context_state.plan(window, keep, staged=self.context_staged)

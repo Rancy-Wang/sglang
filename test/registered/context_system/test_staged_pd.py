@@ -37,7 +37,7 @@ def test_only_final_stage_is_valid_handoff(compiler, transfer_modules, chunk, ta
             layout, expiry, layout.positions, query_start=start, query_end=end, staged=True
         )
         state = req.context_state
-        keep = state.prefill_terminal_keep(layout, end)
+        keep = state.prefill_terminal_keep(layout, end, staged=True)
         if end < n:
             keep &= expiry[:end] > end
         materialization = state.plan(window, keep, staged=True)

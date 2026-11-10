@@ -63,7 +63,7 @@ def test_staged_sequential_versions_and_page_lifetime(compiler, staged, ownershi
                     query_end=end, staged=True,
                 )
                 assert window.segment_count == 1
-                keep = state.prefill_terminal_keep(layout, end)
+                keep = state.prefill_terminal_keep(layout, end, staged=True)
                 if end < n:
                     keep &= expiry[:end] > end
                 plan = state.plan(window, keep, staged=True)
