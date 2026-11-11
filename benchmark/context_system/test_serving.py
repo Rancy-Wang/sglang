@@ -484,9 +484,9 @@ async def run(args):
                     history.append(copy.deepcopy(row["assistant"]))
                 return "all_turns_completed"
 
-            scheduler = (UniqueCohort(cases if args.filler else cases[:args.num_tasks], args.concurrency, args.num_tasks, execute, emit,
-                max_seconds=args.measurement_seconds, stop_file=root / "STOP.json",
-                source_terminal_ok=bool(args.summary_policy_dir))
+            if args.unique_cohort and (args.measurement_seconds is not None or args.summary_policy_dir):
+                raise ValueError("Old-baseline ablation requires source-complete cohorts without timed/summary cutoff")
+            scheduler = (UniqueCohort(cases if args.filler else cases[:args.num_tasks], args.concurrency, args.num_tasks, execute, emit)
                          if args.unique_cohort else method.Scheduler(cases, args.concurrency, execute, emit, filler=args.filler))
             await scheduler.run()
     for future in writes:
