@@ -2,6 +2,7 @@
 import asyncio
 import copy
 import json
+import math
 import queue
 import threading
 import time
@@ -82,6 +83,8 @@ class Journal:
 class UniqueCohort:
     """Finish the fixed primary cohort; fill free slots from unused source tasks."""
     def __init__(self, cases, concurrency, target, execute, emit, *, max_seconds=None, stop_file=None, source_terminal_ok=False):
+        if max_seconds is not None and (not math.isfinite(max_seconds) or max_seconds <= 0):
+            raise ValueError("Measurement deadline must be finite and positive")
         if not 1 <= concurrency <= target <= len(cases):
             raise ValueError("Require concurrency <= primary target <= source count")
         if len({x['case_id'] for x in cases}) != len(cases):

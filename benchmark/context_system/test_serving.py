@@ -333,7 +333,12 @@ async def run(args):
     import aiohttp
 
     method = load_method(args.mini_root)
-    if args.summary_policy_dir:
+    if args.registry_kv:
+        if not args.drop or args.summary_policy_dir or not args.unique_cohort:
+            raise ValueError("Registry KV requires Drop and unique cohort without Summary")
+        from registry_kv_replay import load_cases as load_registry
+        cases, manifest = load_registry(args.requests_path, args.source_tasks or args.num_tasks, args.seed, args.case_id)
+    elif args.summary_policy_dir:
         from summary_replay import load_cases as load_summary
         if args.drop or not args.unique_cohort:
             raise ValueError("Summary replay requires unique cohort and no Drop")
@@ -388,6 +393,10 @@ async def run(args):
             )
 
             async def execute(case, instance):
+                if args.registry_kv:
+                    from registry_kv_replay import execute_case
+                    return await execute_case(case, instance, args=args, renderer=renderer,
+                        rendering=rendering, transport=transport, emit=emit, rows=rows, user_turns=user_turns, method=method)
                 if args.summary_policy_dir:
                     from summary_replay import execute_case
                     return await execute_case(case, instance, args=args, renderer=renderer,
@@ -457,7 +466,7 @@ async def run(args):
                 return "all_turns_completed"
 
             scheduler = (UniqueCohort(cases if args.filler else cases[:args.num_tasks], args.concurrency, args.num_tasks, execute, emit,
-                max_seconds=args.measurement_seconds, stop_file=root / "STOP.json",
+                max_seconds=args.measurement_seconds, stop_file=None,
                 source_terminal_ok=bool(args.summary_policy_dir))
                          if args.unique_cohort else method.Scheduler(cases, args.concurrency, execute, emit, filler=args.filler))
             await scheduler.run()
@@ -469,7 +478,7 @@ async def run(args):
     )
     result = {
         "valid": (count == args.num_tasks or getattr(scheduler, "stop_reason", None) in
-                  ("measurement_time_limit", "cache_pressure_after_1h")) and not getattr(scheduler, "failure", None),
+                  ("measurement_time_limit",)) and not getattr(scheduler, "failure", None),
         "stop_reason": getattr(scheduler, "stop_reason", None),
         "logical_user_turns": user_turns,
         "source_terminal_tasks": sum(t["status"] == "source_terminal_replayed" for t in scheduler.instances),
@@ -517,7 +526,7 @@ def parser():
     p.add_argument("--bootstrap-port", type=int, default=28971)
     p.add_argument("--template-kwargs", default="{}")
     p.add_argument("--chat-template")
-    p.add_argument("--concurrency", type=int, choices=[1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 32], default=1)
+    p.add_argument("--concurrency", type=int, choices=[1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 30, 32], default=1)
     p.add_argument("--num-tasks", type=int, choices=range(1, 161), default=2)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--source-tasks", type=int)
@@ -525,6 +534,7 @@ def parser():
     p.add_argument("--raw-sse", action="store_true")
     p.add_argument("--e2e-timing", action="store_true", help="Record client preparation outside user latency")
     p.add_argument("--case-id", action="append")
+    p.add_argument("--registry-kv", action="store_true", help="Full registry with recorded output budgets and discarded-response semantics")
     p.add_argument("--summary-policy-dir", help="Hashed original pi compaction helpers for full summary replay")
     p.add_argument("--summary-smoke", action="store_true", help="Only first summary event from source prefix; never formal")
     p.add_argument("--measurement-seconds", type=float, help="Graceful cutoff preserving partial SSE and usage")

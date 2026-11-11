@@ -446,7 +446,7 @@ def run_one(args, session=None):
                   "--chat-template", str(template), "--template-kwargs", '{"preserve_thinking_history":true}',
                   "--timeout", str(args.request_timeout)]
         if args.unique_cohort:
-            client += ["--unique-cohort", "--source-tasks", "80", "--raw-sse"]
+            client += ["--unique-cohort", "--source-tasks", str(args.source_tasks), "--raw-sse"]
         if args.summary_policy_dir:
             if args.drop:
                 raise ValueError("Summary benchmark cannot enable Drop")
@@ -454,8 +454,10 @@ def run_one(args, session=None):
             if args.summary_smoke:
                 client += ["--summary-smoke", "--case-id", args.summary_smoke_case]
                 client[client.index("--source-tasks")+1] = "1"
-            if args.measurement_seconds:
-                client += ["--measurement-seconds", str(args.measurement_seconds)]
+        if args.registry_kv:
+            client += ["--registry-kv"]
+        if args.measurement_seconds:
+            client += ["--measurement-seconds", str(args.measurement_seconds)]
         if not args.filler:
             client.append("--no-filler")
         if args.model_context_limit is not None:
@@ -466,7 +468,7 @@ def run_one(args, session=None):
         if args.unique_cohort:
             # Restart history is never pooled into the current attempt.
             write(root / "measurement-ready.json", dict(time=time.time(), seed=args.seed,
-                  primary_tasks=args.primary_tasks or args.concurrency * args.rounds, source_tasks=80))
+                  primary_tasks=args.primary_tasks or args.concurrency * args.rounds, source_tasks=args.source_tasks))
         with (root / "client.log").open("x") as log:
             client_proc = subprocess.Popen(client, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             # Scale the whole-workload watchdog for the larger task cohort only.
@@ -485,7 +487,7 @@ def run_one(args, session=None):
                 raise subprocess.CalledProcessError(client_proc.returncode, client)
         # Completed request records may flush just after the HTTP final event.
         time.sleep(2)
-        if args.summary_policy_dir:
+        if args.summary_policy_dir or args.registry_kv:
             from summarize_summary_serving import summarize as summarize_summary
             accounting = summarize_summary(root / "workload")
             result = dict(valid=accounting['valid'], overall=accounting, measurement={})
@@ -721,6 +723,8 @@ def parser():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--unique-cohort", action="store_true")
     p.add_argument("--primary-tasks", type=int)
+    p.add_argument("--source-tasks", type=int, default=80)
+    p.add_argument("--registry-kv", action="store_true")
     p.add_argument("--summary-policy-dir")
     p.add_argument("--persistent-plan", help="JSON client-only case overrides; reuse one owned P/D pair")
     p.add_argument("--summary-smoke", action="store_true")
@@ -736,7 +740,7 @@ def parser():
     p.add_argument("--transport", choices=("tcp", "nvlink"), default="nvlink")
     p.add_argument("--decode-radix", action="store_true")
     p.add_argument("--drop", action="store_true", help="Rolling K=12 / 96Ki-token Repos, with Drop-aware eviction")
-    p.add_argument("--concurrency", type=int, choices=(1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 32), default=1)
+    p.add_argument("--concurrency", type=int, choices=(1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 30, 32), default=1)
     p.add_argument("--prefill-token-budget", type=int,
                    help="Explicit common chunked-prefill-size and max-prefill-tokens override")
     p.add_argument("--max-running-requests", type=int, choices=(8, 16, 32),
@@ -754,7 +758,7 @@ def parser():
                    help="Preserve failed cases and continue after GPU cleanup; never count them as valid")
     p.add_argument("--rounds", type=int, choices=range(1, 21), default=2)
     p.add_argument("--approved-overlap-matrix", action="store_true", help=OVERLAP_PLAN)
-    p.add_argument("--concurrencies", type=int, nargs="+", choices=(1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 32),
+    p.add_argument("--concurrencies", type=int, nargs="+", choices=(1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 30, 32),
                    default=[1, 2, 4, 8], help="Ordered overlap-matrix concurrency pairs")
     p.add_argument("--wait-for-case", help="Finish this existing case before starting the new matrix")
     p.add_argument("--wait-for-case-pid", type=int)
