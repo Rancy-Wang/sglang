@@ -484,9 +484,9 @@ async def run(args):
                     history.append(copy.deepcopy(row["assistant"]))
                 return "all_turns_completed"
 
-            if args.unique_cohort and (args.measurement_seconds is not None or args.summary_policy_dir):
-                raise ValueError("Old-baseline ablation requires source-complete cohorts without timed/summary cutoff")
-            scheduler = (UniqueCohort(cases if args.filler else cases[:args.num_tasks], args.concurrency, args.num_tasks, execute, emit)
+            if args.unique_cohort and args.summary_policy_dir:
+                raise ValueError("Summary replay requires its summary-aware scheduler")
+            scheduler = (UniqueCohort(cases if args.filler else cases[:args.num_tasks], args.concurrency, args.num_tasks, execute, emit, measurement_seconds=args.measurement_seconds)
                          if args.unique_cohort else method.Scheduler(cases, args.concurrency, execute, emit, filler=args.filler))
             await scheduler.run()
     for future in writes:
@@ -545,7 +545,7 @@ def parser():
     p.add_argument("--bootstrap-port", type=int, default=28971)
     p.add_argument("--template-kwargs", default="{}")
     p.add_argument("--chat-template")
-    p.add_argument("--concurrency", type=int, choices=[1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 32], default=1)
+    p.add_argument("--concurrency", type=int, choices=[1, *range(2, 33, 2)], default=1)
     p.add_argument("--num-tasks", type=int, choices=range(1, 161), default=2)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--source-tasks", type=int)

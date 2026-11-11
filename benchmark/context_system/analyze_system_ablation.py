@@ -81,12 +81,21 @@ def profile(root, start, cutoff):
     return out
 
 
-def account(root, report_tasks):
+def account(root, report_tasks, allow_timed=False):
+    assert report_tasks > 0
     root=Path(root);d=json.loads((root/'workload/result.json').read_text())
     primary=sorted((t for t in d['tasks'] if not t['filler']),key=lambda t:t['instance'])
-    assert d['valid'] and all(t['status']=='all_turns_completed' for t in primary)
-    assert len(primary)>=report_tasks
-    start=d['start'];end=max(t['end_time'] for t in primary[:report_tasks]);seconds=end-start
+    assert d['valid'] and not d.get('cohort_failure')
+    completed = [t for t in primary if t['status']=='all_turns_completed']
+    designated_complete = len(primary)>=report_tasks and all(t['status']=='all_turns_completed' for t in primary[:report_tasks])
+    if not allow_timed:
+        assert len(completed)==len(primary) and designated_complete
+    else:
+        assert all(t['status'] in ('all_turns_completed','cutoff_cancelled') for t in primary)
+        if not designated_complete:
+            assert d.get('stop_reason')=='measurement_time_limit'
+    start=d['start'];end=max(t['end_time'] for t in primary[:report_tasks]) if designated_complete else d['cutoff'];seconds=end-start
+    assert seconds > 0
     reqs={(r['instance'],r['turn']):r for r in d['turns'] if start<=r['start_time']<=end}
     usage={};done={}
     for e in lines(root/'workload/sse.jsonl'):
@@ -105,7 +114,10 @@ def account(root, report_tasks):
                 input_tokens=inp,output_tokens=out,input_throughput=inp/seconds,output_throughput=out/seconds,
                 throughput=(inp+out)/seconds,latency_s=stats([r['latency'] for r in samples]),ttft_s=stats([r['ttft'] for r in samples]),tpot_s=stats([r['tpot'] for r in samples]),
                 known_usage_calls=len(usage),unknown_usage_calls=len(reqs)-len(usage),output_budget_mismatches=mismatches,
-                primary_tasks=len(primary),primary_statuses=[t['status'] for t in primary],cohort_duration_s=d['cutoff']-start)
+                primary_tasks=len(primary),primary_statuses=[t['status'] for t in primary],cohort_duration_s=d['cutoff']-start,
+                designated_tasks_completed=designated_complete,completed_primary_tasks=len(completed),
+                window_kind='designated_task_completion' if designated_complete else 'measurement_time_limit',
+                stop_reason=d.get('stop_reason'))
     write(root/'window-metrics.json',result)
     with (root/'window-usage.jsonl').open('w') as f:
         for k,v in sorted(usage.items()):f.write(json.dumps(dict(instance=k[0],turn=k[1],filler=reqs[k]['filler'],**v))+'\n')
@@ -114,6 +126,7 @@ def account(root, report_tasks):
 
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('root');p.add_argument('--report-tasks',type=int,required=True);args=p.parse_args()
-    result=account(args.root,args.report_tasks);print(json.dumps(result))
+    p=argparse.ArgumentParser();p.add_argument('root');p.add_argument('--report-tasks',type=int,required=True)
+    p.add_argument('--allow-timed', action='store_true');args=p.parse_args()
+    result=account(args.root,args.report_tasks,allow_timed=args.allow_timed);print(json.dumps(result))
     profile(args.root,result['start'],result['cutoff'])

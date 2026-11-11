@@ -125,9 +125,9 @@ class Boundaries(unittest.TestCase):
         self.assertEqual(value["user_latency_s"]["count"], 1)
         self.assertEqual(value["physical_forward_dispatch"]["prefill_tokens"], 20)
 
-    def test_all_ten_commands_use_original_seed_and_common_settings(self):
+    def test_all_twelve_commands_use_original_seed_and_common_settings(self):
         args = SimpleNamespace(server_repo="/repo", mini_root="/mini", source_launch="/launch", requests_path="/data", seed=42, port=41101)
-        self.assertEqual(len(CASES), 10)
+        self.assertEqual(len(CASES), 12)
         for c, drop in CASES:
             cmd = command(args, "head", "/out", c, drop)
             self.assertEqual(cmd[cmd.index("--seed")+1], "42")

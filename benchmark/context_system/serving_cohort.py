@@ -2,6 +2,7 @@
 import asyncio
 import copy
 import json
+import math
 import queue
 import threading
 import time
@@ -81,11 +82,15 @@ class Journal:
 
 class UniqueCohort:
     """Finish the fixed primary cohort; fill free slots from unused source tasks."""
-    def __init__(self, cases, concurrency, target, execute, emit):
+    def __init__(self, cases, concurrency, target, execute, emit, measurement_seconds=None):
         if not 1 <= concurrency <= target <= len(cases):
             raise ValueError("Require concurrency <= primary target <= source count")
         if len({x['case_id'] for x in cases}) != len(cases):
             raise ValueError("Duplicate source task")
+        if measurement_seconds is not None and (not math.isfinite(measurement_seconds) or measurement_seconds <= 0):
+            raise ValueError("Measurement duration must be finite and positive")
+        self.measurement_seconds = measurement_seconds
+        self.stop_reason = None
         self.cases = cases[:target]
         self.pending = deque((case, i >= target) for i, case in enumerate(cases))
         self.concurrency, self.target, self.execute, self.emit = concurrency, target, execute, emit
@@ -96,6 +101,7 @@ class UniqueCohort:
     def stop(self, reason):
         if self.cutoff is None:
             self.cutoff = time.perf_counter()
+            self.stop_reason = reason
             self.emit(dict(kind="measurement_cutoff", time=self.cutoff, reason=reason))
             for task in self.workers:
                 if task is not asyncio.current_task():
@@ -135,12 +141,19 @@ class UniqueCohort:
     async def run(self):
         self.start = time.perf_counter()
         self.workers = [asyncio.create_task(self.worker(i)) for i in range(self.concurrency)]
+        async def deadline():
+            await asyncio.sleep(max(0, self.start + self.measurement_seconds - time.perf_counter()))
+            self.stop("measurement_time_limit")
+        timer = asyncio.create_task(deadline()) if self.measurement_seconds is not None else None
         try:
             outcomes = await asyncio.gather(*self.workers, return_exceptions=True)
             for value in outcomes:
                 if isinstance(value, BaseException) and not isinstance(value, asyncio.CancelledError):
                     raise value
         finally:
+            if timer is not None:
+                timer.cancel()
+                await asyncio.gather(timer, return_exceptions=True)
             for task in self.workers:
                 if not task.done():
                     task.cancel()
