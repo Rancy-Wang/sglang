@@ -533,6 +533,13 @@ async def run(args):
         raise RuntimeError(f"Incomplete trajectories: {root / 'result.json'}")
 
 
+def positive_int(value):
+    value = int(value)
+    if value <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return value
+
+
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--mini-root", required=True)
@@ -545,7 +552,7 @@ def parser():
     p.add_argument("--bootstrap-port", type=int, default=28971)
     p.add_argument("--template-kwargs", default="{}")
     p.add_argument("--chat-template")
-    p.add_argument("--concurrency", type=int, choices=[1, *range(2, 33, 2)], default=1)
+    p.add_argument("--concurrency", type=positive_int, default=1)
     p.add_argument("--num-tasks", type=int, choices=range(1, 161), default=2)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--source-tasks", type=int)
