@@ -72,6 +72,53 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(set(x['status'] for x in s.completed),{'runtime_failed','cancelled'})
         self.assertEqual(len(s.pending),1)
 
+    async def test_completion_target_cancels_sleep_and_stops_refill(self):
+        events, entered = [], []
+        async def execute(case, identity):
+            entered.append(case['case_id'])
+            if case['rank'] == 0:
+                await asyncio.sleep(1000)
+            await asyncio.sleep(0)
+            return 'all_recorded_steps_replayed'
+        s=LiveTaskScheduler([dict(case_id=str(i),rank=i) for i in range(8)],2,execute,events.append,completion_target=3,measurement_seconds=10)
+        await s.run()
+        self.assertEqual(s.stop_reason,'task_completion_target')
+        self.assertEqual(s.finished_endpoints,3)
+        self.assertEqual(entered,['0','1','2','3'])
+        self.assertEqual(sum(t['status']=='cancelled' for t in s.completed),1)
+        self.assertLessEqual(max(t['end'] for t in s.completed if t['status']!='cancelled'),s.cutoff)
+
+    async def test_deadline_cancels_tool_wait_without_false_endpoint(self):
+        async def execute(case,identity):
+            await tool_wait(1000,identity,lambda _:None)
+            return 'all_recorded_steps_replayed'
+        s=LiveTaskScheduler([dict(case_id=str(i),rank=i) for i in range(5)],2,execute,lambda _:None,completion_target=3,measurement_seconds=.02)
+        await s.run()
+        self.assertEqual(s.stop_reason,'measurement_time_limit')
+        self.assertEqual(s.finished_endpoints,0)
+        self.assertAlmostEqual(s.cutoff-s.start,.02,places=5)
+        self.assertEqual(len(s.pending),3)
+        self.assertEqual([t['status'] for t in s.completed],['cancelled','cancelled'])
+
+    async def test_incomplete_source_is_not_completion(self):
+        async def execute(case,identity):
+            return 'source_incomplete_tail' if case['rank']==0 else 'source_terminal_replayed'
+        s=LiveTaskScheduler([dict(case_id=str(i),rank=i) for i in range(5)],2,execute,lambda _:None,completion_target=3)
+        await s.run()
+        self.assertEqual(s.finished_endpoints,3)
+        self.assertEqual(len(s.completed),4)
+
+    async def test_insufficient_unique_pool_fails(self):
+        async def execute(case,identity):return 'source_incomplete_tail'
+        s=LiveTaskScheduler([dict(case_id='a',rank=0)],1,execute,lambda _:None,completion_target=1)
+        with self.assertRaisesRegex(RuntimeError,'exhausted'):await s.run()
+        self.assertEqual(s.stop_reason,'interrupted_or_failed')
+
+    def test_late_request_excluded_from_window(self):
+        from analyze_serving_live import window_turns
+        rows=[dict(success=True,end_time=t) for t in (1,2,3,4)]
+        self.assertEqual(window_turns(dict(turns=rows,start=1,cutoff=3)),rows[:3])
+
     def test_payload_exact_budget_eos_and_ops(self):
         state=dict(drop_message={'27':[2]},reposition=[27],active_tokens=10,position_tokens=10)
         p=make_payload('m',[dict(role='user',content='x')],state,173)

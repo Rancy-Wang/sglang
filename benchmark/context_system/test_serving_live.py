@@ -19,7 +19,9 @@ def positive(value):
 
 
 class LiveTaskScheduler:
-    def __init__(self, cases, concurrency, execute, emit):
+    ENDPOINTS = {'all_recorded_steps_replayed', 'source_terminal_replayed'}
+
+    def __init__(self, cases, concurrency, execute, emit, completion_target=None, measurement_seconds=None):
         if concurrency < 1 or not cases or len({c['case_id'] for c in cases}) != len(cases):
             raise ValueError('Invalid concurrency or task pool')
         self.pending = deque(cases)
@@ -27,9 +29,31 @@ class LiveTaskScheduler:
         self.active, self.completed = {}, []
         self.start = self.cutoff = None
         self.failure = None
+        if completion_target is not None and not 0 < completion_target <= len(cases):
+            raise ValueError('Completion target outside unique task pool')
+        if measurement_seconds is not None and measurement_seconds <= 0:
+            raise ValueError('Measurement duration must be positive')
+        self.completion_target, self.measurement_seconds = completion_target, measurement_seconds
+        self.finished_endpoints = 0
+        self.stop_reason = None
+        self.stopped = asyncio.Event()
+
+    def stop(self, reason, at=None):
+        if not self.stopped.is_set():
+            self.cutoff = time.perf_counter() if at is None else at
+            self.stop_reason = reason
+            self.stopped.set()
+
+    async def deadline(self):
+        at = self.start + self.measurement_seconds
+        await asyncio.sleep(max(0, at-time.perf_counter()))
+        self.stop('measurement_time_limit', at)
 
     async def worker(self, slot):
-        while self.pending:
+        while self.pending and not self.stopped.is_set():
+            if self.measurement_seconds is not None and time.perf_counter() >= self.start+self.measurement_seconds:
+                self.stop('measurement_time_limit', self.start+self.measurement_seconds)
+                return
             case = self.pending.popleft()
             identity = dict(case_id=case['case_id'], instance=case['rank'], slot=slot)
             start = time.perf_counter()
@@ -43,6 +67,7 @@ class LiveTaskScheduler:
             except Exception as error:
                 status = 'runtime_failed'
                 self.failure = repr(error)
+                self.stop('interrupted_or_failed')
                 raise
             finally:
                 end = time.perf_counter()
@@ -50,20 +75,48 @@ class LiveTaskScheduler:
                 self.completed.append(row)
                 self.active.pop(slot)
                 self.emit(dict(kind='task_end', **row, wall=time.time(), active_tasks=len(self.active)))
+                if self.measurement_seconds is not None and end >= self.start+self.measurement_seconds:
+                    self.stop('measurement_time_limit', self.start+self.measurement_seconds)
+                if status in self.ENDPOINTS and (self.cutoff is None or end <= self.cutoff):
+                    self.finished_endpoints += 1
+                    if self.completion_target is not None and self.finished_endpoints >= self.completion_target:
+                        self.stop('task_completion_target', end)
 
     async def run(self):
         self.start = time.perf_counter()
         self.emit(dict(kind='measurement_start', time=self.start, wall=time.time(), user_concurrency=self.concurrency))
         tasks = [asyncio.create_task(self.worker(i)) for i in range(min(self.concurrency, len(self.pending)))]
+        group = asyncio.gather(*tasks)
+        stopper = asyncio.create_task(self.stopped.wait())
+        timer = asyncio.create_task(self.deadline()) if self.measurement_seconds is not None else None
         try:
-            await asyncio.gather(*tasks)
+            await asyncio.wait([group, stopper], return_when=asyncio.FIRST_COMPLETED)
+            if group.done():
+                await group
+                if not self.stopped.is_set():
+                    if self.completion_target is not None and self.finished_endpoints < self.completion_target:
+                        raise RuntimeError('Unique source pool exhausted before completion target')
+                    self.stop('source_pool_exhausted')
+        except BaseException:
+            self.stop('interrupted_or_failed')
+            raise
         finally:
+            if self.cutoff is None:
+                self.stop('interrupted_or_failed')
             for task in tasks:
                 if not task.done():
                     task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
-            self.cutoff = time.perf_counter()
-            self.emit(dict(kind='measurement_cutoff', time=self.cutoff, wall=time.time(), failure=self.failure))
+            # Retrieve failures even when the stop event and a failed worker race.
+            await asyncio.gather(group, return_exceptions=True)
+            stopper.cancel()
+            if timer is not None:
+                timer.cancel()
+            await asyncio.gather(stopper, *([timer] if timer else []), return_exceptions=True)
+            self.emit(dict(kind='measurement_cutoff', time=self.cutoff, wall=time.time(), failure=self.failure,
+                           stop_reason=self.stop_reason, completed_endpoints=self.finished_endpoints))
+            if self.failure:
+                raise RuntimeError(self.failure)
 
 
 async def tool_wait(seconds, identity, emit, sleep=asyncio.sleep, clock=time.perf_counter):
@@ -155,15 +208,17 @@ async def run(args):
                 if orphan:
                     return 'source_incomplete_tail'
                 return 'source_terminal_replayed' if str(case['source_exit_status']).startswith('exit_') else 'all_recorded_steps_replayed'
-            scheduler = LiveTaskScheduler(cases, args.concurrency, execute, emit)
+            scheduler = LiveTaskScheduler(cases, args.concurrency, execute, emit,
+                                          args.completion_target, args.measurement_seconds)
             try:
                 await scheduler.run()
             except BaseException as exc:
                 error = exc
-    result = dict(valid=error is None, stop_reason='source_pool_exhausted' if error is None else 'interrupted_or_failed',
+    result = dict(valid=error is None, stop_reason=scheduler.stop_reason if error is None else 'interrupted_or_failed',
                   error=repr(error) if error else None, start=scheduler.start, cutoff=scheduler.cutoff,
                   duration_s=scheduler.cutoff-scheduler.start, args=vars(args), tasks=scheduler.completed,
                   turns=rows, user_concurrency=args.concurrency, manifest_sha256=file_sha(args.manifest),
+                  completion_target=args.completion_target, completed_endpoints=scheduler.finished_endpoints,
                   source_no_reply=manifest['source_no_reply'], excluded_tasks=manifest['excluded'],
                   note='Wall throughput includes source tool sleeps. Source terminal/incomplete states are not task-solving success.')
     (root/'result.json').write_text(json.dumps(result, ensure_ascii=False, indent=2)+'\n')
@@ -178,6 +233,8 @@ def parser():
     for name in ('source','manifest','mini-root','output-dir','model','tokenizer','chat-template','url','prefill-url'):
         p.add_argument('--'+name, required=True)
     p.add_argument('--concurrency', type=positive, required=True)
+    p.add_argument('--completion-target', type=positive)
+    p.add_argument('--measurement-seconds', type=positive)
     p.add_argument('--bootstrap-port', type=positive, required=True)
     p.add_argument('--model-context-limit', type=positive, default=131072)
     p.add_argument('--timeout', type=positive, default=21600)

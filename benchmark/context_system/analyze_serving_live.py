@@ -13,17 +13,24 @@ def stats(values):
     return dict(n=len(values), mean=sum(values)/len(values), p95=q(.95), p99=q(.99))
 
 
+def window_turns(result):
+    return [r for r in result['turns'] if result.get('start', float('-inf')) <= r.get('end_time', result.get('cutoff', 0)) <= result.get('cutoff', float('inf'))]
+
+
 def summarize(result):
-    rows = [r for r in result['turns'] if r['success']]
+    observed = window_turns(result)
+    rows = [r for r in observed if r['success']]
+    tasks = [t for t in result['tasks'] if t['status'] != 'cancelled' and t.get('end', result.get('cutoff', 0)) <= result.get('cutoff', float('inf'))]
     duration = result['duration_s']
     return dict(duration_s=duration, completed_requests=len(rows),
-                failed_requests=sum(not r['success'] for r in result['turns']),
+                failed_requests=sum(not r['success'] for r in observed),
+                post_cutoff_requests=len(result['turns'])-len(observed),
                 input_throughput=sum(r['prompt_len'] for r in rows)/duration if duration else None,
                 output_throughput=sum(r['output_len'] for r in rows)/duration if duration else None,
                 latency_s=stats([r['latency'] for r in rows]), ttft_s=stats([r['ttft'] for r in rows]),
                 tpot_ms=stats([r['tpot_s']*1000 if r.get('tpot_s') is not None else None for r in rows]),
                 output_tokens=stats([r['output_len'] for r in rows]),
-                task_latency_s=stats([r['latency_s'] for r in result['tasks']]),
+                task_latency_s=stats([r['latency_s'] for r in tasks]),
                 task_statuses=dict(Counter(r['status'] for r in result['tasks'])))
 
 
@@ -31,7 +38,7 @@ def restoration(result, prefill_log):
     """User-requested estimate from actual TP0 P prefill, not extend-size bins."""
     import json
     import re
-    turns = {(r['instance'],r['turn']):r for r in result['turns'] if r['success']}
+    turns = {(r['instance'],r['turn']):r for r in window_turns(result) if r['success']}
     rooms = {str(r['pd_bootstrap_room']):r for r in turns.values()}
     physical = {}
     with open(prefill_log, errors='replace') as f:
