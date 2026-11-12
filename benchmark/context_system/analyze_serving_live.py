@@ -58,13 +58,20 @@ def restoration(result, prefill_log):
         n,pf=p
         if n!=r['prompt_len'] or not 0<=pf<=n:
             unknown.append(room);continue
-        expected=min(n,prev['prompt_len'] if prev else 0)
+        prior_input=prev['prompt_len'] if prev else 0
+        if r.get('ablation_policy') == 'text_drop':
+            projection=r.get('text_projection') or {}
+            dropped=projection.get('removed_since_previous_tokens')
+            if not isinstance(dropped,int) or dropped < 0:
+                unknown.append(room);continue
+            prior_input=max(0,prior_input-dropped)
+        expected=min(n,prior_input)
         restored=max(0,expected-(n-pf))
         rows.append(dict(instance=r['instance'],turn=r['turn'],room=room,expected_reuse=expected,
                          input_tokens=n,actual_prefill=pf,effective_hit=n-pf,restore=restored,new_prefill=pf-restored))
     positive=sum(r['restore']>0 for r in rows);total=len(turns)
     bins=Counter(r['restore']//2048 for r in rows if r['restore']>0)
-    return dict(formula='max(0,min(current_input,previous_input)-(input-actual_P_prefill)); previous output excluded; no second drop subtraction',
+    return dict(formula='max(0,min(current_input,previous_input)-(input-actual_P_prefill)); previous output excluded; text_drop subtracts newly removed observation tokens, native does not double-subtract drop',
                 total_requests=total,known_requests=len(rows),unknown_requests=len(unknown),unknown_rooms=unknown,
                 positive_requests=positive,positive_fraction=positive/total if total else None,
                 exact_zero=bool(total) and not unknown and positive==0,rows=rows,

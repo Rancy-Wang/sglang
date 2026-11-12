@@ -133,11 +133,39 @@ async def tool_wait(seconds, identity, emit, sleep=asyncio.sleep, clock=time.per
               actual_seconds=elapsed, wake_delay_seconds=elapsed-seconds))
 
 
-def make_payload(model, history, state, budget):
-    return dict(model=model, messages=history, tools=[], max_tokens=budget, ignore_eos=True,
-                temperature=0, stream=True, stream_options={'include_usage':True},
-                chat_template_kwargs={'preserve_thinking_history':True},
-                drop_message=state['drop_message'], reposition=state['reposition'])
+def prepare_request(renderer, history, rolling, observation_ids, policy, previous_removed):
+    """Preserve canonical history; only the S2 wire view deletes observations."""
+    full, owners = renderer.render(history, [])
+    state = rolling.extend(history, owners, full, observation_ids) if policy != 'ignore' else dict(
+        drop_message={}, reposition=[], active_tokens=full, position_tokens=full)
+    wire, projection = history, None
+    if policy == 'text_drop':
+        removed = {i for targets in state['drop_message'].values() for i in targets}
+        if not removed <= observation_ids or any(i < 2 or history[i]['role'] != 'user' for i in removed):
+            raise ValueError('Text drop may delete only identified observations')
+        if not previous_removed <= removed:
+            raise ValueError('Previously dropped observations reappeared')
+        new_removed = removed - previous_removed
+        removed_tokens = sum(i in new_removed for i in owners)
+        kept = [i for i in range(len(history)) if i not in removed]
+        wire = [copy.deepcopy(history[i]) for i in kept]
+        wire_full, _ = renderer.render(wire, [])
+        projection = dict(canonical_tokens=full, wire_tokens=wire_full,
+                          kept_canonical_ids=kept, removed_canonical_ids=sorted(removed),
+                          removed_since_previous_tokens=removed_tokens)
+        previous_removed = removed
+        full = wire_full
+        state = dict(drop_message={}, reposition=[], active_tokens=full, position_tokens=full)
+    return wire, full, state, projection, previous_removed
+
+
+def make_payload(model, history, state, budget, policy='native'):
+    payload = dict(model=model, messages=history, tools=[], max_tokens=budget, ignore_eos=True,
+                   temperature=0, stream=True, stream_options={'include_usage':True},
+                   chat_template_kwargs={'preserve_thinking_history':True})
+    if policy == 'native':
+        payload.update(drop_message=state['drop_message'], reposition=state['reposition'])
+    return payload
 
 
 def validate_budget(state, budget, limit):
@@ -150,7 +178,7 @@ async def run(args):
     from test_serving import NativeTemplateAdapter, Transport, load_method
     from serving_cohort import Journal
     manifest = json.loads(Path(args.manifest).read_text())
-    if manifest['seed'] != 42 or manifest['limit'] != args.model_context_limit:
+    if manifest['seed'] != 42 or manifest['limit'] != 131072:
         raise ValueError('Unexpected frozen selection')
     for name, expected in manifest['tokenizer_files'].items():
         if file_sha(Path(args.tokenizer)/name) != expected:
@@ -177,6 +205,7 @@ async def run(args):
                 history, observation_ids = [], set()
                 rolling = ObservationRollingState()
                 orphan = False
+                previous_removed = set()
                 for turn, call in enumerate(case['calls']):
                     identity = dict(**task_id, turn=turn, filler=False)
                     prep = time.perf_counter()
@@ -184,10 +213,11 @@ async def run(args):
                         if len(history) >= 2 and message['role'] == 'user':
                             observation_ids.add(len(history))
                         history.append(copy.deepcopy(message))
-                    full, owners = await loop.run_in_executor(rendering, renderer.render, history, [])
-                    state = rolling.extend(history, owners, full, observation_ids)
+                    wire, full, state, projection, previous_removed = await loop.run_in_executor(
+                        rendering, prepare_request, renderer, history, rolling, observation_ids,
+                        args.ablation_policy, previous_removed)
                     validate_budget(state, call['budget'], args.model_context_limit)
-                    payload = make_payload(args.model, history, state, call['budget'])
+                    payload = make_payload(args.model, wire, state, call['budget'], args.ablation_policy)
                     emit(dict(kind='client_prepare', **identity, start=prep, end=time.perf_counter(), wall=time.time()))
                     emit(dict(kind='turn_start', **identity, time=time.perf_counter(), wall=time.time(),
                               full_tokens=full, **state, max_new_tokens=call['budget']))
@@ -195,7 +225,9 @@ async def run(args):
                     if row['success'] and (row['prompt_len'] != full or row['output_len'] != call['budget']):
                         row.update(success=False, status='budget_or_template_mismatch', error='Native prompt/output differs from frozen budget')
                     row.update(**identity, requested_max_tokens=call['budget'], expected_prompt_tokens=full,
-                               history_sha256=digest(history), drop_state=state, source_tool_seconds=call['tool_seconds'])
+                               history_sha256=digest(history), wire_history_sha256=digest(wire), drop_state=state,
+                               ablation_policy=args.ablation_policy, text_projection=projection,
+                               source_tool_seconds=call['tool_seconds'])
                     rows.append(row)
                     emit(dict(kind='turn_end', **row))
                     if not row['success']:
@@ -232,6 +264,7 @@ def parser():
     p = argparse.ArgumentParser(description=__doc__)
     for name in ('source','manifest','mini-root','output-dir','model','tokenizer','chat-template','url','prefill-url'):
         p.add_argument('--'+name, required=True)
+    p.add_argument('--ablation-policy', choices=['native', 'text_drop', 'ignore'], default='native')
     p.add_argument('--concurrency', type=positive, required=True)
     p.add_argument('--completion-target', type=positive)
     p.add_argument('--measurement-seconds', type=positive)

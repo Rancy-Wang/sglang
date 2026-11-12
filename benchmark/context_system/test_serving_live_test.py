@@ -154,3 +154,50 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(r['latency_s']['mean'],2)
 
 if __name__=='__main__':unittest.main()
+
+class AblationPolicyTests(unittest.TestCase):
+    def test_text_drop_preserves_canonical_history_and_counts_only_new_drops(self):
+        import copy
+        from test_serving_live import prepare_request, make_payload
+        from mlgym_replay import ObservationRollingState
+        class Renderer:
+            def render(self, h, tools):
+                owners=[i for i,m in enumerate(h) for _ in m['content']]
+                return len(owners),owners
+        h=[dict(role='system',content='s'),dict(role='user',content='task')]
+        obs=set()
+        for i in range(14):
+            h.append(dict(role='assistant',content='a'));obs.add(len(h));h.append(dict(role='user',content='obs'))
+        before=copy.deepcopy(h);rolling=ObservationRollingState()
+        wire,n,st,proj,removed=prepare_request(Renderer(),h,rolling,obs,'text_drop',set())
+        self.assertEqual(h,before);self.assertEqual(len(removed),2)
+        self.assertEqual(proj['removed_since_previous_tokens'],6)
+        self.assertEqual(len(wire),len(h)-2)
+        _,_,_,next_proj,_=prepare_request(Renderer(),h,rolling,obs,'text_drop',removed)
+        self.assertEqual(next_proj['removed_since_previous_tokens'],0)
+        payload=make_payload('m',wire,st,7,'text_drop')
+        self.assertNotIn('drop_message',payload);self.assertNotIn('reposition',payload)
+        self.assertTrue(payload['ignore_eos']);self.assertEqual(payload['max_tokens'],7)
+    def test_ignore_keeps_full_history(self):
+        from test_serving_live import prepare_request,make_payload,validate_budget
+        class Renderer:
+            def render(self,h,t):return 200000,[]
+        h=[dict(role='user',content='long')]
+        wire,n,st,proj,_=prepare_request(Renderer(),h,None,set(),'ignore',set())
+        self.assertIs(wire,h);self.assertEqual(n,200000);self.assertIsNone(proj)
+        validate_budget(st,100,393216)
+        with self.assertRaises(ValueError):validate_budget(st,100,131072)
+        self.assertNotIn('drop_message',make_payload('m',h,st,100,'ignore'))
+    def test_restoration_excludes_text_deletion(self):
+        import tempfile,pathlib,json
+        from analyze_serving_live import restoration
+        turns=[dict(instance=1,turn=0,success=True,pd_bootstrap_room=1,prompt_len=100),
+               dict(instance=1,turn=1,success=True,pd_bootstrap_room=2,prompt_len=80,
+                    ablation_policy='text_drop',text_projection={'removed_since_previous_tokens':30})]
+        with tempfile.TemporaryDirectory() as tmp:
+            p=pathlib.Path(tmp)/'p.log'
+            p.write_text('[TP0] ReqTimeStats(bootstrap_room=1, input_len=100), pd_matrix_compute={"pf":100}\n'
+                         '[TP0] ReqTimeStats(bootstrap_room=2, input_len=80), pd_matrix_compute={"pf":10}\n')
+            r=restoration(dict(turns=turns),p)
+            self.assertEqual(r['positive_requests'],0);self.assertEqual(r['unknown_requests'],0)
+            self.assertEqual(r['rows'][1]['expected_reuse'],70)
