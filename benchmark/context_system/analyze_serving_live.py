@@ -25,3 +25,42 @@ def summarize(result):
                 output_tokens=stats([r['output_len'] for r in rows]),
                 task_latency_s=stats([r['latency_s'] for r in result['tasks']]),
                 task_statuses=dict(Counter(r['status'] for r in result['tasks'])))
+
+
+def restoration(result, prefill_log):
+    """User-requested estimate from actual TP0 P prefill, not extend-size bins."""
+    import json
+    import re
+    turns = {(r['instance'],r['turn']):r for r in result['turns'] if r['success']}
+    rooms = {str(r['pd_bootstrap_room']):r for r in turns.values()}
+    physical = {}
+    with open(prefill_log, errors='replace') as f:
+        for line in f:
+            if not line.endswith('\n') or 'TP0]' not in line or 'ReqTimeStats(' not in line:
+                continue
+            room=re.search(r'bootstrap_room=(\d+)',line)
+            pf=re.search(r'pd_matrix_compute=(\{[^}]*\})',line)
+            n=re.search(r'\binput_len=(\d+)',line)
+            if room and pf and n and room[1] in rooms:
+                physical[room[1]]=(int(n[1]),json.loads(pf[1])['pf'])
+    rows, unknown = [], []
+    for room,r in rooms.items():
+        p=physical.get(room);prev=turns.get((r['instance'],r['turn']-1))
+        if p is None or (r['turn'] and prev is None):
+            unknown.append(room);continue
+        n,pf=p
+        if n!=r['prompt_len'] or not 0<=pf<=n:
+            unknown.append(room);continue
+        expected=min(n,prev['prompt_len'] if prev else 0)
+        restored=max(0,expected-(n-pf))
+        rows.append(dict(instance=r['instance'],turn=r['turn'],room=room,expected_reuse=expected,
+                         input_tokens=n,actual_prefill=pf,effective_hit=n-pf,restore=restored,new_prefill=pf-restored))
+    positive=sum(r['restore']>0 for r in rows);total=len(turns)
+    bins=Counter(r['restore']//2048 for r in rows if r['restore']>0)
+    return dict(formula='max(0,min(current_input,previous_input)-(input-actual_P_prefill)); previous output excluded; no second drop subtraction',
+                total_requests=total,known_requests=len(rows),unknown_requests=len(unknown),unknown_rooms=unknown,
+                positive_requests=positive,positive_fraction=positive/total if total else None,
+                exact_zero=bool(total) and not unknown and positive==0,rows=rows,
+                mean_restore_tokens=sum(r['restore'] for r in rows)/len(rows) if rows else None,
+                mean_new_prefill_tokens=sum(r['new_prefill'] for r in rows)/len(rows) if rows else None,
+                positive_2K_frequency={str(k):v/total for k,v in sorted(bins.items())})

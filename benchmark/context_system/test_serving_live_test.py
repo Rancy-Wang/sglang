@@ -82,6 +82,24 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(positive('37'),37)
         with self.assertRaises(Exception):positive('0')
 
+    def test_restoration_uses_previous_input_and_physical_prefill(self):
+        import tempfile
+        from pathlib import Path
+        from analyze_serving_live import restoration
+        rows=[dict(success=True,instance=1,turn=i,pd_bootstrap_room=i+10,prompt_len=n) for i,n in enumerate([100,130,150])]
+        with tempfile.TemporaryDirectory() as tmp:
+            log=Path(tmp)/'p.log'
+            log.write_text('[TP0] ReqTimeStats(bootstrap_room=10, input_len=100), pd_matrix_compute={"pf":100}\n'
+                           '[TP0] ReqTimeStats(bootstrap_room=11, input_len=130), pd_matrix_compute={"pf":50}\n')
+            report=restoration(dict(turns=rows),log)
+        self.assertEqual(report['positive_requests'],1)
+        self.assertEqual(report['unknown_requests'],1)
+        self.assertEqual(report['rows'][0]['restore'],0)
+        self.assertEqual(report['rows'][1]['restore'],20)
+        self.assertEqual(report['rows'][1]['new_prefill'],30)
+        self.assertEqual(report['positive_fraction'],1/3)
+        self.assertFalse(report['exact_zero'])
+
     def test_wall_metrics_include_tool_wait(self):
         row=dict(success=True,prompt_len=1000,output_len=100,latency=2,ttft=.1,tpot_s=.02)
         r=summarize(dict(turns=[row],duration_s=10,tasks=[dict(status='all_recorded_steps_replayed',latency_s=10)]))
