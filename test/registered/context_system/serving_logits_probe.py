@@ -1,4 +1,4 @@
-"""Opt-in numerical instrumentation, excluded from throughput measurements."""
+"""Opt-in semantic/numerical instrumentation, excluded from throughput measurements."""
 
 
 def independent_policy_decode_pairs(spec, generated, position, window):
@@ -30,7 +30,68 @@ def policy_structure_errors(program, spec):
         ("projection", program.execution_to_full[:count].tolist(), reference.raw.tolist()),
         ("stored_positions", program.layout.positions[:count].tolist(), reference.positions.tolist()),
         ("compute_positions", program.layout.birth_positions[:count].tolist(), reference.compute_positions.tolist()),
+        ("visibility", program.visible_until[:count].clamp(max=spec["token_count"] + 1).tolist(), reference.expiry.clip(max=spec["token_count"] + 1).tolist()),
+        ("keep_mask", program.layout.keep_mask[:count].tolist(), (reference.expiry > spec["token_count"]).tolist()),
     ) if actual != expected]
+
+
+def install_cache_policy_graph_probe():
+    """Inspect buffers outside capture, immediately before native graph replay."""
+    from sglang.srt.layers.attention.triton_backend import TritonAttnBackend
+
+    if getattr(TritonAttnBackend, "_cache_policy_graph_probe", False):
+        return
+    original = TritonAttnBackend.init_forward_metadata_out_graph
+
+    def metadata(backend, batch, in_capture=False):
+        result = original(backend, batch, in_capture=in_capture)
+        params = getattr(batch.sampling_info, "custom_params", None)
+        if (in_capture or not batch.forward_mode.is_decode() or not params
+                or len(params) != 1 or not params[0]
+                or not params[0].get("context_graph_read_probe")):
+            return result
+        import json
+        from pathlib import Path
+
+        import torch
+        from sglang.srt.context_system.request_storage import request_row
+
+        param = params[0]
+        generated = len(param.get("_context_probe_rows", []))
+        if generated >= param["context_trace_count"]:
+            return result  # Native overlap may execute a discarded final step.
+        generated += param.get("context_forced_offset", 0)
+        req = param["__req__"]
+        position = int(batch.positions[0])
+        assert generated >= 1
+        assert int(batch.input_ids[0]) == param["context_forced_tokens"][generated - 1]
+        row = request_row(backend.req_to_token_pool, req.kv.req_pool_idx)
+        rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
+        windows = [-1]
+        if backend.sliding_window_size is not None and backend.sliding_window_size > 0:
+            windows.append(backend.sliding_window_size)
+        for window in windows:
+            pairs = independent_policy_decode_pairs(param["context_policy_spec"], generated, position, window)
+            raw = torch.tensor([i for i, _ in pairs], device=row.device, dtype=torch.long)
+            wanted = row[raw]
+            if window >= 0:
+                wanted = backend.token_to_kv_pool.translate_loc_from_full_to_swa(wanted)
+                indptr, indices = backend.window_kv_indptr, backend.cuda_graph_window_kv_indices
+            else:
+                wanted = backend.kv_index_translator.translate_full_attn_ids(wanted)
+                indptr, indices = backend.kv_indptr, backend.cuda_graph_kv_indices
+            actual = indices[int(indptr[0]):int(indptr[1])]
+            report = {"rank": rank, "position": position, "generated": generated,
+                      "window": window, "expected_count": len(pairs), "read_count": len(actual),
+                      "slots_ok": torch.equal(actual, wanted), "source": "native-graph-replay-buffers"}
+            with Path(param["context_trace_path"] + f".graph-reads.rank{rank}.jsonl").open("a") as out:
+                out.write(json.dumps(report) + "\n")
+            if not report["slots_ok"]:
+                raise AssertionError(f"Graph physical reader mismatch: {report}")
+        return result
+
+    TritonAttnBackend.init_forward_metadata_out_graph = metadata
+    TritonAttnBackend._cache_policy_graph_probe = True
 
 
 def install_cache_policy_eviction_probe():
@@ -327,12 +388,21 @@ def install_pd_retraction_barrier():
     Req.reset_for_retract = observed_reset
 
 
-def serialized_probe():
+def serialized_probe(*, graph_metadata=False):
     from sglang.srt.sampling.custom_logit_processor import CustomLogitProcessor
 
     class Probe(CustomLogitProcessor):
         def __init__(self):
             import os
+
+            if graph_metadata:
+                # Explicit diagnostics can add this read-only observer to an
+                # already running graph server after a Git-synced probe update.
+                import importlib
+
+                import serving_logits_probe
+
+                importlib.reload(serving_logits_probe).install_cache_policy_graph_probe()
 
             from serving_logits_probe import (
                 install_cache_policy_attention_probe,
@@ -377,6 +447,7 @@ def serialized_probe():
                 if params.get("context_cache_policy_probe") and not params.get("_cache_policy_recorded"):
                     import json
                     from pathlib import Path
+
                     from serving_logits_probe import policy_structure_errors
 
                     program = req.context_recompute_program or req.context_program

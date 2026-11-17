@@ -21,6 +21,21 @@ pytest_plugins = (
 
 
 @pytest.mark.parametrize("policy", POLICIES)
+def test_diagnostic_structure_checks_visibility(policy_modules, policy):
+    from serving_logits_probe import policy_structure_errors
+
+    drops = {8: [(1, 4)], 12: [(5, 7)]}
+    repos = [14] if policy == POLICIES[0] else []
+    spec = {"token_count": 16, "drops": drops, "reposition": repos, "policy": policy}
+    program = compile_policy(policy_modules, policy, list(range(16)), drops, repos)
+    assert policy_structure_errors(program, spec) == []
+    program.visible_until[0] = 1
+    assert "visibility" in policy_structure_errors(program, spec)
+    program.layout.keep_mask[0] = False
+    assert "keep_mask" in policy_structure_errors(program, spec)
+
+
+@pytest.mark.parametrize("policy", POLICIES)
 def test_diagnostic_decode_readers_ignore_candidate_layout(policy):
     from serving_logits_probe import independent_policy_decode_pairs
 
