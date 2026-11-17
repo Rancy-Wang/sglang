@@ -1,7 +1,7 @@
 # Cache policy ablations
 
 Implementation authorization: `APPROVED_PLAN_ID=PLAN-CS-20261117-R1`,
-`APPROVED_ROUND=18`. The approved file allowlist covers the two new compilers,
+`APPROVED_ROUND=25`. The approved file allowlist covers the two new compilers,
 Context IR/wire/occurrence/recovery, frontend admission, Radix selection,
 scheduler/PD integration, dedicated tests and BCP runner, and this document.
 Existing policies retain their wire formats and execution behavior.
@@ -254,3 +254,52 @@ The original formal trajectories never enable the probes or forced sampling.
 retains per-token error metrics even when comparison fails. These tools have
 not yet completed the full BCP numerical matrix; their existence is not evidence
 that the matrix passed.
+
+## CUDA Graph quick replay, 2026-11-17
+
+At the user's request, the eager long-run queue was stopped and the service
+restarted with decode Full CUDA Graph (batch size 1) and prefill Breakable CUDA
+Graph. Neither phase was disabled. Model, attention/MoE backends, TP=4, page
+size and chunk size remain unchanged. The native one-token hot-prefill path
+can fall below the smallest capture bucket; long prefill and decode replay
+are confirmed by runtime logs, not just startup arguments.
+
+`cache_policy_bcp.py quick --jobs JOBS --model MODEL --url URL --output RUN`
+replays the five frozen real final histories under both policies, plus case
+223's first Drop and first 96 Ki-token Reposition under the text policy. It
+uses 64 generated tokens per request, cold/hot pairs, and independently checks
+execution lengths. The run at `b270ebee0b` completed all 24 HTTP requests in
+135.61 seconds of request time, excluding model startup. Local runner checks:
+`python -m pytest -q benchmark/context_system/test_cache_policy_bcp.py`:
+9 passed. The command now rejects a server with either graph phase disabled.
+
+For the five final snapshots, median cold/hot latency was 5.65/1.42 seconds
+for `text_drop_with_pe` and 16.06/1.53 seconds for
+`message_drop_without_repos`. Hot requests reported positive cache hits.
+Ten of twelve cold/hot free-generation pairs were token-identical. Case 231
+diverged at generated token 34 for text policy and token 14 for KV policy.
+This is a functional/performance smoke result, not precise-reuse acceptance.
+
+A separate Graph-enabled case-231 diagnostic forced each policy's cold
+64-token continuation on both cold and hot paths. Raw-logit max/mean/p99
+differences (maximum over the 64 rows) were respectively:
+
+| Path | Max absolute | Mean absolute | p99 absolute |
+| --- | ---: | ---: | ---: |
+| Native no-drop control | 4.6875 | 0.530116 | 1.718750 |
+| Text policy | 2.96875 | 0.417898 | 1.535156 |
+| KV policy | 2.71875 | 0.308439 | 1.234375 |
+
+Each path had 62/64 identical raw-logit argmaxes. At the text divergence the
+top two candidates were separated by 0.125 in the cold run and swapped in the
+hot run; at the KV divergence the hot candidates tied. Policy differences
+are below the native control on these aggregate metrics, but this diagnostic
+does not establish their cause or replace the independent oracle matrix.
+
+Remaining limitations: the normal-mode bounded same-QKV layer test failed
+its strict tolerance on the no-drop baseline, before policy events. That
+failure is retained and unresolved. Ordinary text free generation completed
+all five cases (211 turns); the eager KV run was interrupted for this user
+requested Graph run. Full ordinary/PD numerical and trajectory acceptance
+is still incomplete. Do not combine the shortened snapshot replay with the
+original full-generation-budget acceptance reports.

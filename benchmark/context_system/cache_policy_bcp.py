@@ -512,9 +512,12 @@ async def quick(args):
     root = Path(args.output)
     root.mkdir(parents=True, exist_ok=False)
     renderer = renderer_for(args)
+    head = await asyncio.to_thread(
+        subprocess.check_output, ["git", "rev-parse", "HEAD"], text=True
+    )
     report = {
         "completed": False, "meaning": "short real BCP snapshot replay; not full trajectory or numerical acceptance",
-        "head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+        "head": head.strip(),
         "generation_budget": 64, "rows": [],
     }
     base = args.url.split("/v1/")[0]
@@ -523,6 +526,10 @@ async def quick(args):
             response.raise_for_status()
             info = await response.json()
             write_json(root / "server-info.json", info)
+            graph = info.get("cuda_graph_config", {})
+            if any(graph.get(phase, {}).get("backend", "disabled") == "disabled"
+                   for phase in ("decode", "prefill")):
+                raise ValueError("Quick graph replay requires enabled decode and prefill graphs")
         for job in jobs:
             payload = copy.deepcopy(job["payload"])
             payload.update(max_tokens=64, ignore_eos=True, temperature=0, stream=False,
@@ -551,10 +558,13 @@ async def quick(args):
                 ids = result["sglext"]["output_ids"]
                 if mode == "cold":
                     cold_ids = ids
-                row = dict(case_id=job["case_id"], policy=job["policy"], snapshot=job["snapshot"],
-                           mode=mode, latency_s=elapsed, output_tokens_per_s=64/elapsed,
-                           full_tokens=count, execution_tokens=len(ref.raw), cached_tokens=cached,
-                           cold_hot_output_equal=ids == cold_ids)
+                row = {
+                    "case_id": job["case_id"], "policy": job["policy"],
+                    "snapshot": job["snapshot"], "mode": mode,
+                    "latency_s": elapsed, "output_tokens_per_s": 64 / elapsed,
+                    "full_tokens": count, "execution_tokens": len(ref.raw),
+                    "cached_tokens": cached, "cold_hot_output_equal": ids == cold_ids,
+                }
                 report["rows"].append(row)
                 write_json(root / "report.json", report)
                 print("BCP_GRAPH_QUICK", json.dumps(row), flush=True)
