@@ -77,7 +77,8 @@ def install_cache_policy_attention_probe():
     original = RadixAttention.forward
     hooks = {}
 
-    def forward(layer, q, k, v, batch, *args, **kwargs):
+    def forward(layer, q, k, v, forward_batch, *args, **kwargs):
+        batch = forward_batch
         output = original(layer, q, k, v, batch, *args, **kwargs)
         params = getattr(batch.sampling_info, "custom_params", None)
         if (params and len(params) == 1 and params[0]
@@ -93,6 +94,21 @@ def install_cache_policy_attention_probe():
 
     RadixAttention.forward = forward
     RadixAttention._cache_policy_attention_probe = True
+
+
+def decode_attention_fp32(q, k, v, scaling, sinks):
+    import torch
+
+    previous = torch.backends.cuda.matmul.allow_tf32
+    try:
+        torch.backends.cuda.matmul.allow_tf32 = False
+        groups = q.shape[1] // k.shape[1]
+        scores = torch.einsum("qhd,khd->hqk", q.float(), k.float().repeat_interleave(groups, 1)) * scaling
+        scores = torch.cat((scores, sinks.float()[:, None, None]), -1)
+        return torch.einsum("hqk,khd->qhd", scores.softmax(-1)[..., :-1],
+                            v.float().repeat_interleave(groups, 1))
+    finally:
+        torch.backends.cuda.matmul.allow_tf32 = previous
 
 
 def create_decode_read_probe(config):
@@ -183,12 +199,8 @@ def create_decode_read_probe(config):
                 sinks_cache[layer.layer_id] = source.get_tensor(name)[
                     rank*layer.tp_q_head_num:(rank+1)*layer.tp_q_head_num
                 ].float().to(q.device)
-        groups = layer.tp_q_head_num // kk.shape[1]
         # Explicit FP32 dot/softmax/reduction, with the model's attention sink.
-        scores = torch.einsum("qhd,khd->hqk", qq, kk.repeat_interleave(groups, 1)) * layer.scaling
-        scores = torch.cat((scores, sinks_cache[layer.layer_id][:, None, None]), -1)
-        expected = torch.einsum("hqk,khd->qhd", scores.softmax(-1)[..., :-1],
-                                vv.repeat_interleave(groups, 1))
+        expected = decode_attention_fp32(qq, kk, vv, layer.scaling, sinks_cache[layer.layer_id])
         error = (output.reshape_as(expected).float()-expected).abs()
         stored_k_ok = torch.equal(kp[actual[-1].long()].reshape_as(k[-1]), k[-1])
         stored_v_ok = torch.equal(vp[actual[-1].long()].reshape_as(v[-1]), v[-1])
