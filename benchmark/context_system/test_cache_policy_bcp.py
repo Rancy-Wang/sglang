@@ -122,7 +122,12 @@ def test_reference_jobs_freeze_calibration_without_changing_formal_payload(
 
     monkeypatch.setattr(runner, "renderer_for", lambda _: Renderer())
     monkeypatch.setattr(runner, "model_fingerprint", lambda _: {})
-    frozen = {"model": "fixture", "model_files": {}, "template_kwargs": {}}
+    frozen = {
+        "model": "fixture",
+        "model_files": {},
+        "template_kwargs": {},
+        "cases": ["223"],
+    }
     frozen_path = tmp_path / "frozen.json"
     runner.write_json(frozen_path, frozen)
     saved = tmp_path / "223"
@@ -163,3 +168,60 @@ def test_reference_jobs_freeze_calibration_without_changing_formal_payload(
     assert baseline["drops"] == baseline["payload"]["drop_message"] == {}
     assert baseline["reposition"] == baseline["payload"]["reposition"] == []
     assert original["payload_sha256"] != baseline["payload_sha256"]
+
+
+def test_numerical_join_preserves_failure_evidence(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    import cache_policy_bcp as runner
+    import torch
+
+    monkeypatch.setattr(runner.subprocess, "check_output", lambda *a, **k: b"tree")
+    candidate = tmp_path / "candidate.pt"
+    expected = tmp_path / "223-final.logits.pt"
+    torch.save(torch.zeros(2, 8), expected)
+    torch.save(torch.ones(2, 8), candidate)
+    runner.write_json(
+        tmp_path / "223-final.json",
+        {
+            "reference": "independent_event_model_forward",
+            "payload_sha256": "same",
+            "continuation": [3],
+            "head": "reference",
+        },
+    )
+    runner.write_json(
+        tmp_path / "diagnostics.json",
+        {
+            "completed": True,
+            "head": "candidate",
+            "calibration": {
+                "frozen_before_policy_candidates": True,
+                "noop_baseline": {"max_abs": 0, "mean_abs": 0, "p99_abs": 0},
+                "limits": {"max_abs": 0.125, "mean_abs": 0.02, "p99_abs": 0.0625},
+            },
+            "comparisons": [
+                {
+                    "case_id": "223",
+                    "snapshot": "final",
+                    "payload_sha256": "same",
+                    "continuation": [3],
+                    "candidate": candidate.name,
+                }
+            ],
+        },
+    )
+    args = SimpleNamespace(
+        diagnostic_report=tmp_path / "diagnostics.json",
+        reference_output=tmp_path,
+        output=tmp_path / "comparison.json",
+    )
+    with pytest.raises(AssertionError, match="comparison failed"):
+        runner.compare_artifacts(args)
+    failed = json.loads(args.output.read_text())
+    assert not failed["passed"] and failed["comparisons"][0]["metrics"]["max_abs"] == [
+        1,
+        1,
+    ]
+    torch.save(torch.zeros(2, 8), candidate)
+    assert runner.compare_artifacts(args)["passed"]

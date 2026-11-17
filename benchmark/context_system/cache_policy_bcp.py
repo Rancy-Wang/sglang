@@ -205,6 +205,7 @@ def reference_jobs(args):
         or report["frozen_sha256"] != digest(frozen)
         or args.model != frozen["model"]
         or model_fingerprint(args.model) != frozen["model_files"]
+        or {str(c["case_id"]) for c in report["cases"]} != set(frozen["cases"])
     ):
         raise ValueError("Reference jobs require the completed frozen cohort")
     renderer = renderer_for(args)
@@ -475,6 +476,8 @@ async def diagnostics(args):
     manifest = json.loads(source.read_text())
     if args.model != manifest["model"]:
         raise ValueError("Diagnostic model differs from frozen reference jobs")
+    if not manifest["jobs"]:
+        raise ValueError("Diagnostic jobs cannot be empty")
     root = Path(args.output).resolve()
     root.mkdir(parents=True, exist_ok=False)
     processor = serialized_probe()
@@ -574,6 +577,10 @@ async def diagnostics(args):
                 for line in f.read_text().splitlines()
             ]
             assert reads, "Independent physical reader hooks produced no evidence"
+            assert len(reads) == len(job["continuation"]) * 36 * args.tp_size
+            assert {(r["rank"], r["layer"]) for r in reads} == {
+                (rank, layer) for rank in range(args.tp_size) for layer in range(36)
+            }
             assert all(
                 r["slots_ok"]
                 and r["stored_k_ok"]
@@ -589,6 +596,7 @@ async def diagnostics(args):
                 "deployment": "pd" if args.prefill_url else "ordinary",
                 "candidate": f"{name}.pt",
                 "payload_sha256": job["payload_sha256"],
+                "continuation": job["continuation"],
                 "same_payload": True,
                 "same_fixed_continuation": True,
                 "structure_errors": 0,
@@ -699,10 +707,83 @@ async def diagnostics(args):
     return report
 
 
+def compare_artifacts(args):
+    """Join recorded candidates and independently generated model references."""
+    import torch
+
+    source = Path(args.diagnostic_report).resolve()
+    report = json.loads(source.read_text())
+    if not report["completed"]:
+        raise ValueError("Candidate diagnostics did not complete")
+    if not report["comparisons"]:
+        raise ValueError("Numerical evidence cannot be empty")
+    calibration = report["calibration"]
+    assert calibration["frozen_before_policy_candidates"] is True
+    limits = calibration["limits"]
+    comparisons = []
+    for row in report["comparisons"]:
+        stem = f"{row['case_id']}-{row['snapshot']}"
+        reference_root = Path(args.reference_output).resolve()
+        metadata = json.loads((reference_root / f"{stem}.json").read_text())
+        assert metadata["reference"] == "independent_event_model_forward"
+        assert metadata["payload_sha256"] == row["payload_sha256"]
+        assert metadata["continuation"] == row["continuation"]
+        assert subprocess.check_output(
+            ["git", "rev-parse", f"{metadata['head']}:python/sglang"]
+        ) == subprocess.check_output(
+            ["git", "rev-parse", f"{report['head']}:python/sglang"]
+        )
+        reference_path = reference_root / f"{stem}.logits.pt"
+        candidate_path = source.parent / row["candidate"]
+        candidate = torch.load(candidate_path, weights_only=True)
+        expected = torch.load(reference_path, weights_only=True)
+        assert candidate.shape == expected.shape
+        assert torch.isfinite(candidate).all() and torch.isfinite(expected).all()
+        delta = (candidate.float() - expected.float()).abs()
+        metrics = {
+            "max_abs": delta.max(-1).values.tolist(),
+            "mean_abs": delta.mean(-1).tolist(),
+            "p99_abs": torch.quantile(delta, 0.99, dim=-1).tolist(),
+        }
+        comparisons.append(
+            dict(
+                row,
+                candidate=str(candidate_path),
+                reference_logits=str(reference_path),
+                metrics=metrics,
+                passed=all(
+                    max(values) <= limits[name] for name, values in metrics.items()
+                ),
+            )
+        )
+    result = {
+        "reference": "independent_event_model_forward",
+        "tolerance_frozen_before_candidate": True,
+        "noop_baseline": calibration["noop_baseline"],
+        "limits": limits,
+        "cases": sorted({row["case_id"] for row in comparisons}),
+        "comparisons": comparisons,
+        "passed": all(row["passed"] for row in comparisons),
+    }
+    write_json(args.output, result)
+    if not result["passed"]:
+        raise AssertionError(
+            "Independent BCP numerical comparison failed; see saved metrics"
+        )
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "action", choices=("preflight", "run", "reference-jobs", "diagnostics")
+        "action",
+        choices=(
+            "preflight",
+            "run",
+            "reference-jobs",
+            "diagnostics",
+            "compare-artifacts",
+        ),
     )
     parser.add_argument("--dataset")
     parser.add_argument("--model", required=True)
@@ -717,6 +798,8 @@ def main():
     parser.add_argument("--include-calibration", action="store_true")
     parser.add_argument("--baseline")
     parser.add_argument("--reference-output")
+    parser.add_argument("--diagnostic-report")
+    parser.add_argument("--tp-size", type=int, default=4)
     parser.add_argument("--policy", choices=POLICIES)
     parser.add_argument("--url")
     parser.add_argument("--prefill-url")
@@ -724,6 +807,13 @@ def main():
     parser.add_argument("--gpu-mapping")
     parser.add_argument("--timeout", type=int, default=7200)
     args = parser.parse_args()
+    if args.action == "compare-artifacts":
+        if not args.diagnostic_report or not args.reference_output:
+            parser.error(
+                "compare-artifacts requires --diagnostic-report and --reference-output"
+            )
+        print(json.dumps(compare_artifacts(args), ensure_ascii=False))
+        return
     if args.action in ("preflight", "run") and not args.dataset:
         parser.error("preflight/run requires --dataset")
     if args.action == "reference-jobs":
