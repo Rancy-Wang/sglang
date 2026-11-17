@@ -28,6 +28,22 @@ def test_independent_boundaries_keep_disjoint_ownership_and_native_suffix():
         independent_events(payload, owners)
 
 
+def test_independent_boundaries_preserve_harmony_generation_header():
+    payload = {
+        "messages": [{}, {}],
+        "drop_rule": POLICIES[0],
+        "drop_message": {"1": [0]},
+        "reposition": [1],
+    }
+    assert independent_events(payload, [-1, 0, 0, 1, 1, 2, 2]) == (
+        {5: [[1, 3]]}, [5]
+    )
+    with pytest.raises(ValueError, match="terminal suffix"):
+        independent_events(payload, [0, 2, 1])
+    with pytest.raises(ValueError, match="outside message"):
+        independent_events(payload, [0, 1, 3])
+
+
 @pytest.mark.parametrize("policy", POLICIES)
 def test_rolling_keeps_assistants_full_history_and_real_threshold(policy):
     rolling = RollingPolicy(policy)

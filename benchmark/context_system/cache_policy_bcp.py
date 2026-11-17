@@ -168,7 +168,16 @@ def independent_events(payload, owners):
     This deliberately does not call the candidate Drop planner/compiler.
     """
     runs, ends = {}, {}
+    generation_started = False
     for offset, owner in enumerate(owners):
+        # Native Harmony assigns the unfinished assistant header to the next
+        # message ordinal. It stays in the input but cannot trigger a history
+        # event or be a Drop target.
+        if owner == len(payload["messages"]):
+            generation_started = True
+            continue
+        if generation_started:
+            raise ValueError("Generation ownership must be a terminal suffix")
         if owner < 0:
             continue
         if owner >= len(payload["messages"]):
