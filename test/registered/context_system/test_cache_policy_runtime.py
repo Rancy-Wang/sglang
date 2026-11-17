@@ -531,3 +531,54 @@ def test_real_model_logits_against_independent_fp32_attention(
         flush=True,
     )
     assert all(measured[name] <= limits[name] for name in limits)
+
+
+@pytest.mark.skipif(
+    not os.environ.get("CONTEXT_MODEL_PATH"), reason="isolated real model required"
+)
+@pytest.mark.parametrize("policy", POLICIES)
+def test_real_model_streaming_reference_chunk_invariance(
+    cache_policy_model_runtime, policy
+):
+    from cache_policy_reference import run_reference_model
+
+    wrapper, tokenizer, _ = cache_policy_model_runtime
+    tokens = tokenizer.encode("The librarian kept blue notebooks and red maps. " * 20)[
+        :96
+    ]
+    # Freeze continuation independently of either model result.
+    continuation = tokenizer.encode(" A blue notebook.")[:3]
+    drops = {32: [(3, 17)], 65: [(21, 38)], 90: [(40, 51)]}
+    repos = [50, 91] if policy == POLICIES[0] else []
+    complete = run_reference_model(
+        wrapper,
+        tokens,
+        drops,
+        repos,
+        policy=policy,
+        continuation=continuation,
+        chunk_tokens=128,
+    )
+    chunked = run_reference_model(
+        wrapper,
+        tokens,
+        drops,
+        repos,
+        policy=policy,
+        continuation=continuation,
+        chunk_tokens=17,
+    )
+    assert (
+        complete.shape == chunked.shape == (len(continuation) + 1, complete.shape[-1])
+    )
+    assert torch.isfinite(chunked).all() and torch.isfinite(complete).all()
+    delta = (complete.float() - chunked.float()).abs()
+    print(
+        "REFERENCE_CHUNK_INVARIANCE",
+        policy,
+        float(delta.max()),
+        float(delta.mean()),
+        flush=True,
+    )
+    assert float(delta.max()) <= 0.125
+    assert float(delta.mean()) <= 0.02

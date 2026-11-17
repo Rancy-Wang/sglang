@@ -414,3 +414,90 @@ def reference_attention_forward(model, reference, projection):
         return torch.stack(results).to(v.dtype).reshape(len(q), -1)
 
     return forward
+
+
+def run_reference_model(
+    wrapper, tokens, drops, reposition, *, policy, continuation=(), chunk_tokens=2048
+):
+    """Model logits with independent positions, readers and owned streaming KV.
+
+    ``continuation`` is an externally frozen sequence of input tokens. Return
+    the prompt's next-token logits followed by one row per continuation token.
+    Native plain-request allocation is only scaffolding: no Context compiler,
+    Radix match, occurrence plan or production KV contents feed the oracle.
+    """
+    from array import array
+    from unittest.mock import patch
+
+    import numpy as np
+    import torch
+    from sglang.benchmark.one_batch import TreeCacheNamespace
+    from sglang.srt.layers.radix_attention import RadixAttention
+    from sglang.srt.managers.schedule_batch import Req, ScheduleBatch
+    from sglang.srt.model_executor.forward_batch_info import ForwardBatch
+    from sglang.srt.sampling.sampling_params import SamplingParams
+    from sglang.srt.speculative.spec_info import SpeculativeAlgorithm
+
+    if chunk_tokens <= 0:
+        raise ValueError("Reference chunk size must be positive")
+    full = list(tokens) + list(continuation)
+    reference = simulate_compact(len(full), drops, reposition, policy=policy)
+    projected = [full[i] for i in reference.raw]
+    prompt_end = int(np.searchsorted(reference.raw, len(tokens)))
+    if prompt_end == 0:
+        raise ValueError("Reference needs a nonempty active prompt")
+    ends = [*range(chunk_tokens, prompt_end, chunk_tokens), prompt_end]
+    ends.extend(range(prompt_end + 1, len(projected) + 1))
+    runner = wrapper.torch_runner
+    wrapper.clear()
+    oracle = chunked_reference_attention_forward(
+        runner.model, reference, query_block=256, key_block=4096, streaming=True
+    )
+    prefix = torch.empty(0, dtype=torch.int64, device=runner.device)
+    results = []
+    with (
+        torch.no_grad(),
+        patch.object(RadixAttention, "forward", oracle),
+        patch.object(runner, "prefill_cuda_graph_runner", None),
+    ):
+        for end in ends:
+            req = Req(
+                "independent-reference",
+                "",
+                array("q", projected),
+                SamplingParams(temperature=0, max_new_tokens=1),
+            )
+            req.full_untruncated_fill_ids = req.origin_input_ids
+            req.logprob_start_len = -1
+            req.prefix_indices = prefix
+            req.set_extend_range(len(prefix), end)
+            batch = ScheduleBatch.init_new(
+                reqs=[req],
+                req_to_token_pool=runner.req_to_token_pool,
+                token_to_kv_pool_allocator=runner.token_to_kv_pool_allocator,
+                tree_cache=TreeCacheNamespace(
+                    page_size=1,
+                    device=runner.device,
+                    token_to_kv_pool_allocator=runner.token_to_kv_pool_allocator,
+                ),
+                model_config=runner.model_config,
+                enable_overlap=False,
+                spec_algorithm=SpeculativeAlgorithm.NONE,
+            )
+            batch.prepare_for_extend()
+            batch.input_ids = batch.prefill_input_ids_cpu.to(batch.device)
+            batch.prefill_input_ids_cpu = None
+            fb = ForwardBatch.init_new(
+                batch, runner, return_hidden_states_before_norm=False
+            )
+            fb.positions = torch.as_tensor(
+                reference.compute_positions[len(prefix) : end],
+                dtype=fb.positions.dtype,
+                device=runner.device,
+            )
+            logits = runner.forward(fb).logits_output.next_token_logits
+            if end >= prompt_end:
+                results.append(logits.detach().clone())
+            prefix = torch.cat((prefix, batch.out_cache_loc))
+            runner.req_to_token_pool.free(req)
+    return torch.cat(results)
