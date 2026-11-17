@@ -451,9 +451,198 @@ async def run(args):
     return report
 
 
+async def diagnostics(args):
+    """Collect real fixed-token cold/hot/retry/eviction evidence separately."""
+    import aiohttp
+    import torch
+    from serving_logits_probe import serialized_probe
+
+    source = Path(args.jobs)
+    manifest = json.loads(source.read_text())
+    root = Path(args.output).resolve()
+    root.mkdir(parents=True, exist_ok=False)
+    processor = serialized_probe()
+    rows = []
+    head = await asyncio.to_thread(
+        subprocess.check_output, ["git", "rev-parse", "HEAD"], text=True
+    )
+    report = {
+        "comparisons": rows,
+        "completed": False,
+        "head": head.strip(),
+    }
+    write_json(root / "diagnostics.json", report)
+    async with aiohttp.ClientSession(
+        timeout=aiohttp.ClientTimeout(total=args.timeout)
+    ) as session:
+
+        async def flush():
+            for endpoint in (args.prefill_url, args.url):
+                if endpoint:
+                    base = endpoint.split("/v1/")[0]
+                    async with session.post(base + "/flush_cache") as response:
+                        if response.status != 200:
+                            raise RuntimeError("Diagnostic cache flush failed")
+
+        async def call(job, name, *, payload=None, evict=0, check=True):
+            payload = copy.deepcopy(payload if payload is not None else job["payload"])
+            forced = [*job["continuation"], job["continuation"][-1]]
+            spec = {
+                "policy": job["policy"],
+                "token_count": len(job["tokens"]),
+                "drops": job["drops"],
+                "reposition": job["reposition"],
+            }
+            payload.update(
+                max_tokens=len(forced),
+                ignore_eos=True,
+                temperature=0,
+                stream=False,
+                custom_logit_processor=processor,
+                return_meta_info=True,
+                return_output_ids_in_sglext=True,
+            )
+
+            async def send(endpoint, role, count, offset):
+                body = copy.deepcopy(payload)
+                path = root / f"{name}-{role}.pt"
+                body["custom_params"] = {
+                    "context_trace_path": str(path),
+                    "context_trace_count": count,
+                    "context_forced_tokens": forced,
+                    "context_forced_offset": offset,
+                    "context_cache_policy_probe": check,
+                    "context_layer_probe": check,
+                    "context_cache_policy_evict_tokens": evict,
+                }
+                if check:
+                    body["custom_params"]["context_policy_spec"] = spec
+                write_json(root / f"{name}-{role}.request.json", body)
+                response = await infer(session, endpoint, body)
+                write_json(root / f"{name}-{role}.response.json", response)
+                return response, path
+
+            if args.prefill_url:
+                payload.update(
+                    bootstrap_host="127.0.0.1",
+                    bootstrap_port=args.bootstrap_port,
+                    bootstrap_room=time.time_ns() % (1 << 52),
+                )
+                (_, p_path), (response, d_path) = await asyncio.gather(
+                    send(args.prefill_url, "prefill", 1, 0),
+                    send(args.url, "decode", len(forced) - 1, 1),
+                )
+                paths = [p_path, d_path]
+            else:
+                response, path = await send(args.url, "ordinary", len(forced), 0)
+                paths = [path]
+            if response["sglext"]["output_ids"] != [forced]:
+                raise AssertionError("Candidate did not consume frozen continuation")
+            logits = torch.cat([torch.load(p, weights_only=True) for p in paths])
+            assert len(logits) == len(forced) and torch.isfinite(logits).all()
+            torch.save(logits, root / f"{name}.pt")
+            if not check:
+                return {"paths": paths}
+            stats = [
+                json.loads(Path(str(p) + ".policy.json").read_text()) for p in paths
+            ]
+            reads = [
+                json.loads(line)
+                for p in paths
+                for f in root.glob(p.name + ".reads.rank*.jsonl")
+                for line in f.read_text().splitlines()
+            ]
+            assert reads, "Independent physical reader hooks produced no evidence"
+            assert all(
+                r["slots_ok"]
+                and r["stored_k_ok"]
+                and r["stored_v_ok"]
+                and r["fp32_close"]
+                for r in reads
+            )
+            assert all(s["structure_errors"] == [] for s in stats)
+            result = {
+                "case_id": job["case_id"],
+                "snapshot": job["snapshot"],
+                "policy": job["policy"],
+                "deployment": "pd" if args.prefill_url else "ordinary",
+                "candidate": f"{name}.pt",
+                "payload_sha256": job["payload_sha256"],
+                "same_payload": True,
+                "same_fixed_continuation": True,
+                "structure_errors": 0,
+                "physical_reads_checked": True,
+                "per_layer_checked": True,
+                "checked_layers": sorted({r["layer"] for r in reads}),
+                "retry_tokens": sum(s["retry_tokens"] for s in stats),
+                "matched_tokens": sum(s["matched"] for s in stats),
+                "recovered_queries": sum(
+                    b - a for s in stats for a, b in s["recovery_intervals"]
+                ),
+            }
+            # Every GPT-OSS layer must be checked, not just a convenient subset.
+            assert result["checked_layers"] == list(range(36))
+            if job["policy"] == POLICIES[1]:
+                assert result["retry_tokens"] == 0
+            return result
+
+        for job_name in manifest["jobs"]:
+            job = json.loads((source.parent / job_name).read_text())
+            stem = Path(job_name).stem
+            await flush()
+            for mode in ("cold", "hot"):
+                row = await call(job, f"{stem}-{mode}")
+                if mode == "hot":
+                    assert row["matched_tokens"] > 0
+                rows.append(dict(row, mode=mode))
+                write_json(root / "diagnostics.json", report)
+            await flush()
+            if job["policy"] == POLICIES[0]:
+                warm = copy.deepcopy(job["payload"])
+                last = len(warm["messages"]) - 1
+                repos = warm.get("reposition", [])
+                warm["reposition"] = (
+                    [r for r in repos if r != last] if last in repos else [*repos, last]
+                )
+                await call(job, f"{stem}-retry-source", payload=warm, check=False)
+                row = await call(job, f"{stem}-retrigger")
+                assert row["retry_tokens"] > 0
+                rows.append(dict(row, mode="retrigger"))
+                write_json(root / "diagnostics.json", report)
+                await flush()
+            from cache_policy_reference import simulate_compact
+
+            ref = simulate_compact(
+                len(job["tokens"]),
+                {int(k): v for k, v in job["drops"].items()},
+                job["reposition"],
+                policy=job["policy"],
+            )
+            dead = int((ref.expiry < 2**63 - 1).sum())
+            source_result = await call(
+                job, f"{stem}-eviction-source", check=False, evict=dead + 256
+            )
+            evicted = sum(
+                json.loads(Path(str(p) + ".eviction.json").read_text())[
+                    "num_tokens_evicted"
+                ]
+                for p in source_result["paths"]
+            )
+            assert evicted > 0
+            row = await call(job, f"{stem}-partial_eviction")
+            assert row["recovered_queries"] > 0
+            rows.append(dict(row, mode="partial_eviction", evicted_pages=evicted))
+            write_json(root / "diagnostics.json", report)
+    report["completed"] = True
+    write_json(root / "diagnostics.json", report)
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("preflight", "run", "reference-jobs"))
+    parser.add_argument(
+        "action", choices=("preflight", "run", "reference-jobs", "diagnostics")
+    )
     parser.add_argument("--dataset")
     parser.add_argument("--model", required=True)
     parser.add_argument("--output", required=True)
@@ -463,6 +652,7 @@ def main():
     parser.add_argument("--cases", nargs=5, default=DEFAULT_CASES)
     parser.add_argument("--frozen")
     parser.add_argument("--report")
+    parser.add_argument("--jobs")
     parser.add_argument("--policy", choices=POLICIES)
     parser.add_argument("--url")
     parser.add_argument("--prefill-url")
@@ -470,12 +660,21 @@ def main():
     parser.add_argument("--gpu-mapping")
     parser.add_argument("--timeout", type=int, default=7200)
     args = parser.parse_args()
-    if args.action != "reference-jobs" and not args.dataset:
+    if args.action in ("preflight", "run") and not args.dataset:
         parser.error("preflight/run requires --dataset")
     if args.action == "reference-jobs":
         if not args.frozen or not args.report:
             parser.error("reference-jobs requires --frozen and --report")
         print(json.dumps(reference_jobs(args), ensure_ascii=False))
+        return
+    if args.action == "diagnostics":
+        if (
+            not args.jobs
+            or not args.url
+            or (args.prefill_url and not args.bootstrap_port)
+        ):
+            parser.error("diagnostics requires --jobs, --url and PD bootstrap port")
+        print(json.dumps(asyncio.run(diagnostics(args)), ensure_ascii=False))
         return
     if args.action == "run" and not all(
         (args.frozen, args.policy, args.url, args.gpu_mapping)
