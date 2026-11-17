@@ -550,6 +550,27 @@ def test_real_model_streaming_reference_chunk_invariance(
     continuation = tokenizer.encode(" A blue notebook.")[:3]
     drops = {32: [(3, 17)], 65: [(21, 38)], 90: [(40, 51)]}
     repos = [50, 91] if policy == POLICIES[0] else []
+    no_event = [
+        run_reference_model(
+            wrapper,
+            tokens,
+            {},
+            [],
+            policy=policy,
+            continuation=continuation,
+            chunk_tokens=size,
+        )
+        for size in (128, 17)
+    ]
+    no_event_delta = (no_event[0].float() - no_event[1].float()).abs()
+    print(
+        "REFERENCE_NO_EVENT_CHUNKS",
+        policy,
+        no_event_delta.max(-1).values.tolist(),
+        no_event_delta.mean(-1).tolist(),
+        flush=True,
+    )
+    audits = [{}, {}]
     complete = run_reference_model(
         wrapper,
         tokens,
@@ -558,6 +579,7 @@ def test_real_model_streaming_reference_chunk_invariance(
         policy=policy,
         continuation=continuation,
         chunk_tokens=128,
+        audit=audits[0],
     )
     chunked = run_reference_model(
         wrapper,
@@ -567,12 +589,27 @@ def test_real_model_streaming_reference_chunk_invariance(
         policy=policy,
         continuation=continuation,
         chunk_tokens=17,
+        audit=audits[1],
     )
     assert (
         complete.shape == chunked.shape == (len(continuation) + 1, complete.shape[-1])
     )
     assert torch.isfinite(chunked).all() and torch.isfinite(complete).all()
     delta = (complete.float() - chunked.float()).abs()
+    if int(os.environ.get("RANK", "0")) == 0:
+        for key in sorted(audits[0]):
+            errors = {
+                name: float((value.float() - audits[1][key][name].float()).abs().max())
+                for name, value in audits[0][key].items()
+            }
+            print("REFERENCE_CHUNK_LAYER", policy, key, errors, flush=True)
+    print(
+        "REFERENCE_CHUNK_ROWS",
+        policy,
+        delta.max(-1).values.tolist(),
+        delta.mean(-1).tolist(),
+        flush=True,
+    )
     print(
         "REFERENCE_CHUNK_INVARIANCE",
         policy,

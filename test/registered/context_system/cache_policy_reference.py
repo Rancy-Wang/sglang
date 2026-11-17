@@ -417,7 +417,15 @@ def reference_attention_forward(model, reference, projection):
 
 
 def run_reference_model(
-    wrapper, tokens, drops, reposition, *, policy, continuation=(), chunk_tokens=2048
+    wrapper,
+    tokens,
+    drops,
+    reposition,
+    *,
+    policy,
+    continuation=(),
+    chunk_tokens=2048,
+    audit=None,
 ):
     """Model logits with independent positions, readers and owned streaming KV.
 
@@ -450,9 +458,28 @@ def run_reference_model(
     ends.extend(range(prompt_end + 1, len(projected) + 1))
     runner = wrapper.torch_runner
     wrapper.clear()
-    oracle = chunked_reference_attention_forward(
+    attention = chunked_reference_attention_forward(
         runner.model, reference, query_block=256, key_block=4096, streaming=True
     )
+    offsets = {}
+
+    def oracle(layer, q, k, v, batch, *args, **kwargs):
+        start = offsets.get(layer.layer_id, 0)
+        result = attention(layer, q, k, v, batch, *args, **kwargs)
+        if audit is not None:
+            for i in range(max(prompt_end - 1, start), start + len(q)):
+                audit[(layer.layer_id, i)] = {
+                    name: tensor[i - start].detach().clone()
+                    for name, tensor in (
+                        ("q", q),
+                        ("k", k),
+                        ("v", v),
+                        ("output", result),
+                    )
+                }
+        offsets[layer.layer_id] = start + len(q)
+        return result
+
     prefix = torch.empty(0, dtype=torch.int64, device=runner.device)
     results = []
     with (
