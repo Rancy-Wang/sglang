@@ -1,7 +1,7 @@
 # Cache policy ablations
 
 Implementation authorization: `APPROVED_PLAN_ID=PLAN-CS-20261117-R1`,
-`APPROVED_ROUND=3`. The approved file allowlist covers the two new compilers,
+`APPROVED_ROUND=4`. The approved file allowlist covers the two new compilers,
 Context IR/wire/occurrence/recovery, frontend admission, Radix selection,
 scheduler/PD integration, dedicated tests and BCP runner, and this document.
 Existing policies retain their wire formats and execution behavior.
@@ -175,6 +175,26 @@ Additional read-only resource preflight on `Tengxuan-BUS-2` found eight A800
 80GB GPUs using 78,944–79,250 MiB each, with their compute processes invisible
 in the current container. System disk free space was about 8.7GB. No existing
 process was stopped, and no model validation was launched there.
+
+On resumption, Tengxuan's independent checkout at
+`/home/wangruoxi/cache-policies-r1-20261117/sglang` passed **34 CPU tests** with
+**14 skipped** at `37a6543bea`. Its five-case tokenizer preflight reproduced
+the frozen input hashes, model metadata fingerprints, thresholds and event
+coverage. The NVIDIA PIDs map through `/proc/*/status`'s `Ngid` to a SGLang
+process family and another GPU process owned by `renzhongqi`. An authorized
+SIGTERM attempt failed; noninteractive sudo requires a password. No task was
+terminated. Complete model execution still requires an available allocation.
+
+Small CUDA tests fit in the remaining GPU 0 memory with the PyTorch allocator
+capped at 256 MiB. The first run had **8 passed, 4 failed**; peak PyTorch
+allocated/reserved memory was 849,920/2,097,152 bytes (CUDA context overhead is
+additional). All failures used a zero SWA window. That fixture incorrectly
+assumed self-only attention: both current and frozen native Triton enable SWA
+only for positive windows, and Context recovery rejects zero. Round 4 changes
+the kernel fixture to the smallest valid window, one, and explicitly tests
+zero-window rejection. No production kernel or legacy policy changes are
+needed for this fixture correction. The mathematical reference still tests
+zero as a boundary of its own explicit visibility definition.
 
 Still required before acceptance: CUDA validation, independent full-model
 numerical execution (including the BCP reference/diagnostic driver),

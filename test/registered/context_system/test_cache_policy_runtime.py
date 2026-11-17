@@ -270,7 +270,9 @@ def test_pd_transfer_sends_only_active_identity(
     os.environ.get("RUN_CONTEXT_GPU") != "1", reason="isolated CUDA device required"
 )
 @pytest.mark.parametrize("policy", POLICIES)
-@pytest.mark.parametrize("window_size", [-1, 0, 16])
+# Context recovery requires positive SWA windows. Native Triton does not
+# interpret zero as self-only attention (the bounded mathematical oracle can).
+@pytest.mark.parametrize("window_size", [-1, 1, 16])
 @pytest.mark.parametrize("kv_heads", [2, 4])
 def test_real_cuda_attention_against_independent_event_reads(
     policy_modules,
@@ -372,6 +374,14 @@ def test_real_cuda_attention_against_independent_event_reads(
         extend_seq_lens_cpu=[1] * len(q),
     )
     torch.testing.assert_close(output, expected, rtol=0.0078125, atol=0.0078125)
+
+
+@pytest.mark.parametrize("policy", POLICIES)
+def test_zero_window_is_rejected_by_context_recovery(policy_modules, policy):
+    recovery = importlib.import_module(policy_modules[2].__package__ + ".recovery")
+    p = compile_policy(policy_modules, policy, list(range(8)), {5: [(1, 3)]})
+    with pytest.raises(ValueError, match="window must be positive"):
+        recovery.sliding_window_starts(p.layout, p.visible_until, 0)
 
 
 @pytest.mark.skipif(
