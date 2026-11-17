@@ -3,6 +3,7 @@
 import importlib
 import os
 import random
+from itertools import pairwise
 
 import pytest
 import torch
@@ -108,6 +109,26 @@ def test_model_oracle_rotation_against_unrotated_complex_attention(
         **extra,
     )
     torch.testing.assert_close(blocked, actual, rtol=1e-5, atol=1e-6)
+    streaming = chunked_reference_attention_forward(
+        model, compact, query_block=3, key_block=2, streaming=True
+    )
+    pieces = []
+    # Cross event boundaries, then finish with one-token decode-shaped calls.
+    cuts = sorted({0, min(3, n), min(7, n), n - 1, n})
+    for start, end in pairwise(cuts):
+        pieces.append(
+            streaming(
+                layer,
+                born_q[start:end],
+                born_k[start:end],
+                v[start:end],
+                SimpleNamespace(positions=torch.tensor(births[start:end])),
+                **extra,
+            )
+        )
+    torch.testing.assert_close(torch.cat(pieces), actual, rtol=1e-5, atol=1e-6)
+    with pytest.raises(ValueError, match="consecutive token chunks"):
+        streaming(layer, born_q[:1], born_k[:1], v[:1], None)
     expected = []
     for i, raw in enumerate(projection):
         chosen = [

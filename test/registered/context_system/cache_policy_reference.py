@@ -183,7 +183,7 @@ def simulate_compact(token_count, drops, reposition=(), *, policy):
 
 
 def chunked_reference_attention_forward(
-    model, reference, *, query_block=128, key_block=2048
+    model, reference, *, query_block=128, key_block=2048, streaming=False
 ):
     """Full-prefill FP32 oracle with bounded attention scratch memory.
 
@@ -191,7 +191,9 @@ def chunked_reference_attention_forward(
     holds one layer's projected KV, O(query_block * N) visibility, and bounded
     score tiles; it never reads a production KV pool, compiler, or occurrence
     plan. Full attention still takes quadratic arithmetic. This is a numerical
-    diagnostic, not a performance baseline or a serving replacement.
+    diagnostic, not a performance baseline or a serving replacement. Streaming
+    mode owns independent per-layer K/V arrays and consumes consecutive chunks
+    (including fixed-continuation decode) from this immutable reference tape.
     """
     import torch
 
@@ -203,31 +205,55 @@ def chunked_reference_attention_forward(
         if hasattr(module, "attn") and hasattr(module, "rotary_emb")
     }
     n = len(reference.raw)
+    state = {}
 
     def attention(layer, q, k, v, batch, *args, **kwargs):
-        if len(q) != n or k is None or v is None or not n:
-            raise ValueError("Reference requires one complete nonempty prefill")
-        if batch.positions.tolist() != reference.compute_positions.tolist():
+        count = len(q)
+        offset = state.get(layer.layer_id, (0,))[0] if streaming else 0
+        end = offset + count
+        if not count or end > n or k is None or v is None:
+            raise ValueError("Reference requires nonempty consecutive token chunks")
+        if not streaming and count != n:
+            raise ValueError("Non-streaming reference requires a complete prefill")
+        if batch.positions.tolist() != reference.compute_positions[offset:end].tolist():
             raise ValueError("Reference model positions differ from event replay")
         rope = rotary[layer.layer_id]
         device = q.device
-        births = torch.as_tensor(reference.compute_positions, device=device)
-        raw = torch.as_tensor(reference.raw, device=device)
-        expiry = torch.as_tensor(reference.expiry, device=device)
-        q = q.reshape(n, layer.tp_q_head_num, layer.qk_head_dim).float()
-        k = k.reshape(n, layer.tp_k_head_num, layer.qk_head_dim)
-        v = v.reshape(n, layer.tp_v_head_num, layer.v_head_dim)
+        births = torch.as_tensor(reference.compute_positions[:end], device=device)
+        raw = torch.as_tensor(reference.raw[:end], device=device)
+        expiry = torch.as_tensor(reference.expiry[:end], device=device)
+        q = q.reshape(count, layer.tp_q_head_num, layer.qk_head_dim).float()
+        k = k.reshape(count, layer.tp_k_head_num, layer.qk_head_dim)
+        v = v.reshape(count, layer.tp_v_head_num, layer.v_head_dim)
+        if streaming:
+            if layer.layer_id not in state:
+                saved_k = k.new_empty(n, *k.shape[1:])
+                saved_v = v.new_empty(n, *v.shape[1:])
+            else:
+                _, saved_k, saved_v = state[layer.layer_id]
+            saved_k[offset:end].copy_(k)
+            saved_v[offset:end].copy_(v)
+            state[layer.layer_id] = (end, saved_k, saved_v)
+            k, v = saved_k[:end], saved_v[:end]
         groups = layer.tp_q_head_num // layer.tp_k_head_num
         window = layer.sliding_window_size
         window = -1 if window is None else window
         cache, width = rope.cos_sin_cache.float(), rope.rotary_dim
         sinks = kwargs.get("sinks")
         result = torch.empty(
-            n, layer.tp_q_head_num, layer.v_head_dim, device=device, dtype=torch.float32
+            count,
+            layer.tp_q_head_num,
+            layer.v_head_dim,
+            device=device,
+            dtype=torch.float32,
         )
-        cuts = sorted({0, n, *reference.rotation_cuts})
-        for begin, end in pairwise(cuts):
-            positions = torch.as_tensor(reference.key_positions(begin), device=device)
+        cuts = sorted(
+            {offset, end, *(c for c in reference.rotation_cuts if offset < c < end)}
+        )
+        for begin, stage_end in pairwise(cuts):
+            positions = torch.as_tensor(
+                reference.key_positions(begin)[:end], device=device
+            )
             keys = k.float().clone()
             co, so = cache[births].chunk(2, -1)
             cn, sn = cache[positions].chunk(2, -1)
@@ -247,8 +273,8 @@ def chunked_reference_attention_forward(
             changed = births != positions
             keys[changed, :, :width] = rotated[changed]
             keys = keys.to(k.dtype)
-            for start in range(begin, end, query_block):
-                stop = min(start + query_block, end)
+            for start in range(begin, stage_end, query_block):
+                stop = min(start + query_block, stage_end)
                 visible = (raw[None] <= raw[start:stop, None]) & (
                     raw[start:stop, None] < expiry[None]
                 )
@@ -267,7 +293,7 @@ def chunked_reference_attention_forward(
                 if sinks is not None:
                     maximum[:] = sinks.float().reshape(-1, 1)
                     denominator.fill_(1)
-                queries = q[start:stop].transpose(0, 1)
+                queries = q[start - offset : stop - offset].transpose(0, 1)
                 for left in range(0, stop, key_block):
                     right = min(left + key_block, stop)
                     mask = visible[:, left:right]
@@ -290,8 +316,10 @@ def chunked_reference_attention_forward(
                     maximum = updated
                 if not bool((denominator > 0).all()):
                     raise AssertionError("Independent reference produced an empty row")
-                result[start:stop] = (total / denominator[..., None]).transpose(0, 1)
-        return result.to(v.dtype).reshape(n, -1)
+                result[start - offset : stop - offset] = (
+                    total / denominator[..., None]
+                ).transpose(0, 1)
+        return result.to(v.dtype).reshape(count, -1)
 
     @torch.no_grad()
     def forward(layer, q, k, v, batch, *args, **kwargs):
