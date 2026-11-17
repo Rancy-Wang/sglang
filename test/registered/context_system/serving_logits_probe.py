@@ -37,16 +37,16 @@ def policy_structure_errors(program, spec):
 
 def install_cache_policy_graph_probe():
     """Inspect buffers outside capture, immediately before native graph replay."""
-    from sglang.srt.layers.attention.triton_backend import TritonAttnBackend
+    from sglang.srt.model_executor.runner.decode_cuda_graph_runner import DecodeCudaGraphRunner
 
-    if getattr(TritonAttnBackend, "_cache_policy_graph_probe", False):
+    if getattr(DecodeCudaGraphRunner, "_cache_policy_graph_probe", False):
         return
-    original = TritonAttnBackend.init_forward_metadata_out_graph
+    original = DecodeCudaGraphRunner.load_batch
 
-    def metadata(backend, batch, in_capture=False):
-        result = original(backend, batch, in_capture=in_capture)
-        params = getattr(batch.sampling_info, "custom_params", None)
-        if (in_capture or not batch.forward_mode.is_decode() or not params
+    def load_batch(runner, batch, *args, **kwargs):
+        result = original(runner, batch, *args, **kwargs)
+        params = getattr(getattr(batch, "sampling_info", None), "custom_params", None)
+        if (not batch.forward_mode.is_decode() or not params
                 or len(params) != 1 or not params[0]
                 or not params[0].get("context_graph_read_probe")):
             return result
@@ -56,6 +56,7 @@ def install_cache_policy_graph_probe():
         import torch
         from sglang.srt.context_system.request_storage import request_row
 
+        backend = runner._replay_attn_backend()
         param = params[0]
         generated = len(param.get("_context_probe_rows", []))
         if generated >= param["context_trace_count"]:
@@ -90,8 +91,8 @@ def install_cache_policy_graph_probe():
                 raise AssertionError(f"Graph physical reader mismatch: {report}")
         return result
 
-    TritonAttnBackend.init_forward_metadata_out_graph = metadata
-    TritonAttnBackend._cache_policy_graph_probe = True
+    DecodeCudaGraphRunner.load_batch = load_batch
+    DecodeCudaGraphRunner._cache_policy_graph_probe = True
 
 
 def install_cache_policy_eviction_probe():

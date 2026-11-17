@@ -20,6 +20,33 @@ pytest_plugins = (
 )
 
 
+def test_graph_probe_preserves_native_loading_without_opt_in(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    from serving_logits_probe import install_cache_policy_graph_probe
+
+    calls = []
+
+    class Runner:
+        def load_batch(self, batch, proxy=None):
+            calls.append((batch, proxy))
+            return "native-result"
+
+    monkeypatch.setitem(
+        sys.modules,
+        "sglang.srt.model_executor.runner.decode_cuda_graph_runner",
+        SimpleNamespace(DecodeCudaGraphRunner=Runner),
+    )
+    install_cache_policy_graph_probe()
+    wrapped = Runner.load_batch
+    install_cache_policy_graph_probe()
+    assert Runner.load_batch is wrapped
+    batch = SimpleNamespace(forward_mode=SimpleNamespace(is_decode=lambda: True))
+    assert Runner().load_batch(batch, "proxy") == "native-result"
+    assert calls == [(batch, "proxy")]
+
+
 @pytest.mark.parametrize("policy", POLICIES)
 def test_diagnostic_structure_checks_visibility(policy_modules, policy):
     from serving_logits_probe import policy_structure_errors
