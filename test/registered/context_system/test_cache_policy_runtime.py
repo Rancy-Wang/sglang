@@ -384,13 +384,62 @@ def test_zero_window_is_rejected_by_context_recovery(policy_modules, policy):
         recovery.sliding_window_starts(p.layout, p.visible_until, 0)
 
 
+@pytest.fixture(scope="module")
+def cache_policy_model_runtime():
+    """Isolated TP fixture; torchrun supplies a consistent rank/port on all GPUs."""
+    from sglang.benchmark.one_batch import load_model
+    from sglang.srt.entrypoints.engine import _set_envs_and_config
+    from sglang.srt.layers.attention.context_backend import ContextModelBinding
+    from sglang.srt.layers.moe import initialize_moe_config
+    from sglang.srt.layers.quantization.fp4_utils import initialize_fp4_gemm_config
+    from sglang.srt.layers.quantization.fp8_utils import initialize_fp8_gemm_config
+    from sglang.srt.runtime_context import publish
+    from sglang.srt.server_args import PortArgs, ServerArgs
+
+    world = int(os.environ.get("WORLD_SIZE", "1"))
+    rank = int(os.environ.get("RANK", "0"))
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+    port = os.environ.get("CONTEXT_TEST_NCCL_PORT")
+    if world > 1 and port is None:
+        raise ValueError("TP validation requires CONTEXT_TEST_NCCL_PORT on every rank")
+    args = ServerArgs(
+        model_path=os.environ["CONTEXT_MODEL_PATH"],
+        tp_size=world,
+        nccl_port=int(port) if port else None,
+        page_size=1,
+        max_total_tokens=4096,
+        max_running_requests=8,
+        context_length=2048,
+        mem_fraction_static=0.85,
+        attention_backend=os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND", "triton"),
+        cuda_graph_config={
+            "decode": {"backend": "disabled"},
+            "prefill": {"backend": "disabled"},
+        },
+    )
+    args.resolve_once()
+    _set_envs_and_config(args)
+    publish(args, role="scheduler")
+    initialize_moe_config()
+    initialize_fp8_gemm_config()
+    initialize_fp4_gemm_config()
+    wrapper, tokenizer = load_model(args, PortArgs.init_new(args), local_rank, rank)
+    runner = wrapper.torch_runner
+    binding = ContextModelBinding(
+        runner.model, runner.token_to_kv_pool, runner.kv_index_translator, page_size=1
+    )
+    runner.context_model_binding = binding
+    print("CACHE_POLICY_MODEL", args.model_path, world, rank, flush=True)
+    yield wrapper, tokenizer, binding
+
+
 @pytest.mark.skipif(
     not os.environ.get("CONTEXT_MODEL_PATH"), reason="isolated real model required"
 )
 @pytest.mark.parametrize("policy", POLICIES)
 @torch.no_grad()
 def test_real_model_logits_against_independent_fp32_attention(
-    runtime, policy_modules, policy
+    cache_policy_model_runtime, policy_modules, policy
 ):
     """No candidate compiler, cache or occurrence plan is used by the oracle."""
     from unittest.mock import patch
@@ -400,7 +449,7 @@ def test_real_model_logits_against_independent_fp32_attention(
     from sglang.srt.model_executor.forward_batch_info import ForwardBatch
     from test_model_forward import forward, prepare_batch
 
-    wrapper, tokenizer, _ = runtime
+    wrapper, tokenizer, _ = cache_policy_model_runtime
     runner = wrapper.torch_runner
     tokens = tokenizer.encode("The librarian kept blue notebooks and red maps. " * 20)[
         :96
