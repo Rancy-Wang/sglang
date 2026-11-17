@@ -877,7 +877,7 @@ class ChatCompletionRequest(BaseModel):
     messages: List[ChatCompletionMessageParam]
     # Public message IDs retain their meaning through native template processing.
     drop_message: Optional[Dict[str, Any]] = None
-    drop_rule: Optional[Dict[str, Any]] = None
+    drop_rule: Optional[Union[Dict[str, Any], Literal["text_drop_with_pe", "message_drop_without_repos"]]] = None
     insert: Optional[Dict[str, Annotated[int, Field(strict=True, lt=0)]]] = None
     reposition: Optional[List[Annotated[int, Field(strict=True)]]] = None
 
@@ -894,7 +894,7 @@ class ChatCompletionRequest(BaseModel):
             from sglang.srt.context_system.rules import InsertRule
 
             messages = [m.model_dump() for m in self.messages]
-            if self.drop_rule and self.drop_rule.get("type") == "keep_text_drop":
+            if isinstance(self.drop_rule, dict) and self.drop_rule.get("type") == "keep_text_drop":
                 messages = self.drop_rule.get("full_messages", messages)
             InsertRule.from_payload(self.insert, messages)
         return self
@@ -905,7 +905,7 @@ class ChatCompletionRequest(BaseModel):
         from sglang.srt.context_system.rules import normalize_message_indices
 
         messages = [m.model_dump() for m in self.messages]
-        if self.drop_rule and self.drop_rule.get("type") == "keep_text_drop":
+        if isinstance(self.drop_rule, dict) and self.drop_rule.get("type") == "keep_text_drop":
             messages = self.drop_rule.get("full_messages", messages)
         ids = normalize_message_indices(messages)
         return {"context_message_indices": list(ids),

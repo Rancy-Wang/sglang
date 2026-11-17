@@ -7,7 +7,7 @@ or acquire restrictions from these staged integration limits.
 from __future__ import annotations
 
 
-def validate_context_config(args, model_config, *, has_insert=False):
+def validate_context_config(args, model_config, *, has_insert=False, cache_policy=None):
     if args.page_size != 1:
         raise ValueError("Context Drop/Reposition requires page_size=1")
     architectures = model_config.hf_config.architectures or ()
@@ -18,6 +18,8 @@ def validate_context_config(args, model_config, *, has_insert=False):
         "Qwen3_5ForConditionalGeneration", "Qwen3_5MoeForConditionalGeneration",
         "Qwen3_5ForCausalLM", "Qwen3_5MoeForCausalLM",
     }
+    if cache_policy and (has_insert or qwen_hybrid):
+        raise ValueError("New cache policies do not support Insert or hybrid Linear attention")
     mode = getattr(args, "context_execution_mode", "occurrence")
     if mode not in {"occurrence", "staged"}:
         raise ValueError("Unknown Context execution mode")
@@ -134,6 +136,8 @@ def validate_context_request(args, model_config, request):
     from sglang.srt.context_system.planner import ContextProgram
 
     program = ContextProgram.from_wire(request.context_program, request.input_ids)
+    if program.layout.cache_policy:
+        validate_context_config(args, model_config, cache_policy=program.layout.cache_policy)
     if request.context_program.get("version") in (7, 8):
         validate_context_config(args, model_config, has_insert=True)
     return program

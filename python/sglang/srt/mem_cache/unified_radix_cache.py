@@ -1587,7 +1587,8 @@ class UnifiedRadixCache(BasePrefixCache):
             MatchPrefixParams(
                 key=radix_key,
                 req=req,
-                context_retry=req.context_program is not None,
+                context_retry=req.context_program is not None and req.context_program.allow_retry,
+                need_context_metadata=req.context_program is not None,
                 context_cache_publication=req.context_program is not None,
             )
         )

@@ -140,7 +140,7 @@ def sliding_window_starts(
     """
     if window <= 0:
         raise ValueError("Context SWA window must be positive")
-    if layout.insert_spans.numel():
+    if layout.insert_spans.numel() or layout.cache_policy:
         # Insert windows are not raw suffixes. Exact consumers use the logical
         # occurrence read sets below; zero is a safe conservative raw bound.
         return torch.zeros(len(layout.positions), dtype=torch.int32)
@@ -187,7 +187,7 @@ def sliding_window_read_mask(
     queries cannot undo its Drop. Evaluate only the potential read range of
     each monotonic run, including disjoint historical repair intervals.
     """
-    if layout is not None and layout.insert_spans.numel():
+    if layout is not None and (layout.insert_spans.numel() or layout.cache_policy):
         if window is None:
             raise ValueError("Insert SWA demand requires its native window")
         return _insert_read_masks(layout, visible_until, intervals, prefix_length, window)[1]
@@ -446,7 +446,7 @@ def plan_recovery(
             raise ValueError(
                 "Recovery source masks must match the CPU residency vector."
             )
-    if layout is not None and layout.insert_spans.numel():
+    if layout is not None and (layout.insert_spans.numel() or layout.cache_policy):
         if input_length != len(visible_until) or input_length != len(layout.positions):
             raise ValueError("Insert recovery metadata must cover the complete input")
         if swa_resident is not None and (swa_window is None or swa_window <= 0):

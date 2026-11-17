@@ -175,7 +175,8 @@ def match_prefix_for_req(
     match_result = tree_cache.match_prefix(
         MatchPrefixParams(
             key=req.make_prefix_key(token_ids, limit=key_limit),
-            context_retry=req.context_program is not None,
+            context_retry=req.context_program is not None and req.context_program.allow_retry,
+            need_context_metadata=req.context_program is not None,
             cow_mamba=cow_mamba,
             req=req if include_req else None,
         )

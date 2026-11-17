@@ -1029,7 +1029,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         key = params.key
         if key.context is not None:
             self._validate_context_key(key)
-            if params.context_retry:
+            if params.context_retry or params.need_context_metadata:
                 return self._match_context_retry(params)
         key, _ = key.maybe_to_bigram_view(self.is_eagle)
         if len(key) == 0:
@@ -1071,7 +1071,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         # Insert's logical SWA window need not be an execution-order suffix.
         # Match Full history first; recovery validates every actual SWA reader
         # against the returned residency map before any attention is dispatched.
-        insert_history = key.context is not None and key.context.has_insert
+        insert_history = key.context is not None and (key.context.has_insert or key.context.cache_policy != 0)
 
         def advance(node, length, suffix):
             if node.evicted:
@@ -1111,9 +1111,9 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                 break
             node = child
 
-        selected = longest_compatible_prefix(
+        selected = (longest_compatible_prefix(
             self.root_node, key, self.page_size, advance, initial=exact
-        )
+        ) if params.context_retry and key.context.cache_policy != 2 else exact)
         if not selected.matched_length:
             return self._empty_match_result
         winner = selected.node

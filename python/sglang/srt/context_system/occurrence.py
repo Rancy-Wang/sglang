@@ -250,6 +250,8 @@ def compile_occurrence_window(
                    if layout.insert_spans.numel() else np.empty(0, dtype=np.int32))
     order_cuts = (np.flatnonzero(np.diff(layout.logical_ranks.numpy()) != 1) + 1
                   if layout.logical_ranks.numel() else np.empty(0, dtype=np.int32))
+    position_cuts = (np.flatnonzero(np.diff(birth) != 1) + 1
+                     if layout.cache_policy else np.empty(0, dtype=np.int32))
     for stage in range(stage_count + 1):
         # An intermediate staged forward must not pre-materialize future RoPE
         # versions. At the final query, also consume trailing zero-query events.
@@ -286,6 +288,7 @@ def compile_occurrence_window(
             *np.unique(values[(values > local_start) & (values < local_end)]),
             *insert_cuts[(insert_cuts > local_start) & (insert_cuts < local_end)],
             *order_cuts[(order_cuts > local_start) & (order_cuts < local_end)],
+            *position_cuts[(position_cuts > local_start) & (position_cuts < local_end)],
             local_end,
         ])
         for start, end in pairwise(cuts):

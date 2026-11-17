@@ -831,12 +831,19 @@ DropRule = MessageDropRule | TextDropRule | KeepTextDropRule | ThinkingDropRule
 
 
 def parse_drop_rule(
-    payload: Mapping[str, Any] | None,
+    payload: Mapping[str, Any] | str | None,
     messages: Sequence[Mapping[str, Any]],
     *,
     legacy_drop_message: Mapping[Any, Any] | None = None,
     allow_internal: bool = False,
 ) -> DropRule | None:
+    if isinstance(payload, str):
+        if payload not in {"text_drop_with_pe", "message_drop_without_repos"}:
+            raise ValueError("Unknown string drop_rule")
+        base = MessageDropRule.from_payload(
+            {"type": "message_drop", "drop_messages": legacy_drop_message if legacy_drop_message is not None else {}}, messages,
+        )
+        return MessageDropRule(base.drop_messages, type=payload)
     if payload is not None and legacy_drop_message is not None:
         raise ValueError(
             "drop_rule and legacy drop_message cannot be supplied together"

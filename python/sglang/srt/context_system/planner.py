@@ -23,7 +23,7 @@
 from __future__ import annotations
 
 from bisect import bisect_right
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from itertools import pairwise
 from typing import Any
 
@@ -317,6 +317,12 @@ class TokenEventCompiler:
 class ContextProgram:
     layout: ContextLayout
     visible_until: torch.Tensor
+    # Provenance only. Never used as attention addresses or matching identity.
+    execution_to_full: torch.Tensor = field(default_factory=lambda: torch.empty(0, dtype=torch.int32))
+
+    @property
+    def allow_retry(self):
+        return self.layout.cache_policy != 2
 
     @property
     def input_ids(self):
@@ -345,6 +351,8 @@ class ContextProgram:
                     ),
                 )
             ),
+            (torch.cat((self.execution_to_full, torch.full((len(token_ids),), -1, dtype=torch.int32)))
+             if self.layout.cache_policy else self.execution_to_full),
         )
 
     def to_wire(self) -> dict[str, Any]:
@@ -354,13 +362,17 @@ class ContextProgram:
         reconstruct views of the transported CPU tensors, not the event program.
         The tensors are immutable by convention throughout the request lifetime.
         """
-        return {
-            "version": 7 if self.layout.insert_spans.numel() else 3,
+        wire = {
+            "version": 9 if self.layout.cache_policy else (7 if self.layout.insert_spans.numel() else 3),
             "layout": {name: value for name, value in vars(self.layout).items()
-                       if self.layout.insert_spans.numel() or name not in
-                       {"logical_order", "logical_ranks", "insert_spans"}},
+                       if (name != "cache_policy" or self.layout.cache_policy)
+                       and (self.layout.insert_spans.numel() or name not in
+                            {"logical_order", "logical_ranks", "insert_spans"})},
             "visible_until": self.visible_until,
         }
+        if self.layout.cache_policy:
+            wire["execution_to_full"] = self.execution_to_full
+        return wire
 
     def to_json_wire(self) -> dict[str, Any]:
         """Bounded binary JSON for rare native PD rebootstrap HTTP requests."""
@@ -374,13 +386,16 @@ class ContextProgram:
                 "data": base64.b64encode(value.numpy().tobytes()).decode("ascii"),
             }
 
-        return {
-            "version": 8 if self.layout.insert_spans.numel() else 4,
+        result = {
+            "version": self.to_wire()["version"] + 1,
             "layout": {
                 name: encode(value) for name, value in self.to_wire()["layout"].items()
             },
             "visible_until": encode(self.visible_until),
         }
+        if self.layout.cache_policy:
+            result["execution_to_full"] = encode(self.execution_to_full)
+        return result
 
     @classmethod
     def from_wire(cls, wire: dict[str, Any], input_ids) -> ContextProgram:
@@ -388,12 +403,12 @@ class ContextProgram:
         if (
             isinstance(wire, dict)
             and type(wire.get("version")) is int
-            and wire["version"] in (4, 8)
+            and wire["version"] in (4, 8, 10)
         ):
             import base64
             import math
 
-            scalar = {"next_position", "compile_ns"}
+            scalar = {"next_position", "compile_ns", "cache_policy"}
             boolean = {
                 "virtual_mask",
                 "keep_mask",
@@ -434,33 +449,44 @@ class ContextProgram:
                     else torch.empty(shape, dtype=dtype)
                 )
 
-            if set(wire) != {"version", "layout", "visible_until"} or not isinstance(
+            expected_wire = {"version", "layout", "visible_until"}
+            if wire["version"] == 10:
+                expected_wire.add("execution_to_full")
+            if set(wire) != expected_wire or not isinstance(
                 wire["layout"], dict
             ):
                 raise ValueError("Invalid Context JSON wire")
+            provenance = ({"execution_to_full": decode("execution_to_full", wire["execution_to_full"])}
+                          if wire["version"] == 10 else {})
             wire = {
+                **provenance,
                 "version": wire["version"] - 1,
                 "layout": {
                     name: decode(name, value) for name, value in wire["layout"].items()
                 },
                 "visible_until": decode("visible_until", wire["visible_until"]),
             }
+        expected_wire = {"version", "layout", "visible_until"}
+        if isinstance(wire, dict) and wire.get("version") == 9:
+            expected_wire.add("execution_to_full")
         if (
             not isinstance(wire, dict)
-            or set(wire) != {"version", "layout", "visible_until"}
+            or set(wire) != expected_wire
             or type(wire["version"]) is not int
-            or wire["version"] not in (3, 7)
+            or wire["version"] not in (3, 7, 9)
         ):
             raise ValueError("Unsupported Context program wire version")
         data = wire["layout"]
         expected = {field.name for field in fields(ContextLayout)}
-        if wire["version"] == 3:
+        if wire["version"] != 9:
+            expected -= {"cache_policy"}
+        if wire["version"] in (3, 9):
             expected -= {"logical_order", "logical_ranks", "insert_spans"}
         if not isinstance(data, dict) or set(data) != expected:
             raise ValueError("Context layout fields do not match the wire schema")
         layout = ContextLayout(**data)
         n = len(input_ids)
-        scalar_names = {"next_position", "compile_ns"}
+        scalar_names = {"next_position", "compile_ns", "cache_policy"}
         bool_names = {
             "virtual_mask",
             "keep_mask",
@@ -491,7 +517,7 @@ class ContextProgram:
         records = layout.records
         if records.shape[1] != 3:
             raise ValueError("Context key records must have three columns")
-        max_kind = 4 if wire["version"] == 7 else 2
+        max_kind = 5 if wire["version"] == 9 else (4 if wire["version"] == 7 else 2)
         if bool(torch.any(records[:, 0] < 0) | torch.any(records[:, 0] > max_kind)):
             raise ValueError("Context key record kind is invalid for its wire version")
         for name in (
@@ -541,7 +567,28 @@ class ContextProgram:
             for start, end, depth in layout.insert_spans.reshape(-1, 3).tolist():
                 if not 0 < depth <= start < end <= n:
                     raise ValueError("Context Insert anchor is not an ancestor token")
-        return cls(layout, expiry)
+        provenance = wire.get("execution_to_full", torch.empty(0, dtype=torch.int32))
+        if wire["version"] == 9:
+            if layout.cache_policy not in (1, 2):
+                raise ValueError("Invalid cache policy")
+            if (not isinstance(provenance, torch.Tensor) or provenance.device.type != "cpu"
+                    or provenance.dtype != torch.int32 or provenance.shape != (n,)
+                    or not provenance.is_contiguous() or bool(torch.any(provenance < -1))):
+                raise ValueError("Invalid cache policy provenance")
+            kinds = records[:, 0]
+            if bool(torch.any((kinds == 3) | (kinds == 4))):
+                raise ValueError("Cache policies do not support Insert")
+            if layout.cache_policy == 1:
+                c = torch.nonzero(kinds == 5).flatten()
+                if (len(c) != n or not torch.equal(c+1, real_keys)
+                        or not torch.equal(records[c, 1], layout.birth_positions)
+                        or bool(torch.any(records[c, 2] != -1))
+                        or bool(torch.any(kinds == 1)) or not bool(layout.keep_mask.all())
+                        or bool(torch.any(expiry != 2**31-1))):
+                    raise ValueError("Invalid text-drop compute identity")
+            elif bool(torch.any((kinds == 2) | (kinds == 5))) or not torch.equal(layout.positions, layout.birth_positions):
+                raise ValueError("Frozen-death policy forbids rotations")
+        return cls(layout, expiry, provenance)
 
 
 def _compile_insert_program(raw_messages, provenance, drop_rule, reposition, insert):
@@ -677,6 +724,10 @@ def compile_chat_program(
     same IDs. Keep-text callers supply the full history selected by the rule.
     This function is called only after the no-feature fast-path decision.
     """
+    from .cache_policies import POLICIES, compile_cache_policy
+    policy = getattr(drop_rule, "type", None)
+    if policy in POLICIES and insert:
+        raise ValueError("New cache policies do not support Insert")
     if any(message.get("index") is not None for message in raw_messages):
         from .rules import InsertRule
         InsertRule.from_payload(insert, raw_messages)
@@ -707,6 +758,11 @@ def compile_chat_program(
     repos = resolve_reposition_token_boundaries(
         reposition, owner_ranges, {i: i for i in range(message_count)}
     )
+    if policy in POLICIES:
+        layout, expiry, projection = compile_cache_policy(
+            torch.tensor(provenance.input_ids, dtype=torch.int32), events, repos, policy,
+        )
+        return ContextProgram(layout, expiry, projection)
     layout = compile_context_layout(
         torch.tensor(provenance.input_ids, dtype=torch.int32),
         events.event_insert_offsets,

@@ -24,6 +24,9 @@ class ContextTransferPlan:
     @classmethod
     def build(cls, program, device):
         digest = hashlib.blake2b(digest_size=8)
+        if program.layout.cache_policy:
+            digest.update(b"cache-policy" + bytes([program.layout.cache_policy]))
+            digest.update(program.layout.next_position.to_bytes(4, "little"))
         # Include the full event identity, not just final token text/positions.
         for value in (
             program.layout.records,

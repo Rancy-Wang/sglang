@@ -34,6 +34,7 @@ DELTA_KIND = 1
 REPOSITION_KIND = 2
 INSERT_BEGIN_KIND = 3
 INSERT_END_KIND = 4
+COMPUTE_KIND = 5
 
 
 def _empty_i32():
@@ -71,6 +72,9 @@ class ContextLayout:
     # Flattened (execution start, execution end, target birth-depth) triples.
     insert_spans: torch.Tensor = field(default_factory=_empty_i32)
 
+    # 0: legacy, 1: active text with C records, 2: frozen-death full history.
+    cache_policy: int = 0
+
     @property
     def keys(self) -> torch.Tensor:
         return self.records
@@ -97,15 +101,25 @@ def append_generated_layout(layout: ContextLayout, token_ids) -> ContextLayout:
     )
     stages = torch.full((count,), len(layout.transition_offsets) - 1, dtype=torch.int32)
     records = torch.stack((torch.zeros_like(positions), tokens.int(), positions), 1)
+    stride = 2 if layout.cache_policy == 1 else 1
+    virtual = torch.zeros(count * stride, dtype=torch.bool)
+    key_map = torch.arange(n, n + count).repeat_interleave(stride)
+    if stride == 2:
+        expanded = torch.empty((2 * count, 3), dtype=torch.int32)
+        expanded[::2] = torch.stack((torch.full_like(positions, COMPUTE_KIND), positions, torch.full_like(positions, -1)), 1)
+        expanded[1::2] = records
+        records = expanded
+        virtual[::2] = True
+        key_map[::2] = -1
     return replace(
         layout,
         records=torch.cat((layout.records, records)),
         virtual_mask=torch.cat(
-            (layout.virtual_mask, torch.zeros(count, dtype=torch.bool))
+            (layout.virtual_mask, virtual)
         ),
-        key_to_token=torch.cat((layout.key_to_token, torch.arange(n, n + count))),
+        key_to_token=torch.cat((layout.key_to_token, key_map)),
         token_to_key=torch.cat(
-            (layout.token_to_key, torch.arange(record_count, record_count + count))
+            (layout.token_to_key, torch.arange(record_count + stride - 1, record_count + stride * count, stride))
         ),
         positions=torch.cat((layout.positions, positions)),
         keep_mask=torch.cat((layout.keep_mask, torch.ones(count, dtype=torch.bool))),
@@ -384,6 +398,7 @@ class ContextKeyData:
     event_tokens: array
     positions: array
     has_insert: bool = False
+    cache_policy: int = 0
 
     @classmethod
     def from_layout(cls, layout: ContextLayout) -> ContextKeyData:
@@ -411,7 +426,7 @@ class ContextKeyData:
         positions.frombytes(layout.positions.numpy().tobytes())
         return cls(
             records, token_map, special_tokens, retry_records, event_tokens, positions,
-            bool(layout.insert_spans.numel()),
+            bool(layout.insert_spans.numel()), layout.cache_policy,
         )
 
     def append_tokens(self, token_ids: array, *, next_position: int) -> None:
@@ -432,6 +447,10 @@ class ContextKeyData:
             raise ValueError("Context decode tokens/positions exceed int32 range")
         for offset, token in enumerate(token_ids):
             raw = len(self.token_to_record)
+            if self.cache_policy == 1:
+                compute = (COMPUTE_KIND, next_position + offset, -1)
+                self.records.extend(compute)
+                self.retry_records.extend(compute)
             record = len(self.records) // 3
             preceding = self.token_to_record[-1] + 1 if raw else 0
             position = next_position + offset
@@ -470,6 +489,10 @@ class ContextKeyData:
         retry: bool = False,
     ) -> int:
         """Exact structured LCP, returned in real tokens (never virtual slots)."""
+        if self.cache_policy != other.cache_policy:
+            return 0
+        if retry and self.cache_policy == 2:
+            retry = False
         if not count:
             return 0
         a, ae = self.record_span(start, count)

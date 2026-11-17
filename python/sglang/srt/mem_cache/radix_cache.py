@@ -238,6 +238,8 @@ class RadixKey:
             raise ValueError("RadixKey operations require matching bigram modes")
         if offset < 0 or offset > len(other):
             raise IndexError(f"RadixKey offset out of range: {offset}")
+        if getattr(self.context, "cache_policy", 0) != getattr(other.context, "cache_policy", 0):
+            return 0
         t0, t1 = self.token_ids, other.token_ids
         assert type(t0) is type(t1), (type(t0), type(t1))
         n = min(self._raw_len(), other._raw_len() - offset)
@@ -298,7 +300,8 @@ class RadixKey:
             start = self.context.record_start(raw)
             end = self.context.token_to_record[raw]
             events = tuple(self.context.records[3 * start : 3 * end])
-        return self.extra_key, self.cache_salt, self.token_ids[offset], events
+        key = self.extra_key, self.cache_salt, self.token_ids[offset], events
+        return ("cache-policy", self.context.cache_policy, key) if self.context is not None and self.context.cache_policy else key
 
     def child_key(self, page_size: int = 1):
         """Hashable dict-key for the first ``page_size`` logical units, namespaced by ``extra_key``."""
@@ -332,15 +335,17 @@ class RadixKey:
                 "context-v2",
                 self.context.child_records(self.context_start + offset, 1),
             )
+        if self.context is not None and self.context.cache_policy:
+            plain = ("cache-policy", self.context.cache_policy, plain)
         if self.cache_salt is not None:
             return ((self.extra_key, self.cache_salt), plain)
         return plain if self.extra_key is None else (self.extra_key, plain)
 
     def hash_page(self, start: int, end: int, prior_hash: Optional[str] = None) -> str:
         """SHA256 for logical units [start, end); bigram mode feeds overlapping (t_i, t_{i+1}) byte pairs."""
-        if self.context is not None and self.context.plain_prefix(
+        if self.context is not None and (self.context.cache_policy or self.context.plain_prefix(
             self.context_start + start, end - start
-        ) < end - start:
+        ) < end - start):
             # Context storage/export is gated separately. Keep this public hash
             # helper collision-safe for diagnostics and in-memory page records.
             import hashlib
@@ -350,6 +355,8 @@ class RadixKey:
                 self.context_start + start, end - start
             )
             digest = hashlib.sha256(b"sglang-context-key-v2")
+            if self.context.cache_policy:
+                digest.update(b"cache-policy" + bytes([self.context.cache_policy]))
             if prior_hash is not None:
                 digest.update(bytes.fromhex(prior_hash))
             digest.update(struct.pack(f"<{len(records)}i", *records))

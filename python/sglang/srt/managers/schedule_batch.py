@@ -1864,7 +1864,8 @@ class Req(ReqDllmMixin):
                     key=self.make_prefix_key(token_ids_to_match, limit=key_limit),
                     req=self,
                     cow_mamba=cow_mamba,
-                    context_retry=self.context_program is not None,
+                    context_retry=self.context_program is not None and self.context_program.allow_retry,
+                    need_context_metadata=self.context_program is not None,
                 )
             )
             if envs.SGLANG_RADIX_FORCE_MISS.get():

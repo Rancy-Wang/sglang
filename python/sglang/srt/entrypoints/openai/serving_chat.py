@@ -1308,6 +1308,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 resolving_view(self.tokenizer_manager.server_args),
                 self.tokenizer_manager.model_config,
                 has_insert=bool(request.insert),
+                cache_policy=request.drop_rule if isinstance(request.drop_rule, str) else None,
             )
             warmup_error = getattr(self.tokenizer_manager, "context_warmup_error", None)
             if isinstance(warmup_error, str):
@@ -1330,6 +1331,9 @@ class OpenAIServingChat(OpenAIServingBase):
                 [message.model_dump() for message in request.messages],
                 legacy_drop_message=request.drop_message,
             )
+            if (getattr(context_rule, "type", None) == "message_drop_without_repos"
+                    and request.reposition):
+                raise ValueError("message_drop_without_repos does not accept reposition")
             if isinstance(context_rule, KeepTextDropRule):
                 # Apply the same native validation and template processing to the
                 # full history; the public kept projection is only a selection.
