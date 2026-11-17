@@ -475,6 +475,94 @@ async def run(args):
     return report
 
 
+def quick_jobs(source):
+    """Reuse real frozen histories; never label shortened runs full trajectories."""
+    source = Path(source)
+    manifest = json.loads(source.read_text())
+    jobs = [json.loads((source.parent / name).read_text()) for name in manifest["jobs"]]
+    finals = [job for job in jobs if job["snapshot"] == "final"]
+    if {job["case_id"] for job in finals} != set(DEFAULT_CASES) or len(finals) != 5:
+        raise ValueError("Quick replay requires all five frozen BCP final histories")
+    selected = []
+    for job in finals:
+        for policy in POLICIES:
+            item = copy.deepcopy(job)
+            item["policy"] = item["payload"]["drop_rule"] = policy
+            if policy == POLICIES[1]:
+                item["payload"].pop("reposition", None)
+            selected.append(item)
+    selected.extend(
+        copy.deepcopy(job) for job in jobs
+        if job["case_id"] == DEFAULT_CASES[0]
+        and job["snapshot"] in ("first_drop", "first_reposition")
+    )
+    if len(selected) != 12:
+        raise ValueError("Quick replay needs first Drop and first 96K Reposition")
+    return manifest, selected
+
+
+async def quick(args):
+    """Graph-enabled HTTP smoke and timing; not full numerical acceptance."""
+    import aiohttp
+    from cache_policy_reference import simulate_compact
+
+    manifest, jobs = quick_jobs(args.jobs)
+    if manifest["model"] != args.model:
+        raise ValueError("Quick model differs from frozen jobs")
+    root = Path(args.output)
+    root.mkdir(parents=True, exist_ok=False)
+    renderer = renderer_for(args)
+    report = {
+        "completed": False, "meaning": "short real BCP snapshot replay; not full trajectory or numerical acceptance",
+        "head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+        "generation_budget": 64, "rows": [],
+    }
+    base = args.url.split("/v1/")[0]
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=args.timeout)) as session:
+        async with session.get(base + "/get_server_info") as response:
+            response.raise_for_status()
+            info = await response.json()
+            write_json(root / "server-info.json", info)
+        for job in jobs:
+            payload = copy.deepcopy(job["payload"])
+            payload.update(max_tokens=64, ignore_eos=True, temperature=0, stream=False,
+                           return_output_ids_in_sglext=True)
+            count, owners = renderer.render(payload["messages"], payload["tools"])
+            drops, repos = independent_events(payload, owners)
+            ref = simulate_compact(count, drops, repos, policy=job["policy"])
+            name = f"{job['case_id']}-{job['policy']}-{job['snapshot']}"
+            async with session.post(base + "/flush_cache") as response:
+                response.raise_for_status()
+            cold_ids = None
+            for mode in ("cold", "hot"):
+                stem = name + "-" + mode
+                write_json(root / (stem + ".request.json"), payload)
+                start = time.perf_counter()
+                result = await infer(session, args.url, payload)
+                elapsed = time.perf_counter() - start
+                write_json(root / (stem + ".response.json"), result)
+                usage = result["usage"]
+                assert usage["completion_tokens"] == 64
+                assert usage["prompt_tokens"] == len(ref.raw)
+                assert result["choices"][0]["finish_reason"] == "length"
+                cached = usage.get("prompt_tokens_details", {}).get("cached_tokens", 0)
+                if mode == "hot":
+                    assert cached > 0, "Repeated snapshot did not reuse cached tokens"
+                ids = result["sglext"]["output_ids"]
+                if mode == "cold":
+                    cold_ids = ids
+                row = dict(case_id=job["case_id"], policy=job["policy"], snapshot=job["snapshot"],
+                           mode=mode, latency_s=elapsed, output_tokens_per_s=64/elapsed,
+                           full_tokens=count, execution_tokens=len(ref.raw), cached_tokens=cached,
+                           cold_hot_output_equal=ids == cold_ids)
+                report["rows"].append(row)
+                write_json(root / "report.json", report)
+                print("BCP_GRAPH_QUICK", json.dumps(row), flush=True)
+    report["completed"] = True
+    write_json(root / "report.json", report)
+    return report
+
+
 async def diagnostics(args):
     """Collect real fixed-token cold/hot/retry/eviction evidence separately."""
     import aiohttp
@@ -796,6 +884,7 @@ def main():
             "reference-jobs",
             "diagnostics",
             "compare-artifacts",
+            "quick",
         ),
     )
     parser.add_argument("--dataset")
@@ -820,6 +909,11 @@ def main():
     parser.add_argument("--gpu-mapping")
     parser.add_argument("--timeout", type=int, default=7200)
     args = parser.parse_args()
+    if args.action == "quick":
+        if not args.jobs or not args.url:
+            parser.error("quick requires --jobs and --url")
+        print(json.dumps(asyncio.run(quick(args)), ensure_ascii=False))
+        return
     if args.action == "compare-artifacts":
         if not args.diagnostic_report or not args.reference_output:
             parser.error(

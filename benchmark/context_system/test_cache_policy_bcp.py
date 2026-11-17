@@ -44,6 +44,32 @@ def test_independent_boundaries_preserve_harmony_generation_header():
         independent_events(payload, [0, 1, 3])
 
 
+def test_quick_jobs_preserve_real_history_and_isolate_policy_fields(tmp_path):
+    from cache_policy_bcp import DEFAULT_CASES, quick_jobs, write_json
+
+    names = []
+    for case in DEFAULT_CASES:
+        for snapshot in ("first_drop", "first_reposition", "final"):
+            name = f"{case}-{snapshot}.json"
+            names.append(name)
+            write_json(tmp_path / name, {
+                "case_id": case, "snapshot": snapshot, "policy": POLICIES[0],
+                "payload": {"messages": [{"content": case}], "drop_rule": POLICIES[0],
+                            "drop_message": {"2": [0]}, "reposition": [2]},
+            })
+    write_json(tmp_path / "jobs.json", {"model": "frozen", "jobs": names})
+    _, selected = quick_jobs(tmp_path / "jobs.json")
+    assert len(selected) == 12
+    for job in selected:
+        assert job["payload"]["messages"] == [{"content": job["case_id"]}]
+        assert job["payload"]["drop_message"] == {"2": [0]}
+        assert ("reposition" in job["payload"]) == (job["policy"] == POLICIES[0])
+    assert "reposition" in json.loads((tmp_path / names[0]).read_text())["payload"]
+    (tmp_path / names[-1]).unlink()
+    with pytest.raises(FileNotFoundError):
+        quick_jobs(tmp_path / "jobs.json")
+
+
 @pytest.mark.parametrize("policy", POLICIES)
 def test_rolling_keeps_assistants_full_history_and_real_threshold(policy):
     rolling = RollingPolicy(policy)
