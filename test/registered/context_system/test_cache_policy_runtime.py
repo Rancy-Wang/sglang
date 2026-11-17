@@ -14,7 +14,92 @@ pytest_plugins = (
     "test_context_attention_plan",
     "test_context_transfer",
     "test_drop_eviction",
+    "test_model_forward",
 )
+
+
+@pytest.mark.parametrize("policy", POLICIES)
+@pytest.mark.parametrize("neox", [False, True])
+def test_model_oracle_rotation_against_unrotated_complex_attention(policy, neox):
+    """Check the independent oracle before trusting its future GPU comparisons."""
+    from types import SimpleNamespace
+
+    from cache_policy_reference import reference_attention_forward
+
+    tokens = list(range(12))
+    reference = simulate(
+        tokens,
+        {5: [(1, 3)], 9: [(4, 6)]},
+        [10] if policy == POLICIES[0] else [],
+        policy=policy,
+    )
+    projection = reference.active if policy == POLICIES[0] else tokens
+    inverse = {raw: i for i, raw in enumerate(projection)}
+    n = len(projection)
+    torch.manual_seed(17)
+    q, k, v = torch.randn(n, 4, 8), torch.randn(n, 2, 8), torch.randn(n, 2, 8)
+    angles = torch.arange(32)[:, None] * torch.tensor([0.1, 0.03])[None, :]
+    # Non-unit amplitude exercises scaled RoPE; preserve the non-rotary tail.
+    cache = 1.2 * torch.cat((angles.cos(), angles.sin()), -1)
+    rope = SimpleNamespace(cos_sin_cache=cache, rotary_dim=4, is_neox_style=neox)
+    layer = SimpleNamespace(
+        layer_id=0,
+        tp_q_head_num=4,
+        tp_k_head_num=2,
+        tp_v_head_num=2,
+        qk_head_dim=8,
+        v_head_dim=8,
+        sliding_window_size=3,
+        scaling=8**-0.5,
+        logit_cap=0,
+    )
+    model = SimpleNamespace(
+        modules=lambda: [SimpleNamespace(attn=layer, rotary_emb=rope)]
+    )
+    births = [reference.compute_positions[i] for i in projection]
+
+    def rotate(x, positions):
+        z = x.double().clone()
+        left, right = (
+            (z[..., :2], z[..., 2:4]) if neox else (z[..., :4:2], z[..., 1:4:2])
+        )
+        phase = torch.polar(
+            torch.full_like(angles[positions], 1.2).double(), angles[positions].double()
+        )[:, None]
+        value = torch.complex(left, right) * phase
+        if neox:
+            z[..., :4] = torch.cat((value.real, value.imag), -1)
+        else:
+            z[..., :4] = torch.stack((value.real, value.imag), -1).flatten(-2)
+        return z
+
+    born_q, born_k = rotate(q, births).float(), rotate(k, births).float()
+    actual = reference_attention_forward(model, reference, projection)(
+        layer, born_q, born_k, v, SimpleNamespace(positions=torch.tensor(births))
+    )
+    expected = []
+    for i, raw in enumerate(projection):
+        chosen = [
+            (inverse[j], pos)
+            for j, pos in reference.readers[raw]
+            if pos >= births[i] - 3
+        ][-4:]
+        ids, positions = zip(*chosen)
+        keys = rotate(k[list(ids)], list(positions)).repeat_interleave(2, 1)
+        scores = (
+            torch.einsum("hd,khd->hk", rotate(q[i : i + 1], [births[i]])[0], keys)
+            * layer.scaling
+        )
+        expected.append(
+            torch.einsum(
+                "hk,khd->hd",
+                scores.softmax(-1),
+                v[list(ids)].double().repeat_interleave(2, 1),
+            )
+        )
+    torch.testing.assert_close(
+        actual.double(), torch.stack(expected).reshape(n, -1), rtol=1e-5, atol=1e-6
+    )
 
 
 @pytest.mark.parametrize("policy", POLICIES)
@@ -192,3 +277,82 @@ def test_real_cuda_attention_against_independent_event_reads(
         extend_seq_lens_cpu=[1] * len(q),
     )
     torch.testing.assert_close(output, expected, rtol=0.0078125, atol=0.0078125)
+
+
+@pytest.mark.skipif(
+    not os.environ.get("CONTEXT_MODEL_PATH"), reason="isolated real model required"
+)
+@pytest.mark.parametrize("policy", POLICIES)
+@torch.no_grad()
+def test_real_model_logits_against_independent_fp32_attention(
+    runtime, policy_modules, policy
+):
+    """No candidate compiler, cache or occurrence plan is used by the oracle."""
+    from unittest.mock import patch
+
+    from cache_policy_reference import reference_attention_forward
+    from sglang.srt.layers.radix_attention import RadixAttention
+    from sglang.srt.model_executor.forward_batch_info import ForwardBatch
+    from test_model_forward import forward, prepare_batch
+
+    wrapper, tokenizer, _ = runtime
+    runner = wrapper.torch_runner
+    tokens = tokenizer.encode("The librarian kept blue notebooks and red maps. " * 20)[
+        :96
+    ]
+    assert len(tokens) == 96
+
+    def pair(drops, repos):
+        ref = simulate(tokens, drops, repos, policy=policy)
+        projection = ref.active if policy == POLICIES[0] else list(range(len(tokens)))
+        wrapper.clear()
+        batch = prepare_batch(runner, [[tokens[i] for i in projection]])
+        fb = ForwardBatch.init_new(
+            batch, runner, return_hidden_states_before_norm=False
+        )
+        fb.positions = torch.tensor(
+            [ref.compute_positions[i] for i in projection],
+            dtype=fb.positions.dtype,
+            device=fb.positions.device,
+        )
+        with (
+            patch.object(
+                RadixAttention,
+                "forward",
+                reference_attention_forward(runner.model, ref, projection),
+            ),
+            patch.object(runner, "prefill_cuda_graph_runner", None),
+        ):
+            expected = runner.forward(fb).logits_output.next_token_logits.clone()
+        wrapper.clear()
+        program = compile_policy(policy_modules, policy, tokens, drops, repos)
+        actual = forward(
+            runner, prepare_batch(runner, [program.input_ids], programs=[program])
+        )
+        delta = (actual.float() - expected.float()).abs()
+        return {
+            "max_abs": float(delta.max()),
+            "mean_abs": float(delta.mean()),
+            "p99_abs": float(torch.quantile(delta.flatten(), 0.99)),
+        }
+
+    baseline = pair({}, [])
+    limits = {
+        name: max(floor, 2 * baseline[name])
+        for name, floor in (("max_abs", 0.125), ("mean_abs", 0.02), ("p99_abs", 0.0625))
+    }
+    measured = pair(
+        {32: [(3, 17)], 65: [(21, 38)], 90: [(40, 51)]},
+        [50, 91] if policy == POLICIES[0] else [],
+    )
+    print(
+        "CACHE_POLICY_MODEL_ORACLE",
+        {
+            "policy": policy,
+            "baseline": baseline,
+            "limits": limits,
+            "measured": measured,
+        },
+        flush=True,
+    )
+    assert all(measured[name] <= limits[name] for name in limits)

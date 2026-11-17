@@ -17,7 +17,7 @@ from collections import Counter
 from pathlib import Path
 
 POLICIES = ("text_drop_with_pe", "message_drop_without_repos")
-DEFAULT_CASES = ("771", "775", "778", "792", "844")
+DEFAULT_CASES = ("223", "231", "238", "775", "844")
 
 
 def digest(value):
@@ -138,6 +138,21 @@ def require_coverage(rows):
         raise ValueError("Cohort must include multiple Drops and Drop after Reposition")
 
 
+def model_fingerprint(path):
+    root = Path(path)
+    names = (
+        "config.json",
+        "model.safetensors.index.json",
+        "tokenizer_config.json",
+        "tokenizer.json",
+    )
+    return {
+        name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+        for name in names
+        if (root / name).is_file()
+    }
+
+
 def renderer_for(args):
     # Reuse native Harmony/Jinja provenance, not a second benchmark tokenizer.
     from test_serving import NativeTemplateAdapter
@@ -172,6 +187,7 @@ def preflight(args):
             _, owners = renderer.render(history, tools)
             rolling.extend(history, owners)
         coverage.append(dict(case_id=case["case_id"], **rolling.coverage()))
+    write_json(root / "source-coverage.json", coverage)
     require_coverage(coverage)
     frozen = {
         "schema": 1,
@@ -179,6 +195,9 @@ def preflight(args):
         "entries": evidence,
         "tools_sha256": digest(tools),
         "model": args.model,
+        "model_files": model_fingerprint(args.model),
+        "numeric_floors": {"max_abs": 0.125, "mean_abs": 0.02, "p99_abs": 0.0625},
+        "numeric_baseline_multiplier": 2,
         "template_kwargs": json.loads(args.template_kwargs),
         "source_coverage": coverage,
         "source": "recorded BCP trajectory; no inference yet",
@@ -231,6 +250,7 @@ async def run(args):
         evidence != frozen["entries"]
         or digest(tools) != frozen["tools_sha256"]
         or args.model != frozen["model"]
+        or model_fingerprint(args.model) != frozen["model_files"]
         or json.loads(args.template_kwargs) != frozen["template_kwargs"]
     ):
         raise ValueError("Run differs from frozen inputs/model/template")

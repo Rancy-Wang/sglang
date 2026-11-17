@@ -136,7 +136,7 @@ def validate_context_request(args, model_config, request):
     from sglang.srt.context_system.planner import ContextProgram
 
     program = ContextProgram.from_wire(request.context_program, request.input_ids)
-    if program.layout.cache_policy:
+    if request.context_program.get("version") in (9, 10):
         validate_context_config(args, model_config, cache_policy=program.layout.cache_policy)
     if request.context_program.get("version") in (7, 8):
         validate_context_config(args, model_config, has_insert=True)

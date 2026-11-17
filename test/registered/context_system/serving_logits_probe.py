@@ -245,6 +245,26 @@ def serialized_probe():
                 if req.extend_range.end < len(req.origin_input_ids):
                     continue
                 key = params["context_trace_path"]
+                if params.get("context_cache_policy_probe") and not params.get("_cache_policy_recorded"):
+                    import json
+                    from pathlib import Path
+
+                    program = req.context_recompute_program or req.context_program
+                    resident = req.context_resident
+                    recovery = req.context_recovery_plan
+                    matched = len(req.context_source_positions) if req.context_source_positions is not None else 0
+                    if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
+                        Path(key + ".policy.json").write_text(json.dumps({
+                            "policy": program.layout.cache_policy if program else 0,
+                            "matched": matched,
+                            "exact_prefix": req.context_exact_prefix_len,
+                            "retry_tokens": max(0, matched-req.context_exact_prefix_len),
+                            "resident": int(resident.sum()) if resident is not None else 0,
+                            "holes": int((~resident).sum()) if resident is not None else 0,
+                            "recovery_intervals": recovery.intervals if recovery else [],
+                            "execution_tokens": len(program.input_ids) if program else len(req.origin_input_ids),
+                        }))
+                    params["_cache_policy_recorded"] = True
                 reuse = getattr(req, "context_decode_reuse", None)
                 if reuse is not None and not params.get("_context_reuse_recorded"):
                     import json

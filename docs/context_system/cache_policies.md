@@ -1,7 +1,7 @@
 # Cache policy ablations
 
 Implementation authorization: `APPROVED_PLAN_ID=PLAN-CS-20261117-R1`,
-`APPROVED_ROUND=1`. The approved file allowlist covers the two new compilers,
+`APPROVED_ROUND=2`. The approved file allowlist covers the two new compilers,
 Context IR/wire/occurrence/recovery, frontend admission, Radix selection,
 scheduler/PD integration, dedicated tests and BCP runner, and this document.
 Existing policies retain their wire formats and execution behavior.
@@ -116,7 +116,45 @@ coverage. Formal runs also reject insufficient actual coverage, shortened
 generation, modified data and template mismatches. Snapshot request files are
 saved for first Drop, first R, multiple Drops and final-turn diagnostics.
 
-Still required before acceptance: five-case target-tokenizer preflight,
-Linux runtime and CUDA validation, independent full-model numerical reference,
+BUS-1 Linux tests on `568428dacf` completed with **30 passed, 12 skipped**,
+including the real UnifiedRadixCache/allocator and public schema. The frozen
+BF16 GPT-OSS tokenizer cohort is **223, 231, 238, 775, 844**. Original candidates
+771/778/792 failed the required 96K coverage; replacements were the first
+qualifying case IDs in ascending numeric order, selected using input histories
+only. All five pass incremental historical-boundary checks, have 27–32 Drop
+events, one R at 98,562–100,601 positions, and a Drop after R. Their final full
+inputs contain 114,172–122,699 tokens. No model outputs informed this selection.
+
+BUS-1 single-thread timings on those full inputs (10 samples after two warmups):
+
+| Policy | Compile median range | Key construction median range |
+|---|---:|---:|
+| Original message Drop + R | 25.3–29.6 ms | 3.42–3.77 ms |
+| Text Drop with PE | 31.6–36.7 ms | 1.45–1.69 ms |
+| Message Drop without repos | 29.1–31.9 ms | 3.75–4.14 ms |
+
+These measure compilation from already-rendered native provenance; they exclude
+tokenization, JIT warmup, inference and network time. Text mode executes only
+40,294–43,971 tokens in these final snapshots. This shows a modest compilation
+overhead, not identical latency to the old compiler.
+
+The expanded Linux regression uncovered a legacy fixture missing
+`swa_evict_floor`. Running its exact test on the original `3d1f6734e1` worktree
+reproduced the same failure. It is recorded separately, not patched as part of
+these policies. An admission mock regression introduced by this change was
+fixed by restricting new policy inspection to wire versions 9/10.
+
+Round 2 adds a bounded independent real-model oracle that uses native model
+projections with independent FP32 attention and complex RoPE rotation, without
+reading the production compiler or KV pool. Its rotation math passes CPU checks
+for both styles and policies; its actual model test is still GPU-gated. It is
+not a scalable full-BCP oracle. Evidence acceptance tests require all four real
+run reports, frozen numerical limits, per-token logits, layer/read validation,
+actual retrigger for A and zero retrigger for B. Missing evidence skips tests;
+it never constitutes acceptance. Run benchmark tests separately from registered
+tests because their approved filenames share a Python module basename.
+
+Still required before acceptance: CUDA validation, independent full-model
+numerical execution (including a scalable BCP reference/diagnostic driver),
 fixed-continuation cold/hot/retrigger/partial-eviction ordinary/PD comparison,
-compiler timing at real input lengths, and all 20 complete BCP trajectories.
+and all 20 complete BCP trajectories.
