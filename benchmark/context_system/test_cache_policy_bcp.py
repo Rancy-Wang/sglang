@@ -4,7 +4,28 @@ import hashlib
 import json
 
 import pytest
-from cache_policy_bcp import POLICIES, RollingPolicy, load_cases, require_coverage
+from cache_policy_bcp import (
+    POLICIES,
+    RollingPolicy,
+    independent_events,
+    load_cases,
+    require_coverage,
+)
+
+
+def test_independent_boundaries_keep_disjoint_ownership_and_native_suffix():
+    payload = {
+        "messages": [{}, {}, {}],
+        "drop_rule": POLICIES[0],
+        "drop_message": {"2": [0]},
+        "reposition": [2],
+    }
+    # Unowned prefix/tail and disjoint message 0 ownership are intentional.
+    owners = [-1, 0, 0, 1, 0, 1, 2, 2, -1]
+    assert independent_events(payload, owners) == ({8: [[1, 3], [4, 5]]}, [8])
+    payload["drop_message"] = {"0": [2]}
+    with pytest.raises(ValueError, match="future text"):
+        independent_events(payload, owners)
 
 
 @pytest.mark.parametrize("policy", POLICIES)

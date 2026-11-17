@@ -1,6 +1,73 @@
 """Opt-in numerical instrumentation, excluded from throughput measurements."""
 
 
+def independent_policy_decode_pairs(spec, generated, position, window):
+    """Expected logical readers from the input event tape, never candidate IR."""
+    from cache_policy_reference import simulate_compact
+
+    if generated < 1:
+        raise ValueError("Decode probe requires an already sampled input token")
+    reference = simulate_compact(
+        spec["token_count"] + generated,
+        {int(k): v for k, v in spec["drops"].items()},
+        spec["reposition"], policy=spec["policy"],
+    )
+    query = len(reference.raw) - 1
+    if int(reference.compute_positions[query]) != position:
+        raise AssertionError("Decode position differs from independent event replay")
+    return reference.row(query, window)
+
+
+def policy_structure_errors(program, spec):
+    from cache_policy_reference import simulate_compact
+
+    reference = simulate_compact(
+        spec["token_count"], {int(k): v for k, v in spec["drops"].items()},
+        spec["reposition"], policy=spec["policy"],
+    )
+    count = len(reference.raw)
+    return [name for name, actual, expected in (
+        ("projection", program.execution_to_full[:count].tolist(), reference.raw.tolist()),
+        ("stored_positions", program.layout.positions[:count].tolist(), reference.positions.tolist()),
+        ("compute_positions", program.layout.birth_positions[:count].tolist(), reference.compute_positions.tolist()),
+    ) if actual != expected]
+
+
+def install_cache_policy_eviction_probe():
+    """Explicit diagnostics may evict via the native API after releasing leases."""
+    from sglang.srt.mem_cache.base_prefix_cache import EvictParams
+    from sglang.srt.mem_cache.unified_radix_cache import UnifiedRadixCache
+
+    if getattr(UnifiedRadixCache, "_cache_policy_eviction_probe", False):
+        return
+    original = UnifiedRadixCache.cache_finished_req
+
+    def finish(cache, req, *args, **kwargs):
+        import dataclasses
+        import json
+        from pathlib import Path
+
+        import torch
+
+        params = req.sampling_params.custom_params or {}
+        quota = params.get("context_cache_policy_evict_tokens", 0)
+        program = req.context_program
+        if quota and (type(quota) is not int or quota < 1 or program is None
+                      or program.layout.cache_policy not in (1, 2)):
+            raise ValueError("Eviction probe requires a new policy and positive quota")
+        result = original(cache, req, *args, **kwargs)
+        if quota:
+            evicted = cache.evict(EvictParams(num_tokens=quota))
+            if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
+                Path(params["context_trace_path"] + ".eviction.json").write_text(
+                    json.dumps(dataclasses.asdict(evicted)) + "\n"
+                )
+        return result
+
+    UnifiedRadixCache.cache_finished_req = finish
+    UnifiedRadixCache._cache_policy_eviction_probe = True
+
+
 def create_decode_read_probe(config):
     """Audit actual Triton decode gathers and FP32 attention, outside timing runs.
 
@@ -12,7 +79,6 @@ def create_decode_read_probe(config):
 
     import torch
     from safetensors import safe_open
-    from insert_state_audit import brute_decode_reads
     from sglang.srt.context_system.request_storage import request_row
     from sglang.srt.model_executor.forward_context import get_attn_backend
 
@@ -48,7 +114,15 @@ def create_decode_read_probe(config):
                     # Native Triton treats window as total capacity. Keep its
                     # unchanged control distinct from Context's distance rule.
                     pairs = pairs[-window:] if window else []
+            elif params[0].get("context_policy_spec"):
+                if req.output_ids[-1] != int(batch.input_ids[0]):
+                    raise AssertionError("Diagnostic requires non-overlapped decode")
+                pairs = independent_policy_decode_pairs(
+                    params[0]["context_policy_spec"], len(req.output_ids), pos, window
+                )
             else:
+                from insert_state_audit import brute_decode_reads
+
                 layout = req.context_program.layout
                 pairs = brute_decode_reads(layout, pos-int(layout.next_position)+1, window)
             row = request_row(backend.req_to_token_pool, req.kv.req_pool_idx)
@@ -213,6 +287,10 @@ def serialized_probe():
         def __init__(self):
             import os
 
+            from serving_logits_probe import install_cache_policy_eviction_probe
+
+            install_cache_policy_eviction_probe()
+
             if os.environ.get("CONTEXT_PD_RETRACT") == "1":
                 from serving_logits_probe import install_pd_retraction_barrier
 
@@ -248,11 +326,13 @@ def serialized_probe():
                 if params.get("context_cache_policy_probe") and not params.get("_cache_policy_recorded"):
                     import json
                     from pathlib import Path
+                    from serving_logits_probe import policy_structure_errors
 
                     program = req.context_recompute_program or req.context_program
                     resident = req.context_resident
                     recovery = req.context_recovery_plan
                     matched = len(req.context_source_positions) if req.context_source_positions is not None else 0
+                    errors = policy_structure_errors(program, params["context_policy_spec"]) if params.get("context_policy_spec") else None
                     if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
                         Path(key + ".policy.json").write_text(json.dumps({
                             "policy": program.layout.cache_policy if program else 0,
@@ -263,7 +343,10 @@ def serialized_probe():
                             "holes": int((~resident).sum()) if resident is not None else 0,
                             "recovery_intervals": recovery.intervals if recovery else [],
                             "execution_tokens": len(program.input_ids) if program else len(req.origin_input_ids),
+                            "structure_errors": errors,
                         }))
+                    if errors:
+                        raise AssertionError(f"Independent policy structure mismatch: {errors}")
                     params["_cache_policy_recorded"] = True
                 reuse = getattr(req, "context_decode_reuse", None)
                 if reuse is not None and not params.get("_context_reuse_recorded"):

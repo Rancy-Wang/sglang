@@ -2,6 +2,7 @@
 
 import json
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -22,7 +23,16 @@ def test_five_cases_two_rules_two_deployments():
         for deployment in ("ordinary", "pd")
     }
     assert len({r["frozen_sha256"] for r in reports}) == 1
-    assert len({r["head"] for r in reports}) == 1
+    # Diagnostic-only commits may differ while long formal runs are in flight.
+    # Resolve the recorded commits, never rewrite their provenance or accept
+    # runtime changes merely because an unverified report says they are equal.
+    runtime_trees = {
+        subprocess.check_output(
+            ["git", "rev-parse", f"{r['head']}:python/sglang"], text=True
+        ).strip()
+        for r in reports
+    }
+    assert len(runtime_trees) == 1
     cohort = {c["case_id"] for c in reports[0]["cases"]}
     assert len(cohort) == 5
     for path, report in zip(paths, reports):

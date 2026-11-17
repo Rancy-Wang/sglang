@@ -21,6 +21,34 @@ pytest_plugins = (
 
 
 @pytest.mark.parametrize("policy", POLICIES)
+def test_diagnostic_decode_readers_ignore_candidate_layout(policy):
+    from serving_logits_probe import independent_policy_decode_pairs
+
+    drops = {8: [(1, 4)], 12: [(5, 7)]}
+    repos = [14] if policy == POLICIES[0] else []
+    spec = {"token_count": 16, "drops": drops, "reposition": repos, "policy": policy}
+    explicit = simulate(list(range(19)), drops, repos, policy=policy)
+    projection = explicit.active if policy == POLICIES[0] else list(range(19))
+    inverse = {raw: i for i, raw in enumerate(projection)}
+    for window in (-1, 3):
+        expected = [(inverse[i], pos) for i, pos in explicit.readers[18]]
+        if window >= 0:
+            expected = [
+                (i, pos)
+                for i, pos in expected
+                if pos >= explicit.compute_positions[18] - window
+            ][-(window + 1) :]
+        assert (
+            independent_policy_decode_pairs(
+                spec, 3, explicit.compute_positions[18], window
+            )
+            == expected
+        )
+    with pytest.raises(AssertionError, match="position differs"):
+        independent_policy_decode_pairs(spec, 3, -123, -1)
+
+
+@pytest.mark.parametrize("policy", POLICIES)
 @pytest.mark.parametrize("neox", [False, True])
 @pytest.mark.parametrize("window", [-1, 0, 3])
 @pytest.mark.parametrize("with_sinks", [False, True])
@@ -423,14 +451,30 @@ def cache_policy_model_runtime():
     port = os.environ.get("CONTEXT_TEST_NCCL_PORT")
     if world > 1 and port is None:
         raise ValueError("TP validation requires CONTEXT_TEST_NCCL_PORT on every rank")
+    jobs_path = os.environ.get("CONTEXT_REFERENCE_JOBS")
+    capacity = 0
+    if jobs_path:
+        import json
+        from pathlib import Path
+
+        manifest_path = Path(jobs_path)
+        manifest = json.loads(manifest_path.read_text())
+        assert manifest["reference"] == "independent_event_model_forward"
+        assert manifest["model"] == os.environ["CONTEXT_MODEL_PATH"]
+        for name in manifest["jobs"]:
+            job = json.loads((manifest_path.parent / name).read_text())
+            capacity = max(capacity, len(job["tokens"]) + len(job["continuation"]))
     args = ServerArgs(
         model_path=os.environ["CONTEXT_MODEL_PATH"],
         tp_size=world,
         nccl_port=int(port) if port else None,
         page_size=1,
-        max_total_tokens=4096,
+        max_total_tokens=max(4096, capacity + 4096),
         max_running_requests=8,
-        context_length=2048,
+        context_length=max(2048, capacity + 1),
+        # Plain native allocation is only scaffolding for independent KV.
+        # Retain the full logical prefix in this reference-only runner.
+        disable_hybrid_swa_memory=bool(jobs_path),
         mem_fraction_static=0.85,
         attention_backend=os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND", "triton"),
         # Match the frozen BCP server backend. Auto can select triton_kernels,
@@ -471,6 +515,10 @@ def cache_policy_model_runtime():
 
 @pytest.mark.skipif(
     not os.environ.get("CONTEXT_MODEL_PATH"), reason="isolated real model required"
+)
+@pytest.mark.skipif(
+    os.environ.get("CONTEXT_TEST_DETERMINISTIC") == "1",
+    reason="Context Triton candidate explicitly rejects deterministic inference",
 )
 @pytest.mark.parametrize("policy", POLICIES)
 @torch.no_grad()
@@ -670,3 +718,69 @@ def test_real_model_streaming_reference_chunk_invariance(
     )
     assert float(delta.max()) <= 0.125
     assert float(delta.mean()) <= 0.02
+
+
+@pytest.mark.skipif(
+    not os.environ.get("CONTEXT_REFERENCE_JOBS"),
+    reason="frozen real BCP reference jobs required",
+)
+def test_real_model_bcp_reference_artifacts(cache_policy_model_runtime):
+    """Produce independent logits; generation alone is not numerical acceptance."""
+    import json
+    import subprocess
+    from pathlib import Path
+
+    from cache_policy_reference import run_reference_model
+
+    wrapper, _, _ = cache_policy_model_runtime
+    manifest_path = Path(os.environ["CONTEXT_REFERENCE_JOBS"])
+    manifest = json.loads(manifest_path.read_text())
+    root = Path(os.environ["CONTEXT_REFERENCE_OUTPUT"])
+    root.mkdir(parents=True, exist_ok=True)
+    rank = int(os.environ.get("RANK", "0"))
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    for name in manifest["jobs"]:
+        job = json.loads((manifest_path.parent / name).read_text())
+        audit = {}
+        logits = (
+            run_reference_model(
+                wrapper,
+                job["tokens"],
+                {int(k): v for k, v in job["drops"].items()},
+                job["reposition"],
+                policy=job["policy"],
+                continuation=job["continuation"],
+                audit=audit,
+            )
+            .float()
+            .cpu()
+        )
+        assert logits.ndim == 2 and len(logits) == len(job["continuation"]) + 1
+        assert torch.isfinite(logits).all()
+        stem = Path(name).stem
+        torch.save(
+            {key: {k: v.cpu() for k, v in row.items()} for key, row in audit.items()},
+            root / f"{stem}.rank{rank}.pt",
+        )
+        if rank == 0:
+            torch.save(logits, root / f"{stem}.logits.pt")
+            (root / f"{stem}.json").write_text(
+                json.dumps(
+                    {
+                        "reference": manifest["reference"],
+                        "head": head,
+                        "payload_sha256": job["payload_sha256"],
+                        "continuation": job["continuation"],
+                        "policy": job["policy"],
+                        "case_id": job["case_id"],
+                        "snapshot": job["snapshot"],
+                        "layers": len(
+                            wrapper.torch_runner.context_model_binding.layers
+                        ),
+                        "numerical_acceptance": False,
+                    },
+                    indent=2,
+                )
+                + "\n"
+            )
+        print("BCP_INDEPENDENT_REFERENCE_SAVED", name, rank, flush=True)

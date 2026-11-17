@@ -160,6 +160,99 @@ def renderer_for(args):
     return NativeTemplateAdapter(args.model, json.loads(args.template_kwargs))
 
 
+def independent_events(payload, owners):
+    """Translate native ownership into event boundaries without Context IR.
+
+    Each message may own several disjoint runs. The trigger is after its last
+    owned token, including its native suffix; unowned template tokens remain.
+    This deliberately does not call the candidate Drop planner/compiler.
+    """
+    runs, ends = {}, {}
+    for offset, owner in enumerate(owners):
+        if owner < 0:
+            continue
+        if owner >= len(payload["messages"]):
+            raise ValueError("Template owner outside message history")
+        parts = runs.setdefault(owner, [])
+        if parts and parts[-1][1] == offset:
+            parts[-1][1] = offset + 1
+        else:
+            parts.append([offset, offset + 1])
+        ends[owner] = offset + 1
+    if len(ends) != len(payload["messages"]):
+        raise ValueError("Message lacks native ownership")
+    drops = {}
+    for trigger, targets in payload.get("drop_message", {}).items():
+        trigger = int(trigger)
+        boundary = ends[trigger]
+        spans = [part[:] for target in targets for part in runs[int(target)]]
+        if any(end > boundary for _, end in spans):
+            raise ValueError("Drop references future text")
+        drops.setdefault(boundary, []).extend(spans)
+    repos = [ends[int(trigger)] for trigger in payload.get("reposition", [])]
+    if payload["drop_rule"] == POLICIES[1] and repos:
+        raise ValueError("KV policy cannot reposition")
+    return drops, repos
+
+
+def reference_jobs(args):
+    """Freeze diagnostic inputs from completed real trajectories, no inference."""
+    report_path = Path(args.report)
+    report = json.loads(report_path.read_text())
+    frozen = json.loads(Path(args.frozen).read_text())
+    if (
+        not report["completed"]
+        or report["frozen_sha256"] != digest(frozen)
+        or args.model != frozen["model"]
+        or model_fingerprint(args.model) != frozen["model_files"]
+    ):
+        raise ValueError("Reference jobs require the completed frozen cohort")
+    renderer = renderer_for(args)
+    if json.loads(args.template_kwargs) != frozen["template_kwargs"]:
+        raise ValueError("Reference template differs from frozen template")
+    continuation = renderer.renderer.tokenizer_manager.tokenizer.encode(
+        " A blue notebook contains the recorded answer."
+    )[:8]
+    if len(continuation) < 4:
+        raise ValueError("Fixed diagnostic continuation is too short")
+    root = Path(args.output)
+    root.mkdir(parents=True, exist_ok=False)
+    jobs = []
+    for case in report["cases"]:
+        for snapshot, turn in case["snapshots"].items():
+            request = report_path.parent / str(case["case_id"]) / f"{turn}.request.json"
+            payload = json.loads(request.read_text())
+            count, owners = renderer.render(payload["messages"], payload["tools"])
+            tokens = list(renderer.renderer.trace.input_ids)
+            assert len(tokens) == count == len(owners)
+            drops, repos = independent_events(payload, owners)
+            job = {
+                "case_id": str(case["case_id"]),
+                "snapshot": snapshot,
+                "deployment": report["deployment"],
+                "policy": report["policy"],
+                "tokens": tokens,
+                "drops": drops,
+                "reposition": repos,
+                "continuation": continuation,
+                "payload": payload,
+                "payload_sha256": digest(payload),
+                "frozen_sha256": digest(frozen),
+                "trajectory_head": report["head"],
+            }
+            name = f"{case['case_id']}-{snapshot}.json"
+            write_json(root / name, job)
+            jobs.append(name)
+    manifest = {
+        "reference": "independent_event_model_forward",
+        "jobs": jobs,
+        "model": args.model,
+        "frozen_sha256": digest(frozen),
+    }
+    write_json(root / "jobs.json", manifest)
+    return manifest
+
+
 def preflight(args):
     root = Path(args.output)
     root.mkdir(parents=True, exist_ok=False)
@@ -360,8 +453,8 @@ async def run(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("preflight", "run"))
-    parser.add_argument("--dataset", required=True)
+    parser.add_argument("action", choices=("preflight", "run", "reference-jobs"))
+    parser.add_argument("--dataset")
     parser.add_argument("--model", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument(
@@ -369,6 +462,7 @@ def main():
     )
     parser.add_argument("--cases", nargs=5, default=DEFAULT_CASES)
     parser.add_argument("--frozen")
+    parser.add_argument("--report")
     parser.add_argument("--policy", choices=POLICIES)
     parser.add_argument("--url")
     parser.add_argument("--prefill-url")
@@ -376,6 +470,13 @@ def main():
     parser.add_argument("--gpu-mapping")
     parser.add_argument("--timeout", type=int, default=7200)
     args = parser.parse_args()
+    if args.action != "reference-jobs" and not args.dataset:
+        parser.error("preflight/run requires --dataset")
+    if args.action == "reference-jobs":
+        if not args.frozen or not args.report:
+            parser.error("reference-jobs requires --frozen and --report")
+        print(json.dumps(reference_jobs(args), ensure_ascii=False))
+        return
     if args.action == "run" and not all(
         (args.frozen, args.policy, args.url, args.gpu_mapping)
     ):
