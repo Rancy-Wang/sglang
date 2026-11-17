@@ -219,7 +219,10 @@ def reference_jobs(args):
     root.mkdir(parents=True, exist_ok=False)
     jobs = []
     for case in report["cases"]:
-        for snapshot, turn in case["snapshots"].items():
+        for snapshot in ("first_drop", "multiple_drop", "first_reposition", "final"):
+            if snapshot not in case["snapshots"]:
+                continue
+            turn = case["snapshots"][snapshot]
             request = report_path.parent / str(case["case_id"]) / f"{turn}.request.json"
             payload = json.loads(request.read_text())
             count, owners = renderer.render(payload["messages"], payload["tools"])
@@ -243,6 +246,17 @@ def reference_jobs(args):
             name = f"{case['case_id']}-{snapshot}.json"
             write_json(root / name, job)
             jobs.append(name)
+            if args.include_calibration and len(jobs) == 1:
+                baseline = copy.deepcopy(job)
+                baseline["calibration"] = True
+                baseline["snapshot"] = "noop"
+                baseline["drops"], baseline["reposition"] = {}, []
+                baseline["payload"]["drop_message"] = {}
+                if baseline["policy"] == POLICIES[0]:
+                    baseline["payload"]["reposition"] = []
+                baseline["payload_sha256"] = digest(baseline["payload"])
+                write_json(root / "noop.json", baseline)
+                jobs.insert(0, "noop.json")
     manifest = {
         "reference": "independent_event_model_forward",
         "jobs": jobs,
@@ -459,6 +473,8 @@ async def diagnostics(args):
 
     source = Path(args.jobs)
     manifest = json.loads(source.read_text())
+    if args.model != manifest["model"]:
+        raise ValueError("Diagnostic model differs from frozen reference jobs")
     root = Path(args.output).resolve()
     root.mkdir(parents=True, exist_ok=False)
     processor = serialized_probe()
@@ -471,6 +487,10 @@ async def diagnostics(args):
         "completed": False,
         "head": head.strip(),
     }
+    if "noop.json" not in manifest["jobs"] and not args.baseline:
+        raise ValueError("Freeze a no-event numerical baseline before candidates")
+    if args.baseline:
+        report["calibration"] = json.loads(Path(args.baseline).read_text())
     write_json(root / "diagnostics.json", report)
     async with aiohttp.ClientSession(
         timeout=aiohttp.ClientTimeout(total=args.timeout)
@@ -577,6 +597,8 @@ async def diagnostics(args):
                 "checked_layers": sorted({r["layer"] for r in reads}),
                 "retry_tokens": sum(s["retry_tokens"] for s in stats),
                 "matched_tokens": sum(s["matched"] for s in stats),
+                "resident_tokens": sum(s["resident"] for s in stats),
+                "hole_tokens": sum(s["holes"] for s in stats),
                 "recovered_queries": sum(
                     b - a for s in stats for a, b in s["recovery_intervals"]
                 ),
@@ -591,6 +613,44 @@ async def diagnostics(args):
             job = json.loads((source.parent / job_name).read_text())
             stem = Path(job_name).stem
             await flush()
+            if job.get("calibration"):
+                if not args.reference_output:
+                    raise ValueError(
+                        "Calibration requires independent --reference-output"
+                    )
+                await call(job, stem)
+                candidate = torch.load(root / f"{stem}.pt", weights_only=True)
+                expected = torch.load(
+                    Path(args.reference_output) / f"{stem}.logits.pt", weights_only=True
+                )
+                assert (
+                    candidate.shape == expected.shape and torch.isfinite(expected).all()
+                )
+                delta = (candidate.float() - expected.float()).abs()
+                baseline = {
+                    "max_abs": float(delta.max()),
+                    "mean_abs": float(delta.mean(-1).max()),
+                    "p99_abs": float(torch.quantile(delta, 0.99, dim=-1).max()),
+                }
+                limits = {
+                    name: max(floor, 2 * baseline[name])
+                    for name, floor in (
+                        ("max_abs", 0.125),
+                        ("mean_abs", 0.02),
+                        ("p99_abs", 0.0625),
+                    )
+                }
+                calibration = {
+                    "noop_baseline": baseline,
+                    "limits": limits,
+                    "reference": str(Path(args.reference_output) / f"{stem}.logits.pt"),
+                    "candidate": str(root / f"{stem}.pt"),
+                    "frozen_before_policy_candidates": True,
+                }
+                write_json(root / "numeric-baseline.json", calibration)
+                report["calibration"] = calibration
+                write_json(root / "diagnostics.json", report)
+                continue
             for mode in ("cold", "hot"):
                 row = await call(job, f"{stem}-{mode}")
                 if mode == "hot":
@@ -631,7 +691,7 @@ async def diagnostics(args):
             )
             assert evicted > 0
             row = await call(job, f"{stem}-partial_eviction")
-            assert row["recovered_queries"] > 0
+            assert row["recovered_queries"] > 0 and row["resident_tokens"] > 0
             rows.append(dict(row, mode="partial_eviction", evicted_pages=evicted))
             write_json(root / "diagnostics.json", report)
     report["completed"] = True
@@ -654,6 +714,9 @@ def main():
     parser.add_argument("--frozen")
     parser.add_argument("--report")
     parser.add_argument("--jobs")
+    parser.add_argument("--include-calibration", action="store_true")
+    parser.add_argument("--baseline")
+    parser.add_argument("--reference-output")
     parser.add_argument("--policy", choices=POLICIES)
     parser.add_argument("--url")
     parser.add_argument("--prefill-url")

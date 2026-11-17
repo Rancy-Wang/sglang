@@ -99,3 +99,67 @@ def test_hash_verified_exactly_five_case_loading(tmp_path):
     (tmp_path / "trajectories.jsonl").write_bytes(b"corrupted")
     with pytest.raises(ValueError, match="hash mismatch"):
         load_cases(tmp_path, list(map(str, range(5))))
+
+
+def test_reference_jobs_freeze_calibration_without_changing_formal_payload(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+
+    import cache_policy_bcp as runner
+
+    class Renderer:
+        def __init__(self):
+            self.renderer = SimpleNamespace(
+                trace=SimpleNamespace(input_ids=list(range(9))),
+                tokenizer_manager=SimpleNamespace(
+                    tokenizer=SimpleNamespace(encode=lambda _: list(range(8)))
+                ),
+            )
+
+        def render(self, messages, tools):
+            return 9, [-1, 0, 0, 1, 1, 2, 2, 2, -1]
+
+    monkeypatch.setattr(runner, "renderer_for", lambda _: Renderer())
+    monkeypatch.setattr(runner, "model_fingerprint", lambda _: {})
+    frozen = {"model": "fixture", "model_files": {}, "template_kwargs": {}}
+    frozen_path = tmp_path / "frozen.json"
+    runner.write_json(frozen_path, frozen)
+    saved = tmp_path / "223"
+    saved.mkdir()
+    payload = {
+        "messages": [{}, {}, {}],
+        "tools": [],
+        "drop_rule": POLICIES[0],
+        "drop_message": {"2": [1]},
+        "reposition": [2],
+    }
+    runner.write_json(saved / "13.request.json", payload)
+    report = {
+        "completed": True,
+        "frozen_sha256": runner.digest(frozen),
+        "head": "test",
+        "policy": POLICIES[0],
+        "deployment": "ordinary",
+        "cases": [{"case_id": "223", "snapshots": {"first_drop": "13"}}],
+    }
+    runner.write_json(tmp_path / "report.json", report)
+    root = tmp_path / "jobs"
+    result = runner.reference_jobs(
+        SimpleNamespace(
+            report=tmp_path / "report.json",
+            frozen=frozen_path,
+            model="fixture",
+            template_kwargs="{}",
+            output=root,
+            include_calibration=True,
+        )
+    )
+    assert result["jobs"] == ["noop.json", "223-first_drop.json"]
+    original = json.loads((root / "223-first_drop.json").read_text())
+    baseline = json.loads((root / "noop.json").read_text())
+    assert original["payload"] == payload
+    assert original["drops"] == {"8": [[3, 5]]}
+    assert baseline["drops"] == baseline["payload"]["drop_message"] == {}
+    assert baseline["reposition"] == baseline["payload"]["reposition"] == []
+    assert original["payload_sha256"] != baseline["payload_sha256"]
