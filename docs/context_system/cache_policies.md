@@ -1,12 +1,12 @@
 # Cache policy ablations
 
 Implementation authorization: `APPROVED_PLAN_ID=PLAN-CS-20261117-R1`,
-`APPROVED_ROUND=4`. The approved file allowlist covers the two new compilers,
+`APPROVED_ROUND=18`. The approved file allowlist covers the two new compilers,
 Context IR/wire/occurrence/recovery, frontend admission, Radix selection,
 scheduler/PD integration, dedicated tests and BCP runner, and this document.
 Existing policies retain their wire formats and execution behavior.
 
-Status: CPU implementation checkpoint; real-model numerical and BCP acceptance
+Status: GPU validation in progress; complete numerical and BCP acceptance
 remain pending. This is not a claim of production or ablation validation.
 
 `text_drop_with_pe` retains full-history position effects but recomputes the
@@ -200,3 +200,57 @@ Still required before acceptance: CUDA validation, independent full-model
 numerical execution (including the BCP reference/diagnostic driver),
 fixed-continuation cold/hot/retrigger/partial-eviction ordinary/PD comparison,
 and all 20 complete BCP trajectories.
+
+## Resumed GPU validation, 2026-11-17
+
+The user subsequently authorized releasing the identified Tengxuan jobs and
+provided administrative access. Only the verified GPU processes were stopped;
+all eight GPUs were confirmed free before starting this experiment. The earlier
+resource-blocked statements above describe the preflight at that time.
+
+The isolated Tengxuan checkout runs the expanded BF16 GPT-OSS-120B model with
+TP=4, Triton attention and Triton MoE, page size 1 and disabled CUDA graphs.
+Ordinary A uses GPUs 4–7 while B uses GPUs 0–3. The production source tree has
+not changed during these validation-tool iterations. Recorded commit IDs are
+retained; acceptance resolves their `python/sglang` Git trees to verify equality
+when only diagnostic commits differ between long-running jobs.
+
+Evidence as of 14:50 host time:
+
+- Native small CUDA attention/zero-window tests: 14 passed. Independent
+  complex-number attention reference tests on GPU: 24 passed.
+- Bounded real-model logits pass the predeclared 2× no-event calibration gate
+  for both policies. Native BF16/MoE variation is substantial (one no-event
+  control has max error 2.1171875); this is not bitwise precision evidence.
+- The independent streaming reference has exactly identical logits for full
+  versus 17-token chunks on both policies under batch-invariant model GEMMs,
+  including three externally fixed continuation tokens, on all four TP ranks.
+  Its FP32 attention uses fixed per-query arithmetic shapes for this check.
+- Context Triton explicitly rejects deterministic candidate execution. The
+  initial combined invocation therefore failed two candidate tests while both
+  reference chunk-invariance tests passed. Candidate attention layer checks
+  are now run in the ordinary supported mode; their result remains pending.
+- Ordinary A completed cases 223, 231 and 238 (126 turns), each with actual
+  96 Ki-token Reposition and subsequent Drop. Ordinary B completed case 223
+  (41 turns). Remaining ordinary cases and all PD trajectories are pending.
+- Latest local policy checks: 56 passed, 23 skipped. Runner/artifact checks:
+  7 passed. Environment-gated skips never count as acceptance.
+
+`cache_policy_bcp.py reference-jobs` freezes native-template token ownership,
+independently translated Drop/R boundaries, and an eight-token continuation
+from completed reports. `--include-calibration` prepends a no-event control
+before policy comparisons. `CONTEXT_REFERENCE_JOBS` and
+`CONTEXT_REFERENCE_OUTPUT` enable the opt-in real-model reference artifact test;
+the reference owns its KV and does not read candidate compilation or cache state.
+Saving these artifacts is explicitly separate from numerical acceptance.
+
+`cache_policy_bcp.py diagnostics` records cold/hot/retrigger/partial-eviction
+fixed-token requests. The explicitly enabled probe inspects all 36 layers and
+all TP ranks, checks independently expected physical decode reads and local
+FP32 attention, and uses native cache eviction only after source leases are
+released. Legacy requests without these diagnostic parameters are unaffected.
+The original formal trajectories never enable the probes or forced sampling.
+`compare-artifacts` verifies payload/continuation/runtime-source identity and
+retains per-token error metrics even when comparison fails. These tools have
+not yet completed the full BCP numerical matrix; their existence is not evidence
+that the matrix passed.
