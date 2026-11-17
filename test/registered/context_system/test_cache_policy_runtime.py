@@ -605,10 +605,11 @@ def test_real_model_streaming_reference_chunk_invariance(
             policy=policy,
             continuation=continuation,
             chunk_tokens=size,
+            query_block=1,
         )
         for size in (128, 17)
     ]
-    no_event_delta = (no_event[0].float() - no_event[1].float()).abs()
+    no_event_delta = (no_event[0].float() - no_event[1].float()).abs().cpu()
     print(
         "REFERENCE_NO_EVENT_CHUNKS",
         policy,
@@ -625,6 +626,7 @@ def test_real_model_streaming_reference_chunk_invariance(
         policy=policy,
         continuation=continuation,
         chunk_tokens=128,
+        query_block=1,
         audit=audits[0],
     )
     chunked = run_reference_model(
@@ -635,13 +637,16 @@ def test_real_model_streaming_reference_chunk_invariance(
         policy=policy,
         continuation=continuation,
         chunk_tokens=17,
+        query_block=1,
         audit=audits[1],
     )
     assert (
         complete.shape == chunked.shape == (len(continuation) + 1, complete.shape[-1])
     )
     assert torch.isfinite(chunked).all() and torch.isfinite(complete).all()
-    delta = (complete.float() - chunked.float()).abs()
+    # Stable per-row FP32 reductions in the oracle isolate streaming state
+    # from GEMM shape rounding. CPU metrics avoid model operator overrides.
+    delta = (complete.float() - chunked.float()).abs().cpu()
     if int(os.environ.get("RANK", "0")) == 0:
         for key in sorted(audits[0]):
             errors = {

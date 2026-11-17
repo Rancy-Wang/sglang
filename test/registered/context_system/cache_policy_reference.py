@@ -425,6 +425,7 @@ def run_reference_model(
     policy,
     continuation=(),
     chunk_tokens=2048,
+    query_block=256,
     audit=None,
 ):
     """Model logits with independent positions, readers and owned streaming KV.
@@ -459,7 +460,7 @@ def run_reference_model(
     runner = wrapper.torch_runner
     wrapper.clear()
     attention = chunked_reference_attention_forward(
-        runner.model, reference, query_block=256, key_block=4096, streaming=True
+        runner.model, reference, query_block=query_block, key_block=4096, streaming=True
     )
     offsets = {}
 
