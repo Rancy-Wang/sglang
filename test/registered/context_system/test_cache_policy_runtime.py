@@ -436,6 +436,8 @@ def cache_policy_model_runtime():
         # Match the frozen BCP server backend. Auto can select triton_kernels,
         # whose projection/MoE rounding varies substantially with tiny chunks.
         moe_runner_backend="triton",
+        enable_deterministic_inference=os.environ.get("CONTEXT_TEST_DETERMINISTIC")
+        == "1",
         cuda_graph_config={
             "decode": {"backend": "disabled"},
             "prefill": {"backend": "disabled"},
@@ -448,6 +450,16 @@ def cache_policy_model_runtime():
     initialize_fp8_gemm_config()
     initialize_fp4_gemm_config()
     wrapper, tokenizer = load_model(args, PortArgs.init_new(args), local_rank, rank)
+    if os.environ.get("CONTEXT_TEST_DETERMINISTIC") == "1":
+        from sglang.srt.batch_invariant_ops import (
+            disable_batch_invariant_mode,
+            enable_batch_invariant_mode,
+        )
+
+        # Keep deterministic model GEMMs, but use native FP32 BMM in the
+        # independent oracle: the invariant BMM kernel defaults to TF32 dots.
+        disable_batch_invariant_mode()
+        enable_batch_invariant_mode(enable_bmm=False)
     runner = wrapper.torch_runner
     binding = ContextModelBinding(
         runner.model, runner.token_to_kv_pool, runner.kv_index_translator, page_size=1
@@ -538,6 +550,10 @@ def test_real_model_logits_against_independent_fp32_attention(
 
 @pytest.mark.skipif(
     not os.environ.get("CONTEXT_MODEL_PATH"), reason="isolated real model required"
+)
+@pytest.mark.skipif(
+    os.environ.get("CONTEXT_TEST_DETERMINISTIC") != "1",
+    reason="chunk invariance requires the model's batch-invariant GEMM mode",
 )
 @pytest.mark.parametrize("policy", POLICIES)
 def test_real_model_streaming_reference_chunk_invariance(
