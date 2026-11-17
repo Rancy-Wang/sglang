@@ -1,7 +1,7 @@
 # Cache policy ablations
 
 Implementation authorization: `APPROVED_PLAN_ID=PLAN-CS-20261117-R1`,
-`APPROVED_ROUND=2`. The approved file allowlist covers the two new compilers,
+`APPROVED_ROUND=3`. The approved file allowlist covers the two new compilers,
 Context IR/wire/occurrence/recovery, frontend admission, Radix selection,
 scheduler/PD integration, dedicated tests and BCP runner, and this document.
 Existing policies retain their wire formats and execution behavior.
@@ -143,6 +143,9 @@ The expanded Linux regression uncovered a legacy fixture missing
 reproduced the same failure. It is recorded separately, not patched as part of
 these policies. An admission mock regression introduced by this change was
 fixed by restricting new policy inspection to wire versions 9/10.
+At `297ff16c2e`, that Linux regression finished with **196 passed, 33 skipped,
+1 pre-existing failure**. The remaining failure is the same missing fixture
+field reproduced on the baseline checkout.
 
 Round 2 adds a bounded independent real-model oracle that uses native model
 projections with independent FP32 attention and complex RoPE rotation, without
@@ -154,7 +157,26 @@ actual retrigger for A and zero retrigger for B. Missing evidence skips tests;
 it never constitutes acceptance. Run benchmark tests separately from registered
 tests because their approved filenames share a Python module basename.
 
+Round 3 adds `simulate_compact` in
+`test/registered/context_system/cache_policy_reference.py:119`: independent
+flat-array event replay with linear memory, compared against the original
+sequential reader graph over 200 randomized histories. Its 128K synthetic
+geometry tests check final boundary visibility without allocating all reader
+rows. `chunked_reference_attention_forward` in the same file at line 185
+uses tiled FP32 online softmax and bounded visibility scratch space. It matches
+the row-wise oracle and a separate complex-number calculation on CPU for both
+policies, both RoPE styles, Full/SWA attention, sinks and soft caps. Runtime
+tests locally finish with **30 passed, 18 skipped**. This supplies a bounded
+memory attention reference, but its real-model/TP driver, GPU execution and
+BCP diagnostics remain unvalidated; arithmetic for Full attention is still
+quadratic.
+
+Additional read-only resource preflight on `Tengxuan-BUS-2` found eight A800
+80GB GPUs using 78,944–79,250 MiB each, with their compute processes invisible
+in the current container. System disk free space was about 8.7GB. No existing
+process was stopped, and no model validation was launched there.
+
 Still required before acceptance: CUDA validation, independent full-model
-numerical execution (including a scalable BCP reference/diagnostic driver),
+numerical execution (including the BCP reference/diagnostic driver),
 fixed-continuation cold/hot/retrigger/partial-eviction ordinary/PD comparison,
 and all 20 complete BCP trajectories.

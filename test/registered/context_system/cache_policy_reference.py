@@ -6,6 +6,7 @@ in KV mode it recomputes full history at frozen-death/current-live positions.
 """
 
 from dataclasses import dataclass
+from itertools import pairwise
 
 
 @dataclass
@@ -74,6 +75,236 @@ def hidden_fingerprints(tokens, reference, layers=3):
             for i, read in enumerate(reference.readers)
         ]
     return hidden
+
+
+@dataclass
+class CompactReference:
+    """Linear token state plus R boundaries; no materialized query/key graph.
+
+    All arrays use execution order. ``raw`` maps back to logical history, and
+    ``expiry`` is a logical boundary, independent of position encodings.
+    """
+
+    raw: object
+    positions: object
+    compute_positions: object
+    expiry: object
+    rotation_cuts: tuple
+    next_position: int
+
+    def key_positions(self, query):
+        import numpy as np
+
+        positions = self.compute_positions.copy()
+        for cut in self.rotation_cuts:
+            if query < cut:
+                break
+            positions[:cut] = np.arange(cut)
+        return positions
+
+    def row(self, query, window=-1):
+        """Inspection only: one row, in execution coordinates."""
+        import numpy as np
+
+        positions = self.key_positions(query)
+        mask = (self.raw <= self.raw[query]) & (self.raw[query] < self.expiry)
+        if window >= 0:
+            mask &= positions >= self.compute_positions[query] - window
+        indices = np.flatnonzero(mask)
+        if window >= 0:
+            indices = indices[-(window + 1) :]
+        return [(int(i), int(positions[i])) for i in indices]
+
+
+def simulate_compact(token_count, drops, reposition=(), *, policy):
+    """Independent event replay in O(N * events) time and O(N + events) memory.
+
+    Unlike the production compiler, this just mutates flat arrays at events.
+    Unlike ``simulate``, it never constructs the quadratic reader graph. Token
+    IDs do not affect attention geometry. R boundaries before a text reset are
+    erased only from the computation graph, after their position effects apply.
+    """
+    import numpy as np
+
+    if policy not in ("text_drop_with_pe", "message_drop_without_repos"):
+        raise ValueError("Unknown reference policy")
+    if policy == "message_drop_without_repos" and reposition:
+        raise ValueError("KV policy has no reposition")
+    n = token_count
+    positions = np.zeros(n, dtype=np.int64)
+    birth = np.zeros(n, dtype=np.int64)
+    alive = np.zeros(n, dtype=bool)
+    expiry = np.full(n, 2**63 - 1, dtype=np.int64)
+    previous = cursor = 0
+    rotations = []
+    repos = set(reposition)
+    for boundary in sorted({0, n, *drops, *repos}):
+        if not 0 <= boundary <= n:
+            raise ValueError("Reference event outside token history")
+        count = boundary - previous
+        positions[previous:boundary] = np.arange(cursor, cursor + count)
+        birth[previous:boundary] = positions[previous:boundary]
+        alive[previous:boundary] = True
+        cursor += count
+        remove = np.zeros(n, dtype=bool)
+        for start, end in drops.get(boundary, ()):
+            if not 0 <= start <= end <= boundary:
+                raise ValueError("Drop must refer to already born tokens")
+            remove[start:end] = True
+        remove &= alive
+        if remove.any():
+            expiry[remove] = boundary
+            alive[remove] = False
+            if policy == "text_drop_with_pe":
+                birth[alive] = positions[alive]
+                rotations.clear()
+            else:
+                positions[alive] = np.arange(alive.sum())
+                birth[:boundary] = positions[:boundary]
+                cursor = int(alive.sum())
+        if boundary in repos:
+            if not alive.any():
+                raise ValueError("No live tokens to reposition")
+            compact = np.arange(alive.sum())
+            if not np.array_equal(positions[alive], compact):
+                positions[alive] = compact
+                cursor = len(compact)
+                rotations.append(boundary)
+        previous = boundary
+    raw = np.flatnonzero(alive) if policy == "text_drop_with_pe" else np.arange(n)
+    return CompactReference(
+        raw,
+        positions[raw],
+        birth[raw],
+        expiry[raw],
+        tuple(int(np.searchsorted(raw, boundary)) for boundary in rotations),
+        cursor,
+    )
+
+
+def chunked_reference_attention_forward(
+    model, reference, *, query_block=128, key_block=2048
+):
+    """Full-prefill FP32 oracle with bounded attention scratch memory.
+
+    Uses only the independent flat event replay above and native Q/K/V. It
+    holds one layer's projected KV, O(query_block * N) visibility, and bounded
+    score tiles; it never reads a production KV pool, compiler, or occurrence
+    plan. Full attention still takes quadratic arithmetic. This is a numerical
+    diagnostic, not a performance baseline or a serving replacement.
+    """
+    import torch
+
+    if query_block <= 0 or key_block <= 0:
+        raise ValueError("Reference block sizes must be positive")
+    rotary = {
+        module.attn.layer_id: module.rotary_emb
+        for module in model.modules()
+        if hasattr(module, "attn") and hasattr(module, "rotary_emb")
+    }
+    n = len(reference.raw)
+
+    def attention(layer, q, k, v, batch, *args, **kwargs):
+        if len(q) != n or k is None or v is None or not n:
+            raise ValueError("Reference requires one complete nonempty prefill")
+        if batch.positions.tolist() != reference.compute_positions.tolist():
+            raise ValueError("Reference model positions differ from event replay")
+        rope = rotary[layer.layer_id]
+        device = q.device
+        births = torch.as_tensor(reference.compute_positions, device=device)
+        raw = torch.as_tensor(reference.raw, device=device)
+        expiry = torch.as_tensor(reference.expiry, device=device)
+        q = q.reshape(n, layer.tp_q_head_num, layer.qk_head_dim).float()
+        k = k.reshape(n, layer.tp_k_head_num, layer.qk_head_dim)
+        v = v.reshape(n, layer.tp_v_head_num, layer.v_head_dim)
+        groups = layer.tp_q_head_num // layer.tp_k_head_num
+        window = layer.sliding_window_size
+        window = -1 if window is None else window
+        cache, width = rope.cos_sin_cache.float(), rope.rotary_dim
+        sinks = kwargs.get("sinks")
+        result = torch.empty(
+            n, layer.tp_q_head_num, layer.v_head_dim, device=device, dtype=torch.float32
+        )
+        cuts = sorted({0, n, *reference.rotation_cuts})
+        for begin, end in pairwise(cuts):
+            positions = torch.as_tensor(reference.key_positions(begin), device=device)
+            keys = k.float().clone()
+            co, so = cache[births].chunk(2, -1)
+            cn, sn = cache[positions].chunk(2, -1)
+            denom = co.square() + so.square()
+            cos = ((cn * co + sn * so) / denom)[:, None, :]
+            sin = ((sn * co - cn * so) / denom)[:, None, :]
+            if rope.is_neox_style:
+                left, right = keys[..., :width].chunk(2, -1)
+                rotated = torch.cat(
+                    (left * cos - right * sin, right * cos + left * sin), -1
+                )
+            else:
+                left, right = keys[..., :width:2], keys[..., 1:width:2]
+                rotated = torch.stack(
+                    (left * cos - right * sin, right * cos + left * sin), -1
+                ).flatten(-2)
+            changed = births != positions
+            keys[changed, :, :width] = rotated[changed]
+            keys = keys.to(k.dtype)
+            for start in range(begin, end, query_block):
+                stop = min(start + query_block, end)
+                visible = (raw[None] <= raw[start:stop, None]) & (
+                    raw[start:stop, None] < expiry[None]
+                )
+                if window >= 0:
+                    visible &= positions[None] >= births[start:stop, None] - window
+                    rank = visible.cumsum(-1, dtype=torch.int32)
+                    visible &= rank > rank[:, -1:] - (window + 1)
+                shape = (layer.tp_q_head_num, stop - start)
+                maximum = torch.full(
+                    shape, -torch.inf, device=device, dtype=torch.float32
+                )
+                denominator = torch.zeros(shape, device=device, dtype=torch.float32)
+                total = torch.zeros(
+                    *shape, layer.v_head_dim, device=device, dtype=torch.float32
+                )
+                if sinks is not None:
+                    maximum[:] = sinks.float().reshape(-1, 1)
+                    denominator.fill_(1)
+                queries = q[start:stop].transpose(0, 1)
+                for left in range(0, stop, key_block):
+                    right = min(left + key_block, stop)
+                    mask = visible[:, left:right]
+                    if not bool(mask.any()):
+                        continue
+                    kk = keys[left:right].float().repeat_interleave(groups, 1)
+                    vv = v[left:right].float().repeat_interleave(groups, 1)
+                    scores = torch.einsum("hqd,khd->hqk", queries, kk) * layer.scaling
+                    if layer.logit_cap:
+                        scores = layer.logit_cap * torch.tanh(scores / layer.logit_cap)
+                    scores.masked_fill_(~mask[None], -torch.inf)
+                    updated = torch.maximum(maximum, scores.max(-1).values)
+                    safe = torch.where(torch.isfinite(updated), updated, 0)
+                    prior = (maximum - safe).exp()
+                    weights = (scores - safe[..., None]).exp()
+                    total = total * prior[..., None] + torch.einsum(
+                        "hqk,khd->hqd", weights, vv
+                    )
+                    denominator = denominator * prior + weights.sum(-1)
+                    maximum = updated
+                if not bool((denominator > 0).all()):
+                    raise AssertionError("Independent reference produced an empty row")
+                result[start:stop] = (total / denominator[..., None]).transpose(0, 1)
+        return result.to(v.dtype).reshape(n, -1)
+
+    @torch.no_grad()
+    def forward(layer, q, k, v, batch, *args, **kwargs):
+        # Model setup can enable TF32 globally. The oracle's dot products must
+        # retain FP32 precision; restore the caller's setting even on failure.
+        previous = torch.backends.cuda.matmul.allow_tf32
+        try:
+            torch.backends.cuda.matmul.allow_tf32 = False
+            return attention(layer, q, k, v, batch, *args, **kwargs)
+        finally:
+            torch.backends.cuda.matmul.allow_tf32 = previous
+
+    return forward
 
 
 def reference_attention_forward(model, reference, projection):

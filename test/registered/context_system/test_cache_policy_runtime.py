@@ -2,10 +2,11 @@
 
 import importlib
 import os
+import random
 
 import pytest
 import torch
-from cache_policy_reference import simulate
+from cache_policy_reference import simulate, simulate_compact
 from test_cache_policy_ir import POLICIES, compile_policy
 
 pytest_plugins = (
@@ -20,11 +21,18 @@ pytest_plugins = (
 
 @pytest.mark.parametrize("policy", POLICIES)
 @pytest.mark.parametrize("neox", [False, True])
-def test_model_oracle_rotation_against_unrotated_complex_attention(policy, neox):
+@pytest.mark.parametrize("window", [-1, 0, 3])
+@pytest.mark.parametrize("with_sinks", [False, True])
+def test_model_oracle_rotation_against_unrotated_complex_attention(
+    policy, neox, window, with_sinks
+):
     """Check the independent oracle before trusting its future GPU comparisons."""
     from types import SimpleNamespace
 
-    from cache_policy_reference import reference_attention_forward
+    from cache_policy_reference import (
+        chunked_reference_attention_forward,
+        reference_attention_forward,
+    )
 
     tokens = list(range(12))
     reference = simulate(
@@ -49,9 +57,9 @@ def test_model_oracle_rotation_against_unrotated_complex_attention(policy, neox)
         tp_v_head_num=2,
         qk_head_dim=8,
         v_head_dim=8,
-        sliding_window_size=3,
+        sliding_window_size=window,
         scaling=8**-0.5,
-        logit_cap=0,
+        logit_cap=1.7 if with_sinks else 0,
     )
     model = SimpleNamespace(
         modules=lambda: [SimpleNamespace(attn=layer, rotary_emb=rope)]
@@ -74,31 +82,118 @@ def test_model_oracle_rotation_against_unrotated_complex_attention(policy, neox)
         return z
 
     born_q, born_k = rotate(q, births).float(), rotate(k, births).float()
+    extra = {"sinks": torch.randn(4)} if with_sinks else {}
     actual = reference_attention_forward(model, reference, projection)(
-        layer, born_q, born_k, v, SimpleNamespace(positions=torch.tensor(births))
+        layer,
+        born_q,
+        born_k,
+        v,
+        SimpleNamespace(positions=torch.tensor(births)),
+        **extra,
     )
+    compact = simulate_compact(
+        len(tokens),
+        {5: [(1, 3)], 9: [(4, 6)]},
+        [10] if policy == POLICIES[0] else [],
+        policy=policy,
+    )
+    blocked = chunked_reference_attention_forward(
+        model, compact, query_block=3, key_block=2
+    )(
+        layer,
+        born_q,
+        born_k,
+        v,
+        SimpleNamespace(positions=torch.tensor(births)),
+        **extra,
+    )
+    torch.testing.assert_close(blocked, actual, rtol=1e-5, atol=1e-6)
     expected = []
     for i, raw in enumerate(projection):
         chosen = [
             (inverse[j], pos)
             for j, pos in reference.readers[raw]
-            if pos >= births[i] - 3
-        ][-4:]
+            if window < 0 or pos >= births[i] - window
+        ]
+        if window >= 0:
+            chosen = chosen[-(window + 1) :]
         ids, positions = zip(*chosen)
         keys = rotate(k[list(ids)], list(positions)).repeat_interleave(2, 1)
         scores = (
             torch.einsum("hd,khd->hk", rotate(q[i : i + 1], [births[i]])[0], keys)
             * layer.scaling
         )
+        if layer.logit_cap:
+            scores = layer.logit_cap * torch.tanh(scores / layer.logit_cap)
+        if with_sinks:
+            scores = torch.cat((scores, extra["sinks"].double()[:, None]), -1)
+        weights = scores.softmax(-1)
+        if with_sinks:
+            weights = weights[:, :-1]
         expected.append(
             torch.einsum(
                 "hk,khd->hd",
-                scores.softmax(-1),
+                weights,
                 v[list(ids)].double().repeat_interleave(2, 1),
             )
         )
     torch.testing.assert_close(
         actual.double(), torch.stack(expected).reshape(n, -1), rtol=1e-5, atol=1e-6
+    )
+
+
+@pytest.mark.parametrize("policy", POLICIES)
+def test_compact_reference_matches_sequential_reader_graph(policy):
+    rng = random.Random(17112026)
+    for _ in range(100):
+        n = rng.randrange(3, 50)
+        drops = {
+            b: [(i, i + 1) for i in range(b - 1) if rng.random() < 0.2]
+            for b in range(2, n + 1)
+            if rng.random() < 0.25
+        }
+        repos = (
+            [b for b in range(2, n + 1) if rng.random() < 0.25]
+            if policy == POLICIES[0]
+            else []
+        )
+        slow = simulate(list(range(n)), drops, repos, policy=policy)
+        compact = simulate_compact(n, drops, repos, policy=policy)
+        raw = compact.raw.tolist()
+        assert raw == (slow.active if policy == POLICIES[0] else list(range(n)))
+        assert compact.positions.tolist() == [slow.positions[i] for i in raw]
+        assert compact.compute_positions.tolist() == [
+            slow.compute_positions[i] for i in raw
+        ]
+        assert compact.next_position == slow.next_position
+        for query, i in enumerate(raw):
+            for window in (-1, 0, 4):
+                expected = [
+                    (j, position)
+                    for j, position in slow.readers[i]
+                    if window < 0 or position >= slow.compute_positions[i] - window
+                ]
+                if window >= 0:
+                    expected = expected[-(window + 1) :]
+                assert [(raw[j], p) for j, p in compact.row(query, window)] == expected
+
+
+@pytest.mark.parametrize("policy", POLICIES)
+def test_long_reference_keeps_linear_state_and_exact_boundary_reads(policy):
+    # Synthetic 128K geometry, explicitly not a real BCP/model acceptance run.
+    n = 128 * 1024
+    drops = {32768: [(100, 8192)], 98304: [(16384, 24576)]}
+    repos = [98304] if policy == POLICIES[0] else []
+    compact = simulate_compact(n, drops, repos, policy=policy)
+    arrays = (compact.raw, compact.positions, compact.compute_positions, compact.expiry)
+    assert sum(a.nbytes for a in arrays) <= 4 * n * 8
+    assert compact.next_position == n - (8192 - 100) - 8192
+    last = compact.row(len(compact.raw) - 1)
+    assert len(last) == compact.next_position
+    assert [p for _, p in last] == list(range(compact.next_position))
+    # The final row excludes dead history even when it remains on the B path.
+    assert not any(
+        100 <= compact.raw[j] < 8192 or 16384 <= compact.raw[j] < 24576 for j, _ in last
     )
 
 
