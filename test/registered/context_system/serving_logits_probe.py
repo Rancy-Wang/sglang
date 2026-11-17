@@ -84,6 +84,10 @@ def install_cache_policy_attention_probe():
         if (params and len(params) == 1 and params[0]
                 and params[0].get("context_policy_spec")
                 and params[0].get("context_layer_probe")):
+            if len(params[0].get("_context_probe_rows", [])) >= params[0]["context_trace_count"]:
+                # Native overlap may execute a discarded extra sample after
+                # the requested fixed continuation has already completed.
+                return output
             model = params[0]["context_policy_model"]
             if model not in hooks:
                 hooks[model] = create_decode_read_probe(
