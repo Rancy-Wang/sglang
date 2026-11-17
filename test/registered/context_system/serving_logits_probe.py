@@ -68,6 +68,33 @@ def install_cache_policy_eviction_probe():
     UnifiedRadixCache._cache_policy_eviction_probe = True
 
 
+def install_cache_policy_attention_probe():
+    """Attach read-only inspection only for explicit new-policy diagnostics."""
+    from sglang.srt.layers.radix_attention import RadixAttention
+
+    if getattr(RadixAttention, "_cache_policy_attention_probe", False):
+        return
+    original = RadixAttention.forward
+    hooks = {}
+
+    def forward(layer, q, k, v, batch, *args, **kwargs):
+        output = original(layer, q, k, v, batch, *args, **kwargs)
+        params = getattr(batch.sampling_info, "custom_params", None)
+        if (params and len(params) == 1 and params[0]
+                and params[0].get("context_policy_spec")
+                and params[0].get("context_layer_probe")):
+            model = params[0]["context_policy_model"]
+            if model not in hooks:
+                hooks[model] = create_decode_read_probe(
+                    {"model": model, "layers": list(range(36))}
+                )
+            hooks[model](layer, (q, k, v, batch), output)
+        return output
+
+    RadixAttention.forward = forward
+    RadixAttention._cache_policy_attention_probe = True
+
+
 def create_decode_read_probe(config):
     """Audit actual Triton decode gathers and FP32 attention, outside timing runs.
 
@@ -115,10 +142,14 @@ def create_decode_read_probe(config):
                     # unchanged control distinct from Context's distance rule.
                     pairs = pairs[-window:] if window else []
             elif params[0].get("context_policy_spec"):
-                if req.output_ids[-1] != int(batch.input_ids[0]):
-                    raise AssertionError("Diagnostic requires non-overlapped decode")
+                # Sampler rows are committed in model execution order. The
+                # scheduler's output_ids can lag with native overlap enabled.
+                generated = len(params[0].get("_context_probe_rows", [])) + params[0].get("context_forced_offset", 0)
+                forced = params[0]["context_forced_tokens"]
+                if generated < 1 or forced[generated - 1] != int(batch.input_ids[0]):
+                    raise AssertionError("Decode did not consume the frozen input")
                 pairs = independent_policy_decode_pairs(
-                    params[0]["context_policy_spec"], len(req.output_ids), pos, window
+                    params[0]["context_policy_spec"], generated, pos, window
                 )
             else:
                 from insert_state_audit import brute_decode_reads
@@ -287,9 +318,13 @@ def serialized_probe():
         def __init__(self):
             import os
 
-            from serving_logits_probe import install_cache_policy_eviction_probe
+            from serving_logits_probe import (
+                install_cache_policy_attention_probe,
+                install_cache_policy_eviction_probe,
+            )
 
             install_cache_policy_eviction_probe()
+            install_cache_policy_attention_probe()
 
             if os.environ.get("CONTEXT_PD_RETRACT") == "1":
                 from serving_logits_probe import install_pd_retraction_barrier

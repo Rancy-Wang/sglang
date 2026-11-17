@@ -514,6 +514,7 @@ async def diagnostics(args):
                     "context_cache_policy_probe": check,
                     "context_layer_probe": check,
                     "context_cache_policy_evict_tokens": evict,
+                    "context_policy_model": args.model,
                 }
                 if check:
                     body["custom_params"]["context_policy_spec"] = spec
