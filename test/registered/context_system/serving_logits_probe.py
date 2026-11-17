@@ -37,7 +37,9 @@ def policy_structure_errors(program, spec):
 
 def install_cache_policy_graph_probe():
     """Inspect buffers outside capture, immediately before native graph replay."""
-    from sglang.srt.model_executor.runner.decode_cuda_graph_runner import DecodeCudaGraphRunner
+    from sglang.srt.model_executor.runner.decode_cuda_graph_runner import (
+        DecodeCudaGraphRunner,
+    )
 
     if getattr(DecodeCudaGraphRunner, "_cache_policy_graph_probe", False):
         return

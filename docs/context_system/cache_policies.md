@@ -296,10 +296,49 @@ hot run; at the KV divergence the hot candidates tied. Policy differences
 are below the native control on these aggregate metrics, but this diagnostic
 does not establish their cause or replace the independent oracle matrix.
 
-Remaining limitations: the normal-mode bounded same-QKV layer test failed
-its strict tolerance on the no-drop baseline, before policy events. That
-failure is retained and unresolved. Ordinary text free generation completed
+The normal-mode bounded same-QKV layer test failed its strict tolerance on
+the no-drop baseline, before policy events. That numerical observation is
+retained; the user subsequently accepted logits differences and set semantic
+correctness as the acceptance criterion. It is no longer a numerical-equality
+gate. Ordinary text free generation completed
 all five cases (211 turns); the eager KV run was interrupted for this user
-requested Graph run. Full ordinary/PD numerical and trajectory acceptance
-is still incomplete. Do not combine the shortened snapshot replay with the
+requested Graph run. Full Graph-enabled KV trajectories and PD acceptance
+are still incomplete. Do not combine the shortened snapshot replay with the
 original full-generation-budget acceptance reports.
+
+## Semantic verification with CUDA Graph enabled
+
+The opt-in `serialized_probe(graph_metadata=True)` observer runs after the
+native decode graph runner loads the request. It compares the actual Full/SWA
+index buffers used by graph replay with independently simulated event readers
+on every TP rank. This observer is outside capture: the older per-layer Python
+hook does not execute for every replay and cannot establish this coverage.
+The observer does not disable or recapture the model graphs. Ordinary benchmark
+requests omit `context_graph_read_probe` and pay no diagnostic tensor readback.
+The request-state probe also checks active projection, computation and stored
+positions, visibility expiry and final keep masks. KV policy diagnostics require
+zero retrigger tokens. Numerical differences remain recorded separately.
+
+The first graph observer attempt (`7d54383361`) incorrectly expected sampling
+parameters on the backend's reduced replay view and caused the diagnostic
+server to exit. `99198d68f3` moves observation to the full request loader and
+adds a regression test for native loading without diagnostic parameters. This
+was a test instrumentation failure; production policy code was unchanged.
+
+The corrected real-service run `graph-semantic-99198d6` completed 26 cold/hot
+requests: both policies at first Drop and the five frozen final BCP histories,
+plus the text policy at first 96 Ki-token Reposition. All 1,456 physical-reader
+checks passed (seven decode inputs, two attention pools, four TP ranks per
+request), and all request-state comparisons passed. All 12 KV-policy requests
+reported zero retry tokens. These are actual graph-replay buffer observations,
+not equality of generated text or a numerical-tolerance inference. The histories
+are from the earlier completed text trajectories, replayed as real requests
+under each policy; this is separate from generating complete KV trajectories.
+
+Focused IR/Radix/recovery/runtime tests passed 53 tests locally (21 skipped)
+and 69 tests on BUS-2 with `CUDA_VISIBLE_DEVICES=0 RUN_CONTEXT_GPU=1` (5 skipped).
+The GPU run includes native attention against independent event readers.
+`graph-kv-99198d6` follows the semantic run and uses the unchanged five cases,
+original per-turn output budgets, rolling drops and the Graph-enabled service
+on GPUs 4–7. Its full-trajectory result remains pending. Neither this semantic
+check nor the unit-level transfer tests establish full PD deployment acceptance.
