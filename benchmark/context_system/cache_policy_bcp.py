@@ -619,6 +619,10 @@ async def diagnostics(args):
 
         for job_name in manifest["jobs"]:
             job = json.loads((source.parent / job_name).read_text())
+            if job.get("calibration") and args.baseline:
+                # Reuse the already frozen control across deployments; never
+                # recalibrate after seeing policy candidates.
+                continue
             stem = Path(job_name).stem
             await flush()
             if job.get("calibration"):
