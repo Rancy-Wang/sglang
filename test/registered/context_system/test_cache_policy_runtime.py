@@ -433,6 +433,9 @@ def cache_policy_model_runtime():
         context_length=2048,
         mem_fraction_static=0.85,
         attention_backend=os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND", "triton"),
+        # Match the frozen BCP server backend. Auto can select triton_kernels,
+        # whose projection/MoE rounding varies substantially with tiny chunks.
+        moe_runner_backend="triton",
         cuda_graph_config={
             "decode": {"backend": "disabled"},
             "prefill": {"backend": "disabled"},
