@@ -516,9 +516,36 @@ def test_real_model_logits_against_independent_fp32_attention(
             expected = runner.forward(fb).logits_output.next_token_logits.clone()
         wrapper.clear()
         program = compile_policy(policy_modules, policy, tokens, drops, repos)
-        actual = forward(
-            runner, prepare_batch(runner, [program.input_ids], programs=[program])
-        )
+        native_attention = RadixAttention.forward
+        local_oracle = reference_attention_forward(runner.model, ref, projection)
+        layers_checked = []
+
+        def checked_attention(layer, q, k, v, batch, *args, **kwargs):
+            result = native_attention(layer, q, k, v, batch, *args, **kwargs)
+            expected_layer = local_oracle(layer, q, k, v, batch, *args, **kwargs)
+            error = (result.float() - expected_layer.float()).abs()
+            # Same actual Q/K/V on both paths isolates attention correctness
+            # from MoE amplification of upstream BF16 rounding differences.
+            assert torch.isfinite(result).all() and torch.isfinite(expected_layer).all()
+            assert bool(
+                torch.all(error <= 0.0078125 + 0.0078125 * expected_layer.abs())
+            )
+            layers_checked.append((layer.layer_id, float(error.max())))
+            return result
+
+        with patch.object(RadixAttention, "forward", checked_attention):
+            actual = forward(
+                runner, prepare_batch(runner, [program.input_ids], programs=[program])
+            )
+        assert len(layers_checked) == len(runner.context_model_binding.layers)
+        if int(os.environ.get("RANK", "0")) == 0:
+            print(
+                "CACHE_POLICY_LAYER_CHECKS",
+                policy,
+                bool(drops),
+                layers_checked,
+                flush=True,
+            )
         delta = (actual.float() - expected.float()).abs()
         return {
             "max_abs": float(delta.max()),
