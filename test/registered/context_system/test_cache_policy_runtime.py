@@ -546,7 +546,7 @@ def test_real_model_logits_against_independent_fp32_attention(
                 layers_checked,
                 flush=True,
             )
-        delta = (actual.float() - expected.float()).abs()
+        delta = (actual.float() - expected.float()).abs().cpu()
         return {
             "max_abs": float(delta.max()),
             "mean_abs": float(delta.mean()),
