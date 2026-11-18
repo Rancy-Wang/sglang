@@ -53,11 +53,12 @@ def test_recovery_second_pass_only_removed_for_identical_b_inputs(monkeypatch, p
     assert req.prefix_indices.tolist() == [0]
 
 
-def test_graph_probe_preserves_native_loading_without_opt_in(monkeypatch):
+@pytest.mark.parametrize("probe_module, installer", [("serving_logits_probe", "install_cache_policy_graph_probe"), ("cache_policy_perf_probe", "install_perf_graph_probe")])
+def test_graph_probe_preserves_native_loading_without_opt_in(monkeypatch, probe_module, installer):
     import sys
     from types import SimpleNamespace
 
-    from serving_logits_probe import install_cache_policy_graph_probe
+    install_cache_policy_graph_probe = getattr(importlib.import_module(probe_module), installer)
 
     calls = []
 
@@ -78,6 +79,36 @@ def test_graph_probe_preserves_native_loading_without_opt_in(monkeypatch):
     batch = SimpleNamespace(forward_mode=SimpleNamespace(is_decode=lambda: True))
     assert Runner().load_batch(batch, "proxy") == "native-result"
     assert calls == [(batch, "proxy")]
+
+
+@pytest.mark.parametrize("hybrid", [False, True])
+@pytest.mark.parametrize("window", [-1, 128])
+def test_perf_probe_pool_specific_physical_ids(monkeypatch, hybrid, window):
+    import sys
+    from types import SimpleNamespace
+
+    from cache_policy_perf_probe import expected_graph_slots
+
+    class Shared:
+        pass
+
+    class Hybrid:
+        def translate_loc_from_full_to_swa(self, ids):
+            return ids + 200
+
+    monkeypatch.setitem(sys.modules, "sglang.srt.mem_cache.memory_pool",
+                        SimpleNamespace(MHATokenToKVPool=Shared))
+    monkeypatch.setitem(sys.modules, "sglang.srt.mem_cache.base_swa_memory_pool",
+                        SimpleNamespace(BaseSWAKVPool=Hybrid))
+    ids = torch.tensor([7, 2, 11])
+    backend = SimpleNamespace(token_to_kv_pool=Hybrid() if hybrid else Shared(),
+                              kv_index_translator=SimpleNamespace(
+                                  translate_full_attn_ids=lambda ids: ids + 100))
+    assert torch.equal(expected_graph_slots(backend, ids, window),
+                       ids + (200 if hybrid and window >= 0 else 100))
+    backend.token_to_kv_pool = object()
+    with pytest.raises(TypeError, match="Unsupported diagnostic KV pool"):
+        expected_graph_slots(backend, ids, window)
 
 
 @pytest.mark.parametrize("policy", POLICIES)
