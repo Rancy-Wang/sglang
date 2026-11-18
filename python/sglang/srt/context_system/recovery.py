@@ -36,11 +36,12 @@ class DropEvictionCandidates:
     The tree updates a candidate only when its locks, children, residency or
     recency change. Reclaim never scans the tree or reads device page indices.
     ``kind=0`` denotes an ordinary leaf and ``kind=1`` a proven Drop edge,
-    including a Drop edge that has become a leaf.
+    including a Drop edge that has become a leaf. ``kind=2`` is a B historical
+    edge: still reclaimable, but competes with ordinary leaves by priority.
     """
 
     def __init__(self):
-        self.heaps = ([], [])
+        self.heaps = ([], [], [])
         self.entries = {}
         self.version = 0
 
@@ -54,20 +55,26 @@ class DropEvictionCandidates:
         if sum(map(len, self.heaps)) > 2 * len(self.entries) + 64:
             self.heaps = tuple(
                 [entry for k, entry in self.entries.values() if k == kind]
-                for kind in (0, 1)
+                for kind in (0, 1, 2)
             )
             for heap in self.heaps:
                 heapq.heapify(heap)
 
     def pop(self):
-        for kind in (1, 0):
+        for kind in (0, 1, 2):
             heap = self.heaps[kind]
-            while heap:
-                entry = heapq.heappop(heap)
-                if self.entries.get(entry[1]) == (kind, entry):
-                    del self.entries[entry[1]]
-                    return kind, entry[-1]
-        return None
+            while heap and self.entries.get(heap[0][1]) != (kind, heap[0]):
+                heapq.heappop(heap)
+        if self.heaps[1]:
+            kind = 1
+        else:
+            candidates = [k for k in (0, 2) if self.heaps[k]]
+            if not candidates:
+                return None
+            kind = min(candidates, key=lambda k: self.heaps[k][0][:3])
+        entry = heapq.heappop(self.heaps[kind])
+        del self.entries[entry[1]]
+        return kind, entry[-1]
 
 
 def mask_ranges(mask: np.ndarray) -> list[tuple[int, int]]:
@@ -265,6 +272,32 @@ def _insert_window(layout, expiry, start=0):
                                      query_start=start, query_end=len(expiry))
 
 
+def _history_layout(layout):
+    """B's single fixed-position stage; other layouts keep the general oracle."""
+    return (
+        layout.cache_policy == 2
+        and not layout.insert_spans.numel()
+        and not layout.logical_order.numel()
+        and not layout.transition_raw_tokens.numel()
+        and torch.equal(layout.birth_positions, layout.positions)
+    )
+
+
+def _history_read_plan(layout, expiry, selected, resident, swa, terminal, window,
+                       *, recover):
+    from sglang.kernels.ops.attention.cache_policy_plan import load_cache_policy_plan
+
+    count = len(resident)
+    full = torch.empty(count, dtype=torch.bool)
+    sliding = torch.empty_like(full)
+    load_cache_policy_plan().history_recovery(
+        expiry.contiguous(), layout.positions.contiguous(), resident.contiguous(),
+        swa.contiguous(), terminal.contiguous(), selected, full, sliding,
+        0 if window is None else window, recover,
+    )
+    return full, sliding
+
+
 def _insert_read_masks(layout, expiry, intervals, prefix_length, window=None):
     """Union actual readers, in occurrence order; no position-sorted assumption."""
     from .window import LogicalSWAWindowIndex
@@ -277,6 +310,12 @@ def _insert_read_masks(layout, expiry, intervals, prefix_length, window=None):
     selected = np.zeros(n, dtype=np.bool_)
     for a, b in intervals:
         selected[a:b] = True
+    if _history_layout(layout):
+        present = torch.ones(prefix_length, dtype=torch.bool)
+        return _history_read_plan(
+            layout, expiry, torch.from_numpy(selected), present, present,
+            torch.zeros_like(present), window, recover=False,
+        )
     view = _insert_window(layout, expiry, min(a for a, b in intervals))
     raw, pos = view.occurrence_raw_tokens.numpy(), view.occurrence_positions.numpy()
     keys, offsets = view.segment_key_occurrences.numpy(), view.segment_key_offsets.numpy()
@@ -315,6 +354,23 @@ def _plan_insert_recovery(resident, expiry, layout, rewind, incompatible,
     swa_present = np.ones(matched, dtype=bool) if swa_resident is None else swa_resident.numpy()
     terminal = np.zeros(matched, dtype=bool) if terminal is None else terminal.numpy()
     suffix = ((matched, n),)
+    if (
+        _history_layout(layout)
+        and not rewind.any()
+        and not incompatible.any()
+        and (source_positions is None or torch.equal(
+            source_positions, layout.positions[:matched]
+        ))
+    ):
+        selected = torch.arange(n) >= matched
+        full, swa = _history_read_plan(
+            layout, expiry, selected, resident, torch.from_numpy(swa_present),
+            torch.from_numpy(terminal), window, recover=True,
+        )
+        return RecoveryPlan(
+            tuple(mask_ranges(selected.numpy())), full | swa | selected[:matched],
+            matched, resident & ~selected[:matched],
+        )
     full, swa = _insert_read_masks(layout, expiry, suffix, matched, window)
     sw = swa.numpy() | terminal
     if not np.any((~present | incompatible) & full.numpy()) and not np.any(~swa_present & sw):

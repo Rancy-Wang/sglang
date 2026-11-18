@@ -813,7 +813,10 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                 if ct in self.component_types
             )
         ):
-            kind = 1
+            # B can read historical dropped text again on its next reprefill.
+            # Do not discard a hot B edge ahead of every cold ordinary leaf.
+            context = node.key.context
+            kind = 2 if context is not None and context.cache_policy == 2 else 1
         elif node in self.evictable_device_leaves:
             kind = 0
         full = self.components_by_type[BASE_COMPONENT_TYPE]

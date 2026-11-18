@@ -8,7 +8,7 @@ import pytest
 import torch
 from test_ir import ROOT, args, load_file
 
-pytest_plugins = ("test_ir",)
+pytest_plugins = ("test_ir", "test_cache_policy_ir")
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="native SRT runtime")
@@ -48,9 +48,69 @@ def test_candidate_drop_priority_and_bounded_stale_entries():
     assert candidates.pop() == (1, internal)
     assert candidates.pop() == (0, leaf)
     assert candidates.pop() is None
+
+
+def test_history_candidate_competes_by_recency_without_losing_legacy_priority():
+    module = load_file(
+        "context_history_eviction", ROOT / "python/sglang/srt/context_system/recovery.py"
+    )
+    candidates = module.DropEvictionCandidates()
+    leaf, history, legacy = [SimpleNamespace(id=i) for i in range(3)]
+    candidates.update(leaf, 0, 10)
+    for stamp in range(1000):
+        candidates.update(history, 2, stamp)
+    candidates.update(legacy, 1, 10000)
+    assert sum(map(len, candidates.heaps)) <= 2*len(candidates.entries)+64
+    assert candidates.pop() == (1, legacy)
+    assert candidates.pop() == (0, leaf)
+    assert candidates.pop() == (2, history)
+    candidates.update(history, 2, 0)
+    candidates.update(leaf, 0, 1)
+    assert candidates.pop() == (2, history)
+    assert candidates.pop() == (0, leaf)
+    assert candidates.pop() is None
     candidates.update(leaf, 0, 0)
     candidates.update(leaf, None)
     assert candidates.pop() is None
+
+
+def test_history_native_pressure_reclaims_cold_leaf_before_hot_drop(
+    policy_modules, native_cache
+):
+    from sglang.srt.mem_cache.base_prefix_cache import (
+        EvictParams,
+        InsertParams,
+        MatchPrefixParams,
+    )
+    from sglang.srt.mem_cache.radix_cache import RadixKey
+    from test_cache_policy_ir import compile_policy
+
+    cache, allocator = native_cache
+    # Fill the entire real allocator. The ordinary leaf is older than B history.
+    cold = RadixKey(array("q", range(1000, 1116)))
+    cold_slots = allocator.alloc(116)
+    cache.insert(InsertParams(key=cold, value=cold_slots))
+    p = compile_policy(policy_modules, "message_drop_without_repos", list(range(12)), {6: [(1, 4)]})
+    key = RadixKey.from_context(p.layout)
+    slots = allocator.alloc(12)
+    cache.insert(InsertParams(key=key, value=slots))
+    hit = cache.match_prefix(MatchPrefixParams(key=key))
+    lease = cache.inc_lock_ref(hit.last_device_node)
+    required = p.layout.keep_mask
+    cache.configure_context_drop_lock(hit.last_device_node, lease, required)
+    assert allocator.alloc(1) is None
+    cache.evict(EvictParams(num_tokens=1))
+    retained = cache.match_prefix(MatchPrefixParams(key=key))
+    assert bool(retained.context_resident.all())
+    assert torch.equal(retained.device_indices, slots)
+    # History remains reclaimable if pressure exhausts the cold candidates.
+    cache.evict(EvictParams(num_tokens=128))
+    remaining = cache.match_prefix(MatchPrefixParams(key=key))
+    assert torch.equal(remaining.context_resident, required)
+    assert_allocator(cache, allocator, int(required.sum()))
+    cache.dec_lock_ref(hit.last_device_node, lease.to_dec_params())
+    cache.evict(EvictParams(num_tokens=128))
+    assert_allocator(cache, allocator, 0)
 
 
 @pytest.fixture(params=["full", "full_swa"])
@@ -128,7 +188,9 @@ def assert_allocator(cache, allocator, used):
 def test_retry_source_capacity_counts_shared_edges_and_drop_receipts(
     compiler, native_cache
 ):
-    from sglang.srt.context_system.request_storage import handle_prefill_capacity_pressure
+    from sglang.srt.context_system.request_storage import (
+        handle_prefill_capacity_pressure,
+    )
     from sglang.srt.mem_cache.base_prefix_cache import (
         EvictParams,
         InsertParams,
@@ -297,7 +359,9 @@ def test_exhausted_pool_reclaims_all_drop_pages_before_any_leaf(
     compiler, native_cache, monkeypatch
 ):
     from sglang.srt.mem_cache.base_prefix_cache import (
-        EvictParams, InsertParams, MatchPrefixParams,
+        EvictParams,
+        InsertParams,
+        MatchPrefixParams,
     )
     from sglang.srt.mem_cache.radix_cache import RadixKey
 
@@ -367,7 +431,9 @@ def test_exhausted_pool_reclaims_all_drop_pages_before_any_leaf(
 def test_drop_leaf_priority_and_empty_path_pruning(native_cache):
     from sglang.srt.context_system.recovery import DropEvictionCandidates
     from sglang.srt.mem_cache.base_prefix_cache import (
-        EvictParams, InsertParams, MatchPrefixParams,
+        EvictParams,
+        InsertParams,
+        MatchPrefixParams,
     )
     from sglang.srt.mem_cache.radix_cache import RadixKey
 

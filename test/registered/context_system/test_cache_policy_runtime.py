@@ -20,6 +20,39 @@ pytest_plugins = (
 )
 
 
+@pytest.mark.skipif(__import__("sys").platform != "linux", reason="native SRT runtime")
+@pytest.mark.parametrize("policy, mismatch, expected_calls", [(2, False, 1), (2, True, 2), (0, False, 2), (1, False, 2)])
+def test_recovery_second_pass_only_removed_for_identical_b_inputs(monkeypatch, policy, mismatch, expected_calls):
+    from types import SimpleNamespace
+
+    from sglang.srt.context_system import recovery
+    from sglang.srt.managers.schedule_batch import Req
+
+    calls = []
+    def plan(*args, **kwargs):
+        calls.append((args, kwargs))
+        return recovery.RecoveryPlan(((1, 4),), torch.ones(3, dtype=torch.bool), 3,
+                                     torch.tensor([True, False, False]))
+    monkeypatch.setattr(recovery, "plan_recovery", plan)
+    positions = torch.arange(4, dtype=torch.int32)
+    stored = positions[:3].clone()
+    if mismatch:
+        stored[0] += 1
+    req = SimpleNamespace(
+        context_recompute_program=None,
+        context_program=SimpleNamespace(layout=SimpleNamespace(
+            positions=positions, birth_positions=positions, cache_policy=policy),
+            visible_until=torch.full((4,), 10, dtype=torch.int32)),
+        prefix_indices=torch.arange(3), context_source_positions=stored,
+        context_resident=torch.ones(3, dtype=torch.bool), context_swa_resident=None,
+        context_swa_window=None, context_swa_query_starts=None, context_usage=object(),
+        context_exact_prefix_len=3, kv=SimpleNamespace(cache_protected_len=3),
+    )
+    Req.prepare_context_recovery(req)
+    assert len(calls) == expected_calls
+    assert req.prefix_indices.tolist() == [0]
+
+
 def test_graph_probe_preserves_native_loading_without_opt_in(monkeypatch):
     import sys
     from types import SimpleNamespace

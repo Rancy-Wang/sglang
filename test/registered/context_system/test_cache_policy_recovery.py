@@ -11,6 +11,55 @@ from test_cache_policy_ir import POLICIES, compile_policy
 pytest_plugins = ("test_cache_policy_ir", "test_context_attention_plan")
 
 
+@pytest.mark.parametrize("window", [None, 1, 3, 128])
+def test_history_fast_plan_matches_general_with_terminal_and_sparse_queries(
+    policy_modules, monkeypatch, window
+):
+    recovery = importlib.import_module(policy_modules[2].__package__ + ".recovery")
+    rng = random.Random(1118)
+    for _ in range(100):
+        n = rng.randrange(8, 100)
+        drops = {b: [(i, i+1) for i in range(b-1) if rng.random() < .1]
+                 for b in range(3, n+1, 3)}
+        p = compile_policy(policy_modules, POLICIES[1], list(range(n)), drops)
+        m = rng.randrange(n)
+        resident = torch.tensor([rng.random() < .8 for _ in range(m)], dtype=torch.bool)
+        swa = torch.tensor([rng.random() < .6 for _ in range(m)], dtype=torch.bool)
+        terminal = torch.tensor([rng.random() < .2 for _ in range(m)], dtype=torch.bool)
+        arguments = (resident, p.visible_until, p.layout, None, None,
+                     swa if window else None, window, terminal if window else None,
+                     p.layout.positions[:m])
+        fast = recovery._plan_insert_recovery(*arguments)
+        intervals = tuple((i, i+1) for i in range(n) if rng.random() < .2)
+        masks = recovery._insert_read_masks(p.layout, p.visible_until, intervals, m, window)
+        with monkeypatch.context() as patch:
+            patch.setattr(recovery, "_history_layout", lambda layout: False)
+            general = recovery._plan_insert_recovery(*arguments)
+            expected = recovery._insert_read_masks(p.layout, p.visible_until, intervals, m, window)
+        assert fast.intervals == general.intervals
+        assert torch.equal(fast.required_prefix, general.required_prefix)
+        assert torch.equal(fast.reusable_prefix, general.reusable_prefix)
+        assert all(torch.equal(a, b) for a, b in zip(masks, expected))
+
+
+def test_history_fast_path_rejects_version_mismatch(policy_modules, monkeypatch):
+    recovery = importlib.import_module(policy_modules[2].__package__ + ".recovery")
+    p = compile_policy(policy_modules, POLICIES[1], list(range(12)), {8: [(1, 4)]})
+    positions = p.layout.positions[:9].clone()
+    positions[0] += 1
+    # The generic path may call the fast read-mask helper, but it must not use
+    # the fixed-version dependency planner for this source.
+    original = recovery._history_read_plan
+    def observe(*args, **kwargs):
+        assert not kwargs["recover"]
+        return original(*args, **kwargs)
+    monkeypatch.setattr(recovery, "_history_read_plan", observe)
+    recovery._plan_insert_recovery(
+        torch.zeros(9, dtype=torch.bool), p.visible_until, p.layout,
+        torch.ones(9, dtype=torch.bool), None, None, None, None, positions,
+    )
+
+
 @pytest.mark.parametrize("policy", POLICIES)
 def test_holes_and_rotated_versions(policy_modules, policy):
     rng = random.Random(1117)

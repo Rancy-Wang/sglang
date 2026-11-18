@@ -1620,7 +1620,10 @@ class Req(ReqDllmMixin):
             swa_window=self.context_swa_window,
             source_positions=positions,
         )
-        if recovery.start < matched:
+        incompatible = positions != program.layout.positions[:matched]
+        if recovery.start < matched and (
+            program.layout.cache_policy != 2 or bool(incompatible.any())
+        ):
             # Like mini, restore source versions only for historical repair.
             # A later Reposition alone can rotate a fully reusable prefix;
             # treating its old final positions as missing would recompute it.
@@ -1631,7 +1634,7 @@ class Req(ReqDllmMixin):
                 program.visible_until,
                 len(program.layout.positions),
                 rewind,
-                positions != program.layout.positions[:matched],
+                incompatible,
                 swa_resident=swa,
                 swa_query_starts=self.context_swa_query_starts,
                 swa_terminal_required=terminal,
