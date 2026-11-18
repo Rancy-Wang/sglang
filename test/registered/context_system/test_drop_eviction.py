@@ -849,7 +849,7 @@ def test_context_decode_window_releases_sparse_prompt_then_generated_peers(
         context_decode_layout=decode,
         kv=SimpleNamespace(
             req_pool_idx=0, swa_evicted_seqlen=0, holds_kv=True, swa_dead_lo=lambda _: 0,
-            cache_protected_len=0,
+            cache_protected_len=0, swa_evict_floor=0,
         ),
     )
     for computed in (24, 25, 30, 40):
