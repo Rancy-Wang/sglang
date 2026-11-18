@@ -128,7 +128,7 @@ void history_recovery(tvm::ffi::TensorView expiry,
                       int64_t window, bool recover) {
   auto valid = [](tvm::ffi::TensorView t, int code, int bits, int64_t size) {
     return t.device().device_type == kDLCPU && t.ndim() == 1 &&
-           t.is_contiguous() && t.dtype().code == code &&
+           (size == 0 || t.is_contiguous()) && t.dtype().code == code &&
            t.dtype().bits == bits && t.size(0) == size;
   };
   const int64_t length = expiry.size(0), matched = resident.size(0);

@@ -348,6 +348,8 @@ def _plan_insert_recovery(resident, expiry, layout, rewind, incompatible,
     n, matched = len(expiry), len(resident)
     if not 0 <= matched < n:
         raise ValueError("Insert recovery must leave an uncached query suffix")
+    if not matched:
+        return RecoveryPlan(((0, n),), resident.clone(), 0, resident.clone())
     present = resident.numpy()
     rewind = np.zeros(matched, dtype=bool) if rewind is None else rewind.numpy()
     incompatible = np.zeros(matched, dtype=bool) if incompatible is None else incompatible.numpy()
