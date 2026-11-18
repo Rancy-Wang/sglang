@@ -94,18 +94,18 @@ def test_history_native_pressure_reclaims_cold_leaf_before_hot_drop(
     key = RadixKey.from_context(p.layout)
     slots = allocator.alloc(12)
     cache.insert(InsertParams(key=key, value=slots))
-    hit = cache.match_prefix(MatchPrefixParams(key=key))
+    hit = cache.match_prefix(MatchPrefixParams(key=key, need_context_metadata=True))
     lease = cache.inc_lock_ref(hit.last_device_node)
     required = p.layout.keep_mask
     cache.configure_context_drop_lock(hit.last_device_node, lease, required)
     assert allocator.alloc(1) is None
     cache.evict(EvictParams(num_tokens=1))
-    retained = cache.match_prefix(MatchPrefixParams(key=key))
+    retained = cache.match_prefix(MatchPrefixParams(key=key, need_context_metadata=True))
     assert bool(retained.context_resident.all())
     assert torch.equal(retained.device_indices, slots)
     # History remains reclaimable if pressure exhausts the cold candidates.
     cache.evict(EvictParams(num_tokens=128))
-    remaining = cache.match_prefix(MatchPrefixParams(key=key))
+    remaining = cache.match_prefix(MatchPrefixParams(key=key, need_context_metadata=True))
     assert torch.equal(remaining.context_resident, required)
     assert_allocator(cache, allocator, int(required.sum()))
     cache.dec_lock_ref(hit.last_device_node, lease.to_dec_params())
