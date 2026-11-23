@@ -391,6 +391,22 @@ def release_kv_cache(req: Req, tree_cache: BasePrefixCache, *, checkpoint: bool)
             )
             req.kv.mamba_pool_idx = None
         return
+    allocator = tree_cache.token_to_kv_pool_allocator
+    if getattr(allocator.get_kvcache(), "loopvq_enabled", False):
+        # Coupled codes have physical page boundaries independent of logical
+        # token positions (a prefill quant tail can be a partial page). Free
+        # the whole owned row once, including tokens after a matched stop.
+        # Logical ceil-align splitting could leak or double-free such pages.
+        if req.kv.cache_protected_len:
+            raise ValueError("LoopVQ request unexpectedly owns a shared prefix.")
+        tree_cache.free_kv_row(req.kv, [(0, req.kv.kv_allocated_len)])
+        tree_cache.unlock(req.lock)
+        req.lock = None
+        tree_cache.on_release(req, checkpointed=False)
+        allocator.release_request(req.kv.req_pool_idx)
+        tree_cache.req_to_token_pool.free(req)
+        req.kv.mark_kv_released()
+        return
     if tree_cache.claim_kv_row(req):
         # A streaming session detached the kv record to keep the row.
         assert not req.kv.holds_kv

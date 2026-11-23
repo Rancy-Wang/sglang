@@ -1062,6 +1062,12 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
             assert self.enable_pdmux
             attn_backend = self.model_runner.decode_attn_backend_group[stream_idx]
 
+        pool = self.model_runner.token_to_kv_pool
+        if getattr(pool, "loopvq_enabled", False):
+            # Page zero of the HP namespace is reserved for graph padding.
+            # A quantized location would otherwise enter the raw-K writer.
+            out_cache_loc.fill_(pool.hp_global_offset)
+
         forward_batch = ForwardBatch(
             forward_mode=self.capture_forward_mode,
             batch_size=bs,
@@ -1496,6 +1502,12 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
             padded_num_tokens=padded_num_tokens,
             pp_proxy_tensors=pp_proxy_tensors,
         )
+
+        pool = self.model_runner.token_to_kv_pool
+        if getattr(pool, "loopvq_enabled", False) and raw_bs < bs:
+            buffers.out_cache_loc[raw_num_token:padded_num_tokens].fill_(
+                pool.hp_global_offset
+            )
 
         if (
             not is_ragged

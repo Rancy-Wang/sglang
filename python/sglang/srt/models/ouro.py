@@ -20,6 +20,7 @@ from sglang.srt.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
 )
 from sglang.srt.model_loader.weight_utils import default_weight_loader
+from sglang.srt.model_executor.forward_context import get_token_to_kv_pool
 from sglang.srt.models.llama import LlamaAttention, LlamaMLP
 from sglang.srt.runtime_context import get_parallel
 from sglang.srt.utils import add_prefix
@@ -91,6 +92,32 @@ class OuroAttention(LlamaAttention):
             attention.ouro_bf16_rounding = True
 
     def forward(self, positions, hidden_states, forward_batch, depth):
+        pool = get_token_to_kv_pool()
+        if getattr(pool, "loopvq_enabled", False):
+            # Coupled codes describe raw K from all four recurrence depths.
+            # Preserve HF's native RoPE arithmetic for the live query/key.
+            qkv, _ = self.qkv_proj(hidden_states)
+            q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+            q, k_rope = self.rotary_emb(positions, q, k)
+            attention = self.attn[depth]
+            cos_sin_cache = self.rotary_emb.rotary.cos_sin_cache
+            if forward_batch.forward_mode.is_decode_or_idle():
+                output = attention(
+                    q, k, v, forward_batch, cos_sin_cache=cos_sin_cache
+                )
+            else:
+                output = attention(
+                    q, k_rope, v, forward_batch,
+                    save_kv_cache=False, cos_sin_cache=cos_sin_cache,
+                )
+                pool.set_kv_buffer(
+                    attention,
+                    forward_batch.out_cache_loc,
+                    k.view(-1, self.num_kv_heads, self.head_dim),
+                    v.view(-1, self.num_kv_heads, self.head_dim),
+                    is_decode=False,
+                )
+            return self.o_proj(output)[0]
         q, k, v = self.forward_prepare_native(positions, hidden_states)
         output = self.attn[depth](q, k, v, forward_batch)
         return self.o_proj(output)[0]

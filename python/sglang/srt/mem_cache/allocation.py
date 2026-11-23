@@ -374,6 +374,10 @@ def alloc_for_extend(
     (the last is the host/CPU mirror). ``alloc_req_slots`` raises ``RuntimeError``
     if the pool can't satisfy the batch (fail-loud — see its docstring).
     """
+    if getattr(batch.token_to_kv_pool_allocator.get_kvcache(), "loopvq_enabled", False):
+        from sglang.srt.mem_cache.loopvq_allocator import alloc_for_extend as alloc_loopvq
+
+        return alloc_loopvq(batch)
     # free out-of-window swa tokens
     batch.maybe_evict_swa()
 
@@ -720,6 +724,10 @@ ALLOC_FOR_DECODE_FUNCS = defaultdict(lambda: alloc_for_decode_default)
 
 
 def alloc_for_decode(batch: ScheduleBatch, token_per_req: int) -> torch.Tensor:
+    if getattr(batch.token_to_kv_pool_allocator.get_kvcache(), "loopvq_enabled", False):
+        from sglang.srt.mem_cache.loopvq_allocator import alloc_for_decode as alloc_loopvq
+
+        return alloc_loopvq(batch, token_per_req)
     return ALLOC_FOR_DECODE_FUNCS[_device_type(batch)](batch, token_per_req)
 
 

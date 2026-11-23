@@ -31,6 +31,80 @@ _NVFP4_PREFILL_DEQUANT_DTYPE = {
 }
 
 
+def handle_loopvq_compatibility(server_args: Any) -> None:
+    """Keep the coupled Ouro cache on its independently validated AR path."""
+    from pathlib import Path
+
+    cfg = resolved_view(server_args)
+    if not cfg.loopvq_codebook_dir:
+        return
+    if not cfg.device.startswith("cuda"):
+        raise ValueError("LoopVQ requires a CUDA device.")
+    if any(
+        getattr(cfg, name) != 1
+        for name in (
+            "tp_size", "pp_size", "dp_size", "attn_dp_size", "attn_cp_size", "attn_dcp_size"
+        )
+    ):
+        raise ValueError("LoopVQ currently requires TP/PP/DP/CP/DCP=1.")
+    if cfg.speculative_algorithm is not None:
+        raise ValueError("LoopVQ cannot be combined with speculative decoding.")
+    if set(attention_backends_of(cfg)) != {"triton"}:
+        raise ValueError("LoopVQ requires Triton for both prefill and decode.")
+    if cfg.page_size != 8:
+        raise ValueError("LoopVQ requires --page-size=8.")
+    if cfg.max_running_requests is None or cfg.max_running_requests < 1:
+        raise ValueError("LoopVQ requires an explicit positive --max-running-requests.")
+    if cfg.kv_cache_dtype not in ("auto", "bf16", "bfloat16"):
+        raise ValueError("LoopVQ keeps its unquantized KV windows in BF16.")
+    if cfg.dtype not in ("auto", "bf16", "bfloat16"):
+        raise ValueError("LoopVQ currently supports BF16 Ouro execution only.")
+    if not cfg.disable_radix_cache or cfg.chunked_prefill_size != -1:
+        raise ValueError(
+            "LoopVQ requires --disable-radix-cache --chunked-prefill-size=-1."
+        )
+    graph = cfg.cuda_graph_config
+    if graph.prefill.backend != Backend.DISABLED:
+        raise ValueError("LoopVQ requires --cuda-graph-backend-prefill=disabled.")
+    if graph.decode.backend not in (Backend.DISABLED, Backend.FULL):
+        raise ValueError("LoopVQ decode supports full CUDA graphs or eager only.")
+    incompatible = (
+        "enable_hierarchical_cache", "enable_unified_memory", "enable_hisparse",
+        "enable_unified_cache_external_linker", "enable_kv_cache_sharding",
+        "enable_lora", "enable_two_batch_overlap", "enable_mixed_chunk",
+        "enable_torch_compile", "enable_memory_saver", "prefill_only_disable_kv_cache",
+    )
+    active = [name for name in incompatible if getattr(cfg, name, False)]
+    if active:
+        raise ValueError(f"LoopVQ does not support these options: {', '.join(active)}")
+    if cfg.disaggregation_mode not in (None, "null"):
+        raise ValueError("LoopVQ does not support prefill/decode disaggregation.")
+    if cfg.enable_priority_scheduling and not cfg.disable_priority_preemption:
+        raise ValueError("LoopVQ requires priority preemption to be disabled.")
+    if envs.SGLANG_ENABLE_POST_CAPTURE_KV_SIZING.get():
+        raise ValueError("LoopVQ does not support post-capture KV resizing.")
+    for name in ("loopvq_prefix_tokens", "loopvq_recent_tokens"):
+        value = getattr(cfg, name)
+        if value < 8 or value % 8:
+            raise ValueError(f"{name} must be a positive multiple of 8.")
+    hf = model_config_of(cfg).hf_config
+    geometry = (
+        getattr(hf, "num_hidden_layers", None),
+        getattr(hf, "total_ut_steps", None),
+        getattr(hf, "num_attention_heads", None),
+        getattr(hf, "num_key_value_heads", None),
+        getattr(hf, "hidden_size", None),
+    )
+    if "OuroForCausalLM" not in hf.architectures or geometry != (48, 4, 16, 16, 2048):
+        raise ValueError("LoopVQ currently requires the Ouro-2.6B R4 geometry.")
+    if getattr(hf, "rope_scaling", None):
+        raise ValueError("LoopVQ currently requires the checkpoint's unscaled RoPE.")
+    bundle = Path(cfg.loopvq_codebook_dir)
+    for filename in ("codebook.pt", "vq_v_codebook.pt"):
+        if not (bundle / filename).is_file():
+            raise ValueError(f"LoopVQ bundle is missing {bundle / filename}")
+
+
 def handle_nvfp4_prefill_kv_dequant_dtype(server_args: Any) -> None:
     """Resolve the public prefill dequantization dtype to attention backends."""
 

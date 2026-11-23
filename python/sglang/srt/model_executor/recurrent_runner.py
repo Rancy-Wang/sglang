@@ -32,6 +32,7 @@ def use_recurrent_execution(model, server_args):
     server_args = resolved_view(server_args)
     return (
         getattr(model, "supports_recurrent_execution", False)
+        and not server_args.loopvq_codebook_dir
         and server_args.speculative_algorithm in (None, "LOOPSPEC")
         and server_args.tp_size in (1, 2)
         and (server_args.pp_size, server_args.dp_size,

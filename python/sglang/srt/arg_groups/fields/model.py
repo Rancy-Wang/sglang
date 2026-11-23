@@ -213,6 +213,20 @@ class Model(msgspec.Struct):
             resolvable=True,
         ),
     ] = "auto"
+    loopvq_codebook_dir: A[
+        Optional[str],
+        "Enable standalone Ouro LoopVQ 0.5-bit KV using a directory containing "
+        "codebook.pt and vq_v_codebook.pt. Requires the supported G16/c4 bundle, "
+        "TP/PP/DP=1, Triton attention, page-size=8, and no speculative decoding.",
+    ] = None
+    loopvq_prefix_tokens: A[
+        int,
+        "Unquantized prefix tokens per LoopVQ request (a positive multiple of 8).",
+    ] = 64
+    loopvq_recent_tokens: A[
+        int,
+        "Unquantized recent tokens per LoopVQ request (a positive multiple of 8).",
+    ] = 256
     qsa_indexer_dtype: A[
         str,
         Arg(

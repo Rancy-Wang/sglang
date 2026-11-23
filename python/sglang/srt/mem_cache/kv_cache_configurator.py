@@ -461,7 +461,11 @@ class KVCacheConfigurator:
         )
 
         return KVCacheConfigResult(
-            max_total_num_tokens=sizes.max_total_num_tokens,
+            max_total_num_tokens=(
+                alloc.size
+                if getattr(pools.token_to_kv_pool, "loopvq_enabled", False)
+                else sizes.max_total_num_tokens
+            ),
             max_running_requests=sizes.max_running_requests,
             full_max_total_num_tokens=sizes.full_max_total_num_tokens,
             swa_max_total_num_tokens=swa_max_total_num_tokens,
@@ -1624,6 +1628,30 @@ class KVCacheConfigurator:
         is_dsv4_model: bool,
         req_to_token_pool: ReqToTokenPool,
     ) -> KVCache:
+        if get_model().loopvq_codebook_dir:
+            from pathlib import Path
+
+            from sglang.srt.mem_cache.loopvq_pool import LoopVQKVPool
+
+            if self.kv_cache_dtype != torch.bfloat16 or self.model_dtype != torch.bfloat16:
+                raise ValueError("LoopVQ requires BF16 model and HP cache storage.")
+            bundle = Path(get_model().loopvq_codebook_dir)
+            return LoopVQKVPool(
+                size=sizes.max_total_num_tokens,
+                page_size=self.page_size,
+                dtype=self.kv_cache_dtype,
+                head_num=self.model_config.get_num_kv_heads(1),
+                head_dim=self.model_config.head_dim,
+                layer_num=self.layer_info.num_effective_layers,
+                device=self.device,
+                codebook_path=str(bundle / "codebook.pt"),
+                v_codebook_path=str(bundle / "vq_v_codebook.pt"),
+                max_req_slots=req_to_token_pool.req_to_token.shape[0],
+                hp_prefix_tokens=get_model().loopvq_prefix_tokens,
+                hp_recent_tokens=get_model().loopvq_recent_tokens,
+                start_layer=self.layer_info.start_layer,
+                end_layer=self.layer_info.end_layer,
+            )
         # Page-granularity envelope layout for the MHA-shaped (full / SWA) pools,
         # selected by swapping in the PageMajorMHATokenToKVPool subclass. The
         # default keeps upstream's per-layer layout. The Mamba state pool is routed
@@ -2492,6 +2520,25 @@ class KVCacheConfigurator:
         req_to_token_pool: ReqToTokenPool,
         token_to_kv_pool_allocator: Optional[BaseTokenToKVPoolAllocator],
     ) -> BaseTokenToKVPoolAllocator:
+        if getattr(token_to_kv_pool, "loopvq_enabled", False):
+            from sglang.srt.mem_cache.loopvq_allocator import LoopVQKVAllocator
+
+            if token_to_kv_pool_allocator is not None:
+                raise ValueError("LoopVQ cannot share an allocator with a draft worker.")
+            return LoopVQKVAllocator(
+                num_quant_pages=token_to_kv_pool.num_quant_pages,
+                quant_tokens_per_page=token_to_kv_pool.N_Q,
+                hp_prefix_tokens=token_to_kv_pool.hp_prefix_tokens,
+                hp_recent_tokens=token_to_kv_pool.hp_recent_tokens,
+                hp_recent_ring_size=token_to_kv_pool.hp_recent_ring_size,
+                max_req_slots=token_to_kv_pool.max_req_slots,
+                num_hp_prefix_slots=token_to_kv_pool.num_hp_prefix_slots,
+                dtype=self.kv_cache_dtype,
+                hp_dtype=self.kv_cache_dtype,
+                device=self.device,
+                kvcache=token_to_kv_pool,
+                need_sort=False,
+            )
         # Initialize token_to_kv_pool_allocator
         need_sort = get_disagg().disaggregation_mode in ("decode", "prefill")
         if token_to_kv_pool_allocator is None:

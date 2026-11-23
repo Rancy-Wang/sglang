@@ -1608,7 +1608,16 @@ class TritonAttnBackend(AttentionBackend):
         sinks=None,
         score_mod=None,
         aux_tensors=None,
+        cos_sin_cache=None,
     ):
+        if getattr(self.token_to_kv_pool, "loopvq_enabled", False):
+            from sglang.srt.layers.attention.loopvq_backend import forward_extend
+
+            if any(value is not None for value in (sinks, score_mod, aux_tensors)):
+                raise ValueError("LoopVQ does not support additional attention modifiers.")
+            return forward_extend(
+                self, q, k, v, layer, forward_batch, save_kv_cache=save_kv_cache
+            )
         if (
             k is not None
             and v is not None
@@ -2244,7 +2253,17 @@ class TritonAttnBackend(AttentionBackend):
         sinks=None,
         score_mod=None,
         aux_tensors=None,
+        cos_sin_cache=None,
     ):
+        if getattr(self.token_to_kv_pool, "loopvq_enabled", False):
+            from sglang.srt.layers.attention.loopvq_backend import forward_decode
+
+            if any(value is not None for value in (sinks, score_mod, aux_tensors)):
+                raise ValueError("LoopVQ does not support additional attention modifiers.")
+            return forward_decode(
+                self, q, k, v, layer, forward_batch,
+                save_kv_cache=save_kv_cache, cos_sin_cache=cos_sin_cache,
+            )
         # During torch.compile, there is a bug in rotary_emb that causes the
         # output value to have a 3D tensor shape. This reshapes the output correctly.
         q = q.reshape(-1, layer.tp_q_head_num * layer.qk_head_dim)

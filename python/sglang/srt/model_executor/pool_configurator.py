@@ -213,6 +213,58 @@ class MemoryPoolConfigurator:
             )
 
 
+class LoopVQPoolConfigurator(MemoryPoolConfigurator):
+    """Coupled uint8 codes plus fixed BF16 windows and FP16 codebooks.
+
+    The memory fraction still reserves transient prefill activations/stashes;
+    those peak allocations are not persistent token capacity.
+    """
+
+    def __init__(self, kvc: KVCacheConfigurator):
+        max_requests = get_schedule().max_running_requests
+        if max_requests is None or max_requests < 1:
+            raise ValueError("LoopVQ requires an explicit max-running-requests.")
+        # ReqToTokenPool reserves row zero for graph padding.
+        request_slots = max_requests + 1
+        layers = kvc.layer_info.num_effective_layers
+        heads = kvc.model_config.get_num_kv_heads(1)
+        dimension = kvc.model_config.head_dim
+        if (layers, heads, dimension) != (192, 16, 128):
+            raise ValueError("LoopVQ pool sizing requires Ouro-2.6B R4 geometry.")
+        prefix = get_model().loopvq_prefix_tokens
+        recent = get_model().loopvq_recent_tokens
+        hp_slots = 8 + 2 * request_slots * prefix + request_slots * (recent + 8)
+        self._cell_size = (layers // 4) * heads * (dimension // 4) * 2
+        hp_bytes = hp_slots * layers * heads * dimension * 2 * 2
+        # K/V, encode/decode layouts, base-layer/head/group/centroid/G16, FP16.
+        codebook_bytes = 4 * (layers // 4) * heads * (dimension // 4) * 256 * 16 * 2
+        self._fixed_bytes = hp_bytes + codebook_bytes + 8 * self._cell_size
+        logger.info(
+            "LoopVQ persistent pool: %.3f GiB fixed (HP %.3f GiB, codebooks %.3f GiB), "
+            "%d bytes per quantized token; prefill transient peak uses remaining headroom.",
+            self._fixed_bytes / (1 << 30), hp_bytes / (1 << 30),
+            codebook_bytes / (1 << 30), self._cell_size,
+        )
+
+    def calculate_pool_sizes(self, available_bytes: int, page_size: int) -> MemoryPoolConfig:
+        if page_size != 8:
+            raise ValueError("LoopVQ requires page-size=8.")
+        tokens = (available_bytes - self._fixed_bytes) // self._cell_size
+        if tokens < 8:
+            raise ValueError(
+                "Insufficient memory for LoopVQ's fixed HP windows and codebooks; "
+                "reduce max-running-requests or increase the memory budget."
+            )
+        return MemoryPoolConfig(max_total_num_tokens=tokens // 8 * 8)
+
+    def calculate_pool_sizes_from_max_tokens(
+        self, max_total_num_tokens: int, page_size: int
+    ) -> MemoryPoolConfig:
+        if page_size != 8:
+            raise ValueError("LoopVQ requires page-size=8.")
+        return MemoryPoolConfig(max_total_num_tokens=max_total_num_tokens // 8 * 8)
+
+
 class DefaultPoolConfigurator(MemoryPoolConfigurator):
     """Standard models (MHA, MLA, DSA, FP4).
 
@@ -1627,6 +1679,8 @@ class DSV4PoolConfigurator(MemoryPoolConfigurator):
 def create_memory_pool_configurator(
     kvc: KVCacheConfigurator,
 ) -> MemoryPoolConfigurator:
+    if get_model().loopvq_codebook_dir:
+        return LoopVQPoolConfigurator(kvc)
     if is_deepseek_v4(kvc.model_config.hf_config) and kvc.is_hybrid_swa:
         return DSV4PoolConfigurator(kvc)
     if kvc.is_hybrid_swa:

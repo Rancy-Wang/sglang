@@ -140,6 +140,7 @@ def run_resolution_pipeline(server_args: Any) -> None:
     from sglang.srt.arg_groups.kv_cache_hook import (
         handle_cache_compatibility,
         handle_kv4_compatibility,
+        handle_loopvq_compatibility,
         handle_mxfp8_kv_cache_compatibility,
         handle_nvfp4_prefill_kv_dequant_dtype,
         handle_page_major_kv_layout,
@@ -338,6 +339,8 @@ def run_resolution_pipeline(server_args: Any) -> None:
 
     # Apply model-capability constraints after backend selection.
     run_hook(handle_model_capability_adjustments, server_args)
+
+    run_hook(handle_loopvq_compatibility, server_args)
 
     finalize_cuda_graph_prefill_max_context(server_args)
 

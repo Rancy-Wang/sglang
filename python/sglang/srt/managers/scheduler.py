@@ -2007,6 +2007,12 @@ class Scheduler(
                 self._record_scheduler_state_for_paused_engine()
                 continue
 
+            pool = self.token_to_kv_pool_allocator.get_kvcache()
+            if getattr(pool, "loopvq_enabled", False):
+                # The next plan may demote/reuse a ring page or free a request.
+                # Its writes must follow the previous forward's KV reads.
+                pool.wait_pending_forward()
+
             # Get the next batch to run
             plan = self.get_next_batch_to_run(
                 running_batch=self.running_batch, last_batch=self.last_batch
@@ -4593,6 +4599,11 @@ class Scheduler(
                         batch_result = self.model_worker.forward_batch_generation(
                             batch, **fwd_kwargs
                         )
+                        pool = self.token_to_kv_pool_allocator.get_kvcache()
+                        if getattr(pool, "loopvq_enabled", False):
+                            forward_done = self.device_module.Event()
+                            forward_done.record(stream=self.forward_stream)
+                            pool.stash_pending_forward(forward_done)
                         if batch.spec_algorithm.is_none():
                             self.future_map.publish(future_indices, batch.seq_lens + 1)
                         # Park any refs the worker wants kept alive 2 iters
@@ -4767,6 +4778,11 @@ class Scheduler(
                 batch_result = self.model_worker.forward_batch_generation(
                     batch, **kwargs
                 )
+                pool = self.token_to_kv_pool_allocator.get_kvcache()
+                if getattr(pool, "loopvq_enabled", False):
+                    forward_done = self.device_module.Event()
+                    forward_done.record()
+                    pool.stash_pending_forward(forward_done)
                 if batch_result.has_sampled_token_ids:
                     # Non-spec: relay via future_map, gathered next iter.
                     self._relay_forward_payload(
