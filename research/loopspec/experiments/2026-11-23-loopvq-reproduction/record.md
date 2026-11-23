@@ -97,7 +97,7 @@ SGLang复用clean且同SHA的 /homes/ruoxi07/repo/sglang-loopspec-tp2（实施�
 
 运行顺序：
 
-1. build_ouro_bundle.py --calib-only --grad-ckpt，生成一次k/v/gk/gv共享缓存（2.6B几何约48GiB）。
+1. build_ouro_bundle.py --calib-only --grad-ckpt，生成一次k/v/gk/gv共享缓存（A10实际完整2.6B几何为96GiB，原计划48GiB估算已纠正）。
 2. 仅G16：--method loopvq --loops-coupled 4 --v-method loopvq --abits 8，使用上述calib-cache、15次k-means。
 3. finetune_codebook.py对G16执行锁定FT，记录trace/W&B和checkpoint；单任务使用一张独占GPU，不使用TP。
 4. 保留初始和e2e两个版本。训练失败不得仅凭目录或文件存在跳过；核对完成标记、shape、NaN/Inf、metadata及内容hash。
@@ -289,3 +289,25 @@ common-shape在正式测量前对两方法、五档batch完成容量预检后冻
 - 范围：LoopVQ/experiments/loopvq_reproduction/run_evaluation.py；不改变采样、评分、训练或推理数学。
 - 成功标准：AST/py_compile、HTTP恢复/失败记录/seed检查全部通过；风险：仅静态通过仍不表示真实server评测通过。
 - 验证：本地脚本解析和已有4项HTTP集成测试；之后与训练及推理候选一起由root审核同步、A10运行。其他组件沿用候选1的未变更实现，任何随后失败再修改继续累计。
+
+- 候选2评测入口复验：5文件py_compile、原HTTP4项、diff检查全部exit0。baseline_probe.py本地语法/CLI及9次成功HTTP+1次503失败保存测试exit0。吞吐measure/aggregate脚本及5项协议测试exit0。均不代表真实模型GPU验收。
+- SGLang独立LoopVQ提交48b5611b2b18cfa221014181d116e0f96e3483a3已push/pull；CPU核心测试3项通过、2项CUDA测试skip（core-cpu.log，exit0）。推理实现采用现有Ouro BF16舍入的Triton混合查表attention，并未整段搬入官方速度优化CUDA kernel；性能待实测。
+- W&B和HF凭据已按用户授权通过隐藏输入验证；GPQA main448、Diamond198可读，差集250；revision固定83022cefff930aea54f654c0b282e74b9eeda5c6，凭据不进记录。build/eval/reference环境安装exit0，目标venv隔离复制exit0；目标CUDA/import仍待检查。
+- 首次训练启动被clean检查正确阻止：reference editable安装自动改写已跟踪python/sglang/_version.py（仅版本字符串/commit_id）。确认安装生成差异后备份到results/reference-install-generated-version.py，用Git恢复该文件到HEAD，未覆盖用户改动或修改运行数学；重试仍为训练bf1cf18，不新增代码轮次。
+- 2026-11-23 13:01 UTC左右在A10 GPU0、tmux calib-fit启动校准，W&B run l7god8t9：https://forge.coreweave.com/wandb/529513043-tsinghua-university/loopvq-ouro-2p6b-thinking/runs/l7god8t9 。8/16序列完成46.3s，按此速度剩余计算约46s；完整缓存96GiB，落盘/校验时间另计。尚未完成fit或FT。
+- 新增可复用A10目标环境入口和三方BF16 probe提交18c649e6f（Git pull进行中）；沿用用户目录CUDA13 compat/toolchain，系统驱动未修改。所有compiler cache隔离至本任务目录。
+
+- A10目标环境import来源和CUDA张量检查通过，提交18c649e6f已两端一致；GPU wiring 6/6、core 5/5通过，其中mixed attention bs1/2/4/8/16最坏绝对误差0、CUDA graph replay与eager一致，logs/target-core-cuda.log exit0。这是合成算子测试，尚不代替真实模型验证。
+- 校准16条序列计算95s，含96GiB缓存写入/全量校验约10分钟，driver-calibration-v2退出0。后续fit/FT在GPU3运行，fit run ffmnphq6，前18/48层64s，预计K/V共约6分钟；FT ETA尚待首步。GPU0曾出现其他任务，已避开，未终止其进程。
+- HF full-R4无缓存参考3条32token probe已退出0，results/baseline-hf；目标BF16实际服务30540/GPU1已健康，8192token池仅用于smoke。官方reference第一次启动受未锁定kernels0.19.0与Transformers5.3.0不兼容阻止；按已安装Transformers声明固定kernels>=0.10.2,<0.11，安装0.10.5退出0。这是隔离环境修复，未修改源码。
+
+### 候选3/10：吞吐记录适配当前服务配置
+
+- 目的：修正吞吐脚本使用旧版CUDA graph字段导致真实/server_info被拒绝的问题；真实返回已经保存results/target-bf16-server-info.json。
+- 步骤：以cuda_graph_config.prefill/decode.backend及decode.bs为权威，结合启动日志的实际capture buckets；更新fixture和校验，并执行真实服务短输出smoke。
+- 范围：benchmark_throughput.py、test_benchmark_throughput.py及本记录；推理数学、训练配方、采样和评分保持既有候选。
+- 成功标准：现行schema的full/eager/prefill拒绝/buckets缺省与差异测试通过；真实请求的token计数、稳定batch、日志覆盖、graph状态能审计，不能确定的padding记unknown。
+- 风险：配置只表示意图，实际runner可能过滤buckets；日志不足时不能报告已达到目标batch或零padding。
+- 验证：本地针对性测试+语法+diff检查，经loopspec-test同步后A10真实BF16服务smoke；记录命令、退出码和结果。此前5项吞吐测试仅覆盖旧fixture，不能作为真实服务兼容证据。
+
+- 候选3本地冻结验证：吞吐schema相关9/9测试、py_compile、diff检查exit0；待真实服务smoke。target BF16三条32token（共96）greedy ID/停止位置与HF全部一致，96个teacher-forced位置argmax也一致；top20 logprob最大绝对差0.34365/0.43015/0.50000，保留原始概率，未声称概率逐位相同。reference第二次启动因未激活环境PATH找不到已安装ninja失败；加入该环境bin路径重启v3，已加载权重并完成graph capture，尚在warmup。
