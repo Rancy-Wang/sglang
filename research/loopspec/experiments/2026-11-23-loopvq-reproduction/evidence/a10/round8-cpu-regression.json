@@ -1,0 +1,111 @@
+{
+  "source_sha": "90bbb757ada1ed455e6e1a56dbcdd7e7a7e96a27",
+  "source_dir": "/homes/ruoxi07/repo/sglang-loopvq-validation",
+  "cuda_visible_devices": "99",
+  "unittest_files": [
+    {
+      "log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/round8-cpu-test_decode_radix_lock_ref.log",
+      "sha256": "584a126efbc64e99f4a5809901e603b14a2216da7f40f6dd4662e267cc5ad896",
+      "exit_code": 0,
+      "run": 13,
+      "skipped": 0
+    },
+    {
+      "log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/round8-cpu-test_dllm_fdfo_kv_reuse.log",
+      "sha256": "b491b9cbeabd1775d19d2b4ed8e7da30bcd6de9650e14e0f8457eb1c5a42d0ec",
+      "exit_code": 0,
+      "run": 6,
+      "skipped": 0
+    },
+    {
+      "log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/round8-cpu-test_kv_cache_configurator_draft_gate.log",
+      "sha256": "4513c20bedd63baf159cab3f91d595c513f3e3c13e4c13408d11ecee8058e6e7",
+      "exit_code": 0,
+      "run": 4,
+      "skipped": 0
+    },
+    {
+      "log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/round8-cpu-test_loopspec_cdb.log",
+      "sha256": "9631cfe41ddfc5b9dd1df7d6ecc9a696c43f98ab9cb5d48c7afc1f2ded39550c",
+      "exit_code": 0,
+      "run": 4,
+      "skipped": 0
+    },
+    {
+      "log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/round8-cpu-test_loopvq_core.log",
+      "sha256": "a32ce6310ad82591b856c6515e3f0c14e15452a78f35c8eed2af3737a31f8af4",
+      "exit_code": 0,
+      "run": 5,
+      "skipped": 2
+    },
+    {
+      "log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/round8-cpu-test_loopvq_wiring.log",
+      "sha256": "4d4a0e7a42428822530493318d5e0cd15cc8c9af5cacf5fa9b3fdba4ab49257a",
+      "exit_code": 0,
+      "run": 9,
+      "skipped": 0
+    },
+    {
+      "log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/round8-cpu-test_ouro.log",
+      "sha256": "b8c93e1a74fa38f02b8f8ad0b76b03f23b9937c22c349838e8a243546ae11522",
+      "exit_code": 0,
+      "run": 4,
+      "skipped": 0
+    },
+    {
+      "log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/round8-cpu-test_pool_configurator.log",
+      "sha256": "053b279a4cad350e3244f8be45cace4c265e2eb0e2cbc1731624b26063e39804",
+      "exit_code": 0,
+      "run": 58,
+      "skipped": 0
+    },
+    {
+      "log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/round8-cpu-test_recurrent.log",
+      "sha256": "dafce8631fec55433ae7d6a9857fa556cd8c53317dfcb77c9773f34f77584fe9",
+      "exit_code": 0,
+      "run": 5,
+      "skipped": 0
+    },
+    {
+      "log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/round8-cpu-test_runtime_context_config_bags.log",
+      "sha256": "601b1203090e54931f53e880bbc80f9d885886196f2e1bee512a5457ac7a6eed",
+      "exit_code": 0,
+      "run": 18,
+      "skipped": 0
+    },
+    {
+      "log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/round8-cpu-test_server_args_namespaces.log",
+      "sha256": "a19dfd4558e49dc2b02dfff2c9dacfac0a720530803b1d297ff4a6fcf55679ca",
+      "exit_code": 0,
+      "run": 5,
+      "skipped": 0
+    },
+    {
+      "log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/round8-cpu-test_server_info.log",
+      "sha256": "9446e44ec3e6353de8c92a8ffa9583a07b4c6c6f87718ff8946f0a8a0fde42a5",
+      "exit_code": 0,
+      "run": 31,
+      "skipped": 0
+    },
+    {
+      "log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/round8-cpu-test_timeline.log",
+      "sha256": "887404359cb3c51a0a99cd658e47ff3bf8e910b6bd31ead15ae1398add081b68",
+      "exit_code": 0,
+      "run": 2,
+      "skipped": 0
+    },
+    {
+      "log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/round8-cpu-test_unified_radix_lock_ref.log",
+      "sha256": "e4c3e68a2b6890b0198aaebc82682c3faadd3d90b0444faa8984f98f45fc57c9",
+      "exit_code": 0,
+      "run": 1,
+      "skipped": 0
+    }
+  ],
+  "unittest_passed": 163,
+  "unittest_skipped": 2,
+  "pytest_passed": 23,
+  "pytest_subtests": 10,
+  "pytest_log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/round8-backend-pytest.log",
+  "pytest_log_sha256": "101b395be2568dbd2a4958e80021c41c85f483f3e57301ed5c620df20020bd17"
+}

@@ -1,0 +1,448 @@
+{
+  "reference_sha": "85cd80c5b7520dc1b86d2be3a997a408b1dfbfa2",
+  "candidate_sha": "90bbb757ada1ed455e6e1a56dbcdd7e7a7e96a27",
+  "cases": [
+    {
+      "name": "hp",
+      "comparisons": [
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 32
+        }
+      ]
+    },
+    {
+      "name": "reuse-before",
+      "comparisons": [
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        }
+      ]
+    },
+    {
+      "name": "long4096",
+      "comparisons": [
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 32
+        }
+      ]
+    },
+    {
+      "name": "boundaries",
+      "comparisons": [
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 17
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 17
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 17
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 17
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 17
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 17
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 17
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 17
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 17
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 17
+        }
+      ]
+    },
+    {
+      "name": "bs1",
+      "comparisons": [
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        }
+      ]
+    },
+    {
+      "name": "bs2",
+      "comparisons": [
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        }
+      ]
+    },
+    {
+      "name": "bs4",
+      "comparisons": [
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        }
+      ]
+    },
+    {
+      "name": "bs8",
+      "comparisons": [
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        }
+      ]
+    },
+    {
+      "name": "bs16",
+      "comparisons": [
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        }
+      ]
+    },
+    {
+      "name": "pad3",
+      "comparisons": [
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        }
+      ]
+    },
+    {
+      "name": "pad5",
+      "comparisons": [
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        }
+      ]
+    },
+    {
+      "name": "pad15",
+      "comparisons": [
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        }
+      ]
+    },
+    {
+      "name": "ring",
+      "comparisons": [
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 600
+        }
+      ]
+    },
+    {
+      "name": "ragged",
+      "comparisons": [
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 17
+        },
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 600
+        }
+      ]
+    },
+    {
+      "name": "reuse-after",
+      "comparisons": [
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 64
+        }
+      ]
+    },
+    {
+      "name": "flush",
+      "comparisons": [
+        {
+          "first_divergence": null,
+          "same_stop": true,
+          "n_tokens": 32
+        }
+      ]
+    }
+  ],
+  "n_requests": 72,
+  "all_equal": true
+}

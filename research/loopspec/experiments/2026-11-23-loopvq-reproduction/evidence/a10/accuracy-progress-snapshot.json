@@ -1,0 +1,53 @@
+{
+  "captured_utc": "2026-11-23T15:03:04.493547+00:00",
+  "workers": [
+    {
+      "worker": "bf16-s0",
+      "completed_responses": 7,
+      "failed_attempts": 0,
+      "length_limited": 0,
+      "mean_output_tokens": 9241.57142857143,
+      "mean_elapsed_s": 390.2695355755942
+    },
+    {
+      "worker": "bf16-s1",
+      "completed_responses": 4,
+      "failed_attempts": 0,
+      "length_limited": 1,
+      "mean_output_tokens": 10920,
+      "mean_elapsed_s": 600.1012911200523
+    },
+    {
+      "worker": "bf16-s2",
+      "completed_responses": 6,
+      "failed_attempts": 0,
+      "length_limited": 0,
+      "mean_output_tokens": 9642.166666666666,
+      "mean_elapsed_s": 417.8791107734044
+    },
+    {
+      "worker": "loopvq_0.5bit-s0",
+      "completed_responses": 3,
+      "failed_attempts": 0,
+      "length_limited": 1,
+      "mean_output_tokens": 15570,
+      "mean_elapsed_s": 759.1498875617981
+    },
+    {
+      "worker": "loopvq_0.5bit-s1",
+      "completed_responses": 6,
+      "failed_attempts": 0,
+      "length_limited": 0,
+      "mean_output_tokens": 11059.666666666666,
+      "mean_elapsed_s": 465.98447183767956
+    },
+    {
+      "worker": "loopvq_0.5bit-s2",
+      "completed_responses": 4,
+      "failed_attempts": 0,
+      "length_limited": 1,
+      "mean_output_tokens": 12552.5,
+      "mean_elapsed_s": 576.6715479493141
+    }
+  ]
+}

@@ -1,0 +1,2259 @@
+{
+  "results/throughput-round7/common-shape/bf16/bs1/summary.json": {
+    "format_version": 1,
+    "method": "bf16",
+    "protocol": "common-shape",
+    "bs": 1,
+    "input_len": 2048,
+    "output_len": 512,
+    "input_ids_sha256": "0e1844f864d0bcb04cdfc65b387d2f6d23c8b4421e2b21c024e524f96aaf08d5",
+    "input_fixture_sha256": "15b8c2695ddc7c7fddb070cba72ac970b4255c1f67dc56a35aaa1c1b2b2b1d5a",
+    "server_manifest": {
+      "host": "a10.mit.edu",
+      "gpu_index": 5,
+      "gpu_uuid": "GPU-82009e07-07c1-3a6c-5613-df2e45f63980",
+      "model_sha256": "c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080",
+      "sglang_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "sglang_git_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "environment_sha256": "68f2eedc0586e5c3d86450a378ebf7809ad4b647497d1ef23e528cbbc75bc291",
+      "server_pid": 1592429,
+      "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+      "method": "bf16",
+      "protocol": "common-shape",
+      "prefix_tokens": 64,
+      "recent_tokens": 256,
+      "exclusive_server": true,
+      "total_ut_steps": 4,
+      "config": {
+        "tp_size": 1,
+        "pp_size": 1,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "attention_backend": "triton",
+        "speculative_algorithm": null,
+        "disable_radix_cache": true,
+        "chunked_prefill_size": -1,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 16,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "cuda_graph_bs_decode": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "cuda_graph_backend_decode": "full",
+        "cuda_graph_backend_prefill": "disabled",
+        "disable_cuda_graph": false,
+        "disable_decode_cuda_graph": false,
+        "disable_prefill_cuda_graph": false,
+        "disable_cuda_graph_padding": false,
+        "decode_log_interval": 1,
+        "incremental_streaming_output": true,
+        "context_length": 40960,
+        "max_running_requests": 16,
+        "mem_fraction_static": 0.9,
+        "max_total_tokens": 41984,
+        "page_size": 8,
+        "loopvq_codebook_dir": null,
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "ouro_decode_profile": "optimized",
+        "triton_attention_num_kv_splits": 8,
+        "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+        "total_ut_steps": 4
+      },
+      "server_command": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/envs/sglang-loopvq-test/bin/python -u -m sglang.launch_server --model-path /homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking --host 127.0.0.1 --port 30545 --trust-remote-code --dtype bfloat16 --attention-backend triton --tp-size 1 --page-size 8 --max-running-requests 16 --max-total-tokens 41984 --max-prefill-tokens 8192 --context-length 40960 --mem-fraction-static .90 --disable-radix-cache --chunked-prefill-size -1 --cuda-graph-backend-decode full --cuda-graph-bs-decode 1 2 4 8 16 --cuda-graph-backend-prefill disabled --enable-metrics --decode-log-interval 1 --incremental-streaming-output --ouro-decode-profile optimized --triton-attention-num-kv-splits 8 "
+    },
+    "server_config_readback": {
+      "tp_size": 1,
+      "pp_size": 1,
+      "dp_size": 1,
+      "dtype": "bfloat16",
+      "attention_backend": "triton",
+      "speculative_algorithm": null,
+      "disable_radix_cache": true,
+      "chunked_prefill_size": -1,
+      "cuda_graph_config": {
+        "decode": {
+          "backend": "full",
+          "max_bs": 16,
+          "bs": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        },
+        "prefill": {
+          "backend": "disabled",
+          "max_bs": -1,
+          "bs": [],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        }
+      },
+      "cuda_graph_bs_decode": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "cuda_graph_backend_decode": "full",
+      "cuda_graph_backend_prefill": "disabled",
+      "disable_cuda_graph": false,
+      "disable_decode_cuda_graph": false,
+      "disable_prefill_cuda_graph": false,
+      "disable_cuda_graph_padding": false,
+      "decode_log_interval": 1,
+      "incremental_streaming_output": true,
+      "context_length": 40960,
+      "max_running_requests": 16,
+      "mem_fraction_static": 0.9,
+      "max_total_tokens": 41984,
+      "page_size": 8,
+      "loopvq_codebook_dir": null,
+      "loopvq_prefix_tokens": 64,
+      "loopvq_recent_tokens": 256,
+      "ouro_decode_profile": "optimized",
+      "triton_attention_num_kv_splits": 8
+    },
+    "base_url": "http://127.0.0.1:30545",
+    "server_log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/throughput-r7-bf16-common-c-server.log",
+    "client_host": "a10.mit.edu",
+    "warmup_count": 2,
+    "repeat_count": 3,
+    "status": "ok",
+    "attempts": [
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs1/warmup-01.json",
+        "phase": "warmup",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 27.77735493369623
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs1/warmup-02.json",
+        "phase": "warmup",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 27.789939880986392
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs1/measure-01.json",
+        "phase": "measure",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 27.782356511116458
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs1/measure-02.json",
+        "phase": "measure",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 27.787585815672536
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs1/measure-03.json",
+        "phase": "measure",
+        "number": 3,
+        "status": "ok",
+        "e2e_output_tokens_s": 27.773088789429195
+      }
+    ],
+    "started_unix": 1795446131.3860583,
+    "primary_metric": "e2e_output_tokens_s",
+    "fixed_length_sampling": {
+      "temperature": 0.0,
+      "ignore_eos": true
+    },
+    "actual_capture_evidence": {
+      "capture_bs": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "source": "target decode runner.capture_bs startup log",
+      "line": "[2026-11-23 14:56:35] Capture target decode CUDA graph end. bs=[1, 2, 4, 8, 16], elapsed=4.48 s, mem usage=0.30 GB, avail mem=11.08 GB.",
+      "byte_offset": 23091
+    },
+    "ended_unix": 1795446225.4479349,
+    "e2e_output_tokens_s_median": 27.782356511116458,
+    "e2e_output_tokens_s_min": 27.773088789429195,
+    "e2e_output_tokens_s_max": 27.787585815672536,
+    "client_ttft_seconds_median": 0.6857298910617828,
+    "client_tpot_seconds_median": 0.034722457205195074,
+    "sampled_peak_device_memory_mib": 70140.0,
+    "min_target_batch_fraction": 1.0
+  },
+  "results/throughput-round7/common-shape/bf16/bs16/summary.json": {
+    "format_version": 1,
+    "method": "bf16",
+    "protocol": "common-shape",
+    "bs": 16,
+    "input_len": 2048,
+    "output_len": 512,
+    "input_ids_sha256": "15b8c2695ddc7c7fddb070cba72ac970b4255c1f67dc56a35aaa1c1b2b2b1d5a",
+    "input_fixture_sha256": "15b8c2695ddc7c7fddb070cba72ac970b4255c1f67dc56a35aaa1c1b2b2b1d5a",
+    "server_manifest": {
+      "host": "a10.mit.edu",
+      "gpu_index": 5,
+      "gpu_uuid": "GPU-82009e07-07c1-3a6c-5613-df2e45f63980",
+      "model_sha256": "c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080",
+      "sglang_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "sglang_git_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "environment_sha256": "68f2eedc0586e5c3d86450a378ebf7809ad4b647497d1ef23e528cbbc75bc291",
+      "server_pid": 1531266,
+      "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+      "method": "bf16",
+      "protocol": "common-shape",
+      "prefix_tokens": 64,
+      "recent_tokens": 256,
+      "exclusive_server": true,
+      "total_ut_steps": 4,
+      "config": {
+        "tp_size": 1,
+        "pp_size": 1,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "attention_backend": "triton",
+        "speculative_algorithm": null,
+        "disable_radix_cache": true,
+        "chunked_prefill_size": -1,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 16,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "cuda_graph_bs_decode": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "cuda_graph_backend_decode": "full",
+        "cuda_graph_backend_prefill": "disabled",
+        "disable_cuda_graph": false,
+        "disable_decode_cuda_graph": false,
+        "disable_prefill_cuda_graph": false,
+        "disable_cuda_graph_padding": false,
+        "decode_log_interval": 1,
+        "incremental_streaming_output": true,
+        "context_length": 40960,
+        "max_running_requests": 16,
+        "mem_fraction_static": 0.9,
+        "max_total_tokens": 41984,
+        "page_size": 8,
+        "loopvq_codebook_dir": null,
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "ouro_decode_profile": "optimized",
+        "triton_attention_num_kv_splits": 8,
+        "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+        "enable_deterministic_inference": false,
+        "triton_attention_split_tile_size": null,
+        "total_ut_steps": 4
+      },
+      "server_command": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/envs/sglang-loopvq-test/bin/python -u -m sglang.launch_server --model-path /homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking --host 127.0.0.1 --port 30545 --trust-remote-code --dtype bfloat16 --attention-backend triton --tp-size 1 --page-size 8 --max-running-requests 16 --max-total-tokens 41984 --max-prefill-tokens 8192 --context-length 40960 --mem-fraction-static .90 --disable-radix-cache --chunked-prefill-size -1 --cuda-graph-backend-decode full --cuda-graph-bs-decode 1 2 4 8 16 --cuda-graph-backend-prefill disabled --enable-metrics --decode-log-interval 1 --incremental-streaming-output --ouro-decode-profile optimized --triton-attention-num-kv-splits 8 "
+    },
+    "server_config_readback": {
+      "tp_size": 1,
+      "pp_size": 1,
+      "dp_size": 1,
+      "dtype": "bfloat16",
+      "attention_backend": "triton",
+      "speculative_algorithm": null,
+      "disable_radix_cache": true,
+      "chunked_prefill_size": -1,
+      "cuda_graph_config": {
+        "decode": {
+          "backend": "full",
+          "max_bs": 16,
+          "bs": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        },
+        "prefill": {
+          "backend": "disabled",
+          "max_bs": -1,
+          "bs": [],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        }
+      },
+      "cuda_graph_bs_decode": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "cuda_graph_backend_decode": "full",
+      "cuda_graph_backend_prefill": "disabled",
+      "disable_cuda_graph": false,
+      "disable_decode_cuda_graph": false,
+      "disable_prefill_cuda_graph": false,
+      "disable_cuda_graph_padding": false,
+      "decode_log_interval": 1,
+      "incremental_streaming_output": true,
+      "context_length": 40960,
+      "max_running_requests": 16,
+      "mem_fraction_static": 0.9,
+      "max_total_tokens": 41984,
+      "page_size": 8,
+      "loopvq_codebook_dir": null,
+      "loopvq_prefix_tokens": 64,
+      "loopvq_recent_tokens": 256,
+      "ouro_decode_profile": "optimized",
+      "triton_attention_num_kv_splits": 8
+    },
+    "base_url": "http://127.0.0.1:30545",
+    "server_log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/throughput-r7-bf16-common-server.log",
+    "client_host": "a10.mit.edu",
+    "warmup_count": 2,
+    "repeat_count": 3,
+    "status": "ok",
+    "attempts": [
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs16/warmup-01.json",
+        "phase": "warmup",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 179.08304844649436
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs16/warmup-02.json",
+        "phase": "warmup",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 178.89854780663586
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs16/measure-01.json",
+        "phase": "measure",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 178.42571611397008
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs16/measure-02.json",
+        "phase": "measure",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 178.49611504365595
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs16/measure-03.json",
+        "phase": "measure",
+        "number": 3,
+        "status": "ok",
+        "e2e_output_tokens_s": 178.16710572312527
+      }
+    ],
+    "started_unix": 1795443544.7275028,
+    "primary_metric": "e2e_output_tokens_s",
+    "fixed_length_sampling": {
+      "temperature": 0.0,
+      "ignore_eos": true
+    },
+    "actual_capture_evidence": {
+      "capture_bs": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "source": "target decode runner.capture_bs startup log",
+      "line": "[2026-11-23 14:17:10] Capture target decode CUDA graph end. bs=[1, 2, 4, 8, 16], elapsed=4.49 s, mem usage=0.30 GB, avail mem=11.08 GB.",
+      "byte_offset": 23090
+    },
+    "ended_unix": 1795443776.0509827,
+    "e2e_output_tokens_s_median": 178.42571611397008,
+    "e2e_output_tokens_s_min": 178.16710572312527,
+    "e2e_output_tokens_s_max": 178.49611504365595,
+    "client_ttft_seconds_median": 8.554697309155017,
+    "client_tpot_seconds_median": 0.07315686470719598,
+    "sampled_peak_device_memory_mib": 70544.0,
+    "min_target_batch_fraction": 1.0
+  },
+  "results/throughput-round7/common-shape/bf16/bs2/summary.json": {
+    "format_version": 1,
+    "method": "bf16",
+    "protocol": "common-shape",
+    "bs": 2,
+    "input_len": 2048,
+    "output_len": 512,
+    "input_ids_sha256": "8015b393e70386cfb875c32516b1d3e5b4a1bea3090266c3934707cf1af38244",
+    "input_fixture_sha256": "15b8c2695ddc7c7fddb070cba72ac970b4255c1f67dc56a35aaa1c1b2b2b1d5a",
+    "server_manifest": {
+      "host": "a10.mit.edu",
+      "gpu_index": 5,
+      "gpu_uuid": "GPU-82009e07-07c1-3a6c-5613-df2e45f63980",
+      "model_sha256": "c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080",
+      "sglang_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "sglang_git_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "environment_sha256": "68f2eedc0586e5c3d86450a378ebf7809ad4b647497d1ef23e528cbbc75bc291",
+      "server_pid": 1592429,
+      "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+      "method": "bf16",
+      "protocol": "common-shape",
+      "prefix_tokens": 64,
+      "recent_tokens": 256,
+      "exclusive_server": true,
+      "total_ut_steps": 4,
+      "config": {
+        "tp_size": 1,
+        "pp_size": 1,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "attention_backend": "triton",
+        "speculative_algorithm": null,
+        "disable_radix_cache": true,
+        "chunked_prefill_size": -1,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 16,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "cuda_graph_bs_decode": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "cuda_graph_backend_decode": "full",
+        "cuda_graph_backend_prefill": "disabled",
+        "disable_cuda_graph": false,
+        "disable_decode_cuda_graph": false,
+        "disable_prefill_cuda_graph": false,
+        "disable_cuda_graph_padding": false,
+        "decode_log_interval": 1,
+        "incremental_streaming_output": true,
+        "context_length": 40960,
+        "max_running_requests": 16,
+        "mem_fraction_static": 0.9,
+        "max_total_tokens": 41984,
+        "page_size": 8,
+        "loopvq_codebook_dir": null,
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "ouro_decode_profile": "optimized",
+        "triton_attention_num_kv_splits": 8,
+        "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+        "total_ut_steps": 4
+      },
+      "server_command": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/envs/sglang-loopvq-test/bin/python -u -m sglang.launch_server --model-path /homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking --host 127.0.0.1 --port 30545 --trust-remote-code --dtype bfloat16 --attention-backend triton --tp-size 1 --page-size 8 --max-running-requests 16 --max-total-tokens 41984 --max-prefill-tokens 8192 --context-length 40960 --mem-fraction-static .90 --disable-radix-cache --chunked-prefill-size -1 --cuda-graph-backend-decode full --cuda-graph-bs-decode 1 2 4 8 16 --cuda-graph-backend-prefill disabled --enable-metrics --decode-log-interval 1 --incremental-streaming-output --ouro-decode-profile optimized --triton-attention-num-kv-splits 8 "
+    },
+    "server_config_readback": {
+      "tp_size": 1,
+      "pp_size": 1,
+      "dp_size": 1,
+      "dtype": "bfloat16",
+      "attention_backend": "triton",
+      "speculative_algorithm": null,
+      "disable_radix_cache": true,
+      "chunked_prefill_size": -1,
+      "cuda_graph_config": {
+        "decode": {
+          "backend": "full",
+          "max_bs": 16,
+          "bs": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        },
+        "prefill": {
+          "backend": "disabled",
+          "max_bs": -1,
+          "bs": [],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        }
+      },
+      "cuda_graph_bs_decode": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "cuda_graph_backend_decode": "full",
+      "cuda_graph_backend_prefill": "disabled",
+      "disable_cuda_graph": false,
+      "disable_decode_cuda_graph": false,
+      "disable_prefill_cuda_graph": false,
+      "disable_cuda_graph_padding": false,
+      "decode_log_interval": 1,
+      "incremental_streaming_output": true,
+      "context_length": 40960,
+      "max_running_requests": 16,
+      "mem_fraction_static": 0.9,
+      "max_total_tokens": 41984,
+      "page_size": 8,
+      "loopvq_codebook_dir": null,
+      "loopvq_prefix_tokens": 64,
+      "loopvq_recent_tokens": 256,
+      "ouro_decode_profile": "optimized",
+      "triton_attention_num_kv_splits": 8
+    },
+    "base_url": "http://127.0.0.1:30545",
+    "server_log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/throughput-r7-bf16-common-c-server.log",
+    "client_host": "a10.mit.edu",
+    "warmup_count": 2,
+    "repeat_count": 3,
+    "status": "ok",
+    "attempts": [
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs2/warmup-01.json",
+        "phase": "warmup",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 51.00179041552429
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs2/warmup-02.json",
+        "phase": "warmup",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 51.19940464235233
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs2/measure-01.json",
+        "phase": "measure",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 51.20895505029098
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs2/measure-02.json",
+        "phase": "measure",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 51.19025705045257
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs2/measure-03.json",
+        "phase": "measure",
+        "number": 3,
+        "status": "ok",
+        "e2e_output_tokens_s": 51.17499892816681
+      }
+    ],
+    "started_unix": 1795446029.3234663,
+    "primary_metric": "e2e_output_tokens_s",
+    "fixed_length_sampling": {
+      "temperature": 0.0,
+      "ignore_eos": true
+    },
+    "actual_capture_evidence": {
+      "capture_bs": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "source": "target decode runner.capture_bs startup log",
+      "line": "[2026-11-23 14:56:35] Capture target decode CUDA graph end. bs=[1, 2, 4, 8, 16], elapsed=4.48 s, mem usage=0.30 GB, avail mem=11.08 GB.",
+      "byte_offset": 23091
+    },
+    "ended_unix": 1795446131.2372832,
+    "e2e_output_tokens_s_median": 51.19025705045257,
+    "e2e_output_tokens_s_min": 51.17499892816681,
+    "e2e_output_tokens_s_max": 51.20895505029098,
+    "client_ttft_seconds_median": 1.297312055947259,
+    "client_tpot_seconds_median": 0.036607460710247376,
+    "sampled_peak_device_memory_mib": 70140.0,
+    "min_target_batch_fraction": 1.0
+  },
+  "results/throughput-round7/common-shape/bf16/bs4/summary.json": {
+    "format_version": 1,
+    "method": "bf16",
+    "protocol": "common-shape",
+    "bs": 4,
+    "input_len": 2048,
+    "output_len": 512,
+    "input_ids_sha256": "543ae840f4716b5c77ec007e6c292f1d9fe8a89e7c44f60f5ddd7309f2295bf0",
+    "input_fixture_sha256": "15b8c2695ddc7c7fddb070cba72ac970b4255c1f67dc56a35aaa1c1b2b2b1d5a",
+    "server_manifest": {
+      "host": "a10.mit.edu",
+      "gpu_index": 5,
+      "gpu_uuid": "GPU-82009e07-07c1-3a6c-5613-df2e45f63980",
+      "model_sha256": "c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080",
+      "sglang_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "sglang_git_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "environment_sha256": "68f2eedc0586e5c3d86450a378ebf7809ad4b647497d1ef23e528cbbc75bc291",
+      "server_pid": 1563930,
+      "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+      "method": "bf16",
+      "protocol": "common-shape",
+      "prefix_tokens": 64,
+      "recent_tokens": 256,
+      "exclusive_server": true,
+      "total_ut_steps": 4,
+      "config": {
+        "tp_size": 1,
+        "pp_size": 1,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "attention_backend": "triton",
+        "speculative_algorithm": null,
+        "disable_radix_cache": true,
+        "chunked_prefill_size": -1,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 16,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "cuda_graph_bs_decode": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "cuda_graph_backend_decode": "full",
+        "cuda_graph_backend_prefill": "disabled",
+        "disable_cuda_graph": false,
+        "disable_decode_cuda_graph": false,
+        "disable_prefill_cuda_graph": false,
+        "disable_cuda_graph_padding": false,
+        "decode_log_interval": 1,
+        "incremental_streaming_output": true,
+        "context_length": 40960,
+        "max_running_requests": 16,
+        "mem_fraction_static": 0.9,
+        "max_total_tokens": 41984,
+        "page_size": 8,
+        "loopvq_codebook_dir": null,
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "ouro_decode_profile": "optimized",
+        "triton_attention_num_kv_splits": 8,
+        "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+        "total_ut_steps": 4
+      },
+      "server_command": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/envs/sglang-loopvq-test/bin/python -u -m sglang.launch_server --model-path /homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking --host 127.0.0.1 --port 30545 --trust-remote-code --dtype bfloat16 --attention-backend triton --tp-size 1 --page-size 8 --max-running-requests 16 --max-total-tokens 41984 --max-prefill-tokens 8192 --context-length 40960 --mem-fraction-static .90 --disable-radix-cache --chunked-prefill-size -1 --cuda-graph-backend-decode full --cuda-graph-bs-decode 1 2 4 8 16 --cuda-graph-backend-prefill disabled --enable-metrics --decode-log-interval 1 --incremental-streaming-output --ouro-decode-profile optimized --triton-attention-num-kv-splits 8 "
+    },
+    "server_config_readback": {
+      "tp_size": 1,
+      "pp_size": 1,
+      "dp_size": 1,
+      "dtype": "bfloat16",
+      "attention_backend": "triton",
+      "speculative_algorithm": null,
+      "disable_radix_cache": true,
+      "chunked_prefill_size": -1,
+      "cuda_graph_config": {
+        "decode": {
+          "backend": "full",
+          "max_bs": 16,
+          "bs": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        },
+        "prefill": {
+          "backend": "disabled",
+          "max_bs": -1,
+          "bs": [],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        }
+      },
+      "cuda_graph_bs_decode": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "cuda_graph_backend_decode": "full",
+      "cuda_graph_backend_prefill": "disabled",
+      "disable_cuda_graph": false,
+      "disable_decode_cuda_graph": false,
+      "disable_prefill_cuda_graph": false,
+      "disable_cuda_graph_padding": false,
+      "decode_log_interval": 1,
+      "incremental_streaming_output": true,
+      "context_length": 40960,
+      "max_running_requests": 16,
+      "mem_fraction_static": 0.9,
+      "max_total_tokens": 41984,
+      "page_size": 8,
+      "loopvq_codebook_dir": null,
+      "loopvq_prefix_tokens": 64,
+      "loopvq_recent_tokens": 256,
+      "ouro_decode_profile": "optimized",
+      "triton_attention_num_kv_splits": 8
+    },
+    "base_url": "http://127.0.0.1:30545",
+    "server_log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/throughput-r7-bf16-common-b-server.log",
+    "client_host": "a10.mit.edu",
+    "warmup_count": 2,
+    "repeat_count": 3,
+    "status": "ok",
+    "attempts": [
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs4/warmup-01.json",
+        "phase": "warmup",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 83.39384242112473
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs4/warmup-02.json",
+        "phase": "warmup",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 83.37488702264228
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs4/measure-01.json",
+        "phase": "measure",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 83.33978232230461
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs4/measure-02.json",
+        "phase": "measure",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 83.32949631752092
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs4/measure-03.json",
+        "phase": "measure",
+        "number": 3,
+        "status": "ok",
+        "e2e_output_tokens_s": 83.28769158066947
+      }
+    ],
+    "started_unix": 1795444811.0496762,
+    "primary_metric": "e2e_output_tokens_s",
+    "fixed_length_sampling": {
+      "temperature": 0.0,
+      "ignore_eos": true
+    },
+    "actual_capture_evidence": {
+      "capture_bs": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "source": "target decode runner.capture_bs startup log",
+      "line": "[2026-11-23 14:37:01] Capture target decode CUDA graph end. bs=[1, 2, 4, 8, 16], elapsed=4.43 s, mem usage=0.30 GB, avail mem=11.08 GB.",
+      "byte_offset": 23091
+    },
+    "ended_unix": 1795444935.738086,
+    "e2e_output_tokens_s_median": 83.32949631752092,
+    "e2e_output_tokens_s_min": 83.28769158066947,
+    "e2e_output_tokens_s_max": 83.33978232230461,
+    "client_ttft_seconds_median": 2.561649054288864,
+    "client_tpot_seconds_median": 0.04308327910747313,
+    "sampled_peak_device_memory_mib": 70542.0,
+    "min_target_batch_fraction": 1.0
+  },
+  "results/throughput-round7/common-shape/bf16/bs8/summary.json": {
+    "format_version": 1,
+    "method": "bf16",
+    "protocol": "common-shape",
+    "bs": 8,
+    "input_len": 2048,
+    "output_len": 512,
+    "input_ids_sha256": "4a9f7a7fed8728a74db180344522bca95acde3aaac1d130ac63db222984f2ef5",
+    "input_fixture_sha256": "15b8c2695ddc7c7fddb070cba72ac970b4255c1f67dc56a35aaa1c1b2b2b1d5a",
+    "server_manifest": {
+      "host": "a10.mit.edu",
+      "gpu_index": 5,
+      "gpu_uuid": "GPU-82009e07-07c1-3a6c-5613-df2e45f63980",
+      "model_sha256": "c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080",
+      "sglang_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "sglang_git_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "environment_sha256": "68f2eedc0586e5c3d86450a378ebf7809ad4b647497d1ef23e528cbbc75bc291",
+      "server_pid": 1563930,
+      "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+      "method": "bf16",
+      "protocol": "common-shape",
+      "prefix_tokens": 64,
+      "recent_tokens": 256,
+      "exclusive_server": true,
+      "total_ut_steps": 4,
+      "config": {
+        "tp_size": 1,
+        "pp_size": 1,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "attention_backend": "triton",
+        "speculative_algorithm": null,
+        "disable_radix_cache": true,
+        "chunked_prefill_size": -1,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 16,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "cuda_graph_bs_decode": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "cuda_graph_backend_decode": "full",
+        "cuda_graph_backend_prefill": "disabled",
+        "disable_cuda_graph": false,
+        "disable_decode_cuda_graph": false,
+        "disable_prefill_cuda_graph": false,
+        "disable_cuda_graph_padding": false,
+        "decode_log_interval": 1,
+        "incremental_streaming_output": true,
+        "context_length": 40960,
+        "max_running_requests": 16,
+        "mem_fraction_static": 0.9,
+        "max_total_tokens": 41984,
+        "page_size": 8,
+        "loopvq_codebook_dir": null,
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "ouro_decode_profile": "optimized",
+        "triton_attention_num_kv_splits": 8,
+        "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+        "total_ut_steps": 4
+      },
+      "server_command": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/envs/sglang-loopvq-test/bin/python -u -m sglang.launch_server --model-path /homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking --host 127.0.0.1 --port 30545 --trust-remote-code --dtype bfloat16 --attention-backend triton --tp-size 1 --page-size 8 --max-running-requests 16 --max-total-tokens 41984 --max-prefill-tokens 8192 --context-length 40960 --mem-fraction-static .90 --disable-radix-cache --chunked-prefill-size -1 --cuda-graph-backend-decode full --cuda-graph-bs-decode 1 2 4 8 16 --cuda-graph-backend-prefill disabled --enable-metrics --decode-log-interval 1 --incremental-streaming-output --ouro-decode-profile optimized --triton-attention-num-kv-splits 8 "
+    },
+    "server_config_readback": {
+      "tp_size": 1,
+      "pp_size": 1,
+      "dp_size": 1,
+      "dtype": "bfloat16",
+      "attention_backend": "triton",
+      "speculative_algorithm": null,
+      "disable_radix_cache": true,
+      "chunked_prefill_size": -1,
+      "cuda_graph_config": {
+        "decode": {
+          "backend": "full",
+          "max_bs": 16,
+          "bs": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        },
+        "prefill": {
+          "backend": "disabled",
+          "max_bs": -1,
+          "bs": [],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        }
+      },
+      "cuda_graph_bs_decode": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "cuda_graph_backend_decode": "full",
+      "cuda_graph_backend_prefill": "disabled",
+      "disable_cuda_graph": false,
+      "disable_decode_cuda_graph": false,
+      "disable_prefill_cuda_graph": false,
+      "disable_cuda_graph_padding": false,
+      "decode_log_interval": 1,
+      "incremental_streaming_output": true,
+      "context_length": 40960,
+      "max_running_requests": 16,
+      "mem_fraction_static": 0.9,
+      "max_total_tokens": 41984,
+      "page_size": 8,
+      "loopvq_codebook_dir": null,
+      "loopvq_prefix_tokens": 64,
+      "loopvq_recent_tokens": 256,
+      "ouro_decode_profile": "optimized",
+      "triton_attention_num_kv_splits": 8
+    },
+    "base_url": "http://127.0.0.1:30545",
+    "server_log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/throughput-r7-bf16-common-b-server.log",
+    "client_host": "a10.mit.edu",
+    "warmup_count": 2,
+    "repeat_count": 3,
+    "status": "ok",
+    "attempts": [
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs8/warmup-01.json",
+        "phase": "warmup",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 128.72135594232066
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs8/warmup-02.json",
+        "phase": "warmup",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 128.6346177250881
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs8/measure-01.json",
+        "phase": "measure",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 128.6230649217853
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs8/measure-02.json",
+        "phase": "measure",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 128.56076518771957
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs8/measure-03.json",
+        "phase": "measure",
+        "number": 3,
+        "status": "ok",
+        "e2e_output_tokens_s": 128.39836393304213
+      }
+    ],
+    "started_unix": 1795444649.7633405,
+    "primary_metric": "e2e_output_tokens_s",
+    "fixed_length_sampling": {
+      "temperature": 0.0,
+      "ignore_eos": true
+    },
+    "actual_capture_evidence": {
+      "capture_bs": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "source": "target decode runner.capture_bs startup log",
+      "line": "[2026-11-23 14:37:01] Capture target decode CUDA graph end. bs=[1, 2, 4, 8, 16], elapsed=4.43 s, mem usage=0.30 GB, avail mem=11.08 GB.",
+      "byte_offset": 23091
+    },
+    "ended_unix": 1795444810.8998857,
+    "e2e_output_tokens_s_median": 128.56076518771957,
+    "e2e_output_tokens_s_min": 128.39836393304213,
+    "e2e_output_tokens_s_max": 128.6230649217853,
+    "client_ttft_seconds_median": 4.923216600436717,
+    "client_tpot_seconds_median": 0.05273568907018146,
+    "sampled_peak_device_memory_mib": 70542.0,
+    "min_target_batch_fraction": 1.0
+  },
+  "results/throughput-round7/common-shape/loopvq/bs1/summary.json": {
+    "format_version": 1,
+    "method": "loopvq",
+    "protocol": "common-shape",
+    "bs": 1,
+    "input_len": 2048,
+    "output_len": 512,
+    "input_ids_sha256": "0e1844f864d0bcb04cdfc65b387d2f6d23c8b4421e2b21c024e524f96aaf08d5",
+    "input_fixture_sha256": "15b8c2695ddc7c7fddb070cba72ac970b4255c1f67dc56a35aaa1c1b2b2b1d5a",
+    "server_manifest": {
+      "host": "a10.mit.edu",
+      "gpu_index": 5,
+      "gpu_uuid": "GPU-82009e07-07c1-3a6c-5613-df2e45f63980",
+      "model_sha256": "c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080",
+      "sglang_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "sglang_git_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "environment_sha256": "68f2eedc0586e5c3d86450a378ebf7809ad4b647497d1ef23e528cbbc75bc291",
+      "server_pid": 1607168,
+      "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+      "method": "loopvq",
+      "protocol": "common-shape",
+      "prefix_tokens": 64,
+      "recent_tokens": 256,
+      "exclusive_server": true,
+      "total_ut_steps": 4,
+      "config": {
+        "tp_size": 1,
+        "pp_size": 1,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "attention_backend": "triton",
+        "speculative_algorithm": null,
+        "disable_radix_cache": true,
+        "chunked_prefill_size": -1,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 16,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "cuda_graph_bs_decode": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "cuda_graph_backend_decode": "full",
+        "cuda_graph_backend_prefill": "disabled",
+        "disable_cuda_graph": false,
+        "disable_decode_cuda_graph": false,
+        "disable_prefill_cuda_graph": false,
+        "disable_cuda_graph_padding": false,
+        "decode_log_interval": 1,
+        "incremental_streaming_output": true,
+        "context_length": 40960,
+        "max_running_requests": 16,
+        "mem_fraction_static": 0.9,
+        "max_total_tokens": 41984,
+        "page_size": 8,
+        "loopvq_codebook_dir": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e",
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "ouro_decode_profile": "optimized",
+        "triton_attention_num_kv_splits": 48,
+        "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+        "total_ut_steps": 4
+      },
+      "server_command": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/envs/sglang-loopvq-test/bin/python -u -m sglang.launch_server --model-path /homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking --host 127.0.0.1 --port 30545 --trust-remote-code --dtype bfloat16 --attention-backend triton --tp-size 1 --page-size 8 --max-running-requests 16 --max-total-tokens 41984 --max-prefill-tokens 8192 --context-length 40960 --mem-fraction-static .90 --disable-radix-cache --chunked-prefill-size -1 --cuda-graph-backend-decode full --cuda-graph-bs-decode 1 2 4 8 16 --cuda-graph-backend-prefill disabled --enable-metrics --decode-log-interval 1 --incremental-streaming-output --ouro-decode-profile optimized --triton-attention-num-kv-splits 48 --loopvq-codebook-dir /homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e --loopvq-prefix-tokens 64 --loopvq-recent-tokens 256 ",
+      "bundle_sha256": "1211b6f9aab8970fde65482650446eaba88a0e93775c32eb2ede173a85b1b066"
+    },
+    "server_config_readback": {
+      "tp_size": 1,
+      "pp_size": 1,
+      "dp_size": 1,
+      "dtype": "bfloat16",
+      "attention_backend": "triton",
+      "speculative_algorithm": null,
+      "disable_radix_cache": true,
+      "chunked_prefill_size": -1,
+      "cuda_graph_config": {
+        "decode": {
+          "backend": "full",
+          "max_bs": 16,
+          "bs": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        },
+        "prefill": {
+          "backend": "disabled",
+          "max_bs": -1,
+          "bs": [],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        }
+      },
+      "cuda_graph_bs_decode": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "cuda_graph_backend_decode": "full",
+      "cuda_graph_backend_prefill": "disabled",
+      "disable_cuda_graph": false,
+      "disable_decode_cuda_graph": false,
+      "disable_prefill_cuda_graph": false,
+      "disable_cuda_graph_padding": false,
+      "decode_log_interval": 1,
+      "incremental_streaming_output": true,
+      "context_length": 40960,
+      "max_running_requests": 16,
+      "mem_fraction_static": 0.9,
+      "max_total_tokens": 41984,
+      "page_size": 8,
+      "loopvq_codebook_dir": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e",
+      "loopvq_prefix_tokens": 64,
+      "loopvq_recent_tokens": 256,
+      "ouro_decode_profile": "optimized",
+      "triton_attention_num_kv_splits": 48
+    },
+    "base_url": "http://127.0.0.1:30545",
+    "server_log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/throughput-r7-vq-common-c-server.log",
+    "client_host": "a10.mit.edu",
+    "warmup_count": 2,
+    "repeat_count": 3,
+    "status": "ok",
+    "attempts": [
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs1/warmup-01.json",
+        "phase": "warmup",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 24.70890341474589
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs1/warmup-02.json",
+        "phase": "warmup",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 25.466711232969352
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs1/measure-01.json",
+        "phase": "measure",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 25.47477243948897
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs1/measure-02.json",
+        "phase": "measure",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 25.472166204362626
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs1/measure-03.json",
+        "phase": "measure",
+        "number": 3,
+        "status": "ok",
+        "e2e_output_tokens_s": 25.473135304567407
+      }
+    ],
+    "started_unix": 1795446445.6129243,
+    "primary_metric": "e2e_output_tokens_s",
+    "fixed_length_sampling": {
+      "temperature": 0.0,
+      "ignore_eos": true
+    },
+    "actual_capture_evidence": {
+      "capture_bs": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "source": "target decode runner.capture_bs startup log",
+      "line": "[2026-11-23 15:06:20] Capture target decode CUDA graph end. bs=[1, 2, 4, 8, 16], elapsed=4.81 s, mem usage=0.33 GB, avail mem=60.85 GB.",
+      "byte_offset": 23554
+    },
+    "ended_unix": 1795446548.5732088,
+    "e2e_output_tokens_s_median": 25.473135304567407,
+    "e2e_output_tokens_s_min": 25.472166204362626,
+    "e2e_output_tokens_s_max": 25.47477243948897,
+    "client_ttft_seconds_median": 0.7160161687061191,
+    "client_tpot_seconds_median": 0.0379323598239826,
+    "sampled_peak_device_memory_mib": 22196.0,
+    "min_target_batch_fraction": 1.0
+  },
+  "results/throughput-round7/common-shape/loopvq/bs16/summary.json": {
+    "format_version": 1,
+    "method": "loopvq",
+    "protocol": "common-shape",
+    "bs": 16,
+    "input_len": 2048,
+    "output_len": 512,
+    "input_ids_sha256": "15b8c2695ddc7c7fddb070cba72ac970b4255c1f67dc56a35aaa1c1b2b2b1d5a",
+    "input_fixture_sha256": "15b8c2695ddc7c7fddb070cba72ac970b4255c1f67dc56a35aaa1c1b2b2b1d5a",
+    "server_manifest": {
+      "host": "a10.mit.edu",
+      "gpu_index": 5,
+      "gpu_uuid": "GPU-82009e07-07c1-3a6c-5613-df2e45f63980",
+      "model_sha256": "c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080",
+      "sglang_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "sglang_git_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "environment_sha256": "68f2eedc0586e5c3d86450a378ebf7809ad4b647497d1ef23e528cbbc75bc291",
+      "server_pid": 1545740,
+      "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+      "method": "loopvq",
+      "protocol": "common-shape",
+      "prefix_tokens": 64,
+      "recent_tokens": 256,
+      "exclusive_server": true,
+      "total_ut_steps": 4,
+      "config": {
+        "tp_size": 1,
+        "pp_size": 1,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "attention_backend": "triton",
+        "speculative_algorithm": null,
+        "disable_radix_cache": true,
+        "chunked_prefill_size": -1,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 16,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "cuda_graph_bs_decode": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "cuda_graph_backend_decode": "full",
+        "cuda_graph_backend_prefill": "disabled",
+        "disable_cuda_graph": false,
+        "disable_decode_cuda_graph": false,
+        "disable_prefill_cuda_graph": false,
+        "disable_cuda_graph_padding": false,
+        "decode_log_interval": 1,
+        "incremental_streaming_output": true,
+        "context_length": 40960,
+        "max_running_requests": 16,
+        "mem_fraction_static": 0.9,
+        "max_total_tokens": 41984,
+        "page_size": 8,
+        "loopvq_codebook_dir": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e",
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "ouro_decode_profile": "optimized",
+        "triton_attention_num_kv_splits": 48,
+        "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+        "total_ut_steps": 4
+      },
+      "server_command": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/envs/sglang-loopvq-test/bin/python -u -m sglang.launch_server --model-path /homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking --host 127.0.0.1 --port 30545 --trust-remote-code --dtype bfloat16 --attention-backend triton --tp-size 1 --page-size 8 --max-running-requests 16 --max-total-tokens 41984 --max-prefill-tokens 8192 --context-length 40960 --mem-fraction-static .90 --disable-radix-cache --chunked-prefill-size -1 --cuda-graph-backend-decode full --cuda-graph-bs-decode 1 2 4 8 16 --cuda-graph-backend-prefill disabled --enable-metrics --decode-log-interval 1 --incremental-streaming-output --ouro-decode-profile optimized --triton-attention-num-kv-splits 48 --loopvq-codebook-dir /homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e --loopvq-prefix-tokens 64 --loopvq-recent-tokens 256 ",
+      "bundle_sha256": "1211b6f9aab8970fde65482650446eaba88a0e93775c32eb2ede173a85b1b066"
+    },
+    "server_config_readback": {
+      "tp_size": 1,
+      "pp_size": 1,
+      "dp_size": 1,
+      "dtype": "bfloat16",
+      "attention_backend": "triton",
+      "speculative_algorithm": null,
+      "disable_radix_cache": true,
+      "chunked_prefill_size": -1,
+      "cuda_graph_config": {
+        "decode": {
+          "backend": "full",
+          "max_bs": 16,
+          "bs": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        },
+        "prefill": {
+          "backend": "disabled",
+          "max_bs": -1,
+          "bs": [],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        }
+      },
+      "cuda_graph_bs_decode": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "cuda_graph_backend_decode": "full",
+      "cuda_graph_backend_prefill": "disabled",
+      "disable_cuda_graph": false,
+      "disable_decode_cuda_graph": false,
+      "disable_prefill_cuda_graph": false,
+      "disable_cuda_graph_padding": false,
+      "decode_log_interval": 1,
+      "incremental_streaming_output": true,
+      "context_length": 40960,
+      "max_running_requests": 16,
+      "mem_fraction_static": 0.9,
+      "max_total_tokens": 41984,
+      "page_size": 8,
+      "loopvq_codebook_dir": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e",
+      "loopvq_prefix_tokens": 64,
+      "loopvq_recent_tokens": 256,
+      "ouro_decode_profile": "optimized",
+      "triton_attention_num_kv_splits": 48
+    },
+    "base_url": "http://127.0.0.1:30545",
+    "server_log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/throughput-r7-vq-common-server.log",
+    "client_host": "a10.mit.edu",
+    "warmup_count": 2,
+    "repeat_count": 3,
+    "status": "ok",
+    "attempts": [
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs16/warmup-01.json",
+        "phase": "warmup",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 156.51903782056894
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs16/warmup-02.json",
+        "phase": "warmup",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 157.86943711727181
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs16/measure-01.json",
+        "phase": "measure",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 157.92791104136754
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs16/measure-02.json",
+        "phase": "measure",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 157.9758331019971
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs16/measure-03.json",
+        "phase": "measure",
+        "number": 3,
+        "status": "ok",
+        "e2e_output_tokens_s": 157.95934547998087
+      }
+    ],
+    "started_unix": 1795444075.5666685,
+    "primary_metric": "e2e_output_tokens_s",
+    "fixed_length_sampling": {
+      "temperature": 0.0,
+      "ignore_eos": true
+    },
+    "actual_capture_evidence": {
+      "capture_bs": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "source": "target decode runner.capture_bs startup log",
+      "line": "[2026-11-23 14:25:52] Capture target decode CUDA graph end. bs=[1, 2, 4, 8, 16], elapsed=7.54 s, mem usage=0.33 GB, avail mem=60.85 GB.",
+      "byte_offset": 23554
+    },
+    "ended_unix": 1795444337.48318,
+    "e2e_output_tokens_s_median": 157.95934547998087,
+    "e2e_output_tokens_s_min": 157.92791104136754,
+    "e2e_output_tokens_s_max": 157.9758331019971,
+    "client_ttft_seconds_median": 8.965762106701732,
+    "client_tpot_seconds_median": 0.08394675812348651,
+    "sampled_peak_device_memory_mib": 32234.0,
+    "min_target_batch_fraction": 1.0
+  },
+  "results/throughput-round7/common-shape/loopvq/bs2/summary.json": {
+    "format_version": 1,
+    "method": "loopvq",
+    "protocol": "common-shape",
+    "bs": 2,
+    "input_len": 2048,
+    "output_len": 512,
+    "input_ids_sha256": "8015b393e70386cfb875c32516b1d3e5b4a1bea3090266c3934707cf1af38244",
+    "input_fixture_sha256": "15b8c2695ddc7c7fddb070cba72ac970b4255c1f67dc56a35aaa1c1b2b2b1d5a",
+    "server_manifest": {
+      "host": "a10.mit.edu",
+      "gpu_index": 5,
+      "gpu_uuid": "GPU-82009e07-07c1-3a6c-5613-df2e45f63980",
+      "model_sha256": "c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080",
+      "sglang_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "sglang_git_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "environment_sha256": "68f2eedc0586e5c3d86450a378ebf7809ad4b647497d1ef23e528cbbc75bc291",
+      "server_pid": 1577775,
+      "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+      "method": "loopvq",
+      "protocol": "common-shape",
+      "prefix_tokens": 64,
+      "recent_tokens": 256,
+      "exclusive_server": true,
+      "total_ut_steps": 4,
+      "config": {
+        "tp_size": 1,
+        "pp_size": 1,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "attention_backend": "triton",
+        "speculative_algorithm": null,
+        "disable_radix_cache": true,
+        "chunked_prefill_size": -1,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 16,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "cuda_graph_bs_decode": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "cuda_graph_backend_decode": "full",
+        "cuda_graph_backend_prefill": "disabled",
+        "disable_cuda_graph": false,
+        "disable_decode_cuda_graph": false,
+        "disable_prefill_cuda_graph": false,
+        "disable_cuda_graph_padding": false,
+        "decode_log_interval": 1,
+        "incremental_streaming_output": true,
+        "context_length": 40960,
+        "max_running_requests": 16,
+        "mem_fraction_static": 0.9,
+        "max_total_tokens": 41984,
+        "page_size": 8,
+        "loopvq_codebook_dir": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e",
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "ouro_decode_profile": "optimized",
+        "triton_attention_num_kv_splits": 48,
+        "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+        "total_ut_steps": 4
+      },
+      "server_command": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/envs/sglang-loopvq-test/bin/python -u -m sglang.launch_server --model-path /homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking --host 127.0.0.1 --port 30545 --trust-remote-code --dtype bfloat16 --attention-backend triton --tp-size 1 --page-size 8 --max-running-requests 16 --max-total-tokens 41984 --max-prefill-tokens 8192 --context-length 40960 --mem-fraction-static .90 --disable-radix-cache --chunked-prefill-size -1 --cuda-graph-backend-decode full --cuda-graph-bs-decode 1 2 4 8 16 --cuda-graph-backend-prefill disabled --enable-metrics --decode-log-interval 1 --incremental-streaming-output --ouro-decode-profile optimized --triton-attention-num-kv-splits 48 --loopvq-codebook-dir /homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e --loopvq-prefix-tokens 64 --loopvq-recent-tokens 256 ",
+      "bundle_sha256": "1211b6f9aab8970fde65482650446eaba88a0e93775c32eb2ede173a85b1b066"
+    },
+    "server_config_readback": {
+      "tp_size": 1,
+      "pp_size": 1,
+      "dp_size": 1,
+      "dtype": "bfloat16",
+      "attention_backend": "triton",
+      "speculative_algorithm": null,
+      "disable_radix_cache": true,
+      "chunked_prefill_size": -1,
+      "cuda_graph_config": {
+        "decode": {
+          "backend": "full",
+          "max_bs": 16,
+          "bs": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        },
+        "prefill": {
+          "backend": "disabled",
+          "max_bs": -1,
+          "bs": [],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        }
+      },
+      "cuda_graph_bs_decode": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "cuda_graph_backend_decode": "full",
+      "cuda_graph_backend_prefill": "disabled",
+      "disable_cuda_graph": false,
+      "disable_decode_cuda_graph": false,
+      "disable_prefill_cuda_graph": false,
+      "disable_cuda_graph_padding": false,
+      "decode_log_interval": 1,
+      "incremental_streaming_output": true,
+      "context_length": 40960,
+      "max_running_requests": 16,
+      "mem_fraction_static": 0.9,
+      "max_total_tokens": 41984,
+      "page_size": 8,
+      "loopvq_codebook_dir": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e",
+      "loopvq_prefix_tokens": 64,
+      "loopvq_recent_tokens": 256,
+      "ouro_decode_profile": "optimized",
+      "triton_attention_num_kv_splits": 48
+    },
+    "base_url": "http://127.0.0.1:30545",
+    "server_log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/throughput-r7-vq-common-b-server.log",
+    "client_host": "a10.mit.edu",
+    "warmup_count": 2,
+    "repeat_count": 3,
+    "status": "ok",
+    "attempts": [
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs2/warmup-01.json",
+        "phase": "warmup",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 43.7711949831788
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs2/warmup-02.json",
+        "phase": "warmup",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 44.649430933160126
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs2/measure-01.json",
+        "phase": "measure",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 44.63699912822163
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs2/measure-02.json",
+        "phase": "measure",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 44.63184203107196
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs2/measure-03.json",
+        "phase": "measure",
+        "number": 3,
+        "status": "ok",
+        "e2e_output_tokens_s": 44.62080405835537
+      }
+    ],
+    "started_unix": 1795445337.3762524,
+    "primary_metric": "e2e_output_tokens_s",
+    "fixed_length_sampling": {
+      "temperature": 0.0,
+      "ignore_eos": true
+    },
+    "actual_capture_evidence": {
+      "capture_bs": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "source": "target decode runner.capture_bs startup log",
+      "line": "[2026-11-23 14:46:13] Capture target decode CUDA graph end. bs=[1, 2, 4, 8, 16], elapsed=4.82 s, mem usage=0.33 GB, avail mem=60.85 GB.",
+      "byte_offset": 23554
+    },
+    "ended_unix": 1795445454.3997958,
+    "e2e_output_tokens_s_median": 44.63184203107196,
+    "e2e_output_tokens_s_min": 44.62080405835537,
+    "e2e_output_tokens_s_max": 44.63699912822163,
+    "client_ttft_seconds_median": 1.3632713227998465,
+    "client_tpot_seconds_median": 0.0422292217182145,
+    "sampled_peak_device_memory_mib": 32232.0,
+    "min_target_batch_fraction": 1.0
+  },
+  "results/throughput-round7/common-shape/loopvq/bs4/summary.json": {
+    "format_version": 1,
+    "method": "loopvq",
+    "protocol": "common-shape",
+    "bs": 4,
+    "input_len": 2048,
+    "output_len": 512,
+    "input_ids_sha256": "543ae840f4716b5c77ec007e6c292f1d9fe8a89e7c44f60f5ddd7309f2295bf0",
+    "input_fixture_sha256": "15b8c2695ddc7c7fddb070cba72ac970b4255c1f67dc56a35aaa1c1b2b2b1d5a",
+    "server_manifest": {
+      "host": "a10.mit.edu",
+      "gpu_index": 5,
+      "gpu_uuid": "GPU-82009e07-07c1-3a6c-5613-df2e45f63980",
+      "model_sha256": "c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080",
+      "sglang_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "sglang_git_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "environment_sha256": "68f2eedc0586e5c3d86450a378ebf7809ad4b647497d1ef23e528cbbc75bc291",
+      "server_pid": 1577775,
+      "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+      "method": "loopvq",
+      "protocol": "common-shape",
+      "prefix_tokens": 64,
+      "recent_tokens": 256,
+      "exclusive_server": true,
+      "total_ut_steps": 4,
+      "config": {
+        "tp_size": 1,
+        "pp_size": 1,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "attention_backend": "triton",
+        "speculative_algorithm": null,
+        "disable_radix_cache": true,
+        "chunked_prefill_size": -1,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 16,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "cuda_graph_bs_decode": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "cuda_graph_backend_decode": "full",
+        "cuda_graph_backend_prefill": "disabled",
+        "disable_cuda_graph": false,
+        "disable_decode_cuda_graph": false,
+        "disable_prefill_cuda_graph": false,
+        "disable_cuda_graph_padding": false,
+        "decode_log_interval": 1,
+        "incremental_streaming_output": true,
+        "context_length": 40960,
+        "max_running_requests": 16,
+        "mem_fraction_static": 0.9,
+        "max_total_tokens": 41984,
+        "page_size": 8,
+        "loopvq_codebook_dir": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e",
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "ouro_decode_profile": "optimized",
+        "triton_attention_num_kv_splits": 48,
+        "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+        "total_ut_steps": 4
+      },
+      "server_command": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/envs/sglang-loopvq-test/bin/python -u -m sglang.launch_server --model-path /homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking --host 127.0.0.1 --port 30545 --trust-remote-code --dtype bfloat16 --attention-backend triton --tp-size 1 --page-size 8 --max-running-requests 16 --max-total-tokens 41984 --max-prefill-tokens 8192 --context-length 40960 --mem-fraction-static .90 --disable-radix-cache --chunked-prefill-size -1 --cuda-graph-backend-decode full --cuda-graph-bs-decode 1 2 4 8 16 --cuda-graph-backend-prefill disabled --enable-metrics --decode-log-interval 1 --incremental-streaming-output --ouro-decode-profile optimized --triton-attention-num-kv-splits 48 --loopvq-codebook-dir /homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e --loopvq-prefix-tokens 64 --loopvq-recent-tokens 256 ",
+      "bundle_sha256": "1211b6f9aab8970fde65482650446eaba88a0e93775c32eb2ede173a85b1b066"
+    },
+    "server_config_readback": {
+      "tp_size": 1,
+      "pp_size": 1,
+      "dp_size": 1,
+      "dtype": "bfloat16",
+      "attention_backend": "triton",
+      "speculative_algorithm": null,
+      "disable_radix_cache": true,
+      "chunked_prefill_size": -1,
+      "cuda_graph_config": {
+        "decode": {
+          "backend": "full",
+          "max_bs": 16,
+          "bs": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        },
+        "prefill": {
+          "backend": "disabled",
+          "max_bs": -1,
+          "bs": [],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        }
+      },
+      "cuda_graph_bs_decode": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "cuda_graph_backend_decode": "full",
+      "cuda_graph_backend_prefill": "disabled",
+      "disable_cuda_graph": false,
+      "disable_decode_cuda_graph": false,
+      "disable_prefill_cuda_graph": false,
+      "disable_cuda_graph_padding": false,
+      "decode_log_interval": 1,
+      "incremental_streaming_output": true,
+      "context_length": 40960,
+      "max_running_requests": 16,
+      "mem_fraction_static": 0.9,
+      "max_total_tokens": 41984,
+      "page_size": 8,
+      "loopvq_codebook_dir": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e",
+      "loopvq_prefix_tokens": 64,
+      "loopvq_recent_tokens": 256,
+      "ouro_decode_profile": "optimized",
+      "triton_attention_num_kv_splits": 48
+    },
+    "base_url": "http://127.0.0.1:30545",
+    "server_log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/throughput-r7-vq-common-b-server.log",
+    "client_host": "a10.mit.edu",
+    "warmup_count": 2,
+    "repeat_count": 3,
+    "status": "ok",
+    "attempts": [
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs4/warmup-01.json",
+        "phase": "warmup",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 76.39058755841246
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs4/warmup-02.json",
+        "phase": "warmup",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 77.68595237722438
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs4/measure-01.json",
+        "phase": "measure",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 77.65691284162583
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs4/measure-02.json",
+        "phase": "measure",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 77.66851234073027
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs4/measure-03.json",
+        "phase": "measure",
+        "number": 3,
+        "status": "ok",
+        "e2e_output_tokens_s": 77.6613699611165
+      }
+    ],
+    "started_unix": 1795445203.1350434,
+    "primary_metric": "e2e_output_tokens_s",
+    "fixed_length_sampling": {
+      "temperature": 0.0,
+      "ignore_eos": true
+    },
+    "actual_capture_evidence": {
+      "capture_bs": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "source": "target decode runner.capture_bs startup log",
+      "line": "[2026-11-23 14:46:13] Capture target decode CUDA graph end. bs=[1, 2, 4, 8, 16], elapsed=4.82 s, mem usage=0.33 GB, avail mem=60.85 GB.",
+      "byte_offset": 23554
+    },
+    "ended_unix": 1795445337.2489545,
+    "e2e_output_tokens_s_median": 77.6613699611165,
+    "e2e_output_tokens_s_min": 77.65691284162583,
+    "e2e_output_tokens_s_max": 77.66851234073027,
+    "client_ttft_seconds_median": 2.691681216005236,
+    "client_tpot_seconds_median": 0.04633869531741201,
+    "sampled_peak_device_memory_mib": 32232.0,
+    "min_target_batch_fraction": 1.0
+  },
+  "results/throughput-round7/common-shape/loopvq/bs8/summary.json": {
+    "format_version": 1,
+    "method": "loopvq",
+    "protocol": "common-shape",
+    "bs": 8,
+    "input_len": 2048,
+    "output_len": 512,
+    "input_ids_sha256": "4a9f7a7fed8728a74db180344522bca95acde3aaac1d130ac63db222984f2ef5",
+    "input_fixture_sha256": "15b8c2695ddc7c7fddb070cba72ac970b4255c1f67dc56a35aaa1c1b2b2b1d5a",
+    "server_manifest": {
+      "host": "a10.mit.edu",
+      "gpu_index": 5,
+      "gpu_uuid": "GPU-82009e07-07c1-3a6c-5613-df2e45f63980",
+      "model_sha256": "c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080",
+      "sglang_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "sglang_git_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+      "environment_sha256": "68f2eedc0586e5c3d86450a378ebf7809ad4b647497d1ef23e528cbbc75bc291",
+      "server_pid": 1545740,
+      "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+      "method": "loopvq",
+      "protocol": "common-shape",
+      "prefix_tokens": 64,
+      "recent_tokens": 256,
+      "exclusive_server": true,
+      "total_ut_steps": 4,
+      "config": {
+        "tp_size": 1,
+        "pp_size": 1,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "attention_backend": "triton",
+        "speculative_algorithm": null,
+        "disable_radix_cache": true,
+        "chunked_prefill_size": -1,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 16,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "cuda_graph_bs_decode": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "cuda_graph_backend_decode": "full",
+        "cuda_graph_backend_prefill": "disabled",
+        "disable_cuda_graph": false,
+        "disable_decode_cuda_graph": false,
+        "disable_prefill_cuda_graph": false,
+        "disable_cuda_graph_padding": false,
+        "decode_log_interval": 1,
+        "incremental_streaming_output": true,
+        "context_length": 40960,
+        "max_running_requests": 16,
+        "mem_fraction_static": 0.9,
+        "max_total_tokens": 41984,
+        "page_size": 8,
+        "loopvq_codebook_dir": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e",
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "ouro_decode_profile": "optimized",
+        "triton_attention_num_kv_splits": 48,
+        "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+        "total_ut_steps": 4
+      },
+      "server_command": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/envs/sglang-loopvq-test/bin/python -u -m sglang.launch_server --model-path /homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking --host 127.0.0.1 --port 30545 --trust-remote-code --dtype bfloat16 --attention-backend triton --tp-size 1 --page-size 8 --max-running-requests 16 --max-total-tokens 41984 --max-prefill-tokens 8192 --context-length 40960 --mem-fraction-static .90 --disable-radix-cache --chunked-prefill-size -1 --cuda-graph-backend-decode full --cuda-graph-bs-decode 1 2 4 8 16 --cuda-graph-backend-prefill disabled --enable-metrics --decode-log-interval 1 --incremental-streaming-output --ouro-decode-profile optimized --triton-attention-num-kv-splits 48 --loopvq-codebook-dir /homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e --loopvq-prefix-tokens 64 --loopvq-recent-tokens 256 ",
+      "bundle_sha256": "1211b6f9aab8970fde65482650446eaba88a0e93775c32eb2ede173a85b1b066"
+    },
+    "server_config_readback": {
+      "tp_size": 1,
+      "pp_size": 1,
+      "dp_size": 1,
+      "dtype": "bfloat16",
+      "attention_backend": "triton",
+      "speculative_algorithm": null,
+      "disable_radix_cache": true,
+      "chunked_prefill_size": -1,
+      "cuda_graph_config": {
+        "decode": {
+          "backend": "full",
+          "max_bs": 16,
+          "bs": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        },
+        "prefill": {
+          "backend": "disabled",
+          "max_bs": -1,
+          "bs": [],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        }
+      },
+      "cuda_graph_bs_decode": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "cuda_graph_backend_decode": "full",
+      "cuda_graph_backend_prefill": "disabled",
+      "disable_cuda_graph": false,
+      "disable_decode_cuda_graph": false,
+      "disable_prefill_cuda_graph": false,
+      "disable_cuda_graph_padding": false,
+      "decode_log_interval": 1,
+      "incremental_streaming_output": true,
+      "context_length": 40960,
+      "max_running_requests": 16,
+      "mem_fraction_static": 0.9,
+      "max_total_tokens": 41984,
+      "page_size": 8,
+      "loopvq_codebook_dir": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e",
+      "loopvq_prefix_tokens": 64,
+      "loopvq_recent_tokens": 256,
+      "ouro_decode_profile": "optimized",
+      "triton_attention_num_kv_splits": 48
+    },
+    "base_url": "http://127.0.0.1:30545",
+    "server_log": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/logs/throughput-r7-vq-common-server.log",
+    "client_host": "a10.mit.edu",
+    "warmup_count": 2,
+    "repeat_count": 3,
+    "status": "ok",
+    "attempts": [
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs8/warmup-01.json",
+        "phase": "warmup",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 118.10569951179141
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs8/warmup-02.json",
+        "phase": "warmup",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 119.12237801028115
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs8/measure-01.json",
+        "phase": "measure",
+        "number": 1,
+        "status": "ok",
+        "e2e_output_tokens_s": 119.12675726601415
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs8/measure-02.json",
+        "phase": "measure",
+        "number": 2,
+        "status": "ok",
+        "e2e_output_tokens_s": 119.12183860754865
+      },
+      {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs8/measure-03.json",
+        "phase": "measure",
+        "number": 3,
+        "status": "ok",
+        "e2e_output_tokens_s": 119.08721720539914
+      }
+    ],
+    "started_unix": 1795444337.6327922,
+    "primary_metric": "e2e_output_tokens_s",
+    "fixed_length_sampling": {
+      "temperature": 0.0,
+      "ignore_eos": true
+    },
+    "actual_capture_evidence": {
+      "capture_bs": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "source": "target decode runner.capture_bs startup log",
+      "line": "[2026-11-23 14:25:52] Capture target decode CUDA graph end. bs=[1, 2, 4, 8, 16], elapsed=7.54 s, mem usage=0.33 GB, avail mem=60.85 GB.",
+      "byte_offset": 23554
+    },
+    "ended_unix": 1795444511.8040996,
+    "e2e_output_tokens_s_median": 119.12183860754865,
+    "e2e_output_tokens_s_min": 119.08721720539914,
+    "e2e_output_tokens_s_max": 119.12675726601415,
+    "client_ttft_seconds_median": 5.160870597464964,
+    "client_tpot_seconds_median": 0.05719701387307109,
+    "sampled_peak_device_memory_mib": 32234.0,
+    "min_target_batch_fraction": 1.0
+  }
+}

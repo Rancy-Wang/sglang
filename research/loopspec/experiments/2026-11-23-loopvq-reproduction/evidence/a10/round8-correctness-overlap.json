@@ -1,0 +1,13 @@
+{
+  "started_unix": 1795444889.501951,
+  "gpu": 4,
+  "known_accuracy_pid": 1484573,
+  "known_accuracy_scheduler_pid": 1485246,
+  "validation_port": 30556,
+  "validation_sha": "90bbb757ada1ed455e6e1a56dbcdd7e7a7e96a27",
+  "scope": "correctness only; accuracy latency during overlap excluded from ETA/throughput",
+  "performance_gpu_exclusive": 5,
+  "ended_unix": 1795445324.7290313,
+  "validation_pid": 1571832,
+  "status": "passed_and_owned_server_stopped"
+}

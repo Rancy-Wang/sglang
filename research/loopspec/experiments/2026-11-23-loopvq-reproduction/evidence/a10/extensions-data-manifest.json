@@ -1,0 +1,357 @@
+{
+  "status": "verified_offline",
+  "schema": 1,
+  "created_utc": "2026-11-23T15:01:45.176377+00:00",
+  "observed": {
+    "packages": {
+      "datasets": "5.0.1",
+      "huggingface-hub": "0.36.2",
+      "pyarrow": "25.0.1",
+      "PyYAML": "6.0.4"
+    },
+    "sources": {
+      "gsm8k": {
+        "repo_id": "openai/gsm8k",
+        "revision": "740312add88f781978c0658806c59bc2815b9866",
+        "files": {
+          "main/train-00000-of-00001.parquet": {
+            "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/huggingface/hub/datasets--openai--gsm8k/snapshots/740312add88f781978c0658806c59bc2815b9866/main/train-00000-of-00001.parquet",
+            "bytes": 2306545,
+            "sha256": "ea82612ea9582142387730c793eb67d3b12849002bc0b7fa6f8efafa7351419d"
+          },
+          "main/test-00000-of-00001.parquet": {
+            "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/huggingface/hub/datasets--openai--gsm8k/snapshots/740312add88f781978c0658806c59bc2815b9866/main/test-00000-of-00001.parquet",
+            "bytes": 419088,
+            "sha256": "ee7b8da9e381df27b9e3f7758a159ab2bdaa4dbaa910546cbbc47e0cb44e4f59"
+          }
+        }
+      },
+      "math500": {
+        "repo_id": "HuggingFaceH4/MATH-500",
+        "revision": "6e4ed1a2a79af7d8630a6b768ec859cb5af4d3be",
+        "files": {
+          "test.jsonl": {
+            "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/huggingface/hub/datasets--HuggingFaceH4--MATH-500/snapshots/6e4ed1a2a79af7d8630a6b768ec859cb5af4d3be/test.jsonl",
+            "bytes": 446564,
+            "sha256": "35dc41080a3680858b27fa7e0533d2d547825316fc5dafe5d316f4ccc5a06132"
+          }
+        }
+      },
+      "ruler": {
+        "repo_id": "simonjegou/ruler",
+        "revision": "24adceac8a0e6532936e8d721cd9e9084d2e4686",
+        "files": {
+          "16384/test-00000-of-00001.parquet": {
+            "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/huggingface/hub/datasets--simonjegou--ruler/snapshots/24adceac8a0e6532936e8d721cd9e9084d2e4686/16384/test-00000-of-00001.parquet",
+            "bytes": 189191762,
+            "sha256": "061d1090d4fde891fa8c1fb66253c33ae50f8e68fe473a70bd162e463c240000"
+          }
+        }
+      },
+      "longbench": {
+        "repo_id": "zai-org/LongBench",
+        "revision": "5e628be450b7e67fb7ae6e201bd6d8f7056f7672",
+        "files": {
+          "data.zip": {
+            "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/huggingface/hub/datasets--zai-org--LongBench/snapshots/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data.zip",
+            "bytes": 113932529,
+            "sha256": "cb45b11a4133c6bc1d6a44b0f8e701335ff1e543195db1103472e575857f7f64"
+          }
+        }
+      }
+    },
+    "source_files": {
+      "tasks/gsm8k_cot_3shot/gsm8k_cot_3shot.yaml": {
+        "path": "/homes/ruoxi07/repo/LoopVQ/tasks/gsm8k_cot_3shot/gsm8k_cot_3shot.yaml",
+        "bytes": 3765,
+        "sha256": "88e8be01b8206d44742180fce34407ccf1d3196b51ca8d295847d1d69e12e93c"
+      },
+      "tasks/niah/build_niah_rows.py": {
+        "path": "/homes/ruoxi07/repo/LoopVQ/tasks/niah/build_niah_rows.py",
+        "bytes": 11030,
+        "sha256": "414ff3a051b56369fe68a1c0ea26bcaf3b3b1cc8c292428185586a535277d427"
+      },
+      "scripts/run_math500_api.py": {
+        "path": "/homes/ruoxi07/repo/LoopVQ/scripts/run_math500_api.py",
+        "bytes": 4308,
+        "sha256": "2a365c303f4598059c8a9c9b74dbb431f4b09bb4d0d8acb65a7e53a822ebbb2d"
+      },
+      "experiments/loopvq_longbench/build_rows.py": {
+        "path": "/homes/ruoxi07/repo/LoopVQ/experiments/loopvq_longbench/build_rows.py",
+        "bytes": 3243,
+        "sha256": "b0bf14ff326acf4e5f17187bf07b8d015620ccf4b66b0bc45c73c9dbb3b1268b"
+      },
+      "experiments/loopvq_longbench/lb/dataset2prompt.json": {
+        "path": "/homes/ruoxi07/repo/LoopVQ/experiments/loopvq_longbench/lb/dataset2prompt.json",
+        "bytes": 5437,
+        "sha256": "56d22ad4f382169c2b8a11ff4c982a4a1bea096c8152b0f0b85b64686b157c30"
+      },
+      "experiments/loopvq_longbench/lb/dataset2maxlen.json": {
+        "path": "/homes/ruoxi07/repo/LoopVQ/experiments/loopvq_longbench/lb/dataset2maxlen.json",
+        "bytes": 459,
+        "sha256": "72966b3c0933e214591637fb085798c5e687ebff4ddaab5d99bbc31120532022"
+      }
+    },
+    "gsm8k": {
+      "train": {
+        "rows": 7473,
+        "rows_sha256": "dca449882e67a1e7716b5da453650a7b16588a1f2d1a0d82394a43d75ea7e9ca"
+      },
+      "test": {
+        "rows": 1319,
+        "rows_sha256": "32c548f08195e19e33408b844dd7be6aa4bcae457d957bc05909ff4bd4a00595"
+      },
+      "fewshot": {
+        "count": 3,
+        "source": "inline YAML first_n; not sampled from train",
+        "sha256": "c4553e8c3202405bc9c61397d247349ad7049531ef1530409f9662de090cee08",
+        "matching_train_question_indices": [
+          [],
+          [],
+          []
+        ]
+      }
+    },
+    "math500": {
+      "rows": 500,
+      "rows_sha256": "8c64443b4679d04084c214ae2cd13788f384ae5e3b17c33086a8960e97aa686b"
+    },
+    "entrypoint_loaders": {
+      "gsm8k_main_train_test": "matched",
+      "math500_test": "matched"
+    },
+    "niah": {
+      "source_rows": 6500,
+      "source_rows_sha256": "b3404b4483046977084ac62824affd9b5fad7d53139144f95a9fee07949e8cc2",
+      "task_counts": {
+        "niah_single_1": 500,
+        "niah_multikey_2": 500,
+        "fwe": 500,
+        "qa_1": 500,
+        "niah_single_3": 500,
+        "niah_multikey_1": 500,
+        "niah_single_2": 500,
+        "cwe": 500,
+        "qa_2": 500,
+        "vt": 500,
+        "niah_multivalue": 500,
+        "niah_multikey_3": 500,
+        "niah_multiquery": 500
+      },
+      "selected_count": 40,
+      "selected_source_indices": [
+        3000,
+        3001,
+        3002,
+        3003,
+        3004,
+        3005,
+        3006,
+        3007,
+        3008,
+        3009,
+        3010,
+        3011,
+        3012,
+        3013,
+        3014,
+        3015,
+        3016,
+        3017,
+        3018,
+        3019,
+        3020,
+        3021,
+        3022,
+        3023,
+        3024,
+        3025,
+        3026,
+        3027,
+        3028,
+        3029,
+        3030,
+        3031,
+        3032,
+        3033,
+        3034,
+        3035,
+        3036,
+        3037,
+        3038,
+        3039
+      ],
+      "selected_rows_sha256": "5cdf14fa2d4b217b76f63fba4da1e8a431f3d19ceeaf73737f4126108b104260",
+      "corpus": {
+        "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/niah/24adceac8a0e6532936e8d721cd9e9084d2e4686/niah_corpus_essays.txt",
+        "bytes": 2974280,
+        "sha256": "b9c684a24dd92f135bf9c40b823cdc3400158f4d62d1643671e3a36b803effac"
+      },
+      "generation": "not run; pass this corpus path explicitly to the builder"
+    },
+    "longbench": {
+      "tasks": {
+        "narrativeqa": {
+          "zip_member": "data/narrativeqa.jsonl",
+          "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data/narrativeqa.jsonl",
+          "bytes": 22715627,
+          "sha256": "0fb8d08ba5cdad4b74244224b0dc2e8b41ee6b850d954a13eb2d282621ce2f71",
+          "rows": 200,
+          "rows_sha256": "2d818fcded9bd29913fcc649d8e08ce1ef4069ee8ae9697f0058078e9c413209"
+        },
+        "qasper": {
+          "zip_member": "data/qasper.jsonl",
+          "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data/qasper.jsonl",
+          "bytes": 4829368,
+          "sha256": "29aa07d2a63f36f4fb8e8cd200a3428ee3126d750bde6af1c8f9bc41c2366854",
+          "rows": 200,
+          "rows_sha256": "150c6e88ea90bb4c2f5949a0ef6553c04434f56a973fe43ac9c38c97bb55c1c1"
+        },
+        "multifieldqa_en": {
+          "zip_member": "data/multifieldqa_en.jsonl",
+          "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data/multifieldqa_en.jsonl",
+          "bytes": 4483926,
+          "sha256": "0aac182fd317dcf6d74f8e1e0f3e61029407435346c2e0b3ff9fb45ae49c5c3f",
+          "rows": 150,
+          "rows_sha256": "ec360e1c740a4f5a736e57e83aab1bff87bf30a15fb4655b5b698da4eaaf42e8"
+        },
+        "hotpotqa": {
+          "zip_member": "data/hotpotqa.jsonl",
+          "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data/hotpotqa.jsonl",
+          "bytes": 11483614,
+          "sha256": "a0005ab2a1bc2ac3a70352dccbf96cccc4e0aac6bb677f6a55180fa51b92ef6f",
+          "rows": 200,
+          "rows_sha256": "4f76e5acd100a5638ece275b252d7a71085ac6dbae3a3d18f71999cf56c18aef"
+        },
+        "2wikimqa": {
+          "zip_member": "data/2wikimqa.jsonl",
+          "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data/2wikimqa.jsonl",
+          "bytes": 6052108,
+          "sha256": "dda279cf93a99e1e5bfa3291fb199fd55978d10a1feb31822953cf77a1742e37",
+          "rows": 200,
+          "rows_sha256": "a6e52b413973c8cd17232e6c95db32ef67ecd926b1c2c2504b4e9217d6362c84"
+        },
+        "musique": {
+          "zip_member": "data/musique.jsonl",
+          "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data/musique.jsonl",
+          "bytes": 14085077,
+          "sha256": "4ac69b91281c4ec6b21316cb7282e83fb6b4dda04fc68480bb8d8ed1e19ff7bd",
+          "rows": 200,
+          "rows_sha256": "7bfade03651ebe41c4a278f2b072811f8147c1aceefe6f0b40f78b94a7ee1a3c"
+        },
+        "gov_report": {
+          "zip_member": "data/gov_report.jsonl",
+          "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data/gov_report.jsonl",
+          "bytes": 11620138,
+          "sha256": "d28112beb3a9b41d80aa390837fa1a31c9e3da84a5262009c97585cc49f597c4",
+          "rows": 200,
+          "rows_sha256": "adfe663e47d8e7fad8833413325d17ed2153abc06c6789e0b753d18a65c54112"
+        },
+        "qmsum": {
+          "zip_member": "data/qmsum.jsonl",
+          "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data/qmsum.jsonl",
+          "bytes": 11750471,
+          "sha256": "e992f5157679b0c1ca281d0da19d1a8b3496117630ae639c9683ed3dab029113",
+          "rows": 200,
+          "rows_sha256": "8bc80afd1e6f90cb33c5d40aaa250dfe1daec641684ec93cf1a463c40d66db1a"
+        },
+        "multi_news": {
+          "zip_member": "data/multi_news.jsonl",
+          "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data/multi_news.jsonl",
+          "bytes": 2741331,
+          "sha256": "f8817c00af317c2d7f81128f334bcfe5780c6c2a515d5c96811aa0ddf8b5ee6b",
+          "rows": 200,
+          "rows_sha256": "d017c59b983990c45549e9f8848f23c4de4861425cfd5b178de37ec8ffb55ce2"
+        },
+        "trec": {
+          "zip_member": "data/trec.jsonl",
+          "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data/trec.jsonl",
+          "bytes": 6360293,
+          "sha256": "20a88e14f7442f58a39082cdd7396f1093ea8162da0a4ea7ead7d6757514c8f4",
+          "rows": 200,
+          "rows_sha256": "471044b06d66fa993c5d889d3e0720f61dbe1108b009549462ce880e46855ba7"
+        },
+        "triviaqa": {
+          "zip_member": "data/triviaqa.jsonl",
+          "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data/triviaqa.jsonl",
+          "bytes": 10300790,
+          "sha256": "ed2529de2e10b12c00f49981870c23c7c51667069cdd8d0740e1423ff337d7fa",
+          "rows": 200,
+          "rows_sha256": "befa56e438e6e239e9cdf8dc952ac14a3c7d1df646321ee8b3408383f558b78c"
+        },
+        "samsum": {
+          "zip_member": "data/samsum.jsonl",
+          "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data/samsum.jsonl",
+          "bytes": 7215647,
+          "sha256": "d435a4c7a05d2006872da8dd0c44c0a48648baa1ce4f62a4084d07aa7883f0cc",
+          "rows": 200,
+          "rows_sha256": "30399b3bd8cd0320cbfc147d5a20c8c0d1a56eab93edd487607bba8e4de39b21"
+        },
+        "passage_count": {
+          "zip_member": "data/passage_count.jsonl",
+          "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data/passage_count.jsonl",
+          "bytes": 13474970,
+          "sha256": "0455a8f1e8e99d63a86bdc6bdb8b943b22509e3102bbef65ce6794045e03bbcd",
+          "rows": 200,
+          "rows_sha256": "b9b0477ec592d1f45adfc984e6eccf7748e37f8268f6de27f5dac649a59bf0d1"
+        },
+        "passage_retrieval_en": {
+          "zip_member": "data/passage_retrieval_en.jsonl",
+          "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data/passage_retrieval_en.jsonl",
+          "bytes": 11285362,
+          "sha256": "0f34d2955bfc9bd21ccaa3f4c5aa4e41263aaf83d3fb6002ff7118c134f1eabd",
+          "rows": 200,
+          "rows_sha256": "c816ab67c2ab50fbd61636e2b6b8b221419f75b07bdc172fc6bc1b74d85aa9fe"
+        },
+        "lcc": {
+          "zip_member": "data/lcc.jsonl",
+          "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data/lcc.jsonl",
+          "bytes": 7248719,
+          "sha256": "a35809a88d899f61c116690b12f9e96d443238852cedc1a9fe48d85bff6f7aa1",
+          "rows": 500,
+          "rows_sha256": "3b8dddf8d912c6df487e081afaca6f0687be1ef89307f18ca0400946be0affb1"
+        },
+        "repobench-p": {
+          "zip_member": "data/repobench-p.jsonl",
+          "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data/repobench-p.jsonl",
+          "bytes": 25309838,
+          "sha256": "919a4439e2a84ebb25bacc39ac3b3269a7641af6e02ae205ed78d8c53dfe3568",
+          "rows": 500,
+          "rows_sha256": "4df61724eac8308e38acc608845057f6a3e6cdb832a9ea1c6313d2845fe46c5f"
+        }
+      },
+      "total_rows": 3750,
+      "data_dir": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/cache/extensions/longbench/5e628be450b7e67fb7ae6e201bd6d8f7056f7672/data",
+      "generation": "not run; no truncation or prompt changes"
+    }
+  },
+  "optional_metric_imports_online": {
+    "jieba": {
+      "importable": false,
+      "error": "ModuleNotFoundError(\"No module named 'jieba'\")"
+    },
+    "fuzzywuzzy": {
+      "importable": false,
+      "error": "ModuleNotFoundError(\"No module named 'fuzzywuzzy'\")"
+    },
+    "rouge": {
+      "importable": false,
+      "error": "ModuleNotFoundError(\"No module named 'rouge'\")"
+    }
+  },
+  "offline_verified_utc": "2026-11-23T15:01:53.947386+00:00",
+  "optional_metric_imports_offline": {
+    "jieba": {
+      "importable": false,
+      "error": "ModuleNotFoundError(\"No module named 'jieba'\")"
+    },
+    "fuzzywuzzy": {
+      "importable": false,
+      "error": "ModuleNotFoundError(\"No module named 'fuzzywuzzy'\")"
+    },
+    "rouge": {
+      "importable": false,
+      "error": "ModuleNotFoundError(\"No module named 'rouge'\")"
+    }
+  }
+}

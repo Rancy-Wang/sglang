@@ -8,7 +8,7 @@
 - 官方参考及用户 LoopVQ fork main：d5d58c83fe5bc9a4ce470ae96c69b55f085e2977。
 - 本地 SGLang：loopspec-test，915e79f4ce7dc08e7e980987e0c8729f523eb74b；包含 v0.5.22 基线 baa9befa381511cd4d56f83980951e5a45fffc6d。
 - 用户新约定：LoopVQ 的 origin 使用 git@github.com:Rancy-Wang/LoopVQ.git，test 用于开发/提交/push/pull；main 只作正式版本，晋升需明确批准。保留 mscheong01/LoopVQ 为 upstream。SGLang 仍仅通过 Rancy-Wang/sglang 的 loopspec-test 开发和远端同步，正式 loopspec 分支不变。
-- 统一候选轮次 **8/10（非VQ入口兼容修复，推理数学保持候选6）**。本任务的训练/评测脚本及推理代码候选修改加验证累计计数；跨阶段不重置，固定候选多项测试不重复计数。只读调查、写计划、纯环境准备不伪计代码轮次。
+- 统一候选轮次 **9/10（长实验编排与数据冻结，推理数学保持候选6）**。本任务的训练/评测脚本及推理代码候选修改加验证累计计数；跨阶段不重置，固定候选多项测试不重复计数。只读调查、写计划、纯环境准备不伪计代码轮次。
 - 主范围：Ouro-2.6B-Thinking、完整 R4，BF16 对照和纯 LoopVQ **0.5 bit（G16/c4）**。原计划0.25 bit移至后续，不在首期训练或评测。不运行 TaSQ 统计、TaSQ/TaSQ+LoopVQ。CQ可作后续附加对照，未列为必需工作。保留微调前码本用于诊断。
 - 用户验收口径：不要求跨机器答案或论文分数完全一致；必须记录真实准确率、差异和运行条件。吞吐是必需交付：bs=1/2/4/8/16分别与同机无LoopVQ的BF16普通AR比较。工程正确性测试不因容许采样差异而放宽。
 - 首期运行：TP/PP/DP=1，普通多请求 AR server，验证 eager 和 decode CUDA graph；按参考评测关闭 radix cache、chunked prefill 和 piecewise graph。显式禁止与 LoopSpec、DFLASH、recurrent-CDB 混用；关闭 LoopVQ 时现有功能必须回归通过。
@@ -385,3 +385,109 @@ common-shape在正式测量前对两方法、五档batch完成容量预检后冻
 6. 验证：本地语法/diff审查，Git loopspec-test同步；A10 GPU99隔离的现有CPU测试，实际GPU VQ核心/服务生命周期复验，保存命令/退出码/提交。固定feba71a892的已启动吞吐测量不与新源码混跑；精确记录运行时版本，修复不追认旧回归失败为通过。
 
 - 候选8本地三文件AST/diff检查exit0。候选7补充CPU回归中其余9文件共131测试全部exit0；decode锁测试用GPU99重试后13test/5errors，确认为MagicMock未配置属性truthy误入VQ，与前两个接口失败同源。为保持六个准确率服务和两套性能任务源码冻结，A10新建独立sglang-loopvq-validation clone，仅跟踪用户origin/loopspec-test，通过Git pull同步候选8；原sglang-loopspec-tp2保持feba71a892直至其作业完成。新验证进程显式PYTHONPATH和sglang.__file__指向验证clone，不修改旧进程源文件。
+
+- 候选8远端独立clone90bbb757ada完成：unittest163通过、2个CUDA-only跳过；backend pytest23通过、10subtests通过，全部exit0。新代码真实full-graph服务17case/72输出请求exit0，与候选6optimized graph的全部token/停止一致，abort/idle/释放/复用/flush通过；round8-serving-vs-round6.json保存比较。只在GPU4与本任务accuracy短时共卡做正确性验证，时间区间存round8-correctness-overlap.json；不计性能或ETA样本，验证服务已停止。GPU5性能服务始终独占。
+
+### 候选9/10：长实验自动衔接与扩展数据冻结
+
+1. 目的：让已授权的长输出完整协议在tmux中自动完成BF16→LoopVQ配对及汇总，并准备后续Thinking扩展的固定数据；不依赖交互终端持续手工切换。
+2. 步骤：读取已启动的BF16 paper-long完成标记/summary，验证真实PID、命令、空闲状态及GPU归属后仅停止该自有服务；确认GPU空闲，调用已冻结feba71a892仓库的a10_throughput_server.sh，在同GPU6启动VQ8/64/557568，实际测五档并汇总。容量不足的BF16 bs2以上明确requests_sent=0/N/A。另一独立数据程序下载GSM8K、MATH500、RULER corpus及LongBench指定revision并离线复读。
+3. 范围：SGLang任务目录a10_paperlong_pipeline.py及有必要的进程安全测试；LoopVQ/test的experiments/loopvq_reproduction/freeze_extension_data.py；本记录。推理源码保持候选8，实际性能服务的固定sourcefeba71a892保持不动，两个fork仅各自测试分支同步。
+4. 成功标准：监督器能识别等待/成功/失败，不覆盖已有测量、只管理已核实的自有PID、不把未运行当成功；真实原长度32768及2预热3测量不变，同GPU/代码/环境校验后生成JSON/CSV/W&B，容量N/A可追溯。数据revision/hash/行数和离线读取一致，原始语料不入Git/W&B。
+5. 风险：长任务中途崩溃、PID复用、他人后来占用GPU、网络中断；任一身份或资源检查不满足必须fail closed保留现场，不杀未知进程、不降长度、不升级环境包。64K扩展仍受当前实现限制，此轮不宣称支持。
+6. 验证：本地语法和进程/状态守卫的有意义测试、diff；经Git同步至独立验证clone，A10只读inspect已运行BF16状态，再在tmux启动监督器。数据线上下载/实际内容核验/新进程离线复验；后续实际切换、五档结果和退出码独立核实，不能把inspect当完整长协议通过。
+
+- 候选9数据冻结已通过：LoopVQ/test b5f821d（两端一致），AST/diff检查exit0；A10原eval环境在独立tmux依次online/offline均exit0，manifest状态verified_offline。GSM8K train7473/test1319，MATH500 500，RULER 6500中取官方顺序前40条niah_single_2构建语料，LongBench16任务3750条；全部revision、文件/内容hash及固定3-shot示例hash保存在evidence/a10/extensions-data-manifest.json。未生成扩展评测结果；jieba/fuzzywuzzy/rouge当前未安装，只记录缺项，不在运行中的accuracy环境改包。新增文件不属于现有run_evaluation recipe的source清单，既有驱动/任务/包/manifest未变。
+
+- 候选7正式common-shape矩阵已全部通过：同一A10 GPU5（GPU-82009e07-07c1-3a6c-5613-df2e45f63980）、固定feba71a892、同环境/2048输入fixture、512输出、prefix64/recent256、pool41984、optimized profile；每cell2预热+3测量，10cells共50次batch请求全部ok，所有测量target_batch_fraction=1.0。主指标为完整HTTP batch端到端output tok/s的三次中位数（包含prefill），不是纯decode吞吐。
+
+  | bs | BF16 tok/s | LoopVQ tok/s | LoopVQ/BF16 |
+  |---:|---:|---:|---:|
+  | 1 | 27.7824 | 25.4731 | 0.916882× |
+  | 2 | 51.1903 | 44.6318 | 0.871882× |
+  | 4 | 83.3295 | 77.6614 | 0.931979× |
+  | 8 | 128.5608 | 119.1218 | 0.926580× |
+  | 16 | 178.4257 | 157.9593 | 0.885295× |
+
+  全部加速比小于1，当前移植在这组短输出负载未取得速度提升；不由此推断尚未完成的论文长输出协议。测得whole-device显存峰值BF16约70542–70544MiB、VQ约32232–32234MiB；这是当前固定pool、模型与临时缓冲合计，不是单token KV压缩率。汇总exit0，W&B run bwuna24m；证据evidence/a10/common-shape-aggregate/{throughput.json,throughput.csv,wandb.json}与common-shape-matrix-provenance.json。最终服务PID1607168在身份、GPU归属与空闲指标核验后已正常停止。
+- 准确率仍在运行：2026-11-23T15:03:04Z快照共30个已保存正式响应、0失败，其中3条达到32768输出上限；未有完整benchmark cell可交付。evidence/a10/accuracy-progress-snapshot.json仅为进度，不能当准确率或最终ETA；VQ seed0还包含此前GPU4正确性短时共卡区间，不用该耗时做公平性能比较。完整30cells/4800 generations保持原计划；paper-long BF16首轮预热32768token已ok（2152.16s），其余重复和VQ尚在运行/等待。
+
+- 候选9监督器本地首次验证通过：`PYTHONDONTWRITEBYTECODE=1 python3 research/loopspec/experiments/2026-11-23-loopvq-reproduction/test_a10_paperlong_pipeline.py -v`，14/14、exit0；两新文件AST与diff检查exit0。覆盖PID复用、未知GPU进程、准确argv/模型/端口、pidfd仅向已核实父进程发SIGTERM、空闲指标、完整原长度结果、容量N/A、排他锁、只读inspect及拒绝覆盖未完成状态。旧BF16 manifest未封存start_ticks，监督器明确从首次接管开始记录身份，不补造启动时证据；实际A10接管及后续自动切换仍须分别验收。
+
+## 已实现代码导航
+
+本节描述本地 `90bbb757a` 的 standalone LoopVQ 实现，不新增运行行为或修改轮次。官方算法/源码、当前移植、算子对照、真实服务与完整 benchmark 是不同证据：代码导航说明实现位置，实测结论及运行时 SHA 以前面的实验记录和对应原始结果为准。已启动准确率、吞吐进程分别冻结在其记录的版本，不能把本地 HEAD 追认为运行版本。以下链接均相对于本记录，指向 SGLang 仓库内文件。
+
+### 入口与核心调用链
+
+```text
+--loopvq-codebook-dir + --ouro-decode-profile
+  → 参数兼容检查 → 固定显存预算 → LoopVQKVPool / LoopVQKVAllocator
+  → 加载 K/V bundle → 编码表、按深度切片的解码表、共享索引映射
+
+新请求：alloc_for_extend → 完整 R4 prefill → live BF16 attention
+        → 每层保存 raw K/V → 同一基础层四轮到齐 → coupled encode
+
+生成：alloc_for_decode → 分配 HP recent slot / 必要时 demote 最旧8个token
+      → 先编码 K/V，再发布位置映射 → 模型完整 R4 decode
+      → hf_reference 或 optimized attention → 第4轮 LM head
+
+结束/abort：等待先前 forward 的 stream event → 释放完整 owned row
+          → 回收 quant/prefix pages → 重置请求 ring → 复用 request slot
+```
+
+| 环节 | 关键文件 | 阅读重点 |
+| --- | --- | --- |
+| 显式启用与拒绝不支持配置 | [model.py](../../../../python/sglang/srt/arg_groups/fields/model.py)、[kv_cache_hook.py](../../../../python/sglang/srt/arg_groups/kv_cache_hook.py) | bundle目录、prefix/recent窗口、两种decode profile；TP/PP/DP/CP/DCP=1、BF16、page-size=8、无speculation/radix/chunked prefill等约束 |
+| 显存预算与实例化 | [pool_configurator.py](../../../../python/sglang/srt/model_executor/pool_configurator.py)、[kv_cache_configurator.py](../../../../python/sglang/srt/mem_cache/kv_cache_configurator.py) | `LoopVQPoolConfigurator`先扣固定HP窗口与码本，再计算quant容量；构造专用pool/allocator |
+| bundle布局与加载 | [loopvq_pack.py](../../../../python/sglang/srt/mem_cache/loopvq_pack.py)、[loopvq_codebook.py](../../../../python/sglang/srt/mem_cache/loopvq_codebook.py) | `code_layer_of`、`step_of`、`slot_codebooks`与严格identity/G16验证 |
+| 模型接线 | [ouro.py](../../../../python/sglang/srt/models/ouro.py)、[loopvq_backend.py](../../../../python/sglang/srt/layers/attention/loopvq_backend.py) | query沿用native RoPE；缓存保存raw K；prefill/decode分别分派，模型仍执行完整4轮 |
+| 缓存所有权与producer | [loopvq_pool.py](../../../../python/sglang/srt/mem_cache/loopvq_pool.py)、[loopvq_allocator.py](../../../../python/sglang/srt/mem_cache/loopvq_allocator.py)、[encode.py](../../../../python/sglang/kernels/ops/loopvq/encode.py) | 共享quant索引、独立HP数据、跨轮暂存、ring demotion与编码后发布 |
+| attention消费者 | [official_attention.py](../../../../python/sglang/kernels/ops/loopvq/official_attention.py)、[official_metadata.py](../../../../python/sglang/kernels/ops/loopvq/official_metadata.py)、[attention.py](../../../../python/sglang/kernels/ops/loopvq/attention.py) | optimized的分段metadata与60-slot scratch；保留HF参考两遍路径用于核对 |
+
+### G16 / c4 为什么是0.5 bit
+
+Ouro有48个基础层、4轮，逻辑KV slot为 `s = depth * 48 + layer`，共192个。一个LoopVQ向量由同一token、基础层和head的4个channel跨4轮组成，维数 `G = c * Tc = 4 * 4 = 16`；256个centroid对应一个uint8索引，所以索引payload是 `8 / 16 = 0.5 bit/标量`。page-size=8则表示分配/flush的token粒度，与8-bit索引不是同一概念。
+
+向量排列是channel-major、depth-minor：深度 `m` 读取centroid位置 `m, m+4, m+8, m+12`。四轮共享同一个索引，但读取不同分量，不能理解为四轮共享相同KV值。加载后encode表为 `[48,16,32,256,16]`，decode表为 `[192,16,32,256,4]`；quant arena的物理层数只有48，HP arena仍有192个独立深度。
+
+K/V索引合计每token `48 * 16 * 32 * 2 = 49,152 bytes`，是完整BF16 KV的1/32。该比例不包含BF16 prefix/recent窗口、768MiB的K/V encode+decode表、模型权重、metadata和prefill暂存，不能直接当作整个服务的显存压缩比。
+
+### 训练产物到服务加载
+
+训练在用户的独立 `LoopVQ/test` 仓库完成：`experiments/loopvq_reproduction/run_training.py` 固定数据、模型和配方，调用 `calibration/build_ouro_bundle.py` 收集各slot的K/V与梯度、逆RoPE并拟合Fisher加权k-means；`calibration/finetune_codebook.py` 冻结模型权重，仅通过clean/quant KL更新K/V码本。nearest-centroid assignment不求导，重建通过可微gather和两阶段backward传回centroid。
+
+最终bundle的 `codebook.pt` / `vq_v_codebook.pt` 是 `torch.save` 字典，包含FP16 centroid、布局、identity forward/inverse和zero mean；两个identity rotation文件及 `build_info.json` 保留官方导出格式。另存的恢复checkpoint包含FP32训练码本、Adam、RNG、epoch/step和best state，不是服务加载文件。
+
+Target实际只读取K/V两份码本；loader在CPU校验完整slot/head覆盖、256×16 FP16 centroid和纯G16/c4/R4约束，再建立GPU表。TaSQ变换、非零mean、归一化、额外scale等被显式拒绝。训练沿用官方HF外层threshold=1.0 readout；线上服务与HF probe明确取最终第4轮LM head，两者不作代码层面严格等价声明。
+
+### Prefill、decode与缓存生命周期
+
+Prefill只接受完整新prompt，分配逻辑顺序为protected prefix、quant中段、recent尾部。当前attention读取live BF16 K/V，量化缓存用于后续前向；前3轮的compact raw K/V留在GPU，到第4轮同一基础层到齐后共同编码并释放暂存。该暂存峰值约1.125MiB/输入token，因此长decode算子通过不等于同长度fresh prefill容量通过。
+
+Decode每个请求每步增加一个HP token。recent ring比配置窗口多8个位置；达到阈值时，将最旧8个token的所有深度联合编码。`alloc_for_decode`先写完整K/V索引，随后更新请求位置映射；分配和flush位于CUDA graph之外。`encode.py`直接读取四轮张量或HP arena并scatter索引，不展开完整历史解压KV。
+
+通用入口在 [allocation.py](../../../../python/sglang/srt/mem_cache/allocation.py) 仅在专用allocator类标记严格为True时切入LoopVQ。完成/abort在 [common.py](../../../../python/sglang/srt/mem_cache/common.py) 按完整owned row释放，避免quant尾部半页按逻辑位置对齐造成重复释放或泄漏；allocator按物理页去重回收quant/prefix，recent是请求专属ring，释放时重置游标。当前不支持共享prefix、CPU KV offload或缓存迁移。
+
+### Attention与CUDA graph边界
+
+`hf_reference` 使用自写两遍混合attention，保留QK、scaled score、normalized probability的BF16舍入边界。`optimized` 使用移植的官方G16 MODE1 quant CUDA、identity HP stage1及统一LSE reducer：[official_quant_cuda.py](../../../../python/sglang/kernels/ops/loopvq/official_quant_cuda.py)、[official_hp.py](../../../../python/sglang/kernels/ops/loopvq/official_hp.py)、[official_reduce.py](../../../../python/sglang/kernels/ops/loopvq/official_reduce.py)。其算术与HF参考profile不同；norm、query RoPE、SiLU和prefill仍保持本仓库的HF语义，并未整体替换为官方模型实现。
+
+优化路径预分配HP12＋quant48共60个split slots；每层将LSE重置为负无穷，空段不会复用旧输出。slot0在GPU上将位置有序的请求KV列表拆成quant与HP两段，其他191个slot复用metadata；quant与HP保留各自正确的绝对RoPE位置。B=1用R1，其余用R2，实际split数按组内最长序列和SM数量确定。固定sm80、CAP2048和当前context≤40960约束，JIT及shared-memory attribute设置必须在capture之前完成。
+
+[decode_cuda_graph_runner.py](../../../../python/sglang/srt/model_executor/runner/decode_cuda_graph_runner.py) 将capture/padding写入保留的HP dummy page，metadata把dummy请求视为空序列。[scheduler.py](../../../../python/sglang/srt/managers/scheduler.py) 记录forward完成event，在可能demote/free/reuse缓存前建立stream等待；pool的 `wait_pending_forward` 是GPU stream依赖，不是每步强制CPU同步。[recurrent_runner.py](../../../../python/sglang/srt/model_executor/recurrent_runner.py) 显式排除LoopVQ，当前服务不联合启用LoopSpec。
+
+### 官方优化尚未整体移植的部分
+
+- Prefill保留本仓库的HF语义两遍kernel；未切换为官方服务脚本默认的FA3或官方Triton单遍在线softmax。
+- Producer是专用Triton Tensor Core融合实现，并非官方encoder原样移植。当前16-token tile、现场计算centroid norm、一次FP16 MMA并直接scatter；官方G16 producer使用64-token tile、预存norm、FP16高低两部分MMA及后续scatter。已测真实数据编码一致不代表所有极小值/near-tie输入都逐位等价。
+- 未整体移植官方GPU flush plan/apply；当前分配和demotion含CPU逐请求规划。也未移植CPU stash预算、chunked-prefill shadow、多bit宽、多模型及TaSQ路径。
+- R1/R2与动态split受batch/配对长度影响，不承诺跨batch逐位相同。deterministic/split-tile/static-split选项未纳入当前支持声明，不能套用generic BF16路径的batch-invariance保证。
+
+因此common E2E包含两方法共同的prefill成本，以及LoopVQ特有的暂存、编码、周期flush和调度成本。正式加速比表示当前移植的同机配对结果，不能等同于纯decode kernel加速，也不能把所有差异都归因KV压缩；未有独立阶段GPU计时时，不根据HTTP总时长推断各环节占比。
+
+### 验证入口与证据范围
+
+[test_loopvq_core.py](test_loopvq_core.py) 覆盖布局、loader、ring/free/reuse及参考算子；[test_loopvq_wiring.py](test_loopvq_wiring.py) 覆盖参数解析和预算；[test_loopvq_official_kernels.py](test_loopvq_official_kernels.py) 使用真实码本、原官方模块及CPU metadata oracle核对优化算子/graph。上述算子测试不替代真实模型准确率。
+
+[baseline_probe.py](baseline_probe.py) 明确HF最终第4轮readout并保存token/logprob；[serving_probe.py](serving_probe.py) 核对真实服务的eager/full、padding、边界、abort和复用；[benchmark_throughput.py](benchmark_throughput.py) 校验实际batch、固定长度、graph状态和同机配对。已通过/失败/未运行状态均沿用本记录中的具体提交、命令和证据，不把接口测试、短输出审计或算子通过写成完整benchmark完成。
