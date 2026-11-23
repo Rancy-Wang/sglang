@@ -1,0 +1,119 @@
+{
+  "status": "ok",
+  "method": "bf16",
+  "source_sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+  "server_pid": 1690520,
+  "gpu_uuid": "GPU-82009e07-07c1-3a6c-5613-df2e45f63980",
+  "total_ut_steps": 4,
+  "request_sha256": "5c524b16a4198cc58339dd80b2c5a6cf95a4001a077a132962e87fe0ea312db1",
+  "sampling_params": {
+    "temperature": 0.0,
+    "max_new_tokens": 512,
+    "ignore_eos": true,
+    "stream_interval": 1
+  },
+  "bs": 16,
+  "input_tokens": 2048,
+  "output_tokens": 512,
+  "prefix_tokens": 64,
+  "recent_tokens": 256,
+  "warmups": 2,
+  "measurements": 3,
+  "median_wall_s": 40.237467,
+  "median_output_tok_s": 203.59134435574683,
+  "records": [
+    {
+      "phase": "warm1",
+      "wall_s": 40.870282,
+      "output_tok_s": 200.4390378319386,
+      "sse_sha256": "16ef594e597131f5c4d45426af3d1fb50deb33690ecf41eb97254eb7c2f97ddb",
+      "sse_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-bf16-common-warm1.sse",
+      "requests": 16,
+      "prompt_tokens_each": 2048,
+      "output_tokens_each": 512,
+      "finish_reason": "length",
+      "decode_log_rows": 510,
+      "target_batch_fraction": 1.0,
+      "all_decode_cuda_graph": true,
+      "log_byte_range": [
+        21349,
+        100737
+      ]
+    },
+    {
+      "phase": "warm2",
+      "wall_s": 40.225886,
+      "output_tok_s": 203.64995813889593,
+      "sse_sha256": "f5bf0b571022a4e740c7208ddda856efa8a6dbdd984639d2fc5970aa513cd2cd",
+      "sse_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-bf16-common-warm2.sse",
+      "requests": 16,
+      "prompt_tokens_each": 2048,
+      "output_tokens_each": 512,
+      "finish_reason": "length",
+      "decode_log_rows": 513,
+      "target_batch_fraction": 1.0,
+      "all_decode_cuda_graph": true,
+      "log_byte_range": [
+        100737,
+        180579
+      ]
+    },
+    {
+      "phase": "measure1",
+      "wall_s": 40.237467,
+      "output_tok_s": 203.59134435574683,
+      "sse_sha256": "bd27e217afd30115fe244e8fc69072d84444b779d603d80b193b625c08ca8793",
+      "sse_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-bf16-common-measure1.sse",
+      "requests": 16,
+      "prompt_tokens_each": 2048,
+      "output_tokens_each": 512,
+      "finish_reason": "length",
+      "decode_log_rows": 512,
+      "target_batch_fraction": 1.0,
+      "all_decode_cuda_graph": true,
+      "log_byte_range": [
+        180579,
+        260269
+      ]
+    },
+    {
+      "phase": "measure2",
+      "wall_s": 40.247406,
+      "output_tok_s": 203.54106796348566,
+      "sse_sha256": "c53755fab39cf3f33e8db3fc4797cd8c55d7d2655172d957746a365254ae669d",
+      "sse_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-bf16-common-measure2.sse",
+      "requests": 16,
+      "prompt_tokens_each": 2048,
+      "output_tokens_each": 512,
+      "finish_reason": "length",
+      "decode_log_rows": 512,
+      "target_batch_fraction": 1.0,
+      "all_decode_cuda_graph": true,
+      "log_byte_range": [
+        260269,
+        339959
+      ]
+    },
+    {
+      "phase": "measure3",
+      "wall_s": 40.233184,
+      "output_tok_s": 203.61301755287377,
+      "sse_sha256": "474a44a63e9c6b3165e5469ce537a71f08ab34c2cd2347c2eccc18db6b7fb9f7",
+      "sse_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-bf16-common-measure3.sse",
+      "requests": 16,
+      "prompt_tokens_each": 2048,
+      "output_tokens_each": 512,
+      "finish_reason": "length",
+      "decode_log_rows": 512,
+      "target_batch_fraction": 1.0,
+      "all_decode_cuda_graph": true,
+      "log_byte_range": [
+        339959,
+        419649
+      ]
+    }
+  ],
+  "limitations": [
+    "Official reference Torch/model math/prefill differ from target; this is a serving-stack comparison, not a single-kernel ablation."
+  ]
+}

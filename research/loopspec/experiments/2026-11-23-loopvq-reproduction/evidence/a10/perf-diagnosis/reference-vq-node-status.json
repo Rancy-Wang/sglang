@@ -1,0 +1,59 @@
+{
+  "time_utc": "2026-11-23T16:43:22.015020+00:00",
+  "generation_validation": [
+    {
+      "bs": 16,
+      "phase": "warm1",
+      "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-vq-node-bs16-warm1.sse",
+      "sha256": "418b6cef52b0e400b252685492621582bb8c530438949d8fc1cb06b554d590ab",
+      "requests": 16,
+      "tokens_per_request": 512,
+      "status": "ok"
+    },
+    {
+      "bs": 16,
+      "phase": "warm2",
+      "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-vq-node-bs16-warm2.sse",
+      "sha256": "e63950f0657c6de63f97f3d9adfdb449411d14d3eaa4ae2630a8a4e85497d67d",
+      "requests": 16,
+      "tokens_per_request": 512,
+      "status": "ok"
+    },
+    {
+      "bs": 16,
+      "phase": "profile",
+      "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-vq-node-bs16-profile.sse",
+      "sha256": "22bfed1f5224e89e17c73c2b167302bb36d115844f244f4f8f2013da2b612922",
+      "requests": 16,
+      "tokens_per_request": 512,
+      "status": "ok"
+    }
+  ],
+  "profiler_client_exit": 28,
+  "nsys_wrapper_exit": 137,
+  "trace_status": "unusable_export_stalled",
+  "nsys_report_exists": false,
+  "nsys_report_size_bytes": null,
+  "nsys_log_tail": [
+    "[1/1] [==18%                       ] reference-vq-node-bs16.nsys-rep",
+    "[1/1] [==19%                       ] reference-vq-node-bs16.nsys-rep",
+    "[1/1] [==20%                       ] reference-vq-node-bs16.nsys-rep[2026-11-23 16:35:44] INFO:     127.0.0.1:59486 - \"GET /metrics HTTP/1.1\" 200 OK",
+    "[2026-11-23 16:36:55] INFO:     127.0.0.1:32798 - \"GET /metrics HTTP/1.1\" 200 OK",
+    "[2026-11-23 16:36:56] INFO:     127.0.0.1:32812 - \"GET /metrics HTTP/1.1\" 200 OK",
+    "[2026-11-23 16:36:57] SIGTERM received. signum=None frame=None. Draining requests and shutting down...",
+    "[2026-11-23 16:36:58] Gracefully exiting... Remaining number of requests 0. Remaining requests remaining_rids=[].",
+    "The target application terminated. One or more process it created re-parented.",
+    "Waiting for termination of re-parented processes.",
+    "Use the `--wait` option to modify this behavior.",
+    "/dvs/p4/build/sw/devtools/Agora/Rel/CUDA13.4/QuadD/Common/AgentAPI/Src/SessionImpl.cpp(21): rpc Shutdown(.Agent.ShutdownRequest) returns (.Agent.EmptyMessage);",
+    " is canceled because the timeout period is expired (30 sec)."
+  ],
+  "diagnostic_processes": {
+    "1724943": false,
+    "1724902": false,
+    "1724917": false,
+    "1731677": false
+  },
+  "gpu5_compute_apps": [],
+  "limitation": "Three generation requests validated; stop_profile timed out while report export stalled at 20%. No official kernel timing inference is permitted. Nsight removed its empty report during shutdown; request artifacts and logs remain."
+}

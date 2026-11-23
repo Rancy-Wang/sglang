@@ -1,0 +1,56 @@
+{
+  "vq-bs1": {
+    "method": "vq",
+    "bs": 1,
+    "trace_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/vq-common.1.sqlite",
+    "gpu_event_count": 3755123,
+    "gpu_devices": [
+      [
+        0
+      ]
+    ],
+    "kernel_sum_ms": 20365.009917,
+    "graph_kernel_sum_ms": 19565.738696,
+    "offgraph_kernel_sum_ms": 799.271221,
+    "gpu_event_span_ms": 24953.307461,
+    "gpu_busy_union_ms": 20337.373469,
+    "gpu_idle_within_event_span_ms": 4615.933992,
+    "graph_count": 511,
+    "graph_kernel_counts": [
+      7305
+    ],
+    "graph_span_sum_ms": 19728.992725,
+    "intergraph_gap_sum_ms": 4463.247545,
+    "intergraph_gap_median_ms": 9.3783985,
+    "intergraph_gap_max_ms": 14.331126,
+    "graph_span_median_ms": 38.584662,
+    "note": "Nsight node tracing perturbs timing. Graph gap includes sampling/allocator/encoding GPU work and CPU gaps; it is not all CPU overhead. GPU busy union combines kernel and memcpy activities; it is not E2E request time."
+  },
+  "vq-bs16": {
+    "method": "vq",
+    "bs": 16,
+    "trace_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/vq-common.2.sqlite",
+    "gpu_event_count": 4056271,
+    "gpu_devices": [
+      [
+        0
+      ]
+    ],
+    "kernel_sum_ms": 51108.303968,
+    "graph_kernel_sum_ms": 39979.610073,
+    "offgraph_kernel_sum_ms": 11128.693895,
+    "gpu_event_span_ms": 57825.013252,
+    "gpu_busy_union_ms": 51047.105085,
+    "gpu_idle_within_event_span_ms": 6777.908167,
+    "graph_count": 511,
+    "graph_kernel_counts": [
+      7689
+    ],
+    "graph_span_sum_ms": 40090.066355,
+    "intergraph_gap_sum_ms": 6935.366312,
+    "intergraph_gap_median_ms": 14.377432,
+    "intergraph_gap_max_ms": 19.644516,
+    "graph_span_median_ms": 78.595759,
+    "note": "Nsight node tracing perturbs timing. Graph gap includes sampling/allocator/encoding GPU work and CPU gaps; it is not all CPU overhead. GPU busy union combines kernel and memcpy activities; it is not E2E request time."
+  }
+}

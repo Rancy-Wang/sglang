@@ -1,0 +1,58 @@
+{
+  "bf16-bs1": {
+    "method": "bf16",
+    "bs": 1,
+    "trace_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/bf16-common.1.sqlite",
+    "gpu_event_count": 3553622,
+    "gpu_devices": [
+      [
+        0
+      ]
+    ],
+    "kernel_sum_ms": 19093.791617,
+    "graph_kernel_sum_ms": 18330.463505,
+    "offgraph_kernel_sum_ms": 763.3281119999992,
+    "gpu_event_span_ms": 19251.810036,
+    "gpu_busy_union_ms": 19048.332611,
+    "gpu_idle_within_event_span_ms": 203.477425,
+    "graph_count": 511,
+    "graph_kernel_counts": [
+      6919
+    ],
+    "graph_span_sum_ms": 18483.199803,
+    "intergraph_gap_sum_ms": 35.408917,
+    "intergraph_gap_median_ms": 0.068703,
+    "intergraph_gap_max_ms": 0.237279,
+    "graph_span_median_ms": 36.192149,
+    "note": "Nsight node tracing perturbs timing. Graph gap includes sampling/allocator/encoding GPU work and CPU gaps; it is not all CPU overhead. GPU busy union combines kernel and memcpy activities; it is not E2E request time.",
+    "nongraph_note": "Nsight stores graphId=NULL outside graphs; offgraph = all kernels minus graph kernels, including prefill."
+  },
+  "bf16-bs16": {
+    "method": "bf16",
+    "bs": 16,
+    "trace_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/bf16-common.2.sqlite",
+    "gpu_event_count": 3770207,
+    "gpu_devices": [
+      [
+        0
+      ]
+    ],
+    "kernel_sum_ms": 46493.903214,
+    "graph_kernel_sum_ms": 36251.528604,
+    "offgraph_kernel_sum_ms": 10242.374609999999,
+    "gpu_event_span_ms": 46636.460249,
+    "gpu_busy_union_ms": 46413.329873,
+    "gpu_idle_within_event_span_ms": 223.130376,
+    "graph_count": 511,
+    "graph_kernel_counts": [
+      7303
+    ],
+    "graph_span_sum_ms": 36366.110366,
+    "intergraph_gap_sum_ms": 35.660758,
+    "intergraph_gap_median_ms": 0.069888,
+    "intergraph_gap_max_ms": 0.078336,
+    "graph_span_median_ms": 70.902654,
+    "note": "Nsight node tracing perturbs timing. Graph gap includes sampling/allocator/encoding GPU work and CPU gaps; it is not all CPU overhead. GPU busy union combines kernel and memcpy activities; it is not E2E request time.",
+    "nongraph_note": "Nsight stores graphId=NULL outside graphs; offgraph = all kernels minus graph kernels, including prefill."
+  }
+}

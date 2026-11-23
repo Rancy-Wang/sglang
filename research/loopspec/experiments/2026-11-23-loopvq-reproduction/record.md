@@ -416,6 +416,116 @@ common-shape在正式测量前对两方法、五档batch完成容量预检后冻
 
 - 候选9 A10接管已验收：监督器提交4593859828e5d64f9998bdbf39e5788d10370ea1，仅独立validation clone同步；原性能/accuracy checkout仍为feba71a892。只读`--inspect` exit0、返回waiting。首次使用loopvq-build的Conda Python被Linux pidfd前置检查拒绝（exit1，日志paperlong-pipeline-r9.log，无服务操作、无status.json）；原样源码改用现场确认具备两个pidfd接口的`/usr/bin/python3` 3.12.3，未改包/推理环境/源码，已通过实际PID/端口/GPU/环境/SHA核查并进入waiting_for_bf16。tmux窗口paperlong-pipeline-r9-system，监督器PID1619623；状态A10 results/throughput-round7/paper-long/pipeline/status.json，日志logs/paperlong-pipeline-r9-system.log。此状态只证明已接管等待，BF16→VQ切换和完整长矩阵仍待运行验收；不标为已完成。evidence/a10/round9-{handoff,bf16-adoption}.json封存本次快照。六个主accuracy服务全部health200、client尚无退出标记；GPU5已释放。之后不要pull修改进入正在运行的冻结checkout；优先读取原tmux/进程/状态再续办，禁止重复启动。
 
+### 性能差距诊断（既有候选只读分析与剖析，未修改推理源码）
+
+用户要求解释论文加速而当前common-shape小于1的原因，并核实是否移植不足。
+
+1. 目的：区分论文协议差异、短上下文固有成本与当前实现的可修复额外开销；不能用工程正确性通过替代性能支持完备。
+2. 步骤：核对原论文图表与官方脚本；从现有raw记录比较TTFT/TPOT；在已释放的GPU5用冻结feba71a892服务做BF16/VQ、bs1/16的相同请求剖析，拆分kernel、H2D/同步与GPU空隙。
+3. 范围：现有serve/HTTP profiler接口及外部Nsight工具，诊断日志另存；六个accuracy worker与GPU6长协议继续原样运行，不改源码/量化/模型/评分。
+4. 成功标准：每个原因标明代码或实测证据与影响范围，明确尚未量化部分；profiler数据只用于归因，不能覆盖无profiler的正式吞吐表。
+5. 风险：profiling本身扰动延迟、CUDA graph只显示聚合launch、首次JIT与warmup混入；先预热、采集graph节点并单列结果，必要时缩小诊断采集范围而不改变正式协议。
+6. 验证：同一GPU/源码/环境、fixture与输出长度；保存实际服务PID/config、profile请求/退出码、trace及逐类汇总。任何后续源码优化才进入下一候选，预算当前仍9/10。
+
+协议纠正：重新核对论文图14后，Ouro-2.6B Thinking图展示2K输入/4K、8K、16K输出；当前名为paper-long的2048/32768来自官方run_efficiency.sh默认，不是逐图同形状复现。保留已启动实验与路径名，但报告必须标为“官方脚本长输出设置”，不能把32768称作图14唯一论文长度。当前2048/512表本来即独立common-shape协议，不能与图中峰值直接对比。
+
+**论文图表、bit与峰值口径（已核原PDF图像）。**
+
+- [PDF第17页 Fig.14](https://arxiv.org/pdf/2611.05304#page=17)：Ouro-2.6B-Thinking、单RTX 6000 Ada 48GB，横轴为batch size，三个形状是2K输入/4K、8K、16K输出；效率窗口为8 sink/64 recent。
+- 图上5.0×、5.2×、6.1×均标在红色实线菱形的**0.25-bit**峰值，量化batch分别64、64、32。它们比较各方法容量内的峰值，不是同batch倍数，也不是本次0.5-bit的成绩或验收目标；在论文该GPU和这组三种长度下，BF16只容纳1至3条长请求。
+- [PDF第16页 Fig.13](https://arxiv.org/pdf/2611.05304#page=16)同模型、同RTX 6000 Ada、decode batch1给出下表；论文并未声称短context必然加速。
+
+| bit | 1K context延迟变化 | 8K | 16K |
+| --- | --- | --- | --- |
+| 0.5 | +3% | −18% | −35% |
+| 0.25 | +3% | −19% | −36% |
+
+论文A100补充实验是**1.4B-Thinking/A100 40GB**（PDF第15–16页 Fig.11–12），不能当作当前2.6B-Thinking/A100 80GB的同硬件结果。
+官方[run_efficiency.sh:L83](../../../../../LoopVQ/experiments/loopvq_efficiency/scripts/run_efficiency.sh#L83)默认2048/32768，但外层[run.sh:L43–57](../../../../../LoopVQ/experiments/loopvq_efficiency/scripts/run.sh#L43)默认2048/4096，并以注释称32768为最终长度；**脚本注释与发布图14实际展示形状不等同**。
+本节据原图纠正前文依据该注释所写的“最终figure为2K→32K”：已启动`paper-long`的2048/32768不变，报告名称为“官方脚本长输出设置”，不声称逐图同形状复现；common-shape仍是独立2048/512、64/256协议。
+
+**计时口径与已完成实测。**
+
+官方[bench_point.py:L11–14](../../../../../LoopVQ/experiments/loopvq_efficiency/scripts/bench_point.py#L11)以`bs*(input+output)/HTTP wall`为E2E throughput；当前以`bs*output/HTTP wall`为主指标。同形状配对的speedup相同，不能用分子定义差异消掉当前小于1的结果。
+当前五档speedup为0.916882/0.871882/0.931979/0.926580/0.885295，实际target batch覆盖率均1.0；[完整汇总](evidence/a10/common-shape-aggregate/throughput.json)的首尾档如下（BF16→VQ）：
+
+| batch | TTFT（秒） | 客户端TPOT（毫秒） |
+| --- | --- | --- |
+| 1 | 0.685730 → 0.716016 | 34.7225 → 37.9324 |
+| 16 | 8.554697 → 8.965762 | 73.1569 → 83.9468 |
+
+所有batch的VQ客户端TPOT也更慢，故**不能只归因prefill，也不能归因未凑齐目标batch**。TTFT/TPOT是客户端SSE观察，不是GPU阶段耗时；不能据此虚构kernel占比。当前2次同形状预热+3次median，与官方常规1024/16预热后单次目标测量也须分别记录。
+
+**源码事实与待验证归因。**
+
+- 官方BF16 prefill选FA3；VQ的Triton wrapper在fresh prefill调用同类FlashAttention varlen：[配置](../../../../../LoopVQ/experiments/loopvq_efficiency/scripts/run_efficiency.sh#L206)、[调用](../../../../../LoopVQ/python/sglang/srt/layers/attention/triton_backend.py#L683)。当前两边prefill仍是保留QK/scale/normalized-prob BF16舍入的[两遍attention](../../../../python/sglang/kernels/ops/attention/ouro_attention.py#L70)，`optimized`未整体替换prefill。
+- 当前[Ouro模型](../../../../python/sglang/srt/models/ouro.py#L30)保留native RoPE和分步SiLU乘法；RMSNorm已经是带`cast_x_before_out_mul=True`的fused kernel，不能笼统称为全部未融合。共同成本会稀释attention收益，但共同加同样成本本身不能解释从加速翻成减速。
+- BF16最大split8/VQ最大split48沿官方配置；VQ已经包含R1/R2共享RoPE/codebook路径。最大split数不等于有效split数，实际按context、batch与SM数量决定：[attention分派](../../../../python/sglang/kernels/ops/loopvq/official_attention.py#L51)、[metadata](../../../../python/sglang/kernels/ops/loopvq/official_metadata.py#L47)。
+- 官方[FA3 wrapper](../../../../../LoopVQ/python/sglang/jit_kernel/flash_attention_v3.py#L72)允许CUDA≥12.3的SM8/SM9；不能依据旧“Hopper+”注释断言A100/Ada未用FA3。具体community kernel或sgl_kernel fallback须有运行时证据，源码配置不证明论文二进制来源。
+- 采样前的待验证假设：common只遍历约2K–2.5K context，64/256窗口名义保留320而非72 tokens，量化查表/RoPE、HP attention、reduce、编码/flush等成本可能尚未被历史KV读取节省覆盖。当时尚无独立GPU计时；下方node/graph实测更新此判断，不将未量化机制直接认作根因。
+- 归因顺序：GPU5配对profile拆分上述VQ特有成本、BF16 attention、共同算子和CPU间隙；再检查较长context的转折。官方reference与target同卡同shape/window配对、各方法容量峰值测试分别报告，不改写当前common结果；FA/模型算术切换须作为后续独立候选，不能替换冻结准确率路径。
+
+**Nsight node四cell实测诊断（更新以上待验证假设）。**
+
+A10 GPU5、Nsight Systems 2026.3.2，BF16/VQ分别采集batch1和16的2048输入/512输出请求，每cell先做2次同形状预热。两臂固定推理提交`feba71a8927502fd334a94a86a6d312ff3f4e543`、同GPU UUID/模型/环境、完整R4、prefix64/recent256、`optimized`及full decode graph；实际请求均验证512token、finish length与`[DONE]`。服务manifest、请求验证及原始CSV见[evidence/a10/perf-diagnosis](evidence/a10/perf-diagnosis/)；[kernel-comparison.json](evidence/a10/perf-diagnosis/kernel-comparison.json)保存逐类汇总、调用数、来源SHA256及口径限制。
+
+下表单位为秒，全部是**Nsight node采样内的累计GPU kernel时长，不是请求wall time，也不是无profile吞吐**。矩阵类含cuBLAS split-K归并；它不能误计为attention reduce。公共算子类含矩阵计算、HF norm、HF prefill及逐元素/RoPE/SiLU符号族，少量同名调度算子无法仅凭符号分离。
+
+| kernel类别 | BF16 bs1 | VQ bs1 | BF16 bs16 | VQ bs16 |
+| --- | ---: | ---: | ---: | ---: |
+| Decode attention合计 | 3.191 | 4.361 | 19.482 | 23.203 |
+| 其中VQ quant主核 | — | 3.107 | — | 17.580 |
+| 其中VQ HP attention | — | 0.794 | — | 4.986 |
+| VQ encoder（prefill＋flush） | — | 0.057 | — | 0.697 |
+| VQ tier metadata | — | 0.0037 | — | 0.0054 |
+| KV写入 | 0.182 | 0.196 | 0.278 | 0.263 |
+| 公共模型算子＋prefill | 15.675 | 15.690 | 26.670 | 26.606 |
+| 全部kernel累计 | 19.094 | 20.365 | 46.494 | 51.108 |
+
+- BF16 decode attention为stage1＋stage2；VQ为quant＋HP＋reduce＋LSE清零。bs1增加1.171秒、36.7%，解释全部kernel增量的**92.1%**；bs16增加3.721秒、19.1%，解释全部kernel增量的**80.6%**。
+- bs16的quant主核较BF16 stage1节省1.501秒，但HP attention花费4.986秒，超过这部分节省。因此这两个短context cell的attention消费者尚无净收益，不能只归因编码器或prefill。
+- Encoder仅占VQ全部kernel时间的0.28%/1.36%，metadata也很小；先前对其为主要热点的猜测未获此次采样支持。公共模型算子两臂基本持平：共享HF算术会限制可加速部分，但不能解释这里的配对增量。
+- 四cell均有511次graph replay；decode各attention核均98,112次，即511×192个R4 slot。bs1有1次prefill，bs16有4次prefill；VQ encoder分别222次（96次prefill＋63×2次flush）、510次（4×96＋63×2），与完整请求生命周期吻合。SQLite确认各graph节点数分别为BF16 6,919/7,303、VQ 7,305/7,689，不能将本次结果归因为graph未生效或遗漏循环层。
+- 调度额外操作确实存在：bs16 H2D次数52→8,276，普通CUDA kernel启动30,072→110,135；但H2D本身累计GPU时间只有9.1毫秒。VQ新增大量stream同步，同时event同步API累计驻留时间减少（调用次数未减少）；同步API时长包含GPU执行，不能相加或直接认作新增CPU开销。
+
+[BF16时间线](evidence/a10/perf-diagnosis/bf16-timeline-summary.json)和[VQ时间线](evidence/a10/perf-diagnosis/vq-timeline-summary.json)保留graph内/外kernel、GPU busy union和graph间隔。graph外应按全部kernel减graph kernel计算，Nsight的非graph行`graphId`为NULL，不能用`graphId=0`筛选。**Node tracing会放大stream同步相关扰动，graph间隔还包含sampling、分配和编码工作，不能直接当作正常推理CPU损失；GPU busy union/event span也不等于客户端wall time。**采集/导出区间不能作为生成耗时。后续graph粒度低开销bs16复核已完成，见下表和light-comparison.json，仍不将间隔直接认作正常CPU损失。正式无profile的五档speedup表保持原结果，不能用上述kernel比值替换。
+
+**补充验证计划：官方服务栈同卡反事实。** 继续使用已释放的GPU5，冻结官方LoopVQ `test` 的原始 `python/` 与 `serve_method.sh`（b5f821d的这两个范围与d5d58c83一致），reference独立环境；两臂同模型/bundle、完整R4、同一2048/512的bs16请求、64/256窗口、41984容量、40960声明context、8192 prefill预算及decode graph。官方BF16 prefill配置FA3、VQ配置Triton wrapper，split8/48；每臂2预热＋3次无profiler测量，保存SSE、curl wall、实际config/PID、日志区间与batch证据。清理外部VQ/stash/split覆盖，固定官方默认GPU stash与R2门槛；不把target专用manifest字段伪造到reference。该对照比较完整官方服务栈与当前移植，Torch版本、模型算术和prefill仍不同，不能将全部差异归于单一kernel。无源码/正式运行配置变更，候选预算仍9/10；准确率与长协议继续使用原冻结进程。
+
+**低开销graph trace复核已完成（bs16）。** 两臂重新启动、2次同形状预热、1次采集；Nsight、client及导出均exit0，SSE完整16×512、两臂511次decode graph。使用`CUPTI_ACTIVITY_KIND_GRAPH_TRACE`与本次capture的`cudaGraphLaunch` runtime按correlationId关联，排除Nsight在手动capture前也保留的warmup graph记录；不能直接统计整张GRAPH_TRACE表。原始trace/SQLite留在A10，紧凑证据为`{bf16,vq}-light-{server-manifest,request-validation,timeline-summary}.json`及curl记录。
+
+| graph级采集指标 | BF16 | LoopVQ |
+| --- | ---: | ---: |
+| 511次graph跨度累计（秒） | 35.7413 | 39.3404 |
+| 相邻graph间隔累计（秒） | 0.0355 | 4.0564 |
+| 相邻graph间隔中位数（毫秒） | 0.0696 | 7.4339 |
+| H2D次数 | 52 | 8276 |
+| 同一进程两次未启用capture的预热wall（秒） | 45.8159 / 45.8625 | 53.5306 / 53.4272 |
+| 采集请求wall（秒） | 46.0716 | 54.2296 |
+
+graph跨度包含内部调度空隙，与node表的kernel累计时间不是同一指标。两臂对照、正式median与15项来源hash见[light-comparison.json](evidence/a10/perf-diagnosis/light-comparison.json)。
+
+该trace中VQ graph之间确有更长间隔，并非仅node采集才出现；但VQ采集wall仍比正式无profiler中位数约51.8614秒高4.6%，因此4.0564秒不能作为正常运行的纯CPU损失，间隔还包含采样、编码、分配及GPU等待。BF16采集wall较正式约45.9127秒高0.35%。node trace的6.935秒VQ间隔降为graph trace的4.056秒，与采样扰动的影响一致，但这是跨run差异，并非隔离测出的profiler开销；正式speedup不改写。H2D自身总耗时约9毫秒，数据拷贝本身不足以解释秒级差距；逐请求操作与同步串行化是待干预验证的候选机制。
+
+源码复核：当前`official_hp.py`与官方identity HP默认均为BLOCK_N32/BLOCK_H4、warps4/stages1、12 splits、FP32 RoPE及FP16 QK MMA，未发现HP关键优化漏移植。common 64/256稳态保留320–327行，对应10–11个非空HP split；论文8/64为72–79行、3个非空split。窗口是数值/协议变量，不能当作修bug静默替换。明确的调度移植差异在`loopvq_allocator.py:494–508`：提前wait、循环中逐请求新建CUDA索引并调用已有向量allocator；官方`mem_cache/common.py:831–929`批量分配、GPU规划并延后wait。是否及如何修改须进入第10轮计划，当前仍未改推理源码。
+
+**官方服务栈同卡反事实已完成（不是源码单变量实验）。** A10 GPU5，原始官方`python/`及`serve_method.sh`、reference Torch2.9.1+cu128环境；同一模型/bundle、完整R4、bs16、2048/512、64/256窗口、41984池、显式40960 context，BF16 FA3 prefill/VQ Triton wrapper、decode Triton、split8/48、graph `[1,2,4,8,16]`、无radix/chunked prefill。两臂均2预热＋3正式请求，SSE完整16×512、finish length、DONE；日志区间内所有非零decode batch均16、graph=True。原始请求直接复用target `common-shape/bf16/bs16/measure-01.request.json`，重复使用相同内容；官方摘要与manifest位于A10 `results/perf-diagnosis/reference-{bf16,vq}-common-{summary,manifest}.json`。
+
+| 服务栈（bs16） | BF16中位wall（秒） | LoopVQ中位wall（秒） | BF16输出tok/s | LoopVQ输出tok/s | 同栈speedup |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 官方reference | 40.237467 | 39.959264 | 203.591344 | 205.008781 | 1.006962× |
+| 当前移植正式common结果 | 45.912664 | 51.861446 | 178.425716 | 157.959345 | 0.885295× |
+
+官方BF16三次测量的已验证中位数为40.237467秒，VQ三次为39.959272/39.959264/39.958586秒；最终以摘要median为准，不把预热计入。**同卡同短请求下，官方接近持平而当前移植明显减速，因此不能将当前小于1全部归于硬件/短上下文。性能适配未完成。** 当前移植相对官方，BF16约多5.675秒、VQ约多11.902秒；两臂差额之差约6.227秒描述完整服务栈差异，不能直接归因allocator某一行。Torch/compiler、prefill、模型算术和调度均有差异，尚缺同栈干预实验来隔离各项净影响。官方1.007×也不是短请求已获得显著加速的证据，论文长context/8+64/容量峰值仍须单独复现。
+
+16:16 UTC原X5/A10会话断开；确认旧session与ControlMaster均失效后，经已有X5别名恢复持久跳板与A10会话（session21643/63365）。恢复后官方VQ客户端exit0，六路accuracy及长输出服务health200，长流程仍waiting_for_bf16；tmux任务未因这次断线中断。随后A10会话再次确认断开，而X5通过实际hostname响应确认仍在线；复用同一X5 ControlMaster重建A10 session9260，没有绕过跳板或重复启动实验。官方BF16/VQ两臂在全部请求验证完成后，经PID/argv/UID/start_ticks/GPU归属与空闲指标核验发送SIGTERM；服务日志均记载remaining requests=0后退出，wrapper exit137，不将其误报为服务自然exit0或请求失败。正式客户端两臂均exit0。原始摘要、manifest、launch记录和[reference-stack-comparison.json](evidence/a10/perf-diagnosis/reference-stack-comparison.json)已完整取回本地并校验。
+
+**官方node补充采样未成功导出，不能用于kernel归因。** 单独启动同配置官方VQ服务（PID1724943），2预热＋1采集生成均完整16×512且HTTP200，采集请求wall40.521373秒；但`stop_profile`等待Nsight导出，300秒后curl超时exit28，Nsight report停在20%且始终0字节。此40.521373只作为诊断请求记录，不进入正式median，也不证明profiling控制流程成功。核实所有请求DONE、used_tokens/queue均0、已验证PID/argv/UID/start_ticks及GPU进程归属后结束该诊断服务；running gauge仍残留最后batch的16，明确未通过原先“三个gauge均0”的正常空闲检查，日志随后确认remaining requests=0。Nsight还等待重挂父进程，SIGINT后agent shutdown RPC超时；仅针对已核实本诊断UUID/父子归属的Nsight agent/importer清理，保留请求产物和失败日志；工具退出时自行移除了空报告。未取得可用官方kernel trace，不能从这里推出quant/HP相对target的耗时差；官方无profiler对照、target有效node/light采样均不受影响。
+
+剩余因果边界：当前node表的3.721秒是target VQ对target BF16的attention增量，不是target对官方VQ的差额。两栈除了调度外还有HP→quant与quant→HP执行顺序、int64/int32 loc、实际编译器和BF16分母实现差异；没有单变量实测前，不分配各项贡献百分比。源码复核也确认官方decode仍对非空K scratch执行fused rotary，不能声称官方完全省去K RoPE而target遗漏了这一数学捷径。下一候选优先评估已有向量allocator的batch调用、保留原等待顺序和量化数学，并做同栈改前/改后对照；尚未开始第10轮，预算仍9/10。
+
+诊断收尾快照为2026-11-23T16:43:29Z：官方诊断服务及三个Nsight进程均已消失，GPU5无计算进程；六路accuracy和GPU6长输出服务health200，长流程仍waiting_for_bf16。详见evidence/a10/perf-diagnosis/{reference-vq-node-status,diagnostic-final-status}.json。所有有效诊断产物与失败状态均归档，未改变冻结推理源码、准确率配置或正式吞吐结果。
+
 ## 已实现代码导航
 
 本节描述本地 `90bbb757a` 的 standalone LoopVQ 实现，不新增运行行为或修改轮次。官方算法/源码、当前移植、算子对照、真实服务与完整 benchmark 是不同证据：代码导航说明实现位置，实测结论及运行时 SHA 以前面的实验记录和对应原始结果为准。已启动准确率、吞吐进程分别冻结在其记录的版本，不能把本地 HEAD 追认为运行版本。以下链接均相对于本记录，指向 SGLang 仓库内文件。

@@ -1,0 +1,202 @@
+{
+  "schema_version": 1,
+  "scope": {
+    "tool": "Nsight Systems 2026.3.2",
+    "trace_granularity": "graph",
+    "status": "completed",
+    "host": "a10.mit.edu",
+    "gpu_index": 5,
+    "gpu_uuid": "GPU-82009e07-07c1-3a6c-5613-df2e45f63980",
+    "sglang_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+    "model_sha256": "c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080",
+    "environment_sha256": "68f2eedc0586e5c3d86450a378ebf7809ad4b647497d1ef23e528cbbc75bc291",
+    "vq_bundle_sha256": "1211b6f9aab8970fde65482650446eaba88a0e93775c32eb2ede173a85b1b066",
+    "input_tokens": 2048,
+    "output_tokens_per_request": 512,
+    "batch_size": 16,
+    "warmups_per_method": 2,
+    "total_ut_steps": 4,
+    "prefix_tokens": 64,
+    "recent_tokens": 256,
+    "ouro_decode_profile": "optimized"
+  },
+  "capture_filter": {
+    "rule": "Raw graph activity includes warmups. Graph rows were selected by correlationId matching cudaGraphLaunch runtime calls in the capture interval, leaving exactly 511 replays per method.",
+    "source": "Parent-produced light timeline summaries; this derived file does not re-query remote SQLite.",
+    "warmup_graph_rows_included": false
+  },
+  "cells": {
+    "bf16": {
+      "graph_replays_capture_only": 511,
+      "graph_span_sum_ms": 35741.262913,
+      "graph_span_median_ms": 69.677616,
+      "intergraph_gap_sum_ms": 35.513888,
+      "intergraph_gap_median_ms": 0.0696,
+      "intergraph_gap_max_ms": 0.071904,
+      "runtime_api_calls": {
+        "cuKernelGetFunction": 4,
+        "cuKernelGetName": 30072,
+        "cuLaunchKernel": 4,
+        "cuLaunchKernelEx": 2832,
+        "cuProfilerStart": 1,
+        "cudaEventCreateWithFlags_v3020": 1549,
+        "cudaEventDestroy_v3020": 1549,
+        "cudaEventQuery_v3020": 11817,
+        "cudaEventRecordWithFlags_v11010": 2116,
+        "cudaEventRecord_v3020": 515,
+        "cudaEventSynchronize_v3020": 515,
+        "cudaGraphLaunch_v10000": 511,
+        "cudaLaunchKernelExC_v11060": 4367,
+        "cudaLaunchKernel_v7000": 30072,
+        "cudaMemcpyAsync_v3020": 1099,
+        "cudaStreamIsCapturing_v10000": 4228,
+        "cudaStreamWaitEvent_v3020": 1545
+      },
+      "gpu_memcpy_kind_count_ms": [
+        [
+          1,
+          52,
+          0.146528
+        ],
+        [
+          2,
+          515,
+          1.068667
+        ],
+        [
+          8,
+          532,
+          2.010044
+        ]
+      ],
+      "client_http_wall_seconds": {
+        "warm1": 45.815949,
+        "warm2": 45.862503,
+        "profile": 46.071592
+      },
+      "formal_unprofiled": {
+        "metric": "median full HTTP batch E2E output tokens/s",
+        "output_tokens_per_second": 178.42571611397008,
+        "median_http_wall_seconds_derived": 45.912664263974875,
+        "wall_derivation": "batch_size * output_len / median_output_tokens_per_second",
+        "ttft_seconds": 8.554697309155017,
+        "client_tpot_seconds": 0.07315686470719598,
+        "target_batch_fraction": 1.0
+      },
+      "profile_wall_vs_formal_median": {
+        "delta_seconds": 0.15892773602512733,
+        "increase_percent": 0.34615228406562615,
+        "interpretation": "Observed difference across runs; not an isolated estimate of profiler overhead."
+      },
+      "node_trace_bs16_reference_ms": {
+        "graph_span_sum_ms": 36366.110366,
+        "graph_span_median_ms": 70.902654,
+        "intergraph_gap_sum_ms": 35.660758,
+        "intergraph_gap_median_ms": 0.069888
+      }
+    },
+    "vq": {
+      "graph_replays_capture_only": 511,
+      "graph_span_sum_ms": 39340.408049,
+      "graph_span_median_ms": 77.140127,
+      "intergraph_gap_sum_ms": 4056.411238,
+      "intergraph_gap_median_ms": 7.4338795,
+      "intergraph_gap_max_ms": 12.08652,
+      "runtime_api_calls": {
+        "cuKernelGetFunction": 4,
+        "cuKernelGetName": 110135,
+        "cuLaunchKernel": 4,
+        "cuLaunchKernelEx": 3591,
+        "cuProfilerStart": 1,
+        "cudaEventCreateWithFlags_v3020": 2064,
+        "cudaEventDestroy_v3020": 2064,
+        "cudaEventQuery_v3020": 1617,
+        "cudaEventRecordWithFlags_v11010": 2615,
+        "cudaEventRecord_v3020": 515,
+        "cudaEventSynchronize_v3020": 515,
+        "cudaGraphLaunch_v10000": 511,
+        "cudaLaunchKernelExC_v11060": 3599,
+        "cudaLaunchKernel_v7000": 110135,
+        "cudaMemcpyAsync_v3020": 9863,
+        "cudaMemsetAsync_v3020": 10,
+        "cudaStreamIsCapturing_v10000": 13474,
+        "cudaStreamSynchronize_v3020": 8248,
+        "cudaStreamWaitEvent_v3020": 2060
+      },
+      "gpu_memcpy_kind_count_ms": [
+        [
+          1,
+          8276,
+          8.982664
+        ],
+        [
+          2,
+          527,
+          1.236795
+        ],
+        [
+          8,
+          1060,
+          1.930011
+        ]
+      ],
+      "client_http_wall_seconds": {
+        "warm1": 53.53061,
+        "warm2": 53.427211,
+        "profile": 54.229582
+      },
+      "formal_unprofiled": {
+        "metric": "median full HTTP batch E2E output tokens/s",
+        "output_tokens_per_second": 157.95934547998087,
+        "median_http_wall_seconds_derived": 51.86144558340311,
+        "wall_derivation": "batch_size * output_len / median_output_tokens_per_second",
+        "ttft_seconds": 8.965762106701732,
+        "client_tpot_seconds": 0.08394675812348651,
+        "target_batch_fraction": 1.0
+      },
+      "profile_wall_vs_formal_median": {
+        "delta_seconds": 2.36813641659689,
+        "increase_percent": 4.566275370763573,
+        "interpretation": "Observed difference across runs; not an isolated estimate of profiler overhead."
+      },
+      "node_trace_bs16_reference_ms": {
+        "graph_span_sum_ms": 40090.066355,
+        "graph_span_median_ms": 78.595759,
+        "intergraph_gap_sum_ms": 6935.366312,
+        "intergraph_gap_median_ms": 14.377432
+      }
+    }
+  },
+  "paired": {
+    "profiled_http_wall_ratio_bf16_over_vq": 0.8495656853855152,
+    "formal_unprofiled_median_throughput_speedup": 0.885294726120554,
+    "formal_speedup_status": "measured",
+    "graph_span_sum_delta_vq_minus_bf16_ms": 3599.145135999999,
+    "observed_intergraph_gap_delta_vq_minus_bf16_ms": 4020.89735
+  },
+  "limitations": [
+    "Graph span includes intra-graph scheduling gaps, not only kernel execution. Intergraph gaps include sampling, allocation, encoding and idle time, not pure CPU overhead.",
+    "Graph-granularity tracing has lower overhead than node tracing but is not overhead-free. VQ profiled HTTP wall is 54.229582 s versus the formal unprofiled median 51.861446 s (about 4.6% higher).",
+    "The profile/formal difference is not solely attributable to tracing: these are separate runs, and the diagnostic warmup walls also differ from the formal median.",
+    "Runtime API waits include GPU work and must not be added to graph spans or treated as independently removable CPU time.",
+    "Client HTTP wall excludes profile start/stop and report-export time. Raw profile-start/stop responses are text and were not parsed as JSON.",
+    "This single profiled batch per method does not replace the formal unprofiled median throughput matrix. Its wall ratio is labeled as profiled, not a new formal speedup."
+  ],
+  "source_sha256": {
+    "../common-shape-aggregate/throughput.json": "95d6d694d6c31815d0c17adbc6f7421a54e09bcca9d7364a76c95f814043693c",
+    "bf16-light-bs16-profile-curl.json": "1387a49862a477222136cc13775d171cd1af3f4a40c4c6c7de3e06a30df81b69",
+    "bf16-light-bs16-warm1-curl.json": "b073095c921066631f324a14156a8927ece558c63679aa7bf590638021732bac",
+    "bf16-light-bs16-warm2-curl.json": "cd35cd3dc72bcd120b1b4b5d38df9073a6987f469004f0126f8aec53aa840d67",
+    "bf16-light-request-validation.json": "f7949e55435feb00183db15d8368eada8c26daa30bbcc393bca75d0614feb81d",
+    "bf16-light-server-manifest.json": "cd35dda4f3fab97c47ca42d12ff4281bee07fe224d0c5c2348872fc5bc5cae23",
+    "bf16-light-timeline-summary.json": "7fcd936d79fd0d96f671a188b26f6ec4dd701124b141875ad2d0efe81b2dc811",
+    "bf16-timeline-summary.json": "b24792df82b96d33deef80fa7737ce0a54925894e195e96e3428e65ffdb832df",
+    "vq-light-bs16-profile-curl.json": "835be909f5212a789d6b587e4ddc42de198c81c64485228fbc8300d5269d4241",
+    "vq-light-bs16-warm1-curl.json": "9c250be1cb2fb94729e7e820f09ec8d283c01ba1428c9c1cacafd388ea81fce8",
+    "vq-light-bs16-warm2-curl.json": "b985af99f0992e410810175103e2d3cfa8a5d35bc25b9ffdfa0de96ff8739941",
+    "vq-light-request-validation.json": "08fed3f90ac4780319c1dd4e7a3975322f92217eadca0165692e49aba45ea032",
+    "vq-light-server-manifest.json": "145403c90f23a2bff66603af015c929361283d32a6e50bfa123923d4e2273f9b",
+    "vq-light-timeline-summary.json": "b5fd51333077abf5afe3dbad1227573999f904033b61ce267c14423285d9ce50",
+    "vq-timeline-summary.json": "be234b4ba7f8cb6c5b2eb22fb8fe12a4302a9277ee5cf9358b9adfaa5f9eb3d8"
+  }
+}

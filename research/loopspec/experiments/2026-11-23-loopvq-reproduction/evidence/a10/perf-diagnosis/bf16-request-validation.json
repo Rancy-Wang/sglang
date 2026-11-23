@@ -1,0 +1,56 @@
+[
+  {
+    "bs": 1,
+    "phase": "warm1",
+    "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/bf16-bs1-warm1.sse",
+    "sha256": "6771a2a7b6b410bcc2dba2d8820865bbf2c79941d8878128773a7af5c6b851e1",
+    "requests": 1,
+    "tokens_per_request": 512,
+    "status": "ok"
+  },
+  {
+    "bs": 1,
+    "phase": "warm2",
+    "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/bf16-bs1-warm2.sse",
+    "sha256": "1d6d3b6c0690dbd37f58ae98cae7a40e5613d08bd172ae52493b89a6e4f7e63b",
+    "requests": 1,
+    "tokens_per_request": 512,
+    "status": "ok"
+  },
+  {
+    "bs": 1,
+    "phase": "profile",
+    "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/bf16-bs1-profile.sse",
+    "sha256": "2cca76b1b207530b7e5788987cb99504f3fc2e220d3886db3ddd6db503097238",
+    "requests": 1,
+    "tokens_per_request": 512,
+    "status": "ok"
+  },
+  {
+    "bs": 16,
+    "phase": "warm1",
+    "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/bf16-bs16-warm1.sse",
+    "sha256": "22c5fc05f694b04105df0dca419610a0a31ea393131061b06be0ca580d950d06",
+    "requests": 16,
+    "tokens_per_request": 512,
+    "status": "ok"
+  },
+  {
+    "bs": 16,
+    "phase": "warm2",
+    "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/bf16-bs16-warm2.sse",
+    "sha256": "c4459ccee4ca6fc6240a2023dae3e758766281e2a774203a1db3ab711347697c",
+    "requests": 16,
+    "tokens_per_request": 512,
+    "status": "ok"
+  },
+  {
+    "bs": 16,
+    "phase": "profile",
+    "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/bf16-bs16-profile.sse",
+    "sha256": "8f42a791dc58f0c2c5406184d008fc2168673914f85e2870dc2fafa979110a2c",
+    "requests": 16,
+    "tokens_per_request": 512,
+    "status": "ok"
+  }
+]

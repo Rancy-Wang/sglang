@@ -1,0 +1,127 @@
+{
+  "method": "vq",
+  "trace_granularity": "graph",
+  "source": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/vq-light-bs16.sqlite",
+  "graph_replays": 511,
+  "graph_span_sum_ms": 39340.408049,
+  "graph_span_median_ms": 77.140127,
+  "intergraph_gap_sum_ms": 4056.411238,
+  "intergraph_gap_median_ms": 7.4338795,
+  "intergraph_gap_max_ms": 12.08652,
+  "runtime_api": {
+    "cuKernelGetFunction": {
+      "calls": 4,
+      "sum_ms": 0.01113
+    },
+    "cuKernelGetName": {
+      "calls": 110135,
+      "sum_ms": 36.577216
+    },
+    "cuLaunchKernel": {
+      "calls": 4,
+      "sum_ms": 0.04307
+    },
+    "cuLaunchKernelEx": {
+      "calls": 3591,
+      "sum_ms": 458.054032
+    },
+    "cuProfilerStart": {
+      "calls": 1,
+      "sum_ms": 0.0211
+    },
+    "cudaEventCreateWithFlags_v3020": {
+      "calls": 2064,
+      "sum_ms": 3.829909
+    },
+    "cudaEventDestroy_v3020": {
+      "calls": 2064,
+      "sum_ms": 2.292348
+    },
+    "cudaEventQuery_v3020": {
+      "calls": 1617,
+      "sum_ms": 7.945808
+    },
+    "cudaEventRecordWithFlags_v11010": {
+      "calls": 2615,
+      "sum_ms": 6.236982
+    },
+    "cudaEventRecord_v3020": {
+      "calls": 515,
+      "sum_ms": 1.223898
+    },
+    "cudaEventSynchronize_v3020": {
+      "calls": 515,
+      "sum_ms": 81.806545
+    },
+    "cudaGraphLaunch_v10000": {
+      "calls": 511,
+      "sum_ms": 1178.798558
+    },
+    "cudaLaunchKernelExC_v11060": {
+      "calls": 3599,
+      "sum_ms": 33.329345
+    },
+    "cudaLaunchKernel_v7000": {
+      "calls": 110135,
+      "sum_ms": 8282.824801
+    },
+    "cudaMemcpyAsync_v3020": {
+      "calls": 9863,
+      "sum_ms": 93.600513
+    },
+    "cudaMemsetAsync_v3020": {
+      "calls": 10,
+      "sum_ms": 0.05525
+    },
+    "cudaStreamIsCapturing_v10000": {
+      "calls": 13474,
+      "sum_ms": 11.667682
+    },
+    "cudaStreamSynchronize_v3020": {
+      "calls": 8248,
+      "sum_ms": 40313.792444
+    },
+    "cudaStreamWaitEvent_v3020": {
+      "calls": 2060,
+      "sum_ms": 5.098584
+    }
+  },
+  "memcpy_kind_count_ms": [
+    [
+      1,
+      8276,
+      8.982664
+    ],
+    [
+      2,
+      527,
+      1.236795
+    ],
+    [
+      8,
+      1060,
+      1.930011
+    ]
+  ],
+  "client_curl": {
+    "warm1": {
+      "http_code": 200,
+      "time_total_s": 53.53061,
+      "size_download": 3868961
+    },
+    "warm2": {
+      "http_code": 200,
+      "time_total_s": 53.427211,
+      "size_download": 3865389
+    },
+    "profile": {
+      "http_code": 200,
+      "time_total_s": 54.229582,
+      "size_download": 3866403
+    }
+  },
+  "limitations": [
+    "Graph span includes intra-graph scheduling gaps; intergraph gap includes sampling, allocation, encoding and idle time, not CPU-only time.",
+    "This single diagnostic request does not replace the unprofiled median throughput matrix."
+  ]
+}

@@ -1,0 +1,29 @@
+[
+  {
+    "bs": 16,
+    "phase": "warm1",
+    "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/vq-light-bs16-warm1.sse",
+    "sha256": "fb748850c92e63366893a6d3dc0a997195989d4d85d87f42f457369111da4472",
+    "requests": 16,
+    "tokens_per_request": 512,
+    "status": "ok"
+  },
+  {
+    "bs": 16,
+    "phase": "warm2",
+    "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/vq-light-bs16-warm2.sse",
+    "sha256": "021d1dffb954c2eb59fd020bcedbce348670eec8406e0f5396bd73b15ce4ee3b",
+    "requests": 16,
+    "tokens_per_request": 512,
+    "status": "ok"
+  },
+  {
+    "bs": 16,
+    "phase": "profile",
+    "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/vq-light-bs16-profile.sse",
+    "sha256": "6734b6d1fea8b5623ca81ac4cdb941b9bc3cc4fc0e2c7795a7a55a35f61654ec",
+    "requests": 16,
+    "tokens_per_request": 512,
+    "status": "ok"
+  }
+]

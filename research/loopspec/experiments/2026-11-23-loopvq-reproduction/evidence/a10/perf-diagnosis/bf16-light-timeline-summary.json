@@ -1,0 +1,119 @@
+{
+  "method": "bf16",
+  "trace_granularity": "graph",
+  "source": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/bf16-light-bs16.sqlite",
+  "graph_replays": 511,
+  "graph_span_sum_ms": 35741.262913,
+  "graph_span_median_ms": 69.677616,
+  "intergraph_gap_sum_ms": 35.513888,
+  "intergraph_gap_median_ms": 0.0696,
+  "intergraph_gap_max_ms": 0.071904,
+  "runtime_api": {
+    "cuKernelGetFunction": {
+      "calls": 4,
+      "sum_ms": 0.00738
+    },
+    "cuKernelGetName": {
+      "calls": 30072,
+      "sum_ms": 11.208546
+    },
+    "cuLaunchKernel": {
+      "calls": 4,
+      "sum_ms": 0.04167
+    },
+    "cuLaunchKernelEx": {
+      "calls": 2832,
+      "sum_ms": 27.241457
+    },
+    "cuProfilerStart": {
+      "calls": 1,
+      "sum_ms": 0.021969
+    },
+    "cudaEventCreateWithFlags_v3020": {
+      "calls": 1549,
+      "sum_ms": 2.782558
+    },
+    "cudaEventDestroy_v3020": {
+      "calls": 1549,
+      "sum_ms": 1.830801
+    },
+    "cudaEventQuery_v3020": {
+      "calls": 11817,
+      "sum_ms": 28.988023
+    },
+    "cudaEventRecordWithFlags_v11010": {
+      "calls": 2116,
+      "sum_ms": 5.322804
+    },
+    "cudaEventRecord_v3020": {
+      "calls": 515,
+      "sum_ms": 1.17756
+    },
+    "cudaEventSynchronize_v3020": {
+      "calls": 515,
+      "sum_ms": 33743.643402
+    },
+    "cudaGraphLaunch_v10000": {
+      "calls": 511,
+      "sum_ms": 1084.027162
+    },
+    "cudaLaunchKernelExC_v11060": {
+      "calls": 4367,
+      "sum_ms": 540.942635
+    },
+    "cudaLaunchKernel_v7000": {
+      "calls": 30072,
+      "sum_ms": 8564.857492
+    },
+    "cudaMemcpyAsync_v3020": {
+      "calls": 1099,
+      "sum_ms": 14.486016
+    },
+    "cudaStreamIsCapturing_v10000": {
+      "calls": 4228,
+      "sum_ms": 3.036163
+    },
+    "cudaStreamWaitEvent_v3020": {
+      "calls": 1545,
+      "sum_ms": 3.436917
+    }
+  },
+  "memcpy_kind_count_ms": [
+    [
+      1,
+      52,
+      0.146528
+    ],
+    [
+      2,
+      515,
+      1.068667
+    ],
+    [
+      8,
+      532,
+      2.010044
+    ]
+  ],
+  "client_curl": {
+    "warm1": {
+      "http_code": 200,
+      "time_total_s": 45.815949,
+      "size_download": 3868383
+    },
+    "warm2": {
+      "http_code": 200,
+      "time_total_s": 45.862503,
+      "size_download": 3870919
+    },
+    "profile": {
+      "http_code": 200,
+      "time_total_s": 46.071592,
+      "size_download": 3868377
+    }
+  },
+  "limitations": [
+    "Graph span includes intra-graph scheduling gaps; intergraph gap includes sampling, allocation, encoding and idle time, not CPU-only time.",
+    "This single diagnostic request does not replace the unprofiled median throughput matrix."
+  ]
+}

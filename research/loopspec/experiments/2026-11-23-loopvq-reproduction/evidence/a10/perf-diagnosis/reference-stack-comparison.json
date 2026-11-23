@@ -1,0 +1,608 @@
+{
+  "schema_version": 1,
+  "comparison_kind": "Unprofiled complete serving-stack comparison; not an allocator or single-kernel ablation.",
+  "scope": {
+    "host": "a10.mit.edu",
+    "gpu_index": 5,
+    "gpu_uuid": "GPU-82009e07-07c1-3a6c-5613-df2e45f63980",
+    "model_sha256": "c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080",
+    "batch_size": 16,
+    "input_tokens": 2048,
+    "output_tokens_per_request": 512,
+    "total_ut_steps": 4,
+    "prefix_tokens": 64,
+    "recent_tokens": 256,
+    "warmups_per_method": 2,
+    "measurements_per_method": 3
+  },
+  "payload_evidence": {
+    "reference_request_sha256": "5c524b16a4198cc58339dd80b2c5a6cf95a4001a077a132962e87fe0ea312db1",
+    "reference_arms_hash_equal": true,
+    "target_arms_input_ids_sha256": "15b8c2695ddc7c7fddb070cba72ac970b4255c1f67dc56a35aaa1c1b2b2b1d5a",
+    "target_arms_input_fixture_sha256": "15b8c2695ddc7c7fddb070cba72ac970b4255c1f67dc56a35aaa1c1b2b2b1d5a",
+    "cross_stack_reuse": {
+      "status": "direct reuse reported by parent execution record",
+      "source_request_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs16/measure-01.request.json",
+      "local_raw_request_available": false,
+      "note": "Reference summaries record the same raw-request SHA256. Raw target request bytes are remote; this derived artifact does not claim an independent local byte comparison."
+    }
+  },
+  "source_identity": {
+    "reference_sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "reference_upstream_python_and_serve_method_sha": "d5d58c83fe5bc9a4ce470ae96c69b55f085e2977",
+    "reference_ranges_verification": "Local git diff d5d58c83..b5f821d -- python scripts/serve_method.sh is empty.",
+    "target_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+    "target_environment_sha256": "68f2eedc0586e5c3d86450a378ebf7809ad4b647497d1ef23e528cbbc75bc291",
+    "target_vq_bundle_sha256": "1211b6f9aab8970fde65482650446eaba88a0e93775c32eb2ede173a85b1b066",
+    "bundle_path_match": true,
+    "reference_bundle_digest_independently_present": false
+  },
+  "shared_config": {
+    "tp_size": 1,
+    "pp_size": 1,
+    "dp_size": 1,
+    "dtype": "bfloat16",
+    "context_length": 40960,
+    "max_running_requests": 16,
+    "max_total_tokens": 41984,
+    "page_size": 8,
+    "chunked_prefill_size": -1,
+    "disable_radix_cache": true,
+    "speculative_algorithm": null,
+    "mem_fraction_static": 0.9,
+    "decode_log_interval": 1,
+    "incremental_streaming_output": true,
+    "disable_cuda_graph": false,
+    "disable_cuda_graph_padding": false,
+    "max_prefill_tokens": 8192,
+    "decode_graph_batch_sizes": [
+      1,
+      2,
+      4,
+      8,
+      16
+    ],
+    "bf16_max_splits": 8,
+    "vq_max_splits": 48
+  },
+  "consistency_assertions": [
+    {
+      "check": "reference arms use byte-identical request hashes",
+      "status": "passed"
+    },
+    {
+      "check": "target arms share input token IDs and fixture hash",
+      "status": "passed"
+    },
+    {
+      "check": "all four arms share host, GPU index/UUID, model hash and full R4",
+      "status": "passed"
+    },
+    {
+      "check": "reference source frozen and equal across arms",
+      "status": "passed"
+    },
+    {
+      "check": "target source frozen and equal across arms",
+      "status": "passed"
+    },
+    {
+      "check": "common config tp_size",
+      "status": "passed"
+    },
+    {
+      "check": "common config pp_size",
+      "status": "passed"
+    },
+    {
+      "check": "common config dp_size",
+      "status": "passed"
+    },
+    {
+      "check": "common config dtype",
+      "status": "passed"
+    },
+    {
+      "check": "common config context_length",
+      "status": "passed"
+    },
+    {
+      "check": "common config max_running_requests",
+      "status": "passed"
+    },
+    {
+      "check": "common config max_total_tokens",
+      "status": "passed"
+    },
+    {
+      "check": "common config page_size",
+      "status": "passed"
+    },
+    {
+      "check": "common config chunked_prefill_size",
+      "status": "passed"
+    },
+    {
+      "check": "common config disable_radix_cache",
+      "status": "passed"
+    },
+    {
+      "check": "common config speculative_algorithm",
+      "status": "passed"
+    },
+    {
+      "check": "common config mem_fraction_static",
+      "status": "passed"
+    },
+    {
+      "check": "common config decode_log_interval",
+      "status": "passed"
+    },
+    {
+      "check": "common config incremental_streaming_output",
+      "status": "passed"
+    },
+    {
+      "check": "common config disable_cuda_graph",
+      "status": "passed"
+    },
+    {
+      "check": "common config disable_cuda_graph_padding",
+      "status": "passed"
+    },
+    {
+      "check": "max prefill budget 8192 across stacks",
+      "status": "passed"
+    },
+    {
+      "check": "decode graphs capture [1,2,4,8,16], prefill graphs disabled",
+      "status": "passed"
+    },
+    {
+      "check": "split maxima match by method",
+      "status": "passed"
+    },
+    {
+      "check": "reference windows explicit 64/256",
+      "status": "passed"
+    },
+    {
+      "check": "target windows explicit 64/256",
+      "status": "passed"
+    },
+    {
+      "check": "reference VQ uses same K/V artifact directory as target",
+      "status": "passed"
+    },
+    {
+      "check": "bf16 reference launch source/GPU/Torch corroborate manifest",
+      "status": "passed"
+    },
+    {
+      "check": "bf16 reference two warmups plus three measurements",
+      "status": "passed"
+    },
+    {
+      "check": "bf16 reference full outputs, fixed greedy sampling and actual bs16 graph logs",
+      "status": "passed"
+    },
+    {
+      "check": "bf16 warm1 curl HTTP/wall matches validated SSE record",
+      "status": "passed"
+    },
+    {
+      "check": "bf16 warm2 curl HTTP/wall matches validated SSE record",
+      "status": "passed"
+    },
+    {
+      "check": "bf16 measure1 curl HTTP/wall matches validated SSE record",
+      "status": "passed"
+    },
+    {
+      "check": "bf16 measure2 curl HTTP/wall matches validated SSE record",
+      "status": "passed"
+    },
+    {
+      "check": "bf16 measure3 curl HTTP/wall matches validated SSE record",
+      "status": "passed"
+    },
+    {
+      "check": "bf16 reference median recomputed from measurements only",
+      "status": "passed"
+    },
+    {
+      "check": "bf16 target formal 2+3 protocol and aggregate match",
+      "status": "passed"
+    },
+    {
+      "check": "vq reference launch source/GPU/Torch corroborate manifest",
+      "status": "passed"
+    },
+    {
+      "check": "vq reference two warmups plus three measurements",
+      "status": "passed"
+    },
+    {
+      "check": "vq reference full outputs, fixed greedy sampling and actual bs16 graph logs",
+      "status": "passed"
+    },
+    {
+      "check": "vq warm1 curl HTTP/wall matches validated SSE record",
+      "status": "passed"
+    },
+    {
+      "check": "vq warm2 curl HTTP/wall matches validated SSE record",
+      "status": "passed"
+    },
+    {
+      "check": "vq measure1 curl HTTP/wall matches validated SSE record",
+      "status": "passed"
+    },
+    {
+      "check": "vq measure2 curl HTTP/wall matches validated SSE record",
+      "status": "passed"
+    },
+    {
+      "check": "vq measure3 curl HTTP/wall matches validated SSE record",
+      "status": "passed"
+    },
+    {
+      "check": "vq reference median recomputed from measurements only",
+      "status": "passed"
+    },
+    {
+      "check": "vq target formal 2+3 protocol and aggregate match",
+      "status": "passed"
+    }
+  ],
+  "cells": {
+    "bf16": {
+      "reference": {
+        "median_http_wall_seconds": 40.237467,
+        "median_output_tokens_per_second": 203.59134435574683,
+        "records": [
+          {
+            "phase": "warm1",
+            "wall_s": 40.870282,
+            "output_tok_s": 200.4390378319386,
+            "sse_sha256": "16ef594e597131f5c4d45426af3d1fb50deb33690ecf41eb97254eb7c2f97ddb",
+            "sse_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-bf16-common-warm1.sse",
+            "requests": 16,
+            "prompt_tokens_each": 2048,
+            "output_tokens_each": 512,
+            "finish_reason": "length",
+            "decode_log_rows": 510,
+            "target_batch_fraction": 1.0,
+            "all_decode_cuda_graph": true,
+            "log_byte_range": [
+              21349,
+              100737
+            ]
+          },
+          {
+            "phase": "warm2",
+            "wall_s": 40.225886,
+            "output_tok_s": 203.64995813889593,
+            "sse_sha256": "f5bf0b571022a4e740c7208ddda856efa8a6dbdd984639d2fc5970aa513cd2cd",
+            "sse_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-bf16-common-warm2.sse",
+            "requests": 16,
+            "prompt_tokens_each": 2048,
+            "output_tokens_each": 512,
+            "finish_reason": "length",
+            "decode_log_rows": 513,
+            "target_batch_fraction": 1.0,
+            "all_decode_cuda_graph": true,
+            "log_byte_range": [
+              100737,
+              180579
+            ]
+          },
+          {
+            "phase": "measure1",
+            "wall_s": 40.237467,
+            "output_tok_s": 203.59134435574683,
+            "sse_sha256": "bd27e217afd30115fe244e8fc69072d84444b779d603d80b193b625c08ca8793",
+            "sse_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-bf16-common-measure1.sse",
+            "requests": 16,
+            "prompt_tokens_each": 2048,
+            "output_tokens_each": 512,
+            "finish_reason": "length",
+            "decode_log_rows": 512,
+            "target_batch_fraction": 1.0,
+            "all_decode_cuda_graph": true,
+            "log_byte_range": [
+              180579,
+              260269
+            ]
+          },
+          {
+            "phase": "measure2",
+            "wall_s": 40.247406,
+            "output_tok_s": 203.54106796348566,
+            "sse_sha256": "c53755fab39cf3f33e8db3fc4797cd8c55d7d2655172d957746a365254ae669d",
+            "sse_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-bf16-common-measure2.sse",
+            "requests": 16,
+            "prompt_tokens_each": 2048,
+            "output_tokens_each": 512,
+            "finish_reason": "length",
+            "decode_log_rows": 512,
+            "target_batch_fraction": 1.0,
+            "all_decode_cuda_graph": true,
+            "log_byte_range": [
+              260269,
+              339959
+            ]
+          },
+          {
+            "phase": "measure3",
+            "wall_s": 40.233184,
+            "output_tok_s": 203.61301755287377,
+            "sse_sha256": "474a44a63e9c6b3165e5469ce537a71f08ab34c2cd2347c2eccc18db6b7fb9f7",
+            "sse_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-bf16-common-measure3.sse",
+            "requests": 16,
+            "prompt_tokens_each": 2048,
+            "output_tokens_each": 512,
+            "finish_reason": "length",
+            "decode_log_rows": 512,
+            "target_batch_fraction": 1.0,
+            "all_decode_cuda_graph": true,
+            "log_byte_range": [
+              339959,
+              419649
+            ]
+          }
+        ]
+      },
+      "target_formal": {
+        "median_http_wall_seconds_derived": 45.912664263974875,
+        "median_output_tokens_per_second": 178.42571611397008,
+        "wall_formula": "16 * 512 / median_output_tokens_per_second",
+        "warmups": 2,
+        "measurements": 3,
+        "attempts": [
+          {
+            "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs16/warmup-01.json",
+            "phase": "warmup",
+            "number": 1,
+            "status": "ok",
+            "e2e_output_tokens_s": 179.08304844649436
+          },
+          {
+            "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs16/warmup-02.json",
+            "phase": "warmup",
+            "number": 2,
+            "status": "ok",
+            "e2e_output_tokens_s": 178.89854780663586
+          },
+          {
+            "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs16/measure-01.json",
+            "phase": "measure",
+            "number": 1,
+            "status": "ok",
+            "e2e_output_tokens_s": 178.42571611397008
+          },
+          {
+            "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs16/measure-02.json",
+            "phase": "measure",
+            "number": 2,
+            "status": "ok",
+            "e2e_output_tokens_s": 178.49611504365595
+          },
+          {
+            "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/bf16/bs16/measure-03.json",
+            "phase": "measure",
+            "number": 3,
+            "status": "ok",
+            "e2e_output_tokens_s": 178.16710572312527
+          }
+        ],
+        "minimum_target_batch_fraction": 1.0
+      },
+      "target_minus_reference_wall_seconds": 5.675197263974873,
+      "reference_over_target_throughput_ratio": 1.1410426074776245
+    },
+    "vq": {
+      "reference": {
+        "median_http_wall_seconds": 39.959264,
+        "median_output_tokens_per_second": 205.00878094251186,
+        "records": [
+          {
+            "phase": "warm1",
+            "wall_s": 40.809807,
+            "output_tok_s": 200.73606327028207,
+            "sse_sha256": "965934c461b02a23641acd82c54ff9fced16cea5c5500aee4c7de463c4635eee",
+            "sse_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-vq-common-warm1.sse",
+            "requests": 16,
+            "prompt_tokens_each": 2048,
+            "output_tokens_each": 512,
+            "finish_reason": "length",
+            "decode_log_rows": 510,
+            "target_batch_fraction": 1.0,
+            "all_decode_cuda_graph": true,
+            "log_byte_range": [
+              23793,
+              103181
+            ]
+          },
+          {
+            "phase": "warm2",
+            "wall_s": 39.951556,
+            "output_tok_s": 205.04833403735265,
+            "sse_sha256": "c22af6e03ddcacbc3a1c45e511cf4722928e6c75f8c2fbba71416afbf65aa77e",
+            "sse_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-vq-common-warm2.sse",
+            "requests": 16,
+            "prompt_tokens_each": 2048,
+            "output_tokens_each": 512,
+            "finish_reason": "length",
+            "decode_log_rows": 513,
+            "target_batch_fraction": 1.0,
+            "all_decode_cuda_graph": true,
+            "log_byte_range": [
+              103181,
+              183023
+            ]
+          },
+          {
+            "phase": "measure1",
+            "wall_s": 39.959272,
+            "output_tok_s": 205.00873989896513,
+            "sse_sha256": "41758be0e1787fd3b46d9a7b9301ea86a1e4642897558560dd7f71c3edbdd4c0",
+            "sse_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-vq-common-measure1.sse",
+            "requests": 16,
+            "prompt_tokens_each": 2048,
+            "output_tokens_each": 512,
+            "finish_reason": "length",
+            "decode_log_rows": 512,
+            "target_batch_fraction": 1.0,
+            "all_decode_cuda_graph": true,
+            "log_byte_range": [
+              183023,
+              262713
+            ]
+          },
+          {
+            "phase": "measure2",
+            "wall_s": 39.959264,
+            "output_tok_s": 205.00878094251186,
+            "sse_sha256": "d8fbdb3a829b5c49efc7eb0c31b5a2b17404882cc4b26507245957fe9416fd5a",
+            "sse_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-vq-common-measure2.sse",
+            "requests": 16,
+            "prompt_tokens_each": 2048,
+            "output_tokens_each": 512,
+            "finish_reason": "length",
+            "decode_log_rows": 512,
+            "target_batch_fraction": 1.0,
+            "all_decode_cuda_graph": true,
+            "log_byte_range": [
+              262713,
+              342403
+            ]
+          },
+          {
+            "phase": "measure3",
+            "wall_s": 39.958586,
+            "output_tok_s": 205.01225944281413,
+            "sse_sha256": "f2bfd901917e7b9bf8e7176295e8ae0734a1688cb973bdaa07ee705c7a7096ff",
+            "sse_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/reference-vq-common-measure3.sse",
+            "requests": 16,
+            "prompt_tokens_each": 2048,
+            "output_tokens_each": 512,
+            "finish_reason": "length",
+            "decode_log_rows": 512,
+            "target_batch_fraction": 1.0,
+            "all_decode_cuda_graph": true,
+            "log_byte_range": [
+              342403,
+              422093
+            ]
+          }
+        ]
+      },
+      "target_formal": {
+        "median_http_wall_seconds_derived": 51.86144558340311,
+        "median_output_tokens_per_second": 157.95934547998087,
+        "wall_formula": "16 * 512 / median_output_tokens_per_second",
+        "warmups": 2,
+        "measurements": 3,
+        "attempts": [
+          {
+            "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs16/warmup-01.json",
+            "phase": "warmup",
+            "number": 1,
+            "status": "ok",
+            "e2e_output_tokens_s": 156.51903782056894
+          },
+          {
+            "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs16/warmup-02.json",
+            "phase": "warmup",
+            "number": 2,
+            "status": "ok",
+            "e2e_output_tokens_s": 157.86943711727181
+          },
+          {
+            "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs16/measure-01.json",
+            "phase": "measure",
+            "number": 1,
+            "status": "ok",
+            "e2e_output_tokens_s": 157.92791104136754
+          },
+          {
+            "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs16/measure-02.json",
+            "phase": "measure",
+            "number": 2,
+            "status": "ok",
+            "e2e_output_tokens_s": 157.9758331019971
+          },
+          {
+            "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/throughput-round7/common-shape/loopvq/bs16/measure-03.json",
+            "phase": "measure",
+            "number": 3,
+            "status": "ok",
+            "e2e_output_tokens_s": 157.95934547998087
+          }
+        ],
+        "minimum_target_batch_fraction": 1.0
+      },
+      "target_minus_reference_wall_seconds": 11.902181583403113,
+      "reference_over_target_throughput_ratio": 1.297857878048082
+    }
+  },
+  "paired": {
+    "reference_vq_over_bf16_throughput_speedup": 1.00696216526911,
+    "target_formal_vq_over_bf16_throughput_speedup": 0.885294726120554,
+    "difference_of_target_minus_reference_wall_differences_seconds": 6.22698431942824,
+    "difference_interpretation": "About 6.227 s describes a difference between complete stacks. It is not a measured allocator-only or CPU-only cost."
+  },
+  "known_stack_differences": {
+    "torch_cuda": {
+      "reference": "2.9.1+cu128, from both launch logs",
+      "target": "2.14.1+cu130 / Triton 3.8.0 / CUDA 13.0, from recorded target environment evidence; formal manifests retain its environment fingerprint"
+    },
+    "model_math": {
+      "reference": "Official fused RMSNorm, fused RoPE and SiluAndMul arithmetic",
+      "target": "HF intermediate BF16 rounding: cast-before-weight RMSNorm, native RoPE products and separate SiLU then multiply",
+      "effect": "Same full-R4 checkpoint structure, not bit-identical operator arithmetic."
+    },
+    "prefill": {
+      "reference_bf16": "FA3 backend, SGLANG_USE_SGL_FA3_KERNEL=1",
+      "reference_vq": "Triton quantized-prefill wrapper invoking FlashAttention varlen for fresh prompts",
+      "target_both": "HF-rounding two-pass Ouro attention"
+    },
+    "compiler_and_runtime": {
+      "reference": "Independent reference environment and torch_extensions/triton-reference-diagnostic caches",
+      "target": "Task CUDA13 toolchain and separate JIT/Triton caches; a10_target_env.sh records CUDA_HOME",
+      "controlled_equal": false,
+      "note": "Exact reference Triton/NVCC build versions are not supplied by these manifests. Compiler/runtime differences and their causal contributions have not been isolated."
+    },
+    "allocator_and_scheduling": "Official batched GPU planner versus current custom request planner; differences coexist with the Torch, model-math and prefill differences."
+  },
+  "limitations": [
+    "All measurements here are unprofiled HTTP batch E2E medians. Reference node profiling is not included because it has not completed.",
+    "Reference is approximately neutral (1.006962x) on this short request. This is not evidence of a large short-context gain or a reproduction of paper long-context/capacity peaks.",
+    "A shared GPU, payload and full R4 control hardware and workload, but different source stacks, Torch/compiler, model arithmetic and prefill remain confounders. The 6.227 s difference cannot be assigned solely to allocator code.",
+    "SSE content hashes, remote paths and decode-log byte ranges are preserved from validated parent summaries. Large raw SSE/server logs were not copied into this derived JSON; this step checks summary/curl consistency, not a fresh remote log parse.",
+    "Matching VQ artifact paths is verified; a new reference bundle checksum is not supplied by these manifests. The target bundle checksum is retained as provenance."
+  ],
+  "source_sha256": {
+    "../../../a10_target_env.sh": "2b9db624036e11e2af976b0c062ac74437029c251e4b99526500076dd7c1839c",
+    "../common-shape-aggregate/throughput.json": "95d6d694d6c31815d0c17adbc6f7421a54e09bcca9d7364a76c95f814043693c",
+    "../common-shape-matrix-provenance.json": "dbb86b8d96dc7c05de3075e0d459fbfeeb6e17d25999a8139a204d72beb0e658",
+    "../round6-official-kernels.json": "6c2f88e3e42fdcb2ce3a7357e7ceb1848783f203b9667b072873a1f86ba5da6b",
+    "reference-bf16-common-manifest.json": "c394ba32a7e5c975119b27cf540525af08b7d6dae83a2d91d1aa54f6d213a146",
+    "reference-bf16-common-measure1-curl.json": "e2c24a3314d5cb4830ffe009389a71f5e03de94198f7419a64d010581feecf04",
+    "reference-bf16-common-measure2-curl.json": "08d666c67fd7e14ff3606b14041d1640a41118c0cf3399bbad1d751453ce440f",
+    "reference-bf16-common-measure3-curl.json": "5ffee1fd243936676c7d38dea4ca866e75e05330cd36f5c217d9345303e011db",
+    "reference-bf16-common-summary.json": "d3532c03cd18e561bda3b4303918d4787b799b9f3c9dc628ebfb41e45de8c640",
+    "reference-bf16-common-warm1-curl.json": "87ed9268b5f86f9258132fab6330d6024bd5d34b6128da25f3f6497f133b5f97",
+    "reference-bf16-common-warm2-curl.json": "d6d5895b5d7d74b4faff56c0db3dfac0230b487f61d95734f9a3256fbc919128",
+    "reference-bf16-common.launch.txt": "1473a978bdbed524153a01eef2e0651518510cdf7715bdd1057770c444df101a",
+    "reference-vq-common-manifest.json": "bf6452403282596915bf80f38ba409c48513946e36b26a78754a52d99da5798d",
+    "reference-vq-common-measure1-curl.json": "31ff469a5d247c8ead6b7d3fcdbc7f271df5fec61a4d0396c89629ec5b1b3f9f",
+    "reference-vq-common-measure2-curl.json": "ea04ec64fa1da25982897f0600d55943c1dad82f6bfb55a4d7478040a0b6e119",
+    "reference-vq-common-measure3-curl.json": "676e4609e7ddcca8f4acdb51eb919b01a2cfb11e9ea3c9ee857561875a665ab2",
+    "reference-vq-common-summary.json": "5380421ce39453b9c030795372227b8f479037deaffe620265e05c70440edce5",
+    "reference-vq-common-warm1-curl.json": "9fbd68200a8e1b98ddedeaea3f41e889aefbdd2a34618da9dc6a126c949f9ffb",
+    "reference-vq-common-warm2-curl.json": "bc79942dcd9111cd857bff4d6a1b63522e2610b633788679e7e8cbc3d65ab828",
+    "reference-vq-common.launch.txt": "22f73a639357b5ad5da8dae497620751e617dc345f4285ddcd82d42e2418426c"
+  }
+}

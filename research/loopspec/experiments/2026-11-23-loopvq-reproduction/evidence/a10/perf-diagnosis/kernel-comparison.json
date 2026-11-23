@@ -1,0 +1,323 @@
+{
+  "schema_version": 1,
+  "scope": {
+    "tool": "Nsight Systems 2026.3.2",
+    "cuda_graph_trace": "node",
+    "host": "a10.mit.edu",
+    "gpu_index": 5,
+    "gpu_uuid": "GPU-82009e07-07c1-3a6c-5613-df2e45f63980",
+    "sglang_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+    "environment_sha256": "68f2eedc0586e5c3d86450a378ebf7809ad4b647497d1ef23e528cbbc75bc291",
+    "model_sha256": "c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080",
+    "vq_bundle_sha256": "1211b6f9aab8970fde65482650446eaba88a0e93775c32eb2ede173a85b1b066",
+    "input_tokens": 2048,
+    "output_tokens_per_request": 512,
+    "batch_sizes": [
+      1,
+      16
+    ],
+    "warmups_per_cell": 2,
+    "total_ut_steps": 4,
+    "prefix_tokens": 64,
+    "recent_tokens": 256,
+    "ouro_decode_profile": "optimized"
+  },
+  "units": "All derived times are milliseconds; kernel sums are sums of durations, not request wall time.",
+  "category_notes": {
+    "decode_attention": "BF16 stage1+stage2 versus VQ quant+HP+reduce+LSE fill.",
+    "matrix": "Includes cublasLt::splitKreduce_kernel; this is not attention reduction.",
+    "common_families": "Matrix, HF RMSNorm, HF prefill attention, BF16 elementwise/copy/cat/SiLU and RoPE-table gather symbol families. A shared symbol can also include minor scheduler operations; this is not per-call stack attribution.",
+    "encoder": "Both prefill encoding and decode flush; 222=96+63*2 for bs1, 510=4*96+63*2 for bs16."
+  },
+  "cells": {
+    "bf16-bs1": {
+      "kernel_sum_ms": 19093.791617,
+      "kernel_instances": 3552581,
+      "category_kernel_ms": {
+        "bf16_decode_stage1": 2801.316979,
+        "bf16_decode_stage2": 389.18612,
+        "common_pointwise_rope_silu_families": 5137.541346,
+        "hf_prefill_attention": 438.416553,
+        "hf_rmsnorm": 1453.594978,
+        "kv_write": 181.649331,
+        "matrix_including_cublas_splitk_reduce": 8645.045424,
+        "other": 47.040886
+      },
+      "forward_evidence": {
+        "graph_replays": 511,
+        "prefill_forwards": 1,
+        "graph_kernel_counts": [
+          6919
+        ],
+        "attention_kernel_calls_per_slot_kind": 98112,
+        "encoder_kernel_calls": 0,
+        "tier_metadata_kernel_calls_total": 0
+      },
+      "api_calls": {
+        "cudaGraphLaunch": 511,
+        "cudaLaunchKernel": 13256,
+        "cudaMemcpyAsync": 1041,
+        "cudaStreamSynchronize": 0,
+        "cudaEventSynchronize": 512,
+        "cudaStreamWaitEvent": 1536
+      },
+      "gpu_memory": {
+        "[CUDA memcpy Device-to-Device]": {
+          "count": 516,
+          "time_ms": 1.827256
+        },
+        "[CUDA memcpy Device-to-Host]": {
+          "count": 512,
+          "time_ms": 1.003513
+        },
+        "[CUDA memcpy Host-to-Device]": {
+          "count": 13,
+          "time_ms": 0.019935
+        }
+      },
+      "node_trace_timeline_ms": {
+        "graph_kernel_sum_ms": 18330.463505,
+        "offgraph_kernel_sum_ms": 763.3281119999992,
+        "gpu_event_span_ms": 19251.810036,
+        "gpu_busy_union_ms": 19048.332611,
+        "gpu_idle_within_event_span_ms": 203.477425,
+        "intergraph_gap_sum_ms": 35.408917,
+        "intergraph_gap_median_ms": 0.068703
+      }
+    },
+    "bf16-bs16": {
+      "kernel_sum_ms": 46493.903214,
+      "kernel_instances": 3769108,
+      "category_kernel_ms": {
+        "bf16_decode_stage1": 19081.514996,
+        "bf16_decode_stage2": 400.757016,
+        "common_pointwise_rope_silu_families": 7569.481437,
+        "hf_prefill_attention": 6610.47729,
+        "hf_rmsnorm": 1537.007942,
+        "kv_write": 277.725651,
+        "matrix_including_cublas_splitk_reduce": 10953.280693,
+        "other": 63.658189
+      },
+      "forward_evidence": {
+        "graph_replays": 511,
+        "prefill_forwards": 4,
+        "graph_kernel_counts": [
+          7303
+        ],
+        "attention_kernel_calls_per_slot_kind": 98112,
+        "encoder_kernel_calls": 0,
+        "tier_metadata_kernel_calls_total": 0
+      },
+      "api_calls": {
+        "cudaGraphLaunch": 511,
+        "cudaLaunchKernel": 30072,
+        "cudaMemcpyAsync": 1099,
+        "cudaStreamSynchronize": 0,
+        "cudaEventSynchronize": 515,
+        "cudaStreamWaitEvent": 1545
+      },
+      "gpu_memory": {
+        "[CUDA memcpy Device-to-Device]": {
+          "count": 532,
+          "time_ms": 1.8248
+        },
+        "[CUDA memcpy Device-to-Host]": {
+          "count": 515,
+          "time_ms": 1.035776
+        },
+        "[CUDA memcpy Host-to-Device]": {
+          "count": 52,
+          "time_ms": 0.140319
+        }
+      },
+      "node_trace_timeline_ms": {
+        "graph_kernel_sum_ms": 36251.528604,
+        "offgraph_kernel_sum_ms": 10242.374609999999,
+        "gpu_event_span_ms": 46636.460249,
+        "gpu_busy_union_ms": 46413.329873,
+        "gpu_idle_within_event_span_ms": 223.130376,
+        "intergraph_gap_sum_ms": 35.660758,
+        "intergraph_gap_median_ms": 0.069888
+      }
+    },
+    "vq-bs1": {
+      "kernel_sum_ms": 20365.009917,
+      "kernel_instances": 3753371,
+      "category_kernel_ms": {
+        "common_pointwise_rope_silu_families": 5131.017164,
+        "hf_prefill_attention": 416.367959,
+        "hf_rmsnorm": 1474.126783,
+        "kv_write": 196.334673,
+        "matrix_including_cublas_splitk_reduce": 8668.960093,
+        "other": 56.287585,
+        "vq_attention_reduce": 320.304684,
+        "vq_encoder_prefill_and_flush": 56.867057,
+        "vq_hp_attention": 793.965827,
+        "vq_lse_fill": 139.981781,
+        "vq_quant_attention": 3107.065039,
+        "vq_tier_metadata": 3.731272
+      },
+      "forward_evidence": {
+        "graph_replays": 511,
+        "prefill_forwards": 1,
+        "graph_kernel_counts": [
+          7305
+        ],
+        "attention_kernel_calls_per_slot_kind": 98112,
+        "encoder_kernel_calls": 222,
+        "tier_metadata_kernel_calls_total": 1022
+      },
+      "api_calls": {
+        "cudaGraphLaunch": 511,
+        "cudaLaunchKernel": 17091,
+        "cudaMemcpyAsync": 1752,
+        "cudaStreamSynchronize": 523,
+        "cudaEventSynchronize": 512,
+        "cudaStreamWaitEvent": 2048
+      },
+      "gpu_memory": {
+        "[CUDA memcpy Device-to-Device]": {
+          "count": 707,
+          "time_ms": 1.328985
+        },
+        "[CUDA memcpy Device-to-Host]": {
+          "count": 518,
+          "time_ms": 1.009404
+        },
+        "[CUDA memcpy Host-to-Device]": {
+          "count": 527,
+          "time_ms": 0.561852
+        }
+      },
+      "node_trace_timeline_ms": {
+        "graph_kernel_sum_ms": 19565.738696,
+        "offgraph_kernel_sum_ms": 799.271221,
+        "gpu_event_span_ms": 24953.307461,
+        "gpu_busy_union_ms": 20337.373469,
+        "gpu_idle_within_event_span_ms": 4615.933992,
+        "intergraph_gap_sum_ms": 4463.247545,
+        "intergraph_gap_median_ms": 9.3783985
+      }
+    },
+    "vq-bs16": {
+      "kernel_sum_ms": 51108.303968,
+      "kernel_instances": 4046408,
+      "category_kernel_ms": {
+        "common_pointwise_rope_silu_families": 7452.61601,
+        "hf_prefill_attention": 6552.769797,
+        "hf_rmsnorm": 1529.254509,
+        "kv_write": 263.232654,
+        "matrix_including_cublas_splitk_reduce": 11071.560643,
+        "other": 332.771038,
+        "vq_attention_reduce": 500.791321,
+        "vq_encoder_prefill_and_flush": 697.381645,
+        "vq_hp_attention": 4985.940181,
+        "vq_lse_fill": 136.509583,
+        "vq_quant_attention": 17580.079177,
+        "vq_tier_metadata": 5.39741
+      },
+      "forward_evidence": {
+        "graph_replays": 511,
+        "prefill_forwards": 4,
+        "graph_kernel_counts": [
+          7689
+        ],
+        "attention_kernel_calls_per_slot_kind": 98112,
+        "encoder_kernel_calls": 510,
+        "tier_metadata_kernel_calls_total": 1022
+      },
+      "api_calls": {
+        "cudaGraphLaunch": 511,
+        "cudaLaunchKernel": 110135,
+        "cudaMemcpyAsync": 9863,
+        "cudaStreamSynchronize": 8248,
+        "cudaEventSynchronize": 515,
+        "cudaStreamWaitEvent": 2060
+      },
+      "gpu_memory": {
+        "[CUDA memcpy Host-to-Device]": {
+          "count": 8276,
+          "time_ms": 9.10135
+        },
+        "[CUDA memcpy Device-to-Device]": {
+          "count": 1060,
+          "time_ms": 1.918295
+        },
+        "[CUDA memcpy Device-to-Host]": {
+          "count": 527,
+          "time_ms": 1.029021
+        },
+        "[CUDA memset]": {
+          "count": 10,
+          "time_ms": 0.018528
+        }
+      },
+      "node_trace_timeline_ms": {
+        "graph_kernel_sum_ms": 39979.610073,
+        "offgraph_kernel_sum_ms": 11128.693895,
+        "gpu_event_span_ms": 57825.013252,
+        "gpu_busy_union_ms": 51047.105085,
+        "gpu_idle_within_event_span_ms": 6777.908167,
+        "intergraph_gap_sum_ms": 6935.366312,
+        "intergraph_gap_median_ms": 14.377432
+      }
+    }
+  },
+  "paired": {
+    "bs1": {
+      "bf16_decode_attention_ms": 3190.503099,
+      "vq_decode_attention_ms": 4361.317331,
+      "vq_attention_increase_pct": 36.696853,
+      "attention_delta_ms": 1170.814232,
+      "all_kernel_delta_ms": 1271.2183,
+      "attention_share_of_kernel_delta_pct": 92.101745,
+      "bf16_common_families_ms": 15674.598301,
+      "vq_common_families_ms": 15690.471999,
+      "vq_encoder_share_of_kernel_total_pct": 0.279239
+    },
+    "bs16": {
+      "bf16_decode_attention_ms": 19482.272012,
+      "vq_decode_attention_ms": 23203.320262,
+      "vq_attention_increase_pct": 19.099663,
+      "attention_delta_ms": 3721.04825,
+      "all_kernel_delta_ms": 4614.400754,
+      "attention_share_of_kernel_delta_pct": 80.639902,
+      "bf16_common_families_ms": 26670.247362,
+      "vq_common_families_ms": 26606.200959,
+      "vq_encoder_share_of_kernel_total_pct": 1.364517
+    }
+  },
+  "interpretation": [
+    "Attention cost explains 92.1% (bs1) and 80.6% (bs16) of the increase in summed GPU kernel durations.",
+    "At bs16 quant attention saves 1501.435819 ms relative to BF16 stage1, but 4985.940181 ms of HP attention exceeds that saving.",
+    "Encoder accounts for 0.279239% and 1.364517% of VQ kernel duration; tier metadata is also small. Neither is the main kernel bottleneck in these captures.",
+    "Common model operator families are nearly unchanged between methods; shared HF arithmetic limits potential gains but does not explain the paired cost increase."
+  ],
+  "limitations": [
+    "Node tracing perturbs timing and amplifies stream-synchronization effects. Observed intergraph gaps are not normal-inference CPU overhead.",
+    "A graph gap includes sampling, allocation, encoding and CPU gaps; CPU API waits include GPU execution and must not be added to kernel duration.",
+    "Offgraph kernels are all kernels minus graph kernels: graphId is NULL outside graphs, not necessarily zero. Offgraph includes prefill.",
+    "GPU busy union and GPU event span are not client request wall time. Capture/export wall time is not generation time.",
+    "This diagnostic does not replace the unprofiled throughput matrix. The lower-overhead graph-granularity bs16 recheck is complete; see light-comparison.json for capture-filtered 511-replay spans/gaps, API counts and client-wall versus formal-median comparison. Its gaps are not pure CPU overhead and the VQ profiled wall remains about 4.6% above the formal median."
+  ],
+  "source_sha256": {
+    "bf16-bs16_cuda_api_sum.csv": "1715f4c3c138efec9d1657ecd6394ec4a17fe9a4ec04453521ea7f96e1a9e93a",
+    "bf16-bs16_cuda_gpu_kern_sum.csv": "c5ef3b194e89c734094af4c6464b8f3a59f0deb75bfcd3477e90155dcb615eb1",
+    "bf16-bs16_cuda_gpu_mem_time_sum.csv": "7fe1e82627f830bb4bbca95e91e1ca7b087c351ec6ce19de7a0db9783287cf80",
+    "bf16-bs1_cuda_api_sum.csv": "e81b25daaf1bb1822b6df9410dbbd050c09ef8a887a83b269046ed40a8f48905",
+    "bf16-bs1_cuda_gpu_kern_sum.csv": "4e7e9ecd20d68bfbb8140cec3236404907d058b435965ffdf05fcd3b3bac49bc",
+    "bf16-bs1_cuda_gpu_mem_time_sum.csv": "197792661b93caf0ea15b289d9c98f057861b88107715ab64abf5c03fd85fe47",
+    "bf16-request-validation.json": "6d520ce4fe1fb388e40213391d8d3e93fc225047c2e17cb84d0f733aa530d426",
+    "bf16-server-manifest.json": "b1404259d9032da3f0f2869c66ed8e5aacb0848da88e6b9c1d5544d3e369ec7c",
+    "bf16-timeline-summary.json": "b24792df82b96d33deef80fa7737ce0a54925894e195e96e3428e65ffdb832df",
+    "vq-bs16_cuda_api_sum.csv": "78e7ba1c348c283cfcc808df64a9ee203b013fdae7985416b1a56ed461682553",
+    "vq-bs16_cuda_gpu_kern_sum.csv": "b64d1864297f8ac08e0d90b5eb56afa95c3ef1106176f8d705b6000492faafce",
+    "vq-bs16_cuda_gpu_mem_time_sum.csv": "be65762d51c4104dd96bc7a8211dc97505ea2bf5d99a4216ea9109e849789088",
+    "vq-bs1_cuda_api_sum.csv": "dc8cbcc8e06a2ca4089a9f45aa9235cf080dfabf1883471e9322f94e25698a9d",
+    "vq-bs1_cuda_gpu_kern_sum.csv": "704ffc347db6d3a28f3f1843c674f33b791dd293144da94040ce25ba9f37b8ce",
+    "vq-bs1_cuda_gpu_mem_time_sum.csv": "d93bb74575e5d47b057a60dcb3b8dec85fcb9c2fb1f2be38be39e7f61ab394a3",
+    "vq-request-validation.json": "4c17c0702483ff4a3efb734d1265d63b95b6cbe965ad43a88339fff0f79a6eb6",
+    "vq-server-manifest.json": "38001b2d22b7c7109ce3dd8cefdfa4adf5f9cdc373a29fc08fd34c712cb9a413",
+    "vq-timeline-summary.json": "be234b4ba7f8cb6c5b2eb22fb8fe12a4302a9277ee5cf9358b9adfaa5f9eb3d8"
+  }
+}

@@ -1,0 +1,10 @@
+Mon Nov 23 16:02:17 UTC 2026
+b5f821d5366cd1411cd9b58c69df9bdf7a66c908
+bash scripts/serve_method.sh /homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking bf16 /homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e --port 30557 --dtype bfloat16 --page-size 8 --context-length 40960 --max-prefill-tokens 8192 --chunked-prefill-size -1 --mem-fraction-static .90 --cuda-graph-bs 1 2 4 8 16 --disable-piecewise-cuda-graph --enable-metrics --decode-log-interval 1 --incremental-streaming-output 
+uuid, name, memory.free [MiB], driver_version
+GPU-82009e07-07c1-3a6c-5613-df2e45f63980, NVIDIA A100-SXM4-80GB, 81154 MiB, 570.195.03
+               total        used        free      shared  buff/cache   available
+Mem:           2.0Ti        98Gi       127Gi       6.0Gi       1.8Ti       1.9Ti
+Swap:          8.0Gi       1.7Gi       6.3Gi
+2.9.1+cu128
+/homes/ruoxi07/repo/LoopVQ/python/sglang/__init__.py

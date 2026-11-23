@@ -1,0 +1,56 @@
+[
+  {
+    "bs": 1,
+    "phase": "warm1",
+    "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/vq-bs1-warm1.sse",
+    "sha256": "6777c2539dc44a31f0463a0a296dfdf6cb01100afa689f00cbf371045bef0481",
+    "requests": 1,
+    "tokens_per_request": 512,
+    "status": "ok"
+  },
+  {
+    "bs": 1,
+    "phase": "warm2",
+    "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/vq-bs1-warm2.sse",
+    "sha256": "29b9f61278040d551dd8c27c9d5562f490358bcbab936572bec4b7af3ecb6490",
+    "requests": 1,
+    "tokens_per_request": 512,
+    "status": "ok"
+  },
+  {
+    "bs": 1,
+    "phase": "profile",
+    "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/vq-bs1-profile.sse",
+    "sha256": "b1888c19ef7d79927164c7bae91a5b2c0706eb0b52be1974839c8c44df2c3d62",
+    "requests": 1,
+    "tokens_per_request": 512,
+    "status": "ok"
+  },
+  {
+    "bs": 16,
+    "phase": "warm1",
+    "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/vq-bs16-warm1.sse",
+    "sha256": "70d2aa0d1e6dde7ea47ef18abb5e487d1c8caad813d88283d57a85b0763aa52f",
+    "requests": 16,
+    "tokens_per_request": 512,
+    "status": "ok"
+  },
+  {
+    "bs": 16,
+    "phase": "warm2",
+    "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/vq-bs16-warm2.sse",
+    "sha256": "4feeec39b3a4486fd5d1a990cd4d60da3711b0a1196ed7ac18107cbd30cf68ff",
+    "requests": 16,
+    "tokens_per_request": 512,
+    "status": "ok"
+  },
+  {
+    "bs": 16,
+    "phase": "profile",
+    "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/perf-diagnosis/vq-bs16-profile.sse",
+    "sha256": "e35b86f396706142f425b9d3afd97bb093314ed580c10626413cbc956628644f",
+    "requests": 16,
+    "tokens_per_request": 512,
+    "status": "ok"
+  }
+]
