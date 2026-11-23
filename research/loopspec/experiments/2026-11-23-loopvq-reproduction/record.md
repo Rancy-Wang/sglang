@@ -8,7 +8,7 @@
 - 官方参考及用户 LoopVQ fork main：d5d58c83fe5bc9a4ce470ae96c69b55f085e2977。
 - 本地 SGLang：loopspec-test，915e79f4ce7dc08e7e980987e0c8729f523eb74b；包含 v0.5.22 基线 baa9befa381511cd4d56f83980951e5a45fffc6d。
 - 用户新约定：LoopVQ 的 origin 使用 git@github.com:Rancy-Wang/LoopVQ.git，test 用于开发/提交/push/pull；main 只作正式版本，晋升需明确批准。保留 mscheong01/LoopVQ 为 upstream。SGLang 仍仅通过 Rancy-Wang/sglang 的 loopspec-test 开发和远端同步，正式 loopspec 分支不变。
-- 统一候选轮次 **2/10（评测入口语法修复，其他组件继续验证）**。本任务的训练/评测脚本及推理代码候选修改加验证累计计数；跨阶段不重置，固定候选多项测试不重复计数。只读调查、写计划、纯环境准备不伪计代码轮次。
+- 统一候选轮次 **7/10（吞吐容量余量配置，推理数学保持候选6）**。本任务的训练/评测脚本及推理代码候选修改加验证累计计数；跨阶段不重置，固定候选多项测试不重复计数。只读调查、写计划、纯环境准备不伪计代码轮次。
 - 主范围：Ouro-2.6B-Thinking、完整 R4，BF16 对照和纯 LoopVQ **0.5 bit（G16/c4）**。原计划0.25 bit移至后续，不在首期训练或评测。不运行 TaSQ 统计、TaSQ/TaSQ+LoopVQ。CQ可作后续附加对照，未列为必需工作。保留微调前码本用于诊断。
 - 用户验收口径：不要求跨机器答案或论文分数完全一致；必须记录真实准确率、差异和运行条件。吞吐是必需交付：bs=1/2/4/8/16分别与同机无LoopVQ的BF16普通AR比较。工程正确性测试不因容许采样差异而放宽。
 - 首期运行：TP/PP/DP=1，普通多请求 AR server，验证 eager 和 decode CUDA graph；按参考评测关闭 radix cache、chunked prefill 和 piecewise graph。显式禁止与 LoopSpec、DFLASH、recurrent-CDB 混用；关闭 LoopVQ 时现有功能必须回归通过。
@@ -356,3 +356,18 @@ common-shape在正式测量前对两方法、五档batch完成容量预检后冻
 
 - 候选5真实最终bundle服务全部通过：eager GPU0/30542和fullgraph GPU3/30544均完成17case（包含abort）并exit0，16个有输出case共72请求，eager/graph output IDs与停止位置全部一致；short HP与HF也一致。覆盖4096输入、63/64/65/319/320/321/327/328/333/383边界、bs1/2/4/8/16、padding3/5/15、600token多圈ring、ragged结束/owned abort、复用及先验idle后flush；均无空闲KV泄漏。原始结果A10 results/serving-vq-{eager,graph}与serving-eager-graph-comparison.json。
 - 候选6本地冻结：5个官方算子/metadata/adapter和GPU测试AST通过；相关11文件py_compile、serving9/9、throughput11/11及diff检查exit0。CUDA源MODE1与d5d58c8只差宏头、split/CAP断言和空白；尚未GPU编译，不能报数值/性能通过。Lean上层capture选择虽可为true，最底层实际仅HIP执行，A10旧路径并未使用Lean；optimized仍显式固定split契约并省掉无用arena。
+
+- 候选6 A10 source85cd80c5：真实wiring9/9、官方GPU3/3 exit0；22个算子case各eager/graph共44次，partial最大误差0、merged BF16逐元素相同；8种batch的metadata CPU oracle及变长graph通过。证据round6-official-kernels.json。optimized BF16三条32token greedy/停止和96个teacher-forced argmax与HF全一致；top20 logprob最大差仍0.343647/0.430154/0.499999，不声称概率逐位一致。
+- optimized BF16与VQ各自完成eager/full全suite并exit0；每方法72请求output IDs/停止位置全一致，abort/idle/free/reuse/flush全通过，证据round6-serving-comparison.json。默认参考profile的上一组72请求另存，不混作optimized证据。所有真实模型仍完整R4；LoopSpec未联合启用。
+- 训练配方审计补充：官方及本次builder/FT沿用固定HF checkpoint的outer model(...).logits，threshold=1.0阈值选层，骨干无条件执行4轮；不是mixture。BF16 gate/pdf/cumsum代码本身不能严格保证选中第4轮，目前无实际提前选层频率证据。线上服务和HF probe则显式最终第4轮LM head。保持官方训练配方，不把两种readout称为代码层面严格等价。
+- 未启用且不作支持声明：enable_deterministic_inference、triton_attention_split_tile_size、SGLANG_TRITON_DECODE_ATTN_STATIC_KV_SPLITS；正式准确率manifest逐项核实默认false/None/absent。35K decode算子通过不等于35K fresh prefill容量通过；跨轮raw K/V暂存约1.125MiB/输入token，须另测长输入峰值。
+- 候选6正式common-shape BF16 bs16预热失败：pool40960恰等于16×(2048+512)，但scheduler per_req_token_overhead=page_size=8，未覆盖预留；实际511条bs15随后511条bs1，target_batch_fraction=0、status=batch_not_verified。原始8192输出/62.664s的130.729 tok/s不作为bs16正式吞吐。日志和失败summary保留于A10 results/throughput-round6/common-shape/bf16/bs16；无CUDA OOM、无retraction，不伪称OOM。
+
+### 候选7/10：给吞吐服务保留调度分页余量
+
+1. 目的：让common-shape bs16真正同时驻留，消除精确容量边界造成15+1顺序执行。
+2. 步骤：本地新增可复用A10吞吐启服脚本；common两方法pool41984，比完整token需求多1024，覆盖16×8页预留及严格比较余量；按Git同步，在同GPU5重跑BF16与VQ。paper-long在GPU6另配对，BF1640960、VQ557568（16×34816+512），后者窗口8/64；各协议单独成表。
+3. 范围：a10_throughput_server.sh及本记录。推理算子、调度器、评分器、训练和既有准确率配置不改；已有准确率服务固定source85cd80c5。
+4. 成功标准：native Thinking输入2048/output512、bs1/2/4/8/16不变；每cell2预热+3测量，原90%实际target batch和至少8连续decode门槛不放宽；同GPU/环境/profile/代码SHA配对。paper-long BF16 bs2以上保存容量N/A，不发送会串行的请求、不编造OOM。
+5. 风险：common BF16多占1.5GiB显存；启服前核对资源。长协议VQ逻辑池约55.8万token仍需实际显存与高batch验收。所有失败原样保留，未启动不标通过。
+6. 验证：本地bash -n和diff检查，push/pull loopspec-test；A10新启动readback、import/SHA、health、实际bs16完整输出；成功后完成同一固定候选的全部计划内测量。此配置修改计第7轮，不借环境修复免计。

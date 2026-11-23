@@ -1,0 +1,29 @@
+{
+  "source_sha": "85cd80c5b7520dc1b86d2be3a997a408b1dfbfa2",
+  "comparisons": [
+    {
+      "prompt": 0,
+      "greedy_equal": true,
+      "stops_equal": true,
+      "forced_positions": 32,
+      "forced_argmax_equal": true,
+      "max_top20_logprob_abs_delta": 0.3436470031738281
+    },
+    {
+      "prompt": 1,
+      "greedy_equal": true,
+      "stops_equal": true,
+      "forced_positions": 32,
+      "forced_argmax_equal": true,
+      "max_top20_logprob_abs_delta": 0.43015384674072266
+    },
+    {
+      "prompt": 2,
+      "greedy_equal": true,
+      "stops_equal": true,
+      "forced_positions": 32,
+      "forced_argmax_equal": true,
+      "max_top20_logprob_abs_delta": 0.4999990463256836
+    }
+  ]
+}

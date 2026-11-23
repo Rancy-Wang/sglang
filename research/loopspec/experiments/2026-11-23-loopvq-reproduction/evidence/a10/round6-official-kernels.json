@@ -1,0 +1,1989 @@
+{
+  "source_sha": "85cd80c5b7520dc1b86d2be3a997a408b1dfbfa2",
+  "exit_code": 0,
+  "log_sha256": "5e8ace42e3fbdf9fb7042719afbab0fe7d235f2d6bfc6f5fa1b00b2aaf8af072",
+  "events": [
+    {
+      "event": "reference_source",
+      "path": "/homes/ruoxi07/repo/LoopVQ/python/sglang/srt/layers/attention/triton_ops/vqwide_g.py",
+      "sha256": "41ea0addbd085dbe807070287973a09c2e3d29ea5b42b7dbec91ee37308e4135",
+      "commit": "d5d58c83fe5bc9a4ce470ae96c69b55f085e2977"
+    },
+    {
+      "event": "reference_source",
+      "path": "/homes/ruoxi07/repo/LoopVQ/python/sglang/srt/layers/attention/triton_ops/decode_attention.py",
+      "sha256": "175fd261d83595cf9d03b7300c5bd38cc18fec447614977ad493d3397339c6af",
+      "commit": "d5d58c83fe5bc9a4ce470ae96c69b55f085e2977"
+    },
+    {
+      "event": "real_bundle",
+      "kind": "k",
+      "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e/codebook.pt",
+      "sha256": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0"
+    },
+    {
+      "event": "real_bundle",
+      "kind": "v",
+      "path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e/vq_v_codebook.pt",
+      "sha256": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4"
+    },
+    {
+      "event": "environment",
+      "torch": "2.14.1+cu130",
+      "triton": "3.8.0",
+      "cuda": "13.0",
+      "gpu": "NVIDIA A100-SXM4-80GB",
+      "context": 40960
+    },
+    {
+      "event": "metadata",
+      "batch": 1,
+      "phase": "eager",
+      "quant_lengths": [
+        0
+      ],
+      "full_lengths": [
+        17
+      ],
+      "exact": true
+    },
+    {
+      "event": "metadata",
+      "batch": 1,
+      "phase": "graph_changed_lengths_and_locations",
+      "quant_lengths": [
+        1
+      ],
+      "full_lengths": [
+        322
+      ],
+      "exact": true
+    },
+    {
+      "event": "metadata",
+      "batch": 2,
+      "phase": "eager",
+      "quant_lengths": [
+        0,
+        1
+      ],
+      "full_lengths": [
+        17,
+        322
+      ],
+      "exact": true
+    },
+    {
+      "event": "metadata",
+      "batch": 2,
+      "phase": "graph_changed_lengths_and_locations",
+      "quant_lengths": [
+        1,
+        13
+      ],
+      "full_lengths": [
+        322,
+        335
+      ],
+      "exact": true
+    },
+    {
+      "event": "metadata",
+      "batch": 3,
+      "phase": "eager",
+      "quant_lengths": [
+        0,
+        1,
+        13
+      ],
+      "full_lengths": [
+        17,
+        322,
+        335
+      ],
+      "exact": true
+    },
+    {
+      "event": "metadata",
+      "batch": 3,
+      "phase": "graph_changed_lengths_and_locations",
+      "quant_lengths": [
+        1,
+        13,
+        1025
+      ],
+      "full_lengths": [
+        322,
+        335,
+        1348
+      ],
+      "exact": true
+    },
+    {
+      "event": "metadata",
+      "batch": 4,
+      "phase": "eager",
+      "quant_lengths": [
+        0,
+        1,
+        13,
+        1025
+      ],
+      "full_lengths": [
+        17,
+        322,
+        335,
+        1348
+      ],
+      "exact": true
+    },
+    {
+      "event": "metadata",
+      "batch": 4,
+      "phase": "graph_changed_lengths_and_locations",
+      "quant_lengths": [
+        1,
+        13,
+        1025,
+        8192
+      ],
+      "full_lengths": [
+        322,
+        335,
+        1348,
+        8516
+      ],
+      "exact": true
+    },
+    {
+      "event": "metadata",
+      "batch": 5,
+      "phase": "eager",
+      "quant_lengths": [
+        0,
+        1,
+        13,
+        1025,
+        8192
+      ],
+      "full_lengths": [
+        17,
+        322,
+        335,
+        1348,
+        8516
+      ],
+      "exact": true
+    },
+    {
+      "event": "metadata",
+      "batch": 5,
+      "phase": "graph_changed_lengths_and_locations",
+      "quant_lengths": [
+        1,
+        13,
+        1025,
+        8192,
+        35000
+      ],
+      "full_lengths": [
+        322,
+        335,
+        1348,
+        8516,
+        35325
+      ],
+      "exact": true
+    },
+    {
+      "event": "metadata",
+      "batch": 8,
+      "phase": "eager",
+      "quant_lengths": [
+        0,
+        1,
+        13,
+        1025,
+        8192,
+        35000,
+        0,
+        320
+      ],
+      "full_lengths": [
+        17,
+        322,
+        335,
+        1348,
+        8516,
+        35325,
+        0,
+        647
+      ],
+      "exact": true
+    },
+    {
+      "event": "metadata",
+      "batch": 8,
+      "phase": "graph_changed_lengths_and_locations",
+      "quant_lengths": [
+        1,
+        13,
+        1025,
+        8192,
+        35000,
+        0,
+        320,
+        0
+      ],
+      "full_lengths": [
+        322,
+        335,
+        1348,
+        8516,
+        35325,
+        0,
+        647,
+        17
+      ],
+      "exact": true
+    },
+    {
+      "event": "metadata",
+      "batch": 15,
+      "phase": "eager",
+      "quant_lengths": [
+        0,
+        1,
+        13,
+        1025,
+        8192,
+        35000,
+        0,
+        320,
+        0,
+        1,
+        13,
+        1025,
+        8192,
+        35000,
+        0
+      ],
+      "full_lengths": [
+        17,
+        322,
+        335,
+        1348,
+        8516,
+        35325,
+        0,
+        647,
+        17,
+        322,
+        335,
+        1348,
+        8516,
+        35325,
+        0
+      ],
+      "exact": true
+    },
+    {
+      "event": "metadata",
+      "batch": 15,
+      "phase": "graph_changed_lengths_and_locations",
+      "quant_lengths": [
+        1,
+        13,
+        1025,
+        8192,
+        35000,
+        0,
+        320,
+        0,
+        1,
+        13,
+        1025,
+        8192,
+        35000,
+        0,
+        320
+      ],
+      "full_lengths": [
+        322,
+        335,
+        1348,
+        8516,
+        35325,
+        0,
+        647,
+        17,
+        322,
+        335,
+        1348,
+        8516,
+        35325,
+        0,
+        647
+      ],
+      "exact": true
+    },
+    {
+      "event": "metadata",
+      "batch": 16,
+      "phase": "eager",
+      "quant_lengths": [
+        0,
+        1,
+        13,
+        1025,
+        8192,
+        35000,
+        0,
+        320,
+        0,
+        1,
+        13,
+        1025,
+        8192,
+        35000,
+        0,
+        320
+      ],
+      "full_lengths": [
+        17,
+        322,
+        335,
+        1348,
+        8516,
+        35325,
+        0,
+        647,
+        17,
+        322,
+        335,
+        1348,
+        8516,
+        35325,
+        0,
+        647
+      ],
+      "exact": true
+    },
+    {
+      "event": "metadata",
+      "batch": 16,
+      "phase": "graph_changed_lengths_and_locations",
+      "quant_lengths": [
+        1,
+        13,
+        1025,
+        8192,
+        35000,
+        0,
+        320,
+        0,
+        1,
+        13,
+        1025,
+        8192,
+        35000,
+        0,
+        320,
+        0
+      ],
+      "full_lengths": [
+        322,
+        335,
+        1348,
+        8516,
+        35325,
+        0,
+        647,
+        17,
+        322,
+        335,
+        1348,
+        8516,
+        35325,
+        0,
+        647,
+        17
+      ],
+      "exact": true
+    },
+    {
+      "event": "case",
+      "name": "split-boundary-b1",
+      "phase": "eager",
+      "batch": 1,
+      "group": 1,
+      "lengths": [
+        321
+      ],
+      "quant_lengths": [
+        1
+      ],
+      "splits": [
+        1
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 0
+    },
+    {
+      "event": "case",
+      "name": "split-boundary-b1",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 1,
+      "group": 1,
+      "lengths": [
+        321
+      ],
+      "quant_lengths": [
+        1
+      ],
+      "splits": [
+        1
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 0
+    },
+    {
+      "event": "case",
+      "name": "split-boundary-b2",
+      "phase": "eager",
+      "batch": 2,
+      "group": 2,
+      "lengths": [
+        321,
+        1344
+      ],
+      "quant_lengths": [
+        1,
+        1023
+      ],
+      "splits": [
+        4,
+        4
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "split-boundary-b2",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 2,
+      "group": 2,
+      "lengths": [
+        321,
+        1344
+      ],
+      "quant_lengths": [
+        1,
+        1023
+      ],
+      "splits": [
+        4,
+        4
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "split-boundary-b3",
+      "phase": "eager",
+      "batch": 3,
+      "group": 2,
+      "lengths": [
+        321,
+        1344,
+        1346
+      ],
+      "quant_lengths": [
+        1,
+        1023,
+        1024
+      ],
+      "splits": [
+        4,
+        4,
+        4
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 191
+    },
+    {
+      "event": "case",
+      "name": "split-boundary-b3",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 3,
+      "group": 2,
+      "lengths": [
+        321,
+        1344,
+        1346
+      ],
+      "quant_lengths": [
+        1,
+        1023,
+        1024
+      ],
+      "splits": [
+        4,
+        4,
+        4
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 191
+    },
+    {
+      "event": "case",
+      "name": "split-boundary-b4",
+      "phase": "eager",
+      "batch": 4,
+      "group": 2,
+      "lengths": [
+        321,
+        1344,
+        1346,
+        1348
+      ],
+      "quant_lengths": [
+        1,
+        1023,
+        1024,
+        1025
+      ],
+      "splits": [
+        4,
+        4,
+        5,
+        5
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 0
+    },
+    {
+      "event": "case",
+      "name": "split-boundary-b4",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 4,
+      "group": 2,
+      "lengths": [
+        321,
+        1344,
+        1346,
+        1348
+      ],
+      "quant_lengths": [
+        1,
+        1023,
+        1024,
+        1025
+      ],
+      "splits": [
+        4,
+        4,
+        5,
+        5
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 0
+    },
+    {
+      "event": "case",
+      "name": "split-boundary-b5",
+      "phase": "eager",
+      "batch": 5,
+      "group": 2,
+      "lengths": [
+        321,
+        1344,
+        1346,
+        1348,
+        2371
+      ],
+      "quant_lengths": [
+        1,
+        1023,
+        1024,
+        1025,
+        2047
+      ],
+      "splits": [
+        4,
+        4,
+        4,
+        4,
+        4
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "split-boundary-b5",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 5,
+      "group": 2,
+      "lengths": [
+        321,
+        1344,
+        1346,
+        1348,
+        2371
+      ],
+      "quant_lengths": [
+        1,
+        1023,
+        1024,
+        1025,
+        2047
+      ],
+      "splits": [
+        4,
+        4,
+        4,
+        4,
+        4
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "split-boundary-b8",
+      "phase": "eager",
+      "batch": 8,
+      "group": 2,
+      "lengths": [
+        321,
+        1344,
+        1346,
+        1348,
+        2371,
+        2373,
+        2375,
+        358
+      ],
+      "quant_lengths": [
+        1,
+        1023,
+        1024,
+        1025,
+        2047,
+        2048,
+        2049,
+        31
+      ],
+      "splits": [
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 191
+    },
+    {
+      "event": "case",
+      "name": "split-boundary-b8",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 8,
+      "group": 2,
+      "lengths": [
+        321,
+        1344,
+        1346,
+        1348,
+        2371,
+        2373,
+        2375,
+        358
+      ],
+      "quant_lengths": [
+        1,
+        1023,
+        1024,
+        1025,
+        2047,
+        2048,
+        2049,
+        31
+      ],
+      "splits": [
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 191
+    },
+    {
+      "event": "case",
+      "name": "split-boundary-b15",
+      "phase": "eager",
+      "batch": 15,
+      "group": 2,
+      "lengths": [
+        321,
+        1344,
+        1346,
+        1348,
+        2371,
+        2373,
+        2375,
+        358,
+        321,
+        1344,
+        1346,
+        1348,
+        2371,
+        2373,
+        2375
+      ],
+      "quant_lengths": [
+        1,
+        1023,
+        1024,
+        1025,
+        2047,
+        2048,
+        2049,
+        31,
+        1,
+        1023,
+        1024,
+        1025,
+        2047,
+        2048,
+        2049
+      ],
+      "splits": [
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        3
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 0
+    },
+    {
+      "event": "case",
+      "name": "split-boundary-b15",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 15,
+      "group": 2,
+      "lengths": [
+        321,
+        1344,
+        1346,
+        1348,
+        2371,
+        2373,
+        2375,
+        358,
+        321,
+        1344,
+        1346,
+        1348,
+        2371,
+        2373,
+        2375
+      ],
+      "quant_lengths": [
+        1,
+        1023,
+        1024,
+        1025,
+        2047,
+        2048,
+        2049,
+        31,
+        1,
+        1023,
+        1024,
+        1025,
+        2047,
+        2048,
+        2049
+      ],
+      "splits": [
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        3
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 0
+    },
+    {
+      "event": "case",
+      "name": "split-boundary-b16",
+      "phase": "eager",
+      "batch": 16,
+      "group": 2,
+      "lengths": [
+        321,
+        1344,
+        1346,
+        1348,
+        2371,
+        2373,
+        2375,
+        358,
+        321,
+        1344,
+        1346,
+        1348,
+        2371,
+        2373,
+        2375,
+        358
+      ],
+      "quant_lengths": [
+        1,
+        1023,
+        1024,
+        1025,
+        2047,
+        2048,
+        2049,
+        31,
+        1,
+        1023,
+        1024,
+        1025,
+        2047,
+        2048,
+        2049,
+        31
+      ],
+      "splits": [
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "split-boundary-b16",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 16,
+      "group": 2,
+      "lengths": [
+        321,
+        1344,
+        1346,
+        1348,
+        2371,
+        2373,
+        2375,
+        358,
+        321,
+        1344,
+        1346,
+        1348,
+        2371,
+        2373,
+        2375,
+        358
+      ],
+      "quant_lengths": [
+        1,
+        1023,
+        1024,
+        1025,
+        2047,
+        2048,
+        2049,
+        31,
+        1,
+        1023,
+        1024,
+        1025,
+        2047,
+        2048,
+        2049,
+        31
+      ],
+      "splits": [
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "long-2048-b1",
+      "phase": "eager",
+      "batch": 1,
+      "group": 1,
+      "lengths": [
+        2368
+      ],
+      "quant_lengths": [
+        2048
+      ],
+      "splits": [
+        8
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "long-2048-b1",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 1,
+      "group": 1,
+      "lengths": [
+        2368
+      ],
+      "quant_lengths": [
+        2048
+      ],
+      "splits": [
+        8
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "long-2048-b2",
+      "phase": "eager",
+      "batch": 2,
+      "group": 2,
+      "lengths": [
+        2368,
+        2368
+      ],
+      "quant_lengths": [
+        2048,
+        2047
+      ],
+      "splits": [
+        8,
+        8
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "long-2048-b2",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 2,
+      "group": 2,
+      "lengths": [
+        2368,
+        2368
+      ],
+      "quant_lengths": [
+        2048,
+        2047
+      ],
+      "splits": [
+        8,
+        8
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "long-2048-b16",
+      "phase": "eager",
+      "batch": 16,
+      "group": 2,
+      "lengths": [
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368
+      ],
+      "quant_lengths": [
+        2048,
+        2047,
+        2046,
+        2045,
+        2044,
+        2043,
+        2042,
+        2041,
+        2048,
+        2047,
+        2046,
+        2045,
+        2044,
+        2043,
+        2042,
+        2041
+      ],
+      "splits": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "long-2048-b16",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 16,
+      "group": 2,
+      "lengths": [
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368,
+        2368
+      ],
+      "quant_lengths": [
+        2048,
+        2047,
+        2046,
+        2045,
+        2044,
+        2043,
+        2042,
+        2041,
+        2048,
+        2047,
+        2046,
+        2045,
+        2044,
+        2043,
+        2042,
+        2041
+      ],
+      "splits": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "long-8192-b1",
+      "phase": "eager",
+      "batch": 1,
+      "group": 1,
+      "lengths": [
+        8512
+      ],
+      "quant_lengths": [
+        8192
+      ],
+      "splits": [
+        13
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "long-8192-b1",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 1,
+      "group": 1,
+      "lengths": [
+        8512
+      ],
+      "quant_lengths": [
+        8192
+      ],
+      "splits": [
+        13
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "long-8192-b2",
+      "phase": "eager",
+      "batch": 2,
+      "group": 2,
+      "lengths": [
+        8512,
+        8512
+      ],
+      "quant_lengths": [
+        8192,
+        8191
+      ],
+      "splits": [
+        13,
+        13
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "long-8192-b2",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 2,
+      "group": 2,
+      "lengths": [
+        8512,
+        8512
+      ],
+      "quant_lengths": [
+        8192,
+        8191
+      ],
+      "splits": [
+        13,
+        13
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "long-8192-b16",
+      "phase": "eager",
+      "batch": 16,
+      "group": 2,
+      "lengths": [
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512
+      ],
+      "quant_lengths": [
+        8192,
+        8191,
+        8190,
+        8189,
+        8188,
+        8187,
+        8186,
+        8185,
+        8192,
+        8191,
+        8190,
+        8189,
+        8188,
+        8187,
+        8186,
+        8185
+      ],
+      "splits": [
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "long-8192-b16",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 16,
+      "group": 2,
+      "lengths": [
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512,
+        8512
+      ],
+      "quant_lengths": [
+        8192,
+        8191,
+        8190,
+        8189,
+        8188,
+        8187,
+        8186,
+        8185,
+        8192,
+        8191,
+        8190,
+        8189,
+        8188,
+        8187,
+        8186,
+        8185
+      ],
+      "splits": [
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "long-35000-b1",
+      "phase": "eager",
+      "batch": 1,
+      "group": 1,
+      "lengths": [
+        35320
+      ],
+      "quant_lengths": [
+        35000
+      ],
+      "splits": [
+        18
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 191
+    },
+    {
+      "event": "case",
+      "name": "long-35000-b1",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 1,
+      "group": 1,
+      "lengths": [
+        35320
+      ],
+      "quant_lengths": [
+        35000
+      ],
+      "splits": [
+        18
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 191
+    },
+    {
+      "event": "case",
+      "name": "long-35000-b2",
+      "phase": "eager",
+      "batch": 2,
+      "group": 2,
+      "lengths": [
+        35320,
+        35320
+      ],
+      "quant_lengths": [
+        35000,
+        34999
+      ],
+      "splits": [
+        35,
+        35
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 191
+    },
+    {
+      "event": "case",
+      "name": "long-35000-b2",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 2,
+      "group": 2,
+      "lengths": [
+        35320,
+        35320
+      ],
+      "quant_lengths": [
+        35000,
+        34999
+      ],
+      "splits": [
+        35,
+        35
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 191
+    },
+    {
+      "event": "case",
+      "name": "long-35000-b16",
+      "phase": "eager",
+      "batch": 16,
+      "group": 2,
+      "lengths": [
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320
+      ],
+      "quant_lengths": [
+        35000,
+        34999,
+        34998,
+        34997,
+        34996,
+        34995,
+        34994,
+        34993,
+        35000,
+        34999,
+        34998,
+        34997,
+        34996,
+        34995,
+        34994,
+        34993
+      ],
+      "splits": [
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 191
+    },
+    {
+      "event": "case",
+      "name": "long-35000-b16",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 16,
+      "group": 2,
+      "lengths": [
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320,
+        35320
+      ],
+      "quant_lengths": [
+        35000,
+        34999,
+        34998,
+        34997,
+        34996,
+        34995,
+        34994,
+        34993,
+        35000,
+        34999,
+        34998,
+        34997,
+        34996,
+        34995,
+        34994,
+        34993
+      ],
+      "splits": [
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 191
+    },
+    {
+      "event": "case",
+      "name": "padding-3-to-4",
+      "phase": "eager",
+      "batch": 4,
+      "group": 2,
+      "lengths": [
+        2371,
+        2371,
+        2371,
+        0
+      ],
+      "quant_lengths": [
+        2051,
+        2050,
+        2049,
+        0
+      ],
+      "splits": [
+        6,
+        6,
+        6,
+        6
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 191
+    },
+    {
+      "event": "case",
+      "name": "padding-3-to-4",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 4,
+      "group": 2,
+      "lengths": [
+        2371,
+        2371,
+        2371,
+        0
+      ],
+      "quant_lengths": [
+        2051,
+        2050,
+        2049,
+        0
+      ],
+      "splits": [
+        6,
+        6,
+        6,
+        6
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 191
+    },
+    {
+      "event": "case",
+      "name": "padding-5-to-8",
+      "phase": "eager",
+      "batch": 8,
+      "group": 2,
+      "lengths": [
+        2371,
+        2371,
+        2371,
+        2371,
+        2371,
+        0,
+        0,
+        0
+      ],
+      "quant_lengths": [
+        2051,
+        2050,
+        2049,
+        2048,
+        2047,
+        0,
+        0,
+        0
+      ],
+      "splits": [
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        1,
+        1
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 191
+    },
+    {
+      "event": "case",
+      "name": "padding-5-to-8",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 8,
+      "group": 2,
+      "lengths": [
+        2371,
+        2371,
+        2371,
+        2371,
+        2371,
+        0,
+        0,
+        0
+      ],
+      "quant_lengths": [
+        2051,
+        2050,
+        2049,
+        2048,
+        2047,
+        0,
+        0,
+        0
+      ],
+      "splits": [
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        1,
+        1
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 191
+    },
+    {
+      "event": "case",
+      "name": "padding-15-to-16",
+      "phase": "eager",
+      "batch": 16,
+      "group": 2,
+      "lengths": [
+        2371,
+        2371,
+        2371,
+        2371,
+        2371,
+        2371,
+        2371,
+        2371,
+        2363,
+        2363,
+        2363,
+        2363,
+        2363,
+        2363,
+        2363,
+        0
+      ],
+      "quant_lengths": [
+        2051,
+        2050,
+        2049,
+        2048,
+        2047,
+        2046,
+        2045,
+        2044,
+        2043,
+        2042,
+        2041,
+        2040,
+        2039,
+        2038,
+        2037,
+        0
+      ],
+      "splits": [
+        3,
+        3,
+        3,
+        3,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 191
+    },
+    {
+      "event": "case",
+      "name": "padding-15-to-16",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 16,
+      "group": 2,
+      "lengths": [
+        2371,
+        2371,
+        2371,
+        2371,
+        2371,
+        2371,
+        2371,
+        2371,
+        2363,
+        2363,
+        2363,
+        2363,
+        2363,
+        2363,
+        2363,
+        0
+      ],
+      "quant_lengths": [
+        2051,
+        2050,
+        2049,
+        2048,
+        2047,
+        2046,
+        2045,
+        2044,
+        2043,
+        2042,
+        2041,
+        2040,
+        2039,
+        2038,
+        2037,
+        0
+      ],
+      "splits": [
+        3,
+        3,
+        3,
+        3,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 191
+    },
+    {
+      "event": "case",
+      "name": "empty-quant",
+      "phase": "eager",
+      "batch": 4,
+      "group": 2,
+      "lengths": [
+        17,
+        17,
+        17,
+        0
+      ],
+      "quant_lengths": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "splits": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 0
+    },
+    {
+      "event": "case",
+      "name": "empty-quant",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 4,
+      "group": 2,
+      "lengths": [
+        17,
+        17,
+        17,
+        0
+      ],
+      "quant_lengths": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "splits": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 0
+    },
+    {
+      "event": "case",
+      "name": "all-padding",
+      "phase": "eager",
+      "batch": 2,
+      "group": 2,
+      "lengths": [
+        0,
+        0
+      ],
+      "quant_lengths": [
+        0,
+        0
+      ],
+      "splits": [
+        1,
+        1
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    },
+    {
+      "event": "case",
+      "name": "all-padding",
+      "phase": "graph_changed_query_and_locations",
+      "batch": 2,
+      "group": 2,
+      "lengths": [
+        0,
+        0
+      ],
+      "quant_lengths": [
+        0,
+        0
+      ],
+      "splits": [
+        1,
+        1
+      ],
+      "max_split_output_abs_error": 0.0,
+      "merged_bf16_exact": true,
+      "real_bundle_slot": 95
+    }
+  ]
+}
