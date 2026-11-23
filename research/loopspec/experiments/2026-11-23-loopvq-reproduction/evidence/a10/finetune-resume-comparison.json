@@ -1,0 +1,51 @@
+{
+  "formal_completed_epochs": 4,
+  "resumed_completed_epochs": 4,
+  "formal_global_step": 48,
+  "resumed_global_step": 48,
+  "same_recipe": true,
+  "formal_best_kl": 0.04768510349094868,
+  "resumed_best_kl": 0.047567552886903286,
+  "absolute_best_kl_delta": 0.00011755060404539108,
+  "parameters": [
+    {
+      "key": "codebooks",
+      "kind": "k",
+      "exact_equal": false,
+      "max_abs_diff": 0.020830631256103516,
+      "mean_abs_diff": 0.0004673109215218574,
+      "reference_abs_mean": 1.0642284154891968
+    },
+    {
+      "key": "codebooks",
+      "kind": "v",
+      "exact_equal": false,
+      "max_abs_diff": 0.021642446517944336,
+      "mean_abs_diff": 0.0005159570719115436,
+      "reference_abs_mean": 0.33670151233673096
+    },
+    {
+      "key": "best_codebooks",
+      "kind": "k",
+      "exact_equal": false,
+      "max_abs_diff": 0.020830631256103516,
+      "mean_abs_diff": 0.0004673109215218574,
+      "reference_abs_mean": 1.0642284154891968
+    },
+    {
+      "key": "best_codebooks",
+      "kind": "v",
+      "exact_equal": false,
+      "max_abs_diff": 0.021642446517944336,
+      "mean_abs_diff": 0.0005159570719115436,
+      "reference_abs_mean": 0.33670151233673096
+    }
+  ],
+  "formal_optimizer_steps": [
+    48.0
+  ],
+  "resumed_optimizer_steps": [
+    48.0
+  ],
+  "note": "Separate identical A100 devices; scatter/atomic GPU operations are not guaranteed bitwise deterministic. Resume loads full Adam/RNG and epoch counters; report observed differences without calling them exact equivalence."
+}

@@ -36,6 +36,20 @@ def handle_loopvq_compatibility(server_args: Any) -> None:
     from pathlib import Path
 
     cfg = resolved_view(server_args)
+    profile = getattr(cfg, "ouro_decode_profile", "hf_reference")
+    if profile not in ("hf_reference", "optimized"):
+        raise ValueError("Unknown Ouro decode profile.")
+    if profile == "optimized":
+        hf = model_config_of(cfg).hf_config
+        if "OuroForCausalLM" not in hf.architectures:
+            raise ValueError("The optimized Ouro decode profile requires an Ouro model.")
+        if cfg.dtype not in ("auto", "bf16", "bfloat16") or cfg.kv_cache_dtype not in ("auto", "bf16", "bfloat16"):
+            raise ValueError("The optimized Ouro decode profile requires BF16 model and KV.")
+        if set(attention_backends_of(cfg)) != {"triton"} or cfg.speculative_algorithm is not None:
+            raise ValueError("The optimized Ouro decode profile requires Triton without speculative decoding.")
+        expected_splits = 48 if cfg.loopvq_codebook_dir else 8
+        if cfg.triton_attention_num_kv_splits != expected_splits:
+            raise ValueError(f"The optimized Ouro decode profile requires {expected_splits} Triton KV splits.")
     if not cfg.loopvq_codebook_dir:
         return
     if not cfg.device.startswith("cuda"):
@@ -90,6 +104,10 @@ def handle_loopvq_compatibility(server_args: Any) -> None:
         if value < 8 or value % 8:
             raise ValueError(f"{name} must be a positive multiple of 8.")
     hf = model_config_of(cfg).hf_config
+    if profile == "optimized":
+        context = cfg.context_length or getattr(hf, "max_position_embeddings", None)
+        if context is None or not 1 <= context <= 40960:
+            raise ValueError("Official LoopVQ decode requires context_length <= 40960.")
     geometry = (
         getattr(hf, "num_hidden_layers", None),
         getattr(hf, "total_ut_steps", None),

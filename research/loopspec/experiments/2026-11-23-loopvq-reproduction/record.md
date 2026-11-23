@@ -339,3 +339,20 @@ common-shape在正式测量前对两方法、五档batch完成容量预检后冻
 - 实际最终bundle与官方loader的encode/decode表及code_layer逐元素一致；校准seq0/12/15、base0/23/47、17边界位置、全部heads/groups共156672个K/V编码，target/official/FP64最近邻全部同索引，raw HP写入、prefill/flush和dummy保护通过exit0。少量极小BF16值转FP16改变，但这批数据未改变索引。evidence/a10/real-bundle-encoding.jsonl保留结果；不替代真实服务生命周期。
 - 五任务数据online/offline复核exit0：AIME24 30/AIME25 30/GPQA Diamond198/HumanEval+164/MBPP+378；GPQA固定83022ce，AIME分别8d88b287/563bb840；EvalPlus GT已预热，manifest已存evidence。真实BF16 HTTP审计aime24+HumanEval、seed0/1（每cell1题64token）全部exit0，payload/template/IDs/seed/评分链路通过；这4个截断审计分数不能作为benchmark准确率。
 - 候选5本地：hook32个字段schema审计、py_compile/diff检查exit0，serving_probe新增9项真实本机mock HTTP/SSE协议测试exit0；A10真实wiring/解析/服务待执行，不能报通过。
+
+- 候选5 A10测试：实际ServerArgs wiring单元与eager/full真实模型参数resolve_once全部exit0（round5-real-resolution.log）；最终bundle eager服务30542/GPU0已健康，full graph30544/GPU3启动中，真实全suite执行中。当前两遍reference实现仍不能作为论文优化性能交付。
+
+### 候选6/10：移植官方纯LoopVQ优化decode
+
+- 目的：完成用户要求的官方SGLang适配/实际加速复现，避免仅交付用于正确性核对的慢速两遍实现。
+- 步骤：提取d5d58c83实际G16默认vqwide_g MODE1 CUDA(R1/R2/PC1)，官方identity HP pre-RoPE stage1和统一LSE reducer；加入稳定metadata/scratch及预编译，再接线显式profile。保留hf_reference供差异定位，新增official_cuda用于正式性能测试。
+- 范围：kernels/ops/loopvq/{official_quant_cuda,official_hp,official_reduce,official_metadata,official_attention}.py；loopvq_backend.py及必要args/hook、测试和记录。pool/allocator/训练码本不重写；候选5真实服务若发现缺陷在本候选首次验证前一并修复并记录。
+- 成功标准：quant/HP/reducer对官方原模块同输入同split数值通过；真实bundle及2K/8K/约35K、split边界/空quant/nonaligned、bs1/2/4/8/16+padding3/5/15通过；profile内eager/full及回收复用通过；短kernel和真实HTTP性能已测后才启动全矩阵。
+- 风险：官方FP32 RoPE/softmax及HP FP16 MMA与hf_reference BF16舍入不同，绝不混为逐位相同算法/结果。纯G16 CAP2048、R2每split1024、48quant splits覆盖49152，必须硬拒绝超容量避免shared越界；A100 shared约97.14KiB/block。CUDA13/Torch2.14 JIT需实编，缓存隔离，capture前完成编译和shared属性设置。
+- 验证：同一A10环境固定架构8.0与最终bundle，先对官方kernel的GPU数值/graph再真实服务生命周期；性能注明profile、硬件、代码、实际batch，BF16无LoopVQ仍保留已验证参考。对官方数学profile的速度差异不能仅归因于KV压缩，不跨profile混合统计。
+
+- 候选6首次验证前范围澄清（性能公平性审计）：统一公开ouro_decode_profile={hf_reference,optimized}。optimized下VQ用官方CUDA分阶段decode；BF16只将forward_decode切到当前已有generic Triton split-K，不切prefill、不全局关闭ouro_bf16_rounding，保持两方法共有的HF norm/RoPE/SiLU/fullR4。默认hf_reference保持现行为。正式速度主表使用optimized BF16 vs optimized LoopVQ，原两遍结果仅诊断；新BF16必须重跑HF/官方32token及teacher-forced/长上下文/graph验收。该profile不是整个模型的官方逐位复刻，当前generic QK还有FP32 reduction差异。记录BF16 splits8/VQ quant48+HP12的完整实现配置差异，不能把速度差全归因KV压缩。
+- 训练恢复诊断已exit0：从epoch1/step12恢复到epoch4/step48，recipe一致、Adam step48；另一A100上最终bestKL0.04756755 vs连续训练0.04768510，差0.00011755；FP32码本K/V平均绝对差0.00046731/0.00051596、最大0.02083/0.02164。GPU散射/原子累加不保证位确定性，报告为恢复成功且存在已量化数值差异，不宣称逐位等价；正式产物仍选连续训练目录。
+
+- 候选5真实最终bundle服务全部通过：eager GPU0/30542和fullgraph GPU3/30544均完成17case（包含abort）并exit0，16个有输出case共72请求，eager/graph output IDs与停止位置全部一致；short HP与HF也一致。覆盖4096输入、63/64/65/319/320/321/327/328/333/383边界、bs1/2/4/8/16、padding3/5/15、600token多圈ring、ragged结束/owned abort、复用及先验idle后flush；均无空闲KV泄漏。原始结果A10 results/serving-vq-{eager,graph}与serving-eager-graph-comparison.json。
+- 候选6本地冻结：5个官方算子/metadata/adapter和GPU测试AST通过；相关11文件py_compile、serving9/9、throughput11/11及diff检查exit0。CUDA源MODE1与d5d58c8只差宏头、split/CAP断言和空白；尚未GPU编译，不能报数值/性能通过。Lean上层capture选择虽可为true，最底层实际仅HIP执行，A10旧路径并未使用Lean；optimized仍显式固定split契约并省掉无用arena。

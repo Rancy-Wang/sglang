@@ -54,6 +54,7 @@ class LoopVQCompatibilityTest(unittest.TestCase):
             architectures=["OuroForCausalLM"], num_hidden_layers=48,
             total_ut_steps=4, num_attention_heads=16, num_key_value_heads=16,
             hidden_size=2048, rope_scaling=None,
+            max_position_embeddings=40960,
         ))
         # model_config_of explicitly supports a cached fixture with no path key.
         # ResolvedView, attention selection and field access remain production code.
@@ -76,6 +77,32 @@ class LoopVQCompatibilityTest(unittest.TestCase):
         kv_cache_hook.handle_loopvq_compatibility(
             ServerArgs(model_path="dummy", loopvq_codebook_dir=None, device="cpu")
         )
+
+    def test_optimized_profile_and_both_window_protocols(self):
+        self.assertEqual(self.config.ouro_decode_profile, "hf_reference")
+        self.config.ouro_decode_profile = "optimized"
+        self.config.triton_attention_num_kv_splits = 48
+        for prefix, recent in ((64, 256), (8, 64)):
+            self.config.loopvq_prefix_tokens, self.config.loopvq_recent_tokens = prefix, recent
+            kv_cache_hook.handle_loopvq_compatibility(self.config)
+        self.config.context_length = 40961
+        with self.assertRaisesRegex(ValueError, "40960"):
+            kv_cache_hook.handle_loopvq_compatibility(self.config)
+
+    def test_optimized_bf16_is_guarded_even_without_loopvq(self):
+        self.config.loopvq_codebook_dir = None
+        self.config.ouro_decode_profile = "optimized"
+        self.config.triton_attention_num_kv_splits = 8
+        kv_cache_hook.handle_loopvq_compatibility(self.config)
+        for key, value in (("dtype", "float32"), ("speculative_algorithm", "LOOPSPEC"),
+                           ("triton_attention_num_kv_splits", 48)):
+            candidate = copy.deepcopy(self.config)
+            setattr(candidate, key, value)
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                kv_cache_hook.handle_loopvq_compatibility(candidate)
+        self.model.hf_config.architectures = ["LlamaForCausalLM"]
+        with self.assertRaisesRegex(ValueError, "Ouro model"):
+            kv_cache_hook.handle_loopvq_compatibility(self.config)
 
     def test_parallel_guard_reads_resolved_declarations(self):
         kv_cache_hook.declare_resolution(self.config, "loopvq_test", dcp_size=2)

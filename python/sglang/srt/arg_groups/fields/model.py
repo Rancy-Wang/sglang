@@ -227,6 +227,15 @@ class Model(msgspec.Struct):
         int,
         "Unquantized recent tokens per LoopVQ request (a positive multiple of 8).",
     ] = 256
+    ouro_decode_profile: A[
+        str,
+        Arg(
+            help="Ouro decode arithmetic: hf_reference preserves checkpoint BF16 "
+            "rounding; optimized uses generic BF16 split-K or official LoopVQ "
+            "CUDA split attention. Prefill, norm, query RoPE and MLP stay unchanged.",
+            choices=["hf_reference", "optimized"],
+        ),
+    ] = "hf_reference"
     qsa_indexer_dtype: A[
         str,
         Arg(

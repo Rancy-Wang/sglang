@@ -40,7 +40,7 @@ from sglang.srt.model_executor.cuda_graph_config import (
     cuda_graph_fully_disabled,
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
-from sglang.srt.runtime_context import get_exec, get_parallel, get_schedule, get_spec
+from sglang.srt.runtime_context import get_exec, get_model, get_parallel, get_schedule, get_spec
 from sglang.srt.speculative.spec_utils import (
     draft_kv_indices_buffer_width,
     draft_kv_indices_used_len,
@@ -212,6 +212,20 @@ class TritonAttnBackend(AttentionBackend):
         self.sliding_window_size = model_runner.sliding_window_size
         self.req_to_token_pool = model_runner.req_to_token_pool
         self.token_to_kv_pool = model_runner.token_to_kv_pool
+        self.ouro_decode_profile = getattr(get_model(), "ouro_decode_profile", "hf_reference")
+        if self.ouro_decode_profile == "optimized":
+            # Explicit split-K contract on both CUDA and HIP; do not let an
+            # automatic Lean policy change the paired BF16 baseline at bs=16.
+            self.enable_lean_attention = False
+        self.loopvq_official = None
+        if getattr(self.token_to_kv_pool, "loopvq_enabled", False) and self.ouro_decode_profile == "optimized":
+            from sglang.kernels.ops.loopvq.official_attention import OfficialAttention
+
+            # Native CUDA extension compilation must precede graph capture.
+            self.loopvq_official = OfficialAttention(
+                self.token_to_kv_pool, max_batch=max_bs,
+                max_context_len=model_runner.model_config.context_len,
+            )
         self.req_to_token = model_runner.req_to_token_pool.req_to_token
         self.token_to_kv_pool_allocator = model_runner.token_to_kv_pool_allocator
         self.use_sliding_window_kv_pool = isinstance(self.token_to_kv_pool, SWAKVPool)
@@ -921,25 +935,26 @@ class TritonAttnBackend(AttentionBackend):
                 ),
             )
 
-            # Lean decode persistent-grid partial-result buffers.
-            lean_Mp = torch.empty(
-                (self.lean_total_programs, self.lean_block_m),
-                dtype=torch.float32,
-                device=self.device,
-            )
-            lean_Lp = torch.empty(
-                (self.lean_total_programs, self.lean_block_m),
-                dtype=torch.float32,
-                device=self.device,
-            )
-            lean_Op = torch.empty(
-                (self.lean_total_programs, self.lean_block_m, self.v_head_dim),
-                dtype=torch.float32,
-                device=self.device,
-            )
-            lean_locks = torch.zeros(
-                (self.lean_total_programs,), dtype=torch.int32, device=self.device
-            )
+            # Optimized Ouro explicitly uses split-K, so it needs no Lean arena.
+            if self.ouro_decode_profile != "optimized":
+                lean_Mp = torch.empty(
+                    (self.lean_total_programs, self.lean_block_m),
+                    dtype=torch.float32,
+                    device=self.device,
+                )
+                lean_Lp = torch.empty(
+                    (self.lean_total_programs, self.lean_block_m),
+                    dtype=torch.float32,
+                    device=self.device,
+                )
+                lean_Op = torch.empty(
+                    (self.lean_total_programs, self.lean_block_m, self.v_head_dim),
+                    dtype=torch.float32,
+                    device=self.device,
+                )
+                lean_locks = torch.zeros(
+                    (self.lean_total_programs,), dtype=torch.int32, device=self.device
+                )
 
             qo_indptr = None
             custom_mask = None
@@ -1130,25 +1145,28 @@ class TritonAttnBackend(AttentionBackend):
             device=self.device,
         )
 
-        # Lean decode persistent-grid partial-result buffers (shared across all layers).
-        self.cuda_graph_lean_Mp = torch.zeros(
-            (self.lean_total_programs, self.lean_block_m),
-            dtype=torch.float32,
-            device=self.device,
-        )
-        self.cuda_graph_lean_Lp = torch.zeros(
-            (self.lean_total_programs, self.lean_block_m),
-            dtype=torch.float32,
-            device=self.device,
-        )
-        self.cuda_graph_lean_Op = torch.zeros(
-            (self.lean_total_programs, self.lean_block_m, self.v_head_dim),
-            dtype=torch.float32,
-            device=self.device,
-        )
-        self.cuda_graph_lean_locks = torch.zeros(
-            (self.lean_total_programs,), dtype=torch.int32, device=self.device
-        )
+        self.cuda_graph_lean_Mp = self.cuda_graph_lean_Lp = None
+        self.cuda_graph_lean_Op = self.cuda_graph_lean_locks = None
+        if self.ouro_decode_profile != "optimized":
+            # Lean decode persistent-grid buffers, shared across all layers.
+            self.cuda_graph_lean_Mp = torch.zeros(
+                (self.lean_total_programs, self.lean_block_m),
+                dtype=torch.float32,
+                device=self.device,
+            )
+            self.cuda_graph_lean_Lp = torch.zeros(
+                (self.lean_total_programs, self.lean_block_m),
+                dtype=torch.float32,
+                device=self.device,
+            )
+            self.cuda_graph_lean_Op = torch.zeros(
+                (self.lean_total_programs, self.lean_block_m, self.v_head_dim),
+                dtype=torch.float32,
+                device=self.device,
+            )
+            self.cuda_graph_lean_locks = torch.zeros(
+                (self.lean_total_programs,), dtype=torch.int32, device=self.device
+            )
 
         if cuda_graph_num_kv_splits_buf is None:
             self.cuda_graph_num_kv_splits = torch.full(
@@ -2312,7 +2330,7 @@ class TritonAttnBackend(AttentionBackend):
             kv_indptr = self.forward_metadata.kv_indptr
             kv_indices = self.forward_metadata.kv_indices
 
-        if getattr(layer, "ouro_bf16_rounding", False):
+        if getattr(layer, "ouro_bf16_rounding", False) and getattr(self, "ouro_decode_profile", "hf_reference") == "hf_reference":
             return self._forward_ouro(q, k, v, o, layer, forward_batch, decode=True)
 
         if layer.k_scale is not None and layer.v_scale is not None:
@@ -2346,7 +2364,7 @@ class TritonAttnBackend(AttentionBackend):
             get_is_capture_mode,
         )
 
-        if self.enable_deterministic or envs.SGLANG_DISABLE_LEAN_ATTENTION.get():
+        if self.ouro_decode_profile == "optimized" or self.enable_deterministic or envs.SGLANG_DISABLE_LEAN_ATTENTION.get():
             enable_lean = False
         else:
             enable_lean = self.enable_lean_attention

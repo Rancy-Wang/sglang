@@ -168,6 +168,13 @@ class ServingProbeTests(unittest.TestCase):
                     "model_sha256": "m", "sglang_sha": "s", "method": "loopvq", "bundle_sha256": "q"}
         identity = PROBE.validate_identity(manifest, config, self.root, Tokenizer.chat_template)
         self.assertEqual(identity["bundle_sha256"], "q")
+        config["ouro_decode_profile"] = "optimized"
+        with self.assertRaisesRegex(ValueError, "profile"):
+            PROBE.validate_identity(manifest, config, self.root, Tokenizer.chat_template)
+        manifest["config"]["ouro_decode_profile"] = "optimized"
+        optimized = PROBE.validate_identity(manifest, config, self.root, Tokenizer.chat_template)
+        self.assertNotEqual(identity, optimized)
+        self.assertEqual(optimized["effective_decode"], "loopvq_official_cuda")
         manifest["config"]["loopvq_codebook_dir"] = "/other"
         with self.assertRaisesRegex(ValueError, "directory"):
             PROBE.validate_identity(manifest, config, self.root, Tokenizer.chat_template)

@@ -1,0 +1,225 @@
+[
+  {
+    "event": "environment",
+    "torch": "2.14.1+cu130",
+    "triton": "3.8.0",
+    "gpu": "NVIDIA A100-SXM4-80GB",
+    "visible_devices": "0",
+    "sequences": [
+      0,
+      12,
+      15
+    ],
+    "layers": [
+      0,
+      23,
+      47
+    ],
+    "positions": [
+      0,
+      1,
+      7,
+      8,
+      63,
+      64,
+      255,
+      256,
+      319,
+      320,
+      321,
+      327,
+      328,
+      333,
+      511,
+      1023,
+      2047
+    ]
+  },
+  {
+    "event": "bundle",
+    "kind": "k",
+    "sha256": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+    "bytes": 607379165
+  },
+  {
+    "event": "tables_equal",
+    "kind": "k",
+    "encode": true,
+    "decode": true,
+    "code_layer": true
+  },
+  {
+    "event": "raw",
+    "kind": "k",
+    "base": 0,
+    "max_abs": 12.3125,
+    "fp16_changes": 4
+  },
+  {
+    "event": "encoding",
+    "kind": "k",
+    "base": 0,
+    "codes": 26112,
+    "target_official_mismatches": 0,
+    "target_vs_fp64": {
+      "mismatches": 0,
+      "max_score_regret": 0.0,
+      "examples": []
+    },
+    "official_vs_fp64": {
+      "mismatches": 0,
+      "max_score_regret": 0.0,
+      "examples": []
+    },
+    "prefill_flush_equal": true,
+    "write_hp_equal": true
+  },
+  {
+    "event": "raw",
+    "kind": "k",
+    "base": 23,
+    "max_abs": 12.6875,
+    "fp16_changes": 3
+  },
+  {
+    "event": "encoding",
+    "kind": "k",
+    "base": 23,
+    "codes": 26112,
+    "target_official_mismatches": 0,
+    "target_vs_fp64": {
+      "mismatches": 0,
+      "max_score_regret": 0.0,
+      "examples": []
+    },
+    "official_vs_fp64": {
+      "mismatches": 0,
+      "max_score_regret": 0.0,
+      "examples": []
+    },
+    "prefill_flush_equal": true,
+    "write_hp_equal": true
+  },
+  {
+    "event": "raw",
+    "kind": "k",
+    "base": 47,
+    "max_abs": 13.375,
+    "fp16_changes": 6
+  },
+  {
+    "event": "encoding",
+    "kind": "k",
+    "base": 47,
+    "codes": 26112,
+    "target_official_mismatches": 0,
+    "target_vs_fp64": {
+      "mismatches": 0,
+      "max_score_regret": 0.0,
+      "examples": []
+    },
+    "official_vs_fp64": {
+      "mismatches": 0,
+      "max_score_regret": 0.0,
+      "examples": []
+    },
+    "prefill_flush_equal": true,
+    "write_hp_equal": true
+  },
+  {
+    "event": "bundle",
+    "kind": "v",
+    "sha256": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+    "bytes": 607379165
+  },
+  {
+    "event": "tables_equal",
+    "kind": "v",
+    "encode": true,
+    "decode": true,
+    "code_layer": true
+  },
+  {
+    "event": "raw",
+    "kind": "v",
+    "base": 0,
+    "max_abs": 5.4375,
+    "fp16_changes": 48
+  },
+  {
+    "event": "encoding",
+    "kind": "v",
+    "base": 0,
+    "codes": 26112,
+    "target_official_mismatches": 0,
+    "target_vs_fp64": {
+      "mismatches": 0,
+      "max_score_regret": 0.0,
+      "examples": []
+    },
+    "official_vs_fp64": {
+      "mismatches": 0,
+      "max_score_regret": 0.0,
+      "examples": []
+    },
+    "prefill_flush_equal": true,
+    "write_hp_equal": true
+  },
+  {
+    "event": "raw",
+    "kind": "v",
+    "base": 23,
+    "max_abs": 9.5625,
+    "fp16_changes": 12
+  },
+  {
+    "event": "encoding",
+    "kind": "v",
+    "base": 23,
+    "codes": 26112,
+    "target_official_mismatches": 0,
+    "target_vs_fp64": {
+      "mismatches": 0,
+      "max_score_regret": 0.0,
+      "examples": []
+    },
+    "official_vs_fp64": {
+      "mismatches": 0,
+      "max_score_regret": 0.0,
+      "examples": []
+    },
+    "prefill_flush_equal": true,
+    "write_hp_equal": true
+  },
+  {
+    "event": "raw",
+    "kind": "v",
+    "base": 47,
+    "max_abs": 5.8125,
+    "fp16_changes": 9
+  },
+  {
+    "event": "encoding",
+    "kind": "v",
+    "base": 47,
+    "codes": 26112,
+    "target_official_mismatches": 0,
+    "target_vs_fp64": {
+      "mismatches": 0,
+      "max_score_regret": 0.0,
+      "examples": []
+    },
+    "official_vs_fp64": {
+      "mismatches": 0,
+      "max_score_regret": 0.0,
+      "examples": []
+    },
+    "prefill_flush_equal": true,
+    "write_hp_equal": true
+  },
+  {
+    "event": "complete",
+    "requires_review": false,
+    "strict_index_match": true
+  }
+]

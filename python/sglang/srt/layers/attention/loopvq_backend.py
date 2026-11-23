@@ -41,6 +41,15 @@ def forward_decode(backend, q, k, v, layer, batch, *, save_kv_cache, cos_sin_cac
     if save_kv_cache:
         pool.set_kv_buffer(layer, batch.out_cache_loc, k, v, is_decode=True)
     metadata = backend.forward_metadata
+    if getattr(backend, "ouro_decode_profile", "hf_reference") == "optimized":
+        if backend.loopvq_official is None:
+            raise RuntimeError("Official LoopVQ state was not prepared before graph capture")
+        out = backend.loopvq_official.forward(
+            q.reshape(-1, layer.tp_q_head_num, layer.qk_head_dim),
+            layer.layer_id, metadata.kv_indptr, metadata.kv_indices,
+            cos_sin_cache, layer.scaling,
+        )
+        return out.reshape(-1, layer.tp_q_head_num * layer.v_head_dim)
     out = loopvq_decode_attention(
         q.reshape(-1, layer.tp_q_head_num, layer.qk_head_dim),
         pool, layer.layer_id, metadata.kv_indptr, metadata.kv_indices,

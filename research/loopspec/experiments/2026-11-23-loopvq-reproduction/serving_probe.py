@@ -101,6 +101,9 @@ def validate_identity(manifest, config, model, template):
     if manifest.get("exclusive_server") is not True or not all(manifest.get(k) for k in ("model_sha256", "sglang_sha")):
         raise ValueError("Manifest needs exclusive_server, model_sha256 and sglang_sha")
     method = manifest.get("method")
+    profile = config.get("ouro_decode_profile", "hf_reference")
+    if profile not in ("hf_reference", "optimized") or declared.get("ouro_decode_profile", "hf_reference") != profile:
+        raise ValueError("Manifest Ouro decode profile differs from the running service")
     if method not in ("bf16", "loopvq") or bool(config.get("loopvq_codebook_dir")) != (method == "loopvq"):
         raise ValueError("Manifest method differs from actual LoopVQ activation")
     if method == "loopvq" and (not manifest.get("bundle_sha256") or
@@ -109,6 +112,9 @@ def validate_identity(manifest, config, model, template):
     if method == "loopvq" and declared.get("loopvq_codebook_dir") != config["loopvq_codebook_dir"]:
         raise ValueError("Manifest codebook directory differs from the running service")
     return {"method": method, "model_sha256": manifest["model_sha256"], "sglang_sha": manifest["sglang_sha"],
+            "ouro_decode_profile": profile,
+            "effective_decode": ("loopvq_official_cuda" if method == "loopvq" else "bf16_generic_split")
+                if profile == "optimized" else ("loopvq_bf16_reference" if method == "loopvq" else "ouro_bf16_reference"),
             "bundle_sha256": manifest.get("bundle_sha256"), "template_sha256": digest(template),
             "model_config_sha256": bp.sha256(model / "config.json"), "prefix": 64, "recent": 256}
 

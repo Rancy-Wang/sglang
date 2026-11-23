@@ -56,6 +56,20 @@ class ThroughputProtocolTests(unittest.TestCase):
         self.assertTrue(evidence["verified"])
         self.assertEqual(evidence["graph_padding_at_target_bs"], 0)
 
+    def test_optimized_profile_checks_method_specific_split_budget(self):
+        manifest, actual = self.manifest()
+        for config in (manifest["config"], actual):
+            config.update(ouro_decode_profile="optimized", triton_attention_num_kv_splits=8)
+        BENCH.validate_manifest(manifest, actual, "bf16", "common-shape", 1, 64, 256)
+        actual["triton_attention_num_kv_splits"] = 48
+        with self.assertRaisesRegex(ValueError, "8 decode splits"):
+            BENCH.validate_manifest(manifest, actual, "bf16", "common-shape", 1, 64, 256)
+        manifest.update(method="loopvq", bundle_sha256="bundle")
+        for config in (manifest["config"], actual):
+            config.update(triton_attention_num_kv_splits=48, loopvq_codebook_dir="/bundle",
+                          loopvq_prefix_tokens=64, loopvq_recent_tokens=256)
+        BENCH.validate_manifest(manifest, actual, "loopvq", "common-shape", 1, 64, 256)
+
     def test_prefill_graph_and_missing_canonical_schema_are_rejected(self):
         graph = copy.deepcopy(ACTUAL_GRAPH)
         graph["prefill"]["backend"] = "breakable"
@@ -139,6 +153,17 @@ class ThroughputProtocolTests(unittest.TestCase):
         base, quant = self.pair()
         quant["input_ids_sha256"] = "different"
         with self.assertRaisesRegex(ValueError, "input_ids"):
+            BENCH.paired_row(base, quant)
+
+    def test_pair_requires_one_profile_but_keeps_intentional_split_difference(self):
+        base, quant = self.pair()
+        base["server_config_readback"].update(ouro_decode_profile="optimized", triton_attention_num_kv_splits=8)
+        quant["server_config_readback"].update(ouro_decode_profile="optimized", triton_attention_num_kv_splits=48)
+        row = BENCH.paired_row(base, quant)
+        self.assertEqual((row["bf16_max_splits"], row["loopvq_max_splits"]), (8, 48))
+        self.assertEqual(row["loopvq_effective_decode"], "official_cuda")
+        quant["server_config_readback"]["ouro_decode_profile"] = "hf_reference"
+        with self.assertRaisesRegex(ValueError, "ouro_decode_profile"):
             BENCH.paired_row(base, quant)
 
 

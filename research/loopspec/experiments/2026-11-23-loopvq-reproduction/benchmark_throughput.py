@@ -50,12 +50,13 @@ CONFIG_KEYS = ("tp_size", "pp_size", "dp_size", "dtype", "attention_backend",
                "disable_prefill_cuda_graph", "disable_cuda_graph_padding",
                "decode_log_interval", "incremental_streaming_output", "context_length",
                "max_running_requests", "mem_fraction_static", "max_total_tokens",
-               "page_size", "loopvq_codebook_dir", "loopvq_prefix_tokens", "loopvq_recent_tokens")
+               "page_size", "loopvq_codebook_dir", "loopvq_prefix_tokens", "loopvq_recent_tokens",
+               "ouro_decode_profile", "triton_attention_num_kv_splits")
 PAIR_CONFIG_KEYS = tuple(k for k in CONFIG_KEYS if k not in (
     "loopvq_codebook_dir", "loopvq_prefix_tokens", "loopvq_recent_tokens",
     "mem_fraction_static", "max_total_tokens", "page_size", "cuda_graph_bs_decode",
     "cuda_graph_backend_decode", "cuda_graph_backend_prefill", "disable_cuda_graph",
-    "disable_decode_cuda_graph", "disable_prefill_cuda_graph"))
+    "disable_decode_cuda_graph", "disable_prefill_cuda_graph", "triton_attention_num_kv_splits"))
 DECODE_PATTERN = re.compile(r"Decode batch.*?#running-req\s*[:=]\s*(\d+)")
 GRAPH_PATTERN = re.compile(r"(?:cuda graph|cuda_graph)\s*[:=]\s*(True|False)", re.I)
 CAPTURE_PATTERN = re.compile(r"Capture target decode CUDA graph end\.\s+bs=(\[[^\]]*\])", re.I)
@@ -97,6 +98,13 @@ def validate_manifest(manifest, actual, method, protocol, bs, prefix, recent):
     if manifest["exclusive_server"] is not True:
         raise ValueError("An exclusive benchmark server is required for batch-log attribution")
     cfg = manifest["config"]
+    profile = actual.get("ouro_decode_profile", "hf_reference")
+    if profile not in ("hf_reference", "optimized") or cfg.get("ouro_decode_profile", "hf_reference") != profile:
+        raise ValueError("Manifest Ouro decode profile differs from the running service")
+    if profile == "optimized":
+        expected_splits = 48 if method == "loopvq" else 8
+        if cfg.get("triton_attention_num_kv_splits") != expected_splits or actual.get("triton_attention_num_kv_splits") != expected_splits:
+            raise ValueError(f"Optimized {method} measurements require {expected_splits} decode splits")
     required_values = {"tp_size": 1, "pp_size": 1, "dp_size": 1,
                        "speculative_algorithm": None, "disable_radix_cache": True,
                        "chunked_prefill_size": -1, "decode_log_interval": 1}
@@ -474,6 +482,11 @@ def paired_row(baseline, quantized):
     if comparable and any(value is None or not math.isfinite(value) or value <= 0 for value in (b, q)):
         raise ValueError("Successful measurements must have finite positive throughput")
     return {"protocol": baseline["protocol"], "bs": baseline["bs"],
+            "ouro_decode_profile": right.get("ouro_decode_profile", "hf_reference"),
+            "bf16_effective_decode": "generic_split" if right.get("ouro_decode_profile") == "optimized" else "ouro_bf16_reference",
+            "loopvq_effective_decode": "official_cuda" if right.get("ouro_decode_profile") == "optimized" else "loopvq_bf16_reference",
+            "bf16_max_splits": left.get("triton_attention_num_kv_splits"),
+            "loopvq_max_splits": right.get("triton_attention_num_kv_splits"),
             "input_len": baseline["input_len"], "output_len": baseline["output_len"],
             "host": baseline["server_manifest"]["host"], "gpu_uuid": baseline["server_manifest"]["gpu_uuid"],
             "prefix_tokens": baseline["server_manifest"]["prefix_tokens"],
@@ -509,6 +522,8 @@ def aggregate(args):
     if not rows:
         raise ValueError("No result pairs")
     for protocol in {row["protocol"] for row in rows}:
+        if len({row["ouro_decode_profile"] for row in rows if row["protocol"] == protocol}) != 1:
+            raise ValueError(f"The {protocol} batch matrix mixes Ouro decode profiles")
         shapes = {(row["input_len"], row["output_len"]) for row in rows if row["protocol"] == protocol}
         if len(shapes) != 1:
             raise ValueError(f"All batches of {protocol} must use one frozen input/output shape")
