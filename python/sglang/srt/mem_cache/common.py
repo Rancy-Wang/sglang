@@ -392,7 +392,7 @@ def release_kv_cache(req: Req, tree_cache: BasePrefixCache, *, checkpoint: bool)
             req.kv.mamba_pool_idx = None
         return
     allocator = tree_cache.token_to_kv_pool_allocator
-    if getattr(allocator.get_kvcache(), "loopvq_enabled", False):
+    if getattr(allocator, "is_loopvq_allocator", False) is True:
         # Coupled codes have physical page boundaries independent of logical
         # token positions (a prefill quant tail can be a partial page). Free
         # the whole owned row once, including tokens after a matched stop.

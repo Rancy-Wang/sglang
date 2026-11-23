@@ -8,7 +8,7 @@
 - 官方参考及用户 LoopVQ fork main：d5d58c83fe5bc9a4ce470ae96c69b55f085e2977。
 - 本地 SGLang：loopspec-test，915e79f4ce7dc08e7e980987e0c8729f523eb74b；包含 v0.5.22 基线 baa9befa381511cd4d56f83980951e5a45fffc6d。
 - 用户新约定：LoopVQ 的 origin 使用 git@github.com:Rancy-Wang/LoopVQ.git，test 用于开发/提交/push/pull；main 只作正式版本，晋升需明确批准。保留 mscheong01/LoopVQ 为 upstream。SGLang 仍仅通过 Rancy-Wang/sglang 的 loopspec-test 开发和远端同步，正式 loopspec 分支不变。
-- 统一候选轮次 **7/10（吞吐容量余量配置，推理数学保持候选6）**。本任务的训练/评测脚本及推理代码候选修改加验证累计计数；跨阶段不重置，固定候选多项测试不重复计数。只读调查、写计划、纯环境准备不伪计代码轮次。
+- 统一候选轮次 **8/10（非VQ入口兼容修复，推理数学保持候选6）**。本任务的训练/评测脚本及推理代码候选修改加验证累计计数；跨阶段不重置，固定候选多项测试不重复计数。只读调查、写计划、纯环境准备不伪计代码轮次。
 - 主范围：Ouro-2.6B-Thinking、完整 R4，BF16 对照和纯 LoopVQ **0.5 bit（G16/c4）**。原计划0.25 bit移至后续，不在首期训练或评测。不运行 TaSQ 统计、TaSQ/TaSQ+LoopVQ。CQ可作后续附加对照，未列为必需工作。保留微调前码本用于诊断。
 - 用户验收口径：不要求跨机器答案或论文分数完全一致；必须记录真实准确率、差异和运行条件。吞吐是必需交付：bs=1/2/4/8/16分别与同机无LoopVQ的BF16普通AR比较。工程正确性测试不因容许采样差异而放宽。
 - 首期运行：TP/PP/DP=1，普通多请求 AR server，验证 eager 和 decode CUDA graph；按参考评测关闭 radix cache、chunked prefill 和 piecewise graph。显式禁止与 LoopSpec、DFLASH、recurrent-CDB 混用；关闭 LoopVQ 时现有功能必须回归通过。
@@ -371,3 +371,17 @@ common-shape在正式测量前对两方法、五档batch完成容量预检后冻
 4. 成功标准：native Thinking输入2048/output512、bs1/2/4/8/16不变；每cell2预热+3测量，原90%实际target batch和至少8连续decode门槛不放宽；同GPU/环境/profile/代码SHA配对。paper-long BF16 bs2以上保存容量N/A，不发送会串行的请求、不编造OOM。
 5. 风险：common BF16多占1.5GiB显存；启服前核对资源。长协议VQ逻辑池约55.8万token仍需实际显存与高batch验收。所有失败原样保留，未启动不标通过。
 6. 验证：本地bash -n和diff检查，push/pull loopspec-test；A10新启动readback、import/SHA、health、实际bs16完整输出；成功后完成同一固定候选的全部计划内测量。此配置修改计第7轮，不借环境修复免计。
+
+- 候选7 common BF16 bs16容量修正已通过：2预热+3测量均status=ok，测量178.430/178.501/178.170 output tok/s，真实batch审计通过；GPU5随后切VQ进行相邻配对。吞吐sourcefeba71a892，accuracy source85cd80c5；两提交python树同为6ca971e4043dca1e7362daf5a7af49da6a540822（后者仅新增runner/记录）。六个正式accuracy worker各负责一个method/seed，concurrency1，五任务共30cells/4800generation，均已完成10条HTTP审计后启动；完整结果尚未完成。所有服务和client都在A10 tmux，W&B各run独立记录。
+- 补充非VQ回归：test_unified_radix_lock_ref.py 1test/1error、test_dllm_fdfo_kv_reuse.py 6test/4errors（exit1）。新增LoopVQ检测在默认路径无条件调用get_kvcache，原有SimpleNamespace/_FakeAllocator未实现该接口。真实BaseTokenToKVPoolAllocator有该方法；不能由此声称生产allocator缺接口。test_decode_radix_lock_ref初次因CUDA_VISIBLE_DEVICES空字符串触发test_utils端口计算IndexError（基础设施），改为不存在的GPU99隔离GPU后原样复验；其他相关CPU回归继续执行。失败日志round7-regression-*完整保留，未修改fixture。
+
+### 候选8/10：保持非量化分配器原有接口
+
+1. 目的：LoopVQ显式选择专用路径，普通分配/释放不额外要求量化缓存接口，防止未约束Mock属性truthy误入。
+2. 步骤：LoopVQKVAllocator增加明确类标记；alloc_for_extend、alloc_for_decode、release_kv_cache仅在该标记严格为True时路由专用路径；其余路径保留原行为，不吞接口异常或改测试fixture。
+3. 范围：mem_cache/loopvq_allocator.py、allocation.py、common.py及任务记录；不改算术、码本、采样、评分或当前已冻结测量负载。
+4. 成功标准：原失败CPU测试及其余相关默认路径回归通过；真实LoopVQ分配器继续正确进入专用分支，已有核心/wiring测试与真实HTTP生命周期通过。
+5. 风险：错误标记会把VQ请求路由到普通分配器，可能破坏物理slot所有权；因此必须验证真实VQ申请、完成、abort和复用，不能仅凭CPU mock成功判定。
+6. 验证：本地语法/diff审查，Git loopspec-test同步；A10 GPU99隔离的现有CPU测试，实际GPU VQ核心/服务生命周期复验，保存命令/退出码/提交。固定feba71a892的已启动吞吐测量不与新源码混跑；精确记录运行时版本，修复不追认旧回归失败为通过。
+
+- 候选8本地三文件AST/diff检查exit0。候选7补充CPU回归中其余9文件共131测试全部exit0；decode锁测试用GPU99重试后13test/5errors，确认为MagicMock未配置属性truthy误入VQ，与前两个接口失败同源。为保持六个准确率服务和两套性能任务源码冻结，A10新建独立sglang-loopvq-validation clone，仅跟踪用户origin/loopspec-test，通过Git pull同步候选8；原sglang-loopspec-tp2保持feba71a892直至其作业完成。新验证进程显式PYTHONPATH和sglang.__file__指向验证clone，不修改旧进程源文件。

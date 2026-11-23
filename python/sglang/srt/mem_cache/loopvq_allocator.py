@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 class LoopVQKVAllocator(BaseTokenToKVPoolAllocator):
     """Paged quant + HP-prefix free-lists, plus per-req HP-recent indexer."""
 
+    is_loopvq_allocator = True
+
     def __init__(
         self,
         num_quant_pages: int,
