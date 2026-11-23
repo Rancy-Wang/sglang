@@ -1,0 +1,65 @@
+{
+  "model": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+  "model_files": {
+    "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking/config.json": {
+      "bytes": 1999,
+      "sha256": "ad4b51dffae60bebeeac5e1d5055e78d01fc01b1a29cd89cd2e50edb848f645a"
+    },
+    "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking/configuration_ouro.py": {
+      "bytes": 11595,
+      "sha256": "ba60253335cecc5bd9cb3e5f8cfbd214aa7e865fc97a98208976fb2517811de6"
+    },
+    "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking/model.safetensors": {
+      "bytes": 5336011242,
+      "sha256": "c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080"
+    },
+    "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking/modeling_ouro.py": {
+      "bytes": 35495,
+      "sha256": "263c097a2ed6870ce549a65ef6d6bb9e8e167423f87d2c494e0988b9a4f63f4b"
+    },
+    "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking/special_tokens_map.json": {
+      "bytes": 965,
+      "sha256": "688ac94df221b18a4d2d4579dfa3c4f0fd5ca3e394da46cd0a317fb5d57d4685"
+    },
+    "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking/tokenizer.json": {
+      "bytes": 3522644,
+      "sha256": "fcb808fe5e7642f5299be28aea07fc7f6d4f4364c3ac5e408e15a772cbc8fa8d"
+    },
+    "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking/tokenizer_config.json": {
+      "bytes": 4303,
+      "sha256": "0d304de54d3f8e0c0573d678c0f1d80cc26e9d23dcb328405f0ec99c4293d04f"
+    },
+    "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking/vocab.json": {
+      "bytes": 800656,
+      "sha256": "7b9de3f47796abf8d00ab96be299fea0dc9afdf1827f34e7e0b9fb44593efe5c"
+    }
+  },
+  "gpqa_revision": "83022cefff930aea54f654c0b282e74b9eeda5c6",
+  "repository": "/homes/ruoxi07/repo/LoopVQ",
+  "git_sha": "bf1cf18b8e58ab1cc772d7467867994add91f787",
+  "python": "/homes/ruoxi07/anaconda3/envs/loopvq-build/bin/python",
+  "host": "a10.mit.edu",
+  "wandb_base_url": "https://api.wandb.ai",
+  "packages": {
+    "torch": "2.8.0+cu128",
+    "transformers": "4.56.2",
+    "datasets": "5.0.1",
+    "wandb": "0.31.2"
+  },
+  "recipe": {
+    "G": 16,
+    "Tc": 4,
+    "abits": 8,
+    "n_calib": 16,
+    "seq_len": 2048,
+    "seed": 0,
+    "kmeans_iters": 15,
+    "n_val": 4,
+    "epochs": 4,
+    "lr": 0.001,
+    "sink": 8,
+    "compound": 1,
+    "objective": "joint",
+    "rep_chunk": 512
+  }
+}

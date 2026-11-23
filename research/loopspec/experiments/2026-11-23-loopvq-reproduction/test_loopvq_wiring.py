@@ -2,9 +2,18 @@
 
 Run in the target SGLang environment, without loading a model or CUDA context:
     python -m unittest discover -s research/loopspec/experiments/2026-11-23-loopvq-reproduction -p test_loopvq_wiring.py
+
+To exercise the real resolution pipeline on A10 before starting the service:
+    python research/loopspec/experiments/2026-11-23-loopvq-reproduction/test_loopvq_wiring.py \
+        --model /absolute/Ouro-2.6B-Thinking --bundle /absolute/g16_lvgqe2e
+This loads configuration and may probe GPU resources, but does not load model
+weights or launch a server. Eager and full-decode settings use separate records.
 """
 
+import argparse
 import copy
+import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +23,7 @@ from unittest.mock import patch
 from sglang.srt.arg_groups import kv_cache_hook
 from sglang.srt.model_executor import pool_configurator
 from sglang.srt.model_executor.cuda_graph_config import CudaGraphConfig, PhaseConfig
+from sglang.srt.server_args import ServerArgs
 
 
 class LoopVQCompatibilityTest(unittest.TestCase):
@@ -22,12 +32,16 @@ class LoopVQCompatibilityTest(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         for name in ("codebook.pt", "vq_v_codebook.pt"):
             (Path(self.directory.name) / name).touch()
-        self.config = NS(
+        # Construction deliberately uses the real flat ServerArgs schema.
+        # No runtime Derived fields (such as attn_dcp_size) exist on this record.
+        self.config = ServerArgs(
+            model_path="dummy",
             loopvq_codebook_dir=self.directory.name,
             loopvq_prefix_tokens=64, loopvq_recent_tokens=256,
             device="cuda", tp_size=1, pp_size=1, dp_size=1,
-            attn_dp_size=1, attn_cp_size=1, attn_dcp_size=1,
+            attn_dp_size=1, attn_cp_size=1, dcp_size=1,
             speculative_algorithm=None, page_size=8, max_running_requests=16,
+            attention_backend="triton",
             kv_cache_dtype="auto", dtype="bfloat16", disable_radix_cache=True,
             chunked_prefill_size=-1, disaggregation_mode="null",
             enable_priority_scheduling=False, disable_priority_preemption=False,
@@ -41,14 +55,9 @@ class LoopVQCompatibilityTest(unittest.TestCase):
             total_ut_steps=4, num_attention_heads=16, num_key_value_heads=16,
             hidden_size=2048, rope_scaling=None,
         ))
-        for target, replacement in (
-            ("resolved_view", lambda value: value),
-            ("attention_backends_of", lambda value: ("triton", "triton")),
-            ("model_config_of", lambda value: self.model),
-        ):
-            manager = patch.object(kv_cache_hook, target, replacement)
-            manager.start()
-            self.addCleanup(manager.stop)
+        # model_config_of explicitly supports a cached fixture with no path key.
+        # ResolvedView, attention selection and field access remain production code.
+        self.config._model_config = self.model
         manager = patch.object(
             kv_cache_hook.envs.SGLANG_ENABLE_POST_CAPTURE_KV_SIZING,
             "get", return_value=False,
@@ -57,16 +66,27 @@ class LoopVQCompatibilityTest(unittest.TestCase):
         self.addCleanup(manager.stop)
 
     def test_supported_eager_and_decode_graph(self):
+        self.assertFalse(hasattr(self.config, "attn_dcp_size"))
+        self.assertFalse(hasattr(kv_cache_hook.resolved_view(self.config), "attn_dcp_size"))
         kv_cache_hook.handle_loopvq_compatibility(self.config)
         self.config.cuda_graph_config.decode.backend = "disabled"
         kv_cache_hook.handle_loopvq_compatibility(self.config)
 
     def test_disabled_does_not_constrain_other_models(self):
-        kv_cache_hook.handle_loopvq_compatibility(NS(loopvq_codebook_dir=None))
+        kv_cache_hook.handle_loopvq_compatibility(
+            ServerArgs(model_path="dummy", loopvq_codebook_dir=None, device="cpu")
+        )
+
+    def test_parallel_guard_reads_resolved_declarations(self):
+        kv_cache_hook.declare_resolution(self.config, "loopvq_test", dcp_size=2)
+        self.assertEqual(self.config.dcp_size, 1)
+        with self.assertRaisesRegex(ValueError, "DCP"):
+            kv_cache_hook.handle_loopvq_compatibility(self.config)
 
     def test_rejects_incompatible_cache_and_execution_paths(self):
         for key, value in (
-            ("tp_size", 2), ("attn_dp_size", 2), ("speculative_algorithm", "LOOPSPEC"),
+            ("tp_size", 2), ("attn_dp_size", 2), ("attn_cp_size", 2), ("dcp_size", 2),
+            ("speculative_algorithm", "LOOPSPEC"),
             ("speculative_algorithm", "DFLASH"), ("page_size", 1),
             ("max_running_requests", None), ("kv_cache_dtype", "fp8_e4m3"),
             ("disable_radix_cache", False), ("chunked_prefill_size", 2048),
@@ -118,5 +138,47 @@ class LoopVQPoolBudgetTest(unittest.TestCase):
             sizer.calculate_pool_sizes(budget, 1)
 
 
+def validate_real_resolution(model, bundle):
+    """Resolve real model arguments; do not replace config/backend/runtime readers."""
+    import sglang
+
+    results = []
+    for decode_backend in ("disabled", "full"):
+        args = ServerArgs(
+            model_path=str(Path(model).resolve()), trust_remote_code=True,
+            device="cuda", dtype="bfloat16", kv_cache_dtype="auto",
+            loopvq_codebook_dir=str(Path(bundle).resolve()),
+            loopvq_prefix_tokens=64, loopvq_recent_tokens=256,
+            attention_backend="triton", tp_size=1, pp_size=1, dp_size=1,
+            attn_dp_size=1, attn_cp_size=1, dcp_size=1,
+            speculative_algorithm=None, page_size=8, max_running_requests=16,
+            context_length=40960, disable_radix_cache=True, chunked_prefill_size=-1,
+            cuda_graph_config=CudaGraphConfig(
+                decode=PhaseConfig(backend=decode_backend, max_bs=16, bs=[1, 2, 4, 8, 16]),
+                prefill=PhaseConfig(backend="disabled"),
+            ),
+        )
+        args.resolve_once()
+        kv_cache_hook.handle_loopvq_compatibility(args)
+        resolved = args.resolved_dict()
+        results.append({
+            "status": "resolved", "sglang_file": sglang.__file__,
+            "model_path": resolved["model_path"],
+            "loopvq_codebook_dir": resolved["loopvq_codebook_dir"],
+            "dcp_size": resolved["dcp_size"], "page_size": resolved["page_size"],
+            "cuda_graph_config": resolved["cuda_graph_config"],
+        })
+    print(json.dumps(results, indent=2))
+
+
 if __name__ == "__main__":
-    unittest.main()
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--model")
+    parser.add_argument("--bundle")
+    options, remaining = parser.parse_known_args()
+    if options.model or options.bundle:
+        if not options.model or not options.bundle or remaining:
+            parser.error("Real resolution requires --model and --bundle, with no unittest arguments")
+        validate_real_resolution(options.model, options.bundle)
+    else:
+        unittest.main(argv=[sys.argv[0], *remaining])

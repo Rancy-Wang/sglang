@@ -43,7 +43,9 @@ def handle_loopvq_compatibility(server_args: Any) -> None:
     if any(
         getattr(cfg, name) != 1
         for name in (
-            "tp_size", "pp_size", "dp_size", "attn_dp_size", "attn_cp_size", "attn_dcp_size"
+            # This hook runs before runtime publication. attn_dcp_size is a
+            # Derived runtime-bag value, not a field of resolved ServerArgs.
+            "tp_size", "pp_size", "dp_size", "attn_dp_size", "attn_cp_size", "dcp_size"
         )
     ):
         raise ValueError("LoopVQ currently requires TP/PP/DP/CP/DCP=1.")
@@ -74,7 +76,7 @@ def handle_loopvq_compatibility(server_args: Any) -> None:
         "enable_lora", "enable_two_batch_overlap", "enable_mixed_chunk",
         "enable_torch_compile", "enable_memory_saver", "prefill_only_disable_kv_cache",
     )
-    active = [name for name in incompatible if getattr(cfg, name, False)]
+    active = [name for name in incompatible if getattr(cfg, name)]
     if active:
         raise ValueError(f"LoopVQ does not support these options: {', '.join(active)}")
     if cfg.disaggregation_mode not in (None, "null"):

@@ -311,3 +311,31 @@ common-shape在正式测量前对两方法、五档batch完成容量预检后冻
 - 验证：本地针对性测试+语法+diff检查，经loopspec-test同步后A10真实BF16服务smoke；记录命令、退出码和结果。此前5项吞吐测试仅覆盖旧fixture，不能作为真实服务兼容证据。
 
 - 候选3本地冻结验证：吞吐schema相关9/9测试、py_compile、diff检查exit0；待真实服务smoke。target BF16三条32token（共96）greedy ID/停止位置与HF全部一致，96个teacher-forced位置argmax也一致；top20 logprob最大绝对差0.34365/0.43015/0.50000，保留原始概率，未声称概率逐位相同。reference第二次启动因未激活环境PATH找不到已安装ninja失败；加入该环境bin路径重启v3，已加载权重并完成graph capture，尚在warmup。
+
+- 候选3已提交22aa032cf029993b84b705f0c9ddf281581d102d并两端同步。真实BF16 HTTP bs2、64输入/32输出、2预热+3测量全部status=ok、exit0；实际decode batch/graph证据通过，logs/throughput-smoke-bf16.log，仅作为流程smoke不计正式性能矩阵。reference BF16也完成3×32 greedy和96 teacher-forced探针exit0；待统一比较其logprob。
+- 初始fit完成351.8s；FT run1r6f3gzx，初始heldout KL0.0678，首epoch54.2s/heldout0.05621675，估余三轮约179s。复制原子epoch checkpoint并在空闲GPU4独立恢复到单独诊断目录，用于真实GPU恢复等价性检查，正式训练GPU3不中断。
+
+### 候选4/10：真实量化服务生命周期验收
+
+- 目的：补足合成测试未覆盖的真实pool写入、长prefill、padding和异步释放路径；不改变量化数学。
+- 步骤：新增外部HTTP诊断driver，保存checkpoint原生Thinking模板/input IDs、raw请求响应、完整output IDs/logprob和错误；先eager再full graph执行相同案例，并比较干扰前后重复请求。
+- 范围：research/loopspec/experiments/2026-11-23-loopvq-reproduction/serving_probe.py及必要的协议测试/本记录；服务器代码修复若另有失败再累计下一轮。
+- 成功标准：短HP路径对BF16、VQ eager/full相同上下文的token/停止对照；真实量化decode有限且计数正确；bs1/2/4/8/16及padding3/5/15，边界319/320/321/333等，4096长prefill、264-ring多圈、abort/free/reuse/最终flush均健康且空闲资源恢复。非预期分歧保留首位置，不用flush掩盖释放泄漏。
+- 风险：LoopVQ量化本身允许不同于BF16；当前target使用BF16舍入的两遍attention，官方参考使用FP32 decode/split数学，不要求二者逐位相同。异常中止可能污染缓存，必须单独检验后续请求。
+- 验证：本地解析/HTTP协议检查，经Git同步后A10真实最终bundle服务，先小后大，保存raw日志、metrics和退出码；正式accuracy/throughput在该门槛后运行。
+
+- 候选4实际VQ启动失败（target-vq-eager-server.log）：handle_loopvq_compatibility读取resolved_view.attn_dcp_size，但此名是Parallel字段组Derived，非ServerArgs实际字段，引发AttributeError。失败发生于参数解析/加载权重之前；原合成fixture人为添加了该属性，故6项测试未发现。新增serving_probe尚在编写，未标通过；保留失败日志，随后修复累计下一轮。
+
+### 候选5/10：修复真实参数解析并验收服务
+
+- 目的：消除LoopVQ兼容hook与当前ServerArgs字段结构不匹配，补足真实参数对象验收。
+- 步骤：核对parallel输入/Derived及其余hook属性，以正确dcp_size或已定义runtime helper检查DCP；更新fixture并增加真实ServerArgs解析检查，完成候选4待验的HTTP服务probe。
+- 范围：arg_groups/kv_cache_hook.py、test_loopvq_wiring.py、候选4新增serving_probe.py/test_serving_probe.py及本记录；不改变码本或attention算术。
+- 成功标准：真实完整Ouro+最终bundle参数解析成功，DCP>1仍被拒绝；原6项及新检查通过；随后真实eager/full模型服务按候选4矩阵验收，不把解析通过代替服务正确。
+- 风险：其他分层配置Derived字段也可能与简化fixture不同；同时审计所有hook访问，不放宽不支持配置的拒绝条件。
+- 验证：本地静态/协议测试，A10实际ServerArgs与启动，记录SHA/命令/退出码/日志；失败再次修改计入下一轮。
+
+- 正式训练完成：calibration/fit/FT均exit0；fit351.8s，FT303.0s，48updates/4epochs，heldout KL曲线0.06782355→0.05621675→0.05229405→0.04873301→0.04768510。最终bundle codebook.pt/vq_v_codebook.pt各607379165B，两个identity rotation各12640793B，build_info1628B。训练源固定bf1cf18；完成并结束恢复诊断后，A10 LoopVQ/test已ff-only到790e69e用于评测。
+- 实际最终bundle与官方loader的encode/decode表及code_layer逐元素一致；校准seq0/12/15、base0/23/47、17边界位置、全部heads/groups共156672个K/V编码，target/official/FP64最近邻全部同索引，raw HP写入、prefill/flush和dummy保护通过exit0。少量极小BF16值转FP16改变，但这批数据未改变索引。evidence/a10/real-bundle-encoding.jsonl保留结果；不替代真实服务生命周期。
+- 五任务数据online/offline复核exit0：AIME24 30/AIME25 30/GPQA Diamond198/HumanEval+164/MBPP+378；GPQA固定83022ce，AIME分别8d88b287/563bb840；EvalPlus GT已预热，manifest已存evidence。真实BF16 HTTP审计aime24+HumanEval、seed0/1（每cell1题64token）全部exit0，payload/template/IDs/seed/评分链路通过；这4个截断审计分数不能作为benchmark准确率。
+- 候选5本地：hook32个字段schema审计、py_compile/diff检查exit0，serving_probe新增9项真实本机mock HTTP/SSE协议测试exit0；A10真实wiring/解析/服务待执行，不能报通过。
