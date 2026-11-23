@@ -414,6 +414,8 @@ common-shape在正式测量前对两方法、五档batch完成容量预检后冻
 
 - 候选9监督器本地首次验证通过：`PYTHONDONTWRITEBYTECODE=1 python3 research/loopspec/experiments/2026-11-23-loopvq-reproduction/test_a10_paperlong_pipeline.py -v`，14/14、exit0；两新文件AST与diff检查exit0。覆盖PID复用、未知GPU进程、准确argv/模型/端口、pidfd仅向已核实父进程发SIGTERM、空闲指标、完整原长度结果、容量N/A、排他锁、只读inspect及拒绝覆盖未完成状态。旧BF16 manifest未封存start_ticks，监督器明确从首次接管开始记录身份，不补造启动时证据；实际A10接管及后续自动切换仍须分别验收。
 
+- 候选9 A10接管已验收：监督器提交4593859828e5d64f9998bdbf39e5788d10370ea1，仅独立validation clone同步；原性能/accuracy checkout仍为feba71a892。只读`--inspect` exit0、返回waiting。首次使用loopvq-build的Conda Python被Linux pidfd前置检查拒绝（exit1，日志paperlong-pipeline-r9.log，无服务操作、无status.json）；原样源码改用现场确认具备两个pidfd接口的`/usr/bin/python3` 3.12.3，未改包/推理环境/源码，已通过实际PID/端口/GPU/环境/SHA核查并进入waiting_for_bf16。tmux窗口paperlong-pipeline-r9-system，监督器PID1619623；状态A10 results/throughput-round7/paper-long/pipeline/status.json，日志logs/paperlong-pipeline-r9-system.log。此状态只证明已接管等待，BF16→VQ切换和完整长矩阵仍待运行验收；不标为已完成。evidence/a10/round9-{handoff,bf16-adoption}.json封存本次快照。六个主accuracy服务全部health200、client尚无退出标记；GPU5已释放。之后不要pull修改进入正在运行的冻结checkout；优先读取原tmux/进程/状态再续办，禁止重复启动。
+
 ## 已实现代码导航
 
 本节描述本地 `90bbb757a` 的 standalone LoopVQ 实现，不新增运行行为或修改轮次。官方算法/源码、当前移植、算子对照、真实服务与完整 benchmark 是不同证据：代码导航说明实现位置，实测结论及运行时 SHA 以前面的实验记录和对应原始结果为准。已启动准确率、吞吐进程分别冻结在其记录的版本，不能把本地 HEAD 追认为运行版本。以下链接均相对于本记录，指向 SGLang 仓库内文件。
