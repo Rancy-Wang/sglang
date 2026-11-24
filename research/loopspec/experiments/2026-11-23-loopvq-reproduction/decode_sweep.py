@@ -19,7 +19,7 @@ import a10_paperlong_pipeline as safe
 import context_diagnostic as context
 import profile_loop_breakdown as loops
 
-ROOT = safe.TASK / "results/decode-20261124"
+ROOT = safe.TASK / "results/decode-20261124-r12"
 OUTPUTS = (1024, 2048, 4096, 8192)
 BATCHES = (1, 2, 4, 8, 16)
 INPUT_LEN = 2048

@@ -76,7 +76,11 @@ def start(method, profile, *, launch_script=None, server_protocol="paper-long"):
     trace = ROOT / f"{method}-nodes"
     if profile:
         assert not list(ROOT.glob(f"{method}-nodes*")), "Preserve previous traces"
-        command = ["nsys", "profile", "--trace=cuda,nvtx,osrt", "--sample=none", "--cpuctxsw=none",
+        nsys_tmp = Path(f"/tmp/loopvq-nsys-{os.getuid()}")
+        nsys_tmp.mkdir(mode=0o700, exist_ok=True)
+        assert nsys_tmp.stat().st_uid == os.getuid(), "Nsight temp directory is not owned by this account"
+        command = ["env", f"NSYS_TMPDIR={nsys_tmp}", f"TMPDIR={nsys_tmp}",
+                   "nsys", "profile", "--trace=cuda,nvtx,osrt", "--sample=none", "--cpuctxsw=none",
                    "--cuda-graph-trace=node", "--capture-range=cudaProfilerApi",
                    "--capture-range-end=repeat:8:async", "--wait=primary", "--kill=none",
                    f"--output={trace}", *command]
@@ -87,6 +91,7 @@ def start(method, profile, *, launch_script=None, server_protocol="paper-long"):
     deadline = time.monotonic() + 1800
     identity = None
     while time.monotonic() < deadline:
+        assert Path(f"/proc/{pane}").exists(), f"Launcher exited before readiness; inspect {launcher}"
         assert not (safe.TASK / "logs" / f"{label}.exit").exists(), "Server exited during launch"
         owned = safe.process_tree(int(pane))
         assert gpu_pids() <= owned, "Unknown GPU5 task"
