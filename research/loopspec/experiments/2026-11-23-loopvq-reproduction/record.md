@@ -603,3 +603,14 @@ Decode每个请求每步增加一个HP token。recent ring比配置窗口多8个
 [test_loopvq_core.py](test_loopvq_core.py) 覆盖布局、loader、ring/free/reuse及参考算子；[test_loopvq_wiring.py](test_loopvq_wiring.py) 覆盖参数解析和预算；[test_loopvq_official_kernels.py](test_loopvq_official_kernels.py) 使用真实码本、原官方模块及CPU metadata oracle核对优化算子/graph。上述算子测试不替代真实模型准确率。
 
 [baseline_probe.py](baseline_probe.py) 明确HF最终第4轮readout并保存token/logprob；[serving_probe.py](serving_probe.py) 核对真实服务的eager/full、padding、边界、abort和复用；[benchmark_throughput.py](benchmark_throughput.py) 校验实际batch、固定长度、graph状态和同机配对。已通过/失败/未运行状态均沿用本记录中的具体提交、命令和证据，不把接口测试、短输出审计或算子通过写成完整benchmark完成。
+
+
+## 2026-11-24 candidate 10/10: context sweep and loop-level attribution
+
+User confirmed 1K/2K/4K/8K means visible decode history; HP window stays 8+64.
+1. Purpose: separate attention, shared model kernels and scheduling overhead, while auditing official differences.
+2. Steps: frozen-inference unprofiled HTTP matrix, then short Nsight node traces and four-loop attribution.
+3. Scope: experimental measurement/analysis helpers and this record only; no inference source changes. Restore failed long-output supervisor using a new, independently hashed metadata manifest and new state directory, preserving previous failure evidence.
+4. Acceptance: all four contexts and bs1/2/4/8/16 measured or explicitly capacity limited; paired inputs, actual graph/batch evidence; each loop's attention/common GPU costs reconciled with all graph kernels.
+5. Risks: client TTFT is not server prefill; short E2E dominated by prefill; node profiling perturbs CPU/wall time. Keep primary throughput unprofiled. BF16 capacity prevents some large-context pairs. Generic pointwise kernels attributed by execution position, not invented fine-grained names.
+6. Validation: A10 GPU5, full R4 Thinking, frozen feba inference, same model/environment and HP8+64. Input L-1, 33 output tokens gives 32 decode steps at histories L..L+31. Profile uses 9 output tokens/8 decode steps at L..L+7, bs1 and4. Two warmups, three unprofiled measurements. Verify 772 norms/192 layers/4 loops per graph and preserve trace/schema/provenance. Use tmux throughout. Candidate10 starts here; no performance fix is attempted.
