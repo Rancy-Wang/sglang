@@ -683,9 +683,9 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                 "Context Drop leases require page_size=1 device-only Python Radix"
             )
         if set(self.component_types) - {
-            ComponentType.FULL, ComponentType.SWA, ComponentType.MAMBA
+            ComponentType.FULL, ComponentType.MAMBA
         }:
-            raise ValueError("Context Drop leases support Full/SWA/Mamba components only")
+            raise ValueError("Context Drop leases require shared Full/SWA pages or Full/Mamba")
         # Only Full references below are released. The native Mamba state lock
         # stays on its endpoint; Drop never changes the live recurrent state.
         anchor = self.node_by_id(node_id)
@@ -774,28 +774,6 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         receipt.context_skip_ranges = spans
         return receipt
 
-    def configure_context_swa_lock(self, node_id, receipt, required_raw):
-        if (
-            self.page_size != 1
-            or self.enable_hicache
-            or self.enable_storage
-            or self.enable_session_radix_cache
-            or self.enable_external_cache_linker
-            or self.is_eagle
-            or set(self.component_types) != {ComponentType.FULL, ComponentType.SWA}
-        ):
-            raise ValueError(
-                "Context SWA leases require page_size=1 device-only Python Full/SWA Radix"
-            )
-        node = self.node_by_id(node_id)
-        self._assert_receipt_anchor(node, receipt)
-        if receipt.node_id is None or receipt.skipped_lock_components:
-            raise ValueError(
-                "Context SWA lease requires acquired Full and SWA references"
-            )
-        return self.components_by_type[ComponentType.SWA].configure_context_lock(
-            node, receipt, required_raw
-        )
 
     def _update_context_candidate(self, node):
         candidates = self.context_eviction_candidates
@@ -970,13 +948,9 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         swa_component = self.components_by_type.get(ComponentType.SWA)
         if swa_component is None:
             return result
-        if params.context_swa_ranges is not None:
-            swa_component.release_component_lock(node, params)
-            params.context_swa_ranges = ()
-        else:
-            swa_component.release_window_lock(
-                node, params.swa_uuid_for_lock, result.device_frees, result.host_frees
-            )
+        swa_component.release_window_lock(
+            node, params.swa_uuid_for_lock, result.device_frees, result.host_frees
+        )
 
         # Drop strictly-lower-priority locks co-located on the node, skipping
         # any the paired inc never took (matters for FULL+SWA+MAMBA models).
@@ -1008,6 +982,8 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         return DecLockRefResult()
 
     def _validate_context_key(self, key: RadixKey) -> None:
+        if ComponentType.SWA in self.components_by_type:
+            raise ValueError("Context requires --disable-hybrid-swa-memory")
         if self.page_size != 1:
             raise ValueError("Context Radix requires page_size=1")
         # Storage hash/export and non-attention component state do not yet carry
@@ -1019,12 +995,12 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             or self.kv_events.enabled
             or self.is_eagle
             or any(
-                ct not in (ComponentType.FULL, ComponentType.SWA, ComponentType.MAMBA)
+                ct not in (ComponentType.FULL, ComponentType.MAMBA)
                 for ct in self.component_types
             )
         ):
             raise ValueError(
-                "Context Radix currently requires device-only Full/SWA/Mamba cache, "
+                "Context Radix currently requires device-only shared-page Full/Mamba cache, "
                 "without speculative decoding or KV cache event export"
             )
 
@@ -1071,10 +1047,8 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         swa = self.components_by_type.get(ComponentType.SWA)
         mamba = self.components_by_type.get(ComponentType.MAMBA)
 
-        # Insert's logical SWA window need not be an execution-order suffix.
-        # Match Full history first; recovery validates every actual SWA reader
-        # against the returned residency map before any attention is dispatched.
-        insert_history = key.context is not None and (key.context.has_insert or key.context.cache_policy != 0)
+        if swa is not None:
+            raise ValueError("Context requires --disable-hybrid-swa-memory")
 
         def advance(node, length, suffix):
             if node.evicted:
@@ -1085,12 +1059,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                 # Context never rewinds or transforms the selected linear state.
                 if length != len(node.key) or node.component_data[ComponentType.MAMBA].value is None:
                     return False, suffix
-            if swa is None or params.context_cache_publication or insert_history:
-                return True, suffix
-            if node.component_data[ComponentType.SWA].value is None:
-                return False, 0
-            suffix += length
-            return suffix >= swa.sliding_window_size, suffix
+            return True, suffix
 
         # Seed with the longest exact source, but keep selection read-only. An
         # equally long Retry candidate must not displace this no-COW choice.
@@ -1129,21 +1098,13 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             path.append(node)
             node = node.parent
         path.reverse()
-        values, positions, residency, swa_residency = [], [], [], []
+        values, positions, residency = [], [], []
         cursor = exact_source_length = 0
         for node in path:
             values.append(node.component_data[BASE_COMPONENT_TYPE].value)
             residency.append(
                 torch.full((len(node.key),), not node.context_hole, dtype=torch.bool)
             )
-            if swa is not None:
-                swa_residency.append(
-                    torch.full(
-                        (len(node.key),),
-                        node.component_data[ComponentType.SWA].value is not None,
-                        dtype=torch.bool,
-                    )
-                )
             source = node.key
             if exact_source_length == cursor:
                 exact_source_length += source.match_at(key, cursor, self.page_size)
@@ -1174,10 +1135,6 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             context_exact_prefix_len=exact_source_length,
             context_retry=exact_source_length < selected.matched_length,
             context_resident=torch.cat(residency),
-            context_swa_resident=torch.cat(swa_residency) if swa is not None else None,
-            # Native attention stores the maximum position distance; the
-            # Context dependency planner accepts the inclusive token count.
-            context_swa_window=swa.sliding_window_size + 1 if swa is not None else None,
         )
 
     def _match_prefix_helper(
@@ -1429,8 +1386,6 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             self._validate_context_key(key)
         if params.context_resident is not None:
             self._validate_context_insert_residency(params)
-        if params.context_swa_resident is not None:
-            self._validate_context_swa_insert_residency(params)
         if params.context_owned is not None and (
             key.context is None
             or params.context_owned.device.type != "cpu"
@@ -1517,25 +1472,6 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         if not np.all(resident[: len(key)].numpy() | proven[real]):
             raise ValueError("Context insert hole has no Drop proof on the inserted path")
 
-    def _validate_context_swa_insert_residency(self, params):
-        key, resident = params.key, params.context_swa_resident
-        if (
-            key.context is None
-            or key.context_start != 0
-            or ComponentType.SWA not in self.components_by_type
-            or resident.device.type != "cpu"
-            or resident.dtype != torch.bool
-            or resident.ndim != 1
-            or len(resident) < len(key)
-        ):
-            raise ValueError(
-                "Context SWA insertion requires aligned CPU residency and structured Full/SWA keys"
-            )
-        full = params.context_resident
-        if full is not None and bool(
-            torch.any(resident[: len(key)] & ~full[: len(key)])
-        ):
-            raise ValueError("Context SWA pages cannot exist inside a Full hole")
 
     def _rotation_conflict(
         self, key: RadixKey, rotation_base: int
@@ -1646,11 +1582,10 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         resident = state.params.context_resident
         if (
             resident is not None
-            or state.params.context_swa_resident is not None
             or state.params.context_owned is not None
         ):
             for component_resident in (
-                resident, state.params.context_swa_resident, state.params.context_owned
+                resident, state.params.context_owned
             ):
                 if component_resident is None:
                     continue
@@ -1732,12 +1667,6 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                 swa_already_freed = min(
                     max(state.params.swa_evicted_seqlen - abs_start, 0), dup.numel()
                 )
-                if state.params.context_swa_resident is not None and not bool(
-                    state.params.context_swa_resident[abs_start]
-                ):
-                    # The edge is homogeneous after the validity split above.
-                    # Missing SWA was already released by the request owner.
-                    swa_already_freed = dup.numel()
                 if swa_already_freed > 0:
                     step_actions.append(FreeDeviceKVFullOnly([dup[:swa_already_freed]]))
                 if swa_already_freed < dup.numel():
@@ -1754,7 +1683,6 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         """Create the tail leaf and run the component commit hooks."""
         if (
             state.params.context_resident is not None
-            or state.params.context_swa_resident is not None
         ) and len(state.key):
             self._insert_context_tail(state)
             return
@@ -1814,10 +1742,6 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             for leaf in self.evictable_device_leaves:
                 self._update_context_candidate(leaf)
         changes = resident[1:] != resident[:-1]
-        swa = state.params.context_swa_resident
-        if swa is not None:
-            swa = swa.numpy()[base : base + len(state.key)]
-            changes |= swa[1:] != swa[:-1]
         bounds = [0, *(np.flatnonzero(changes) + 1), len(resident)]
         node = state.node
         for start, end in zip(bounds[:-1], bounds[1:]):

@@ -119,12 +119,6 @@ def test_pd_final_versions_holes_identity_and_usage(compiler, transfer_modules):
         110,
         111,
     ]
-    # The final raw map has holes, and D allocated only its three live SWA peers.
-    req.context_state = replace(
-        req.context_state, swa_resident=torch.tensor([False] * 6 + [True] * 3)
-    )
-    assert req.context_state.live_swa_ranges(0, 11) == [(9, 11)]
-    assert req.context_state.live_swa_ranges(11, 14) == [(11, 14)]
     req.context_usage = usage.ContextUsage.from_snapshot(
         usage.ContextUsageSnapshot(2, 3, 4, 5, 0)
     )
@@ -213,8 +207,8 @@ def test_decode_changed_branch_copies_even_at_equal_positions(compiler, transfer
         transfer.select_missing_transfer(source, source, reuse.reusable.astype(np.uint8))
 
 
-@pytest.mark.parametrize("separate_swa", [False, True])
-def test_decode_reuse_binding_supports_partial_native_rope(monkeypatch, separate_swa):
+@pytest.mark.parametrize("has_swa", [False, True])
+def test_decode_reuse_binding_supports_partial_native_rope(monkeypatch, has_swa):
     """D-side cached COW reaches the same partial-RoPE binding as prefill."""
     from unittest.mock import Mock
     from sglang.srt.layers.attention.context_backend import ContextModelBinding
@@ -225,9 +219,8 @@ def test_decode_reuse_binding_supports_partial_native_rope(monkeypatch, separate
     pool = SimpleNamespace(get_kv_buffer=lambda _: (k, v))
     translator = SimpleNamespace(sliding_window_write_loc_for=lambda _: None, translate_full_attn_ids=lambda x: x)
     modules = [module]
-    if separate_swa:
+    if has_swa:
         modules.append(SimpleNamespace(attn=SimpleNamespace(layer_id=1, sliding_window_size=4), rotary_emb=rotary))
-        translator.sliding_window_write_loc_for = lambda x: x + 10
     model = SimpleNamespace(modules=lambda: modules)
     runner = SimpleNamespace(model=model, token_to_kv_pool=pool, kv_index_translator=translator)
     req = SimpleNamespace(context_decode_reuse=SimpleNamespace(copy_indices=np.array([0, 1]),
@@ -243,44 +236,8 @@ def test_decode_reuse_binding_supports_partial_native_rope(monkeypatch, separate
     full = kernel.call_args_list[0]
     assert torch.equal(full.args[4], torch.tensor([2, 3], dtype=torch.int32))
     assert torch.equal(full.args[5], torch.tensor([6, 7], dtype=torch.int32))
-    if separate_swa:
+    if has_swa:
         assert len(kernel.call_args_list) == 2
         swa = kernel.call_args_list[1]
-        assert torch.equal(swa.args[4], torch.tensor([12, 13], dtype=torch.int32))
-        assert torch.equal(swa.args[5], torch.tensor([16, 17], dtype=torch.int32))
-        assert swa.kwargs["skip_unmapped"] is True
-
-
-@pytest.mark.parametrize("exact_hit", [False, True])
-def test_decode_swa_tail_stays_private_with_full_cache_reuse(compiler, transfer_modules, exact_hit):
-    transfer, _ = transfer_modules
-    layout = compiler(*args(list(range(12)), {6: [(1, 4)]}, [7]))
-    program = SimpleNamespace(layout=layout, visible_until=torch.full((12,), 99, dtype=torch.int32))
-    req = SimpleNamespace(context_program=program, context_recompute_program=None,
-        context_resident=torch.ones(10, dtype=torch.bool),
-        context_source_positions=torch.arange(10, dtype=torch.int32),
-        context_exact_prefix_len=1, prefix_indices=torch.arange(20, 30), kv=SimpleNamespace(req_pool_idx=0))
-    if exact_hit:
-        req.context_source_positions = layout.positions[:10]
-        req.context_exact_prefix_len = 10
-    initial_exact = req.context_exact_prefix_len
-    plan = transfer.ContextTransferPlan.build(program, "cpu")
-    req.context_decode_reuse = reuse = transfer.ContextDecodeReuse.build(req, plan, window=4)
-    start = plan.swa_start(4)
-    assert not reuse.reusable[start:].any()
-    assert reuse.reusable[:start].any()
-    calls = []
-    def allocate(count, tail):
-        calls.append((count, tail))
-        return torch.arange(100, 100 + count)
-    table = torch.full((1, 12), -1, dtype=torch.int64)
-    slots = transfer.allocate_context_destination(req,
-        SimpleNamespace(device="cpu", alloc_context_swa_tail=allocate),
-        SimpleNamespace(write=lambda i, v: table.__setitem__(i, v)), window=4)
-    assert calls == [(reuse.allocation_count, plan.active_count - start)]
-    assert (slots[start:] >= 100).all()
-    assert req.context_state.swa_resident.tolist() == [False] * start + [True] * (plan.active_count - start)
-
-    private_raw = plan.decode.raw_indices[~reuse.borrowed]
-    assert req.context_exact_prefix_len == min(initial_exact, int(private_raw[0]))
-    assert req.context_state.exact_prefix_len == req.context_exact_prefix_len
+        assert torch.equal(swa.args[4], torch.tensor([2, 3], dtype=torch.int32))
+        assert torch.equal(swa.args[5], torch.tensor([6, 7], dtype=torch.int32))

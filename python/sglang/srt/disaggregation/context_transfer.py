@@ -115,11 +115,6 @@ def validate_staged_handoff(req, plan, *, window=None):
         raise ValueError("Context staged handoff has missing final KV")
     if not np.array_equal(state.canonical_positions.numpy()[raw], plan.decode.positions):
         raise ValueError("Context staged handoff has unfinished position transitions")
-    if state.swa_resident is not None:
-        if window is None or window < 0:
-            raise ValueError("Context staged SWA handoff requires a window")
-        if not state.swa_resident.numpy()[rows[plan.swa_start(window):]].all():
-            raise ValueError("Context staged handoff has missing final SWA KV")
 
 
 def prepare_decode_transfer_plan(req, device, raw_length):
@@ -199,10 +194,7 @@ class ContextDecodeReuse:
         if resident is not None:
             reusable[reusable] &= resident.numpy()[raw[reusable]]
         if window is not None:
-            # Match native PD: receive the SWA tail into fresh owners. The
-            # transport sends that state as one payload, so borrowing any of
-            # its destinations would overwrite a shared cache page.
-            reusable[plan.swa_start(window):] = False
+            raise ValueError("Context PD requires --disable-hybrid-swa-memory")
         source = req.context_source_positions
         if source is None:
             source = torch.arange(matched, dtype=torch.int32)
@@ -231,17 +223,10 @@ def allocate_context_destination(req, allocator, pool, *, window=None):
     count = plan.active_count
     reuse = getattr(req, "context_decode_reuse", None)
     allocation_count = count if reuse is None else reuse.allocation_count
-    if window is None:
-        allocated = allocator.alloc(allocation_count)
-        slots = allocated
-        swa = None
-    else:
-        start = plan.swa_start(window)
-        if reuse is not None and reuse.reusable[start:].any():
-            raise ValueError("Context SWA transfer destinations must be private")
-        allocated = allocator.alloc_context_swa_tail(allocation_count, count - start)
-        slots = allocated
-        swa = torch.arange(count) >= start
+    if window is not None:
+        raise ValueError("Context PD requires --disable-hybrid-swa-memory")
+    allocated = allocator.alloc(allocation_count)
+    slots = allocated
     if slots is None:
         raise RuntimeError(
             "Context PD destination allocation exceeds admitted capacity"
@@ -251,10 +236,8 @@ def allocate_context_destination(req, allocator, pool, *, window=None):
         owned = torch.from_numpy(~reuse.borrowed)
         private_raw = plan.decode.raw_indices[~reuse.borrowed]
         if len(private_raw):
-            # Native SWA eviction treats cache_protected_len as already owned
-            # by the tree. A freshly received tail is private even on an exact
-            # cache hit; excluding it from that prefix also keeps its SWA peers
-            # live until insertion adopts or frees the duplicate destinations.
+            # A received or rotated page is private even below a matched raw
+            # boundary. Only insertion can adopt or free these destinations.
             req.context_exact_prefix_len = min(
                 req.context_exact_prefix_len, int(private_raw[0])
             )
@@ -275,7 +258,6 @@ def allocate_context_destination(req, allocator, pool, *, window=None):
         rows.clone(),
         program.layout.positions,
         min(req.context_exact_prefix_len, plan.decode.prompt_length) if reuse is not None else 0,
-        swa,
     )
     req.context_decode_layout = plan.decode
     # D owns the final layout; it must not inherit P's execution frontier.

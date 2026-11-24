@@ -57,15 +57,6 @@ def test_only_final_stage_is_valid_handoff(compiler, transfer_modules, chunk, ta
         start = end
     transfer.validate_staged_handoff(req, plan)
     state = req.context_state
-    rows = state.terminal_rows[torch.from_numpy(plan.decode.raw_indices.astype('int64'))]
-    swa = torch.zeros(len(state.slots), dtype=torch.bool)
-    swa[rows[plan.swa_start(4):]] = True
-    req.context_state = replace(state, swa_resident=swa)
-    transfer.validate_staged_handoff(req, plan, window=4)
-    swa[rows[-1]] = False
-    with pytest.raises(ValueError, match="missing final SWA"):
-        transfer.validate_staged_handoff(req, plan, window=4)
-    req.context_state = state
     raw = int(plan.decode.raw_indices[0])
     old = int(state.canonical_positions[raw])
     state.canonical_positions[raw] = old + 1

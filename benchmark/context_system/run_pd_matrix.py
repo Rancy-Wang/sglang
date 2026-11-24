@@ -329,7 +329,8 @@ def run_one(args, session=None):
     try:
         if not reused:
             for i, mode in enumerate(("prefill", "decode")):
-                cmd = list(source_servers[i]["argv"])
+                from shared_swa import shared_swa_command
+                cmd = shared_swa_command(source_servers[i]["argv"])
                 cmd[cmd.index("--tp-size") + 1] = str(len(args.gpu_ids.split(",")) // 2)
                 if args.approved_overlap_matrix:
                     cmd = overlap_command(cmd, args.max_running_requests or max(8, args.concurrency),

@@ -110,7 +110,7 @@ def pd_servers():
                     "--reasoning-parser",
                     "gpt-oss",
                 ]
-            if os.environ.get("CONTEXT_SHARED_SWA") == "1":
+            if "gpt-oss" in os.environ["CONTEXT_SERVER_MODEL"].lower():
                 cmd += ["--disable-hybrid-swa-memory"]
             backend = os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND")
             if backend:

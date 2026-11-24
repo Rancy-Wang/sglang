@@ -1,5 +1,44 @@
 # Execution-order Insert
 
+## 2026-11-24 共享页策略（PLAN-CS-20261124-R1）
+
+本节取代下文历史 R1/R2/R3 中的独立 SWA 池恢复与释放说明。GPT-OSS 的所有新实验
+必须启用 `--disable-hybrid-swa-memory`。这改变 KV 存储生命周期，不关闭 SWA attention。
+Context 请求在独立 SWA 配置下直接返回要求该参数的错误；普通原生请求不受此限制。
+
+Full 和 SWA 各层仍存储自己的 K/V 数值，但同一 token 使用同一 slot/页生命周期。
+Radix 命中的共享页同时包含各层 KV；不再维护 `context_swa_resident`、SWA read demand、
+独立 SWA lease 或 tail-only PD 分配。原生 `allocator/swa.py` 与
+`unified_cache/components/swa.py` 恢复为 native base
+`d58342deab27e6f8bb507d9db2a0f87c6f42cee3` 的内容。
+
+请求经过原有编译、execution Radix exact/retrigger 匹配，再按 Full/shared 页的真实
+历史读依赖补齐整页缺失。保留的 suffix 不因 SWA 窗口移动重算。Reposition 为共享源
+生成私有 COW 页，所有层按相同 slot 复制/旋转；完成 GPU 使用后才释放旧私有版本。
+回填和中止按实际 `owned` 释放，不能用 source match 长度替代所有权。这也覆盖
+`cache_protected_len` 之前的私有旋转页，避免旧的私有 SWA peer 漏释放问题。
+
+SWA 选取不变：先按操作历史确定因果可见 KV，保留原生位置下界条件，再取 logical
+顺序最后 `W=w+1` 项（含当前 query）。GPT-OSS 的配置值为 128，层内 distance 为
+127，所以最多读取 128 项。非单调位置仍使用既有 run index；单调位置仍使用原有快速
+路径。KV 保留较多不等于每次 attention 读取较多，不扩大 graph 缓冲，也不新增 eager
+回退。共享页的显存代价与吞吐/TTFT 必须分开报告。
+
+验证基线为 `a9770edb50633cb1ce439121f525064b9070e858`，前后均启用共享页、相同
+模型/TP/chunk/graph 设置。旧独立池性能记录仅为历史参考，不能作为受控 A/B。
+当前提交先完成代码与本地验证；Linux/GPU、28 个冻结事件、10 道 BCP 及配对性能结果
+在本节后续补充，未完成前不宣布数值或性能门禁通过。
+
+保留问题：原生 Triton 与 Context 的 127/128 边界差异未在本轮调整；Insert 的 PD
+`full_chunk` 对非单调 execution raw indices 使用 `searchsorted` 的传输问题仍待修复。
+Qwen Linear Insert 仍不支持。关闭独立池不能消除整页 eviction 或这些独立问题。
+
+实现入口：`context_system/capabilities.py::validate_context_config`、
+`context_system/recovery.py::plan_recovery`、
+`layers/attention/context_backend.py::ContextModelBinding.bind`、
+`mem_cache/unified_radix_cache.py::_free_context_kv_row`（均相对 `python/sglang/srt/`）。
+
+
 实现计划：`PLAN-CS-20261103-R1`、`PLAN-CS-20261103-R2`，以及 `PLAN-CS-20261103-R3` 的已批准非 Linear 部分。本实现保留 `drop_message`，允许重复 Drop；
 SWA 先沿用原位置窗口条件，再选 logical 最后 W 项（W=原生距离窗口+1，包含 query）。Qwen3.8/Qwen3.5 的 Linear/Full hybrid 模型暂不支持 Insert，
 请求会返回格式/能力错误；其原有 Drop/Reposition 路径保留。

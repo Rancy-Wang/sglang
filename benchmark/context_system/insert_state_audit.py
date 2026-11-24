@@ -3,7 +3,7 @@
 The reference walks every resident tree edge and compares individual record
 triples. It deliberately does not use RadixKey.match, retry child buckets,
 descendant bounds, or the production SWA selector. Supported scope is page-one
-Full/Full+SWA Insert histories, whose SWA misses are repaired after matching.
+shared-page Insert histories; every resident page contains all attention layers.
 """
 
 import hashlib
@@ -78,16 +78,13 @@ def audit_match(cache, key, result, expected):
     while node is not root:
         path.append(node)
         node = node.parent
-    units, slots, positions, resident, swa = [], [], [], [], []
+    units, slots, positions, resident = [], [], [], []
     for node in reversed(path):
         edge = token_units(node.key, depth=len(units))
         units.extend(edge)
         positions.extend(unit[-1][2] for unit in edge)
         slots.append(node.component_data[ComponentType.FULL].value)
         resident.extend([not node.context_hole] * len(edge))
-        swa.extend(
-            [node.component_data[ComponentType.SWA].value is not None] * len(edge)
-        )
     count = len(result.device_indices)
     selected_exact = common_units(units, token_units(key))
     compatible = [
@@ -111,8 +108,6 @@ def audit_match(cache, key, result, expected):
             if count == 0
             else resident == result.context_resident.tolist()
         ),
-        "swa_residency": result.context_swa_resident is None
-        or swa == result.context_swa_resident.tolist(),
         "selected_exact": selected_exact == result.context_exact_prefix_len,
         "retry_flag": bool(result.context_retry) == (selected_exact < count),
     }
@@ -344,6 +339,9 @@ def replay(args):
     source = load(args.source) if args.source else None
     session = requests.Session()
     session.trust_env = False
+    from shared_swa import check_shared_swa
+    server = check_shared_swa(args.url, args.model)
+    (output / "server-info.json").write_text(json.dumps(server, indent=2))
     journal = []
 
     def flush():
@@ -508,6 +506,9 @@ def timing(args):
     output.mkdir(parents=True, exist_ok=False)
     session = requests.Session()
     session.trust_env = False
+    from shared_swa import check_shared_swa
+    server = check_shared_swa(args.url, args.model)
+    (output / "server-info.json").write_text(json.dumps(server, indent=2))
     records = []
 
     def load(path):

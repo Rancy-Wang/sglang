@@ -1176,11 +1176,6 @@ class PrefillAdder:
         req.lock_receipt = self.tree_cache.inc_lock_ref(req.last_node).to_dec_params()
         if getattr(req, "context_program", None) is not None:
             self.tree_cache.configure_context_prefill_drop_lock(req, req.lock_receipt)
-        if getattr(req, "context_swa_source_required", None) is not None:
-            self.tree_cache.configure_context_swa_lock(
-                req.last_node, req.lock_receipt, req.context_swa_source_required
-            )
-
     def add_dllm_staging_req(self, req: Req):
         assert self.dllm_config is not None
         _rem_tokens = self._get_dllm_remain_tokens()

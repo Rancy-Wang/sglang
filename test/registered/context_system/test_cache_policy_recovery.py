@@ -1,4 +1,4 @@
-"""Recover arbitrary Full/SWA holes against an independent query graph."""
+"""Recover arbitrary shared-page holes against an independent query graph."""
 
 import importlib
 import random
@@ -11,9 +11,8 @@ from test_cache_policy_ir import POLICIES, compile_policy
 pytest_plugins = ("test_cache_policy_ir", "test_context_attention_plan")
 
 
-@pytest.mark.parametrize("window", [None, 1, 3, 128])
 def test_history_fast_plan_matches_general_with_terminal_and_sparse_queries(
-    policy_modules, monkeypatch, window
+    policy_modules, monkeypatch
 ):
     recovery = importlib.import_module(policy_modules[2].__package__ + ".recovery")
     rng = random.Random(1118)
@@ -24,22 +23,19 @@ def test_history_fast_plan_matches_general_with_terminal_and_sparse_queries(
         p = compile_policy(policy_modules, POLICIES[1], list(range(n)), drops)
         m = rng.randrange(n)
         resident = torch.tensor([rng.random() < .8 for _ in range(m)], dtype=torch.bool)
-        swa = torch.tensor([rng.random() < .6 for _ in range(m)], dtype=torch.bool)
-        terminal = torch.tensor([rng.random() < .2 for _ in range(m)], dtype=torch.bool)
         arguments = (resident, p.visible_until, p.layout, None, None,
-                     swa if window else None, window, terminal if window else None,
                      p.layout.positions[:m])
         fast = recovery._plan_insert_recovery(*arguments)
         intervals = tuple((i, i+1) for i in range(n) if rng.random() < .2)
-        masks = recovery._insert_read_masks(p.layout, p.visible_until, intervals, m, window)
+        masks = recovery._insert_read_mask(p.layout, p.visible_until, intervals, m)
         with monkeypatch.context() as patch:
             patch.setattr(recovery, "_history_layout", lambda layout: False)
             general = recovery._plan_insert_recovery(*arguments)
-            expected = recovery._insert_read_masks(p.layout, p.visible_until, intervals, m, window)
+            expected = recovery._insert_read_mask(p.layout, p.visible_until, intervals, m)
         assert fast.intervals == general.intervals
         assert torch.equal(fast.required_prefix, general.required_prefix)
         assert torch.equal(fast.reusable_prefix, general.reusable_prefix)
-        assert all(torch.equal(a, b) for a, b in zip(masks, expected))
+        assert torch.equal(masks, expected)
 
 
 def test_history_fast_path_rejects_version_mismatch(policy_modules, monkeypatch):
@@ -56,7 +52,7 @@ def test_history_fast_path_rejects_version_mismatch(policy_modules, monkeypatch)
     monkeypatch.setattr(recovery, "_history_read_plan", observe)
     recovery._plan_insert_recovery(
         torch.zeros(9, dtype=torch.bool), p.visible_until, p.layout,
-        torch.ones(9, dtype=torch.bool), None, None, None, None, positions,
+        torch.ones(9, dtype=torch.bool), None, positions,
     )
 
 
@@ -81,14 +77,9 @@ def test_holes_and_rotated_versions(policy_modules, policy):
         resident = torch.tensor(
             [rng.random() < 0.7 for _ in range(matched)], dtype=torch.bool
         )
-        swa = torch.tensor(
-            [bool(resident[i]) and rng.random() < 0.6 for i in range(matched)],
-            dtype=torch.bool,
-        )
         stored = p.layout.positions[:matched]
         rewind = resident & (stored != p.layout.birth_positions[:matched])
-        window = rng.randrange(1, 10)
-        planned, full, old_reads, sliding = set(range(matched, n)), {}, {}, set()
+        planned, full, old_reads = set(range(matched, n)), {}, {}
         for q in range(n - 1, -1, -1):
             if q < matched:
                 versions = old_reads.get(q, set())
@@ -98,7 +89,7 @@ def test_holes_and_rotated_versions(policy_modules, policy):
                         not resident[q]
                         or (rewind[q] and any(pos != stored[q] for pos in versions))
                     )
-                ) or (q in sliding and not swa[q]):
+                ):
                     planned.add(q)
             if q in planned:
                 for raw, pos in rows[q][:-1]:
@@ -107,22 +98,12 @@ def test_holes_and_rotated_versions(policy_modules, policy):
                     # historical repair queries require its original version.
                     if q < matched:
                         old_reads.setdefault(raw, set()).add(pos)
-                qpos = ref.compute_positions[projection[q]]
-                chosen = [pair for pair in rows[q] if pair[1] >= qpos - (window - 1)][
-                    -window:
-                ]
-                sliding.update(raw for raw, _ in chosen if raw != q)
         result = recovery.plan_recovery(
             resident,
             p.visible_until,
             n,
             rewind,
-            swa_resident=swa,
-            swa_query_starts=recovery.sliding_window_starts(
-                p.layout, p.visible_until, window
-            ),
             layout=p.layout,
-            swa_window=window,
             source_positions=stored,
         )
         assert {q for a, b in result.intervals for q in range(a, b)} == planned, (
@@ -132,24 +113,11 @@ def test_holes_and_rotated_versions(policy_modules, policy):
             rows,
             matched,
             resident.tolist(),
-            swa.tolist(),
             stored.tolist(),
             p.layout.birth_positions.tolist(),
-            window,
         )
-        required = (set(full) | sliding | planned).intersection(range(matched))
+        required = (set(full) | planned).intersection(range(matched))
         assert set(result.required_prefix.nonzero().flatten().tolist()) == required
-        demand = recovery.sliding_window_read_mask(
-            torch.zeros(n, dtype=torch.int32),
-            p.visible_until,
-            result.intervals,
-            matched,
-            layout=p.layout,
-            window=window,
-        )
-        assert set(demand.nonzero().flatten().tolist()) == sliding.intersection(
-            range(matched)
-        )
 
 
 @pytest.mark.parametrize("policy", POLICIES)

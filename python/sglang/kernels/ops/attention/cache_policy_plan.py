@@ -68,116 +68,38 @@ void frozen_death_positions(tvm::ffi::TensorView expiry,
 }
 TVM_FFI_DLL_EXPORT_TYPED_FUNC(frozen_death_positions, frozen_death_positions);
 
-// Sweep queries backwards. A token becomes visible when the sweep passes its
-// death; prefix bounds exclude tokens not yet born. Mark the last W eligible
-// logical keys, not the W largest positions (frozen-death PE is not monotonic).
-struct HistoryReaders {
-  int n;
-  std::vector<int> count, low, high;
-  std::vector<uint8_t> marked;
-  explicit HistoryReaders(int length)
-      : n(length), count(4*length), low(4*length, INT32_MAX),
-        high(4*length, INT32_MIN), marked(4*length, 0) {}
-  void push(int v) {
-    if (marked[v]) {
-      marked[2*v] = marked[2*v+1] = 1;
-      marked[v] = 0;
-    }
-  }
-  void activate(int v, int a, int b, int i, int position) {
-    if (b-a == 1) {
-      count[v] = 1; low[v] = high[v] = position;
-      // Marks made while this token was invisible must not survive activation.
-      marked[v] = 0;
-      return;
-    }
-    push(v);
-    int mid = a+(b-a)/2;
-    if (i < mid) activate(2*v, a, mid, i, position);
-    else activate(2*v+1, mid, b, i, position);
-    count[v] = count[2*v]+count[2*v+1];
-    low[v] = std::min(low[2*v], low[2*v+1]);
-    high[v] = std::max(high[2*v], high[2*v+1]);
-  }
-  void select(int v, int a, int b, int end, int64_t lower, int& budget) {
-    if (!budget || a >= end || !count[v] || high[v] < lower) return;
-    if (b <= end && low[v] >= lower && count[v] <= budget) {
-      marked[v] = 1; budget -= count[v]; return;
-    }
-    push(v);
-    int mid = a+(b-a)/2;
-    select(2*v+1, mid, b, end, lower, budget);
-    select(2*v, a, mid, end, lower, budget);
-  }
-  bool read(int v, int a, int b, int i) {
-    if (marked[v]) return true;
-    if (b-a == 1) return false;
-    int mid = a+(b-a)/2;
-    return i < mid ? read(2*v, a, mid, i) : read(2*v+1, mid, b, i);
-  }
-};
-
+// Shared pages contain every layer. Full readers therefore cover SWA too;
+// recover missing pages in a single backward pass without a window index.
 void history_recovery(tvm::ffi::TensorView expiry,
-                      tvm::ffi::TensorView positions,
                       tvm::ffi::TensorView resident,
-                      tvm::ffi::TensorView swa_resident,
-                      tvm::ffi::TensorView terminal,
                       tvm::ffi::TensorView selected,
                       tvm::ffi::TensorView full_required,
-                      tvm::ffi::TensorView swa_required,
-                      int64_t window, bool recover) {
+                      bool recover) {
   auto valid = [](tvm::ffi::TensorView t, int code, int bits, int64_t size) {
     return t.device().device_type == kDLCPU && t.ndim() == 1 &&
            (size == 0 || t.is_contiguous()) && t.dtype().code == code &&
            t.dtype().bits == bits && t.size(0) == size;
   };
   const int64_t length = expiry.size(0), matched = resident.size(0);
-  if (length <= 0 || length >= INT32_MAX/4 || matched < 0 || matched > length ||
-      (recover && matched == length) || window < 0 || window > INT32_MAX ||
-      !valid(expiry, kDLInt, 32, length) ||
-      !valid(positions, kDLInt, 32, length) ||
+  if (length <= 0 || length >= INT32_MAX || matched < 0 || matched > length ||
+      (recover && matched == length) || !valid(expiry, kDLInt, 32, length) ||
       !valid(selected, kDLBool, 8, length) ||
       !valid(resident, kDLBool, 8, matched) ||
-      !valid(swa_resident, kDLBool, 8, matched) ||
-      !valid(terminal, kDLBool, 8, matched) ||
-      !valid(full_required, kDLBool, 8, matched) ||
-      !valid(swa_required, kDLBool, 8, matched))
+      !valid(full_required, kDLBool, 8, matched))
     throw std::invalid_argument("History recovery requires contiguous CPU vectors");
   const int n = length, m = matched;
   const auto* death = static_cast<const int32_t*>(expiry.data_ptr());
-  const auto* pos = static_cast<const int32_t*>(positions.data_ptr());
   const auto* present = static_cast<const uint8_t*>(resident.data_ptr());
-  const auto* sw_present = static_cast<const uint8_t*>(swa_resident.data_ptr());
-  const auto* tail = static_cast<const uint8_t*>(terminal.data_ptr());
   auto* needed = static_cast<uint8_t*>(selected.data_ptr());
   auto* full = static_cast<uint8_t*>(full_required.data_ptr());
-  auto* swa = static_cast<uint8_t*>(swa_required.data_ptr());
-  // Linear activation buckets instead of sorting events or expanding segments.
-  std::vector<int> head(n, -1), next(n, -1);
-  for (int i = 0; i < n; ++i) {
-    if (death[i] <= i || pos[i] < 0)
-      throw std::invalid_argument("Invalid history visibility or position");
-    int q = std::min(death[i], n)-1;
-    next[i] = head[q]; head[q] = i;
-  }
-  HistoryReaders readers(window ? n : 1);
   int earliest = n;
   for (int q = n-1; q >= 0; --q) {
-    if (window) for (int i = head[q]; i != -1; i = next[i])
-      readers.activate(1, 0, n, i, pos[i]);
+    if (death[q] <= q) throw std::invalid_argument("Invalid history visibility");
     if (q < m) {
       full[q] = earliest < n && earliest < death[q];
-      swa[q] = tail[q] || (window && readers.read(1, 0, n, q));
-      if (recover && ((full[q] && !present[q]) || (swa[q] && !sw_present[q])))
-        needed[q] = 1;
+      if (recover && full[q] && !present[q]) needed[q] = 1;
     }
-    if (needed[q]) {
-      earliest = q;
-      if (window > 1) {
-        int budget = window-1;  // The query itself occupies the final SWA slot.
-        readers.select(1, 0, n, q, int64_t(pos[q])-window+1, budget);
-      }
-    }
+    if (needed[q]) earliest = q;
   }
 }
 TVM_FFI_DLL_EXPORT_TYPED_FUNC(history_recovery, history_recovery);

@@ -14,6 +14,30 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def test_independent_swa_rejects_context_before_mutation(compiler, monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "unit/mem_cache"))
+    import test_unified_radix_cache_unittest as native
+    from sglang.srt.mem_cache.base_prefix_cache import InsertParams, MatchPrefixParams
+    from sglang.srt.mem_cache.radix_cache import RadixKey
+    from sglang.srt.mem_cache.unified_cache.component_type import ComponentType
+
+    monkeypatch.setattr(native, "get_device", lambda: "cpu")
+    cache, allocator, _ = native.build_fixture(native.CacheConfig(
+        components=(ComponentType.FULL, ComponentType.SWA), kv_size=512,
+        sliding_window_size=16,
+    ))
+    key = RadixKey.from_context(compiler(*args(list(range(24)), {16: [(2, 5)]}, [17])))
+    free = allocator.available_size()
+    nodes = len(cache.tree_core._node_arena)
+    with pytest.raises(ValueError, match="--disable-hybrid-swa-memory"):
+        cache.insert(InsertParams(key=key, value=torch.arange(24)))
+    for retry in (False, True):
+        with pytest.raises(ValueError, match="--disable-hybrid-swa-memory"):
+            cache.match_prefix(MatchPrefixParams(key=key, context_retry=retry))
+    assert allocator.available_size() == free
+    assert len(cache.tree_core._node_arena) == nodes
+
+
 def test_initial_drop_lease_keeps_checkpoint_and_only_unlocks_proven_pages(compiler, monkeypatch):
     from types import SimpleNamespace
     from test_occurrence_ownership import expiry_for

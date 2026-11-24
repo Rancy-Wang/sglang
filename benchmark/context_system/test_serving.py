@@ -364,6 +364,11 @@ def check_context_budget(prompt_tokens, output_tokens, limit):
 async def run(args):
     import aiohttp
 
+    from shared_swa import check_shared_swa
+
+    for url in (args.url, args.prefill_url):
+        if url:
+            check_shared_swa(url, args.model)
     method = load_method(args.mini_root)
     text_drop = getattr(args, "ablation_policy", None) == "text_drop"
     strict_budget = getattr(args, "strict_source_completion", False)

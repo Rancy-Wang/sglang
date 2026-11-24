@@ -1,5 +1,11 @@
 # Cache policy ablations
 
+> 2026-11-24 / PLAN-CS-20261124-R1：GPT-OSS Context 统一要求
+> `--disable-hybrid-swa-memory`。共享页统一持有 Full/SWA 各层 KV，不再支持独立 SWA
+> residency、恢复、租约和 tail-only 分配。原有 logical SWA 窗口和共享页所有权不变。
+> 下文既有版本与实验结果保留为历史记录；当前实现和新验证见 [Insert 共享页策略](insert.md)。
+
+
 Implementation authorization: `APPROVED_PLAN_ID=PLAN-CS-20261117-R1`,
 `APPROVED_ROUND=25`. The approved file allowlist covers the two new compilers,
 Context IR/wire/occurrence/recovery, frontend admission, Radix selection,

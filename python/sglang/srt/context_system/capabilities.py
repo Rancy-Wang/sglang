@@ -14,6 +14,11 @@ def validate_context_config(args, model_config, *, has_insert=False, cache_polic
     architecture = getattr(model_config, "_resolved_model_arch", None)
     if not isinstance(architecture, str):
         architecture = architectures[0] if architectures else None
+    if getattr(model_config, "is_hybrid_swa", False) or (
+        architecture == "GptOssForCausalLM"
+        and not getattr(args, "disable_hybrid_swa_memory", False)
+    ):
+        raise ValueError("Context requires --disable-hybrid-swa-memory; independent SWA cache recovery is not supported")
     qwen_hybrid = architecture in {
         "Qwen3_5ForConditionalGeneration", "Qwen3_5MoeForConditionalGeneration",
         "Qwen3_5ForCausalLM", "Qwen3_5MoeForCausalLM",

@@ -119,20 +119,20 @@ def test_reposition_rejects_large_page_before_device_access(kernels):
         actual(*([None] * 8), page_size=16)
 
 
-def test_swa_missing_copy_sources_and_destinations_survive_graph_replay(kernels):
+def test_shared_page_copies_survive_graph_replay(kernels):
     actual = kernels
     k = torch.randn((32, 2, 64), device="cuda", dtype=torch.bfloat16)
     v = torch.randn_like(k)
     original_k, original_v = k.clone(), v.clone()
     kptr = torch.tensor([k.data_ptr()], device="cuda", dtype=torch.uint64)
     vptr = torch.tensor([v.data_ptr()], device="cuda", dtype=torch.uint64)
-    src = torch.tensor([0, 2, 3, 4], device="cuda", dtype=torch.int32)
-    dst = torch.tensor([17, 0, 19, 20], device="cuda", dtype=torch.int32)
+    src = torch.tensor([1, 2, 3, 4], device="cuda", dtype=torch.int32)
+    dst = torch.tensor([17, 18, 19, 20], device="cuda", dtype=torch.int32)
     pairs = torch.tensor([[1, 1]] * 4, device="cuda", dtype=torch.int32)
     rope = torch.cat((torch.ones(4, 32), torch.zeros(4, 32)), dim=1).cuda()
 
     def run():
-        actual(kptr, vptr, k, v, src, dst, pairs, rope, skip_unmapped=True)
+        actual(kptr, vptr, k, v, src, dst, pairs, rope)
 
     run()
     graph = torch.cuda.CUDAGraph()
@@ -144,8 +144,8 @@ def test_swa_missing_copy_sources_and_destinations_survive_graph_replay(kernels)
         graph.replay()
         torch.cuda.synchronize()
         expected_k, expected_v = original_k.clone(), original_v.clone()
-        expected_k[19:21] = original_k[3:5]
-        expected_v[19:21] = original_v[3:5]
+        expected_k[17:21] = original_k[1:5]
+        expected_v[17:21] = original_v[1:5]
         assert torch.equal(k, expected_k)
         assert torch.equal(v, expected_v)
 

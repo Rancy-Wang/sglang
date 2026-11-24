@@ -89,8 +89,6 @@ class InsertParams:
     value: Optional[torch.Tensor] = None
     # CPU raw-token residency; absent pages have no allocation to adopt/free.
     context_resident: torch.Tensor | None = None
-    # Independent SWA validity. False entries must already have no SWA mapping.
-    context_swa_resident: torch.Tensor | None = None
     # Context repair can interleave private copies with borrowed prefix pages.
     context_owned: torch.Tensor | None = None
 
@@ -189,8 +187,6 @@ class IncLockRefResult:
     skipped_lock_components: tuple[ComponentType, ...] = ()
     # Raw-token intervals whose KV ref was replaced by a tree-path ref.
     context_skip_ranges: tuple[tuple[int, int], ...] = ()
-    # None uses the native trailing window; a tuple uses exact Context ranges.
-    context_swa_ranges: tuple[tuple[int, int], ...] | None = None
 
     def to_dec_params(self) -> DecLockRefParams:
         """Convert to the corresponding DecLockRefParams for dec_lock_ref."""
@@ -200,7 +196,6 @@ class IncLockRefResult:
             swa_uuid_for_host_lock=self.swa_uuid_for_host_lock,
             skipped_lock_components=tuple(self.skipped_lock_components),
             context_skip_ranges=self.context_skip_ranges,
-            context_swa_ranges=self.context_swa_ranges,
         )
 
 
@@ -219,8 +214,6 @@ class DecLockRefParams:
     swa_uuid_for_host_lock: Optional[int] = None
     skipped_lock_components: tuple[ComponentType, ...] = ()
     context_skip_ranges: tuple[tuple[int, int], ...] = ()
-    # None uses the native trailing window; a tuple uses exact Context ranges.
-    context_swa_ranges: tuple[tuple[int, int], ...] | None = None
 
 
 @dataclasses.dataclass
@@ -289,8 +282,6 @@ class MatchResult(NamedTuple):
     context_exact_prefix_len: int = 0
     context_retry: bool = False
     context_resident: torch.Tensor | None = None
-    context_swa_resident: torch.Tensor | None = None
-    context_swa_window: int | None = None
 
 
 def zero_match_result(
@@ -316,7 +307,6 @@ def zero_match_result(
         context_exact_prefix_len=0,
         context_retry=False,
         context_resident=None,
-        context_swa_resident=None,
     )
 
 

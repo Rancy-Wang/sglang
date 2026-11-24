@@ -365,7 +365,6 @@ class ContextLayerCopy:
     position_pairs: torch.Tensor
     cos_sin_cache: torch.Tensor
     is_neox_style: bool
-    skip_unmapped: bool = False
     rotary_dim: int | None = None
 
     def apply(self):
@@ -383,7 +382,6 @@ class ContextLayerCopy:
             self.position_pairs,
             self.cos_sin_cache,
             is_neox_style=self.is_neox_style,
-            skip_unmapped=self.skip_unmapped,
             rotary_dim=self.rotary_dim,
         )
 
@@ -502,25 +500,16 @@ class ContextModelBinding:
         source = self.translator.translate_full_attn_ids(source).to(torch.int32)
         destination = self.translator.translate_full_attn_ids(destination).to(torch.int32)
         for layer, k_ptrs, v_ptrs in self._existing_copy_groups:
-            src, dst = source, destination
-            separate_swa = False
-            if layer.sliding_window:
-                swa_src = self.translator.sliding_window_write_loc_for(source)
-                if swa_src is not None:
-                    separate_swa = True
-                    src = swa_src.to(torch.int32)
-                    dst = self.translator.sliding_window_write_loc_for(destination).to(torch.int32)
             reposition_kv_layers(
                 k_ptrs, v_ptrs, layer.k_buffer, layer.v_buffer,
-                src, dst, positions, layer.cos_sin_cache,
+                source, destination, positions, layer.cos_sin_cache,
                 is_neox_style=layer.is_neox_style,
                 rotary_dim=layer.rotary_dim,
-                skip_unmapped=separate_swa,
             )
 
     def bind(self, inputs: ContextPrefillInput) -> ContextForwardMetadata:
-        # Translate virtual FULL ids once, then derive SWA ids using the same
-        # native contract as KV writes. Unused -1 entries are padding only;
+        # Translate shared virtual IDs once for every layer.
+        # Unused -1 entries are padding only;
         # admission must have proved every referenced source is resident.
         full_slots = self.translator.translate_full_attn_ids(
             inputs.occurrence_slots.clamp(min=0)
@@ -530,46 +519,24 @@ class ContextModelBinding:
             inputs.copy_destinations
         )
         full = inputs.attention_plan.bind(full_slots)
-        swa = None
-        separate_swa_pool = False
-        if self.has_swa:
-            swa_slots = self.translator.sliding_window_write_loc_for(full_slots)
-            if swa_slots is None:
-                # Native --disable-hybrid-swa-memory keeps SWA layers in the
-                # same token id space as Full layers, as mini-sglang does.
-                # Reuse the binding; sliding visibility is still applied by
-                # the layer's attention kernel using the occurrence positions.
-                swa = full
-                swa_source, swa_destination = copy_source, copy_destination
-            else:
-                separate_swa_pool = True
-                swa_source = self.translator.sliding_window_write_loc_for(copy_source)
-                swa_destination = self.translator.sliding_window_write_loc_for(
-                    copy_destination
-                )
-                if swa_source is None or swa_destination is None:
-                    raise ValueError(
-                        "Context SWA pool is missing its native index mapping"
-                    )
-                swa = inputs.attention_plan.bind(swa_slots)
+        # Shared pages use one physical token ID for every layer. The SWA
+        # layer still applies its logical position window to this binding.
+        swa = full if self.has_swa else None
         copies = {}
         if len(inputs.copy_sources):
+            copy_source = copy_source.to(torch.int32)
+            copy_destination = copy_destination.to(torch.int32)
             for layer in self.layers:
-                source = swa_source if layer.sliding_window else copy_source
-                destination = (
-                    swa_destination if layer.sliding_window else copy_destination
-                )
                 copies[layer.layer_id] = ContextLayerCopy(
                     layer.k_ptr,
                     layer.v_ptr,
                     layer.k_buffer,
                     layer.v_buffer,
-                    source.to(torch.int32),
-                    destination.to(torch.int32),
+                    copy_source,
+                    copy_destination,
                     inputs.copy_positions,
                     layer.cos_sin_cache,
                     layer.is_neox_style,
-                    skip_unmapped=layer.sliding_window and separate_swa_pool,
                     rotary_dim=layer.rotary_dim,
                 )
         return ContextForwardMetadata(full, swa, copies)

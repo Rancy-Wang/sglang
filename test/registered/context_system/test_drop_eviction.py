@@ -113,7 +113,7 @@ def test_history_native_pressure_reclaims_cold_leaf_before_hot_drop(
     assert_allocator(cache, allocator, 0)
 
 
-@pytest.fixture(params=["full", "full_swa"])
+@pytest.fixture(params=["full"])
 def native_cache(request):
     if sys.platform != "linux":
         pytest.skip("native SRT runtime requires Linux")
@@ -123,35 +123,9 @@ def native_cache(request):
     from sglang.srt.mem_cache.unified_radix_cache import UnifiedRadixCache
 
     components = (ComponentType.FULL,)
-    if request.param == "full_swa":
-        from sglang.srt.mem_cache.allocator.swa import SWATokenToKVPoolAllocator
-        from sglang.srt.mem_cache.swa_memory_pool import SWAKVPool
-
-        pool = SWAKVPool(
-            size=128,
-            size_swa=128,
-            page_size=1,
-            dtype=torch.bfloat16,
-            head_num=1,
-            head_dim=64,
-            swa_attention_layer_ids=[0],
-            full_attention_layer_ids=[1],
-            device="cpu",
-        )
-        allocator = SWATokenToKVPoolAllocator(
-            size=128,
-            size_swa=128,
-            page_size=1,
-            dtype=torch.bfloat16,
-            device="cpu",
-            kvcache=pool,
-            need_sort=False,
-        )
-        components += (ComponentType.SWA,)
-    else:
-        allocator = TokenToKVPoolAllocator(
-            size=128, dtype=torch.bfloat16, device="cpu", kvcache=None, need_sort=False
-        )
+    allocator = TokenToKVPoolAllocator(
+        size=128, dtype=torch.bfloat16, device="cpu", kvcache=None, need_sort=False
+    )
     cache = UnifiedRadixCache(
         CacheInitParams(
             disable=False,
@@ -159,7 +133,7 @@ def native_cache(request):
             token_to_kv_pool_allocator=allocator,
             page_size=1,
             tree_components=components,
-            sliding_window_size=4 if request.param == "full_swa" else None,
+            sliding_window_size=None,
         )
     )
     return cache, allocator
@@ -182,6 +156,37 @@ def assert_allocator(cache, allocator, used):
     walk = cache.tree_core.walk_for_kv_canary(False, False)
     assert sorted(walk.slot_indices.tolist()) == sorted(cached.tolist())
     cache.tree_core.sanity_check([], [])
+
+
+def test_shared_private_pages_below_source_match_release_once(native_cache):
+    from sglang.srt.context_system.occurrence import ContextPrefillCompletion, OccurrenceState
+    from sglang.srt.context_system.usage import ContextUsage
+
+    cache, allocator = native_cache
+    slots = allocator.alloc(24)
+    allocator.free(slots[8:9])
+    rows = torch.arange(20)
+    rows[8] = -1
+    owned = torch.ones(20, dtype=torch.bool)
+    owned[:3] = False  # borrowed source pages must survive this request
+    state = OccurrenceState(slots[:20], owned, rows.clone(), rows.clone(),
+                            torch.arange(20, dtype=torch.int32), 20)
+    cache.req_to_token_pool = SimpleNamespace(req_to_token=slots[None, :])
+    req = SimpleNamespace(context_state=state,
+                         kv=SimpleNamespace(req_pool_idx=0, cache_protected_len=20))
+    # The source match protects 0:20, but actual COW ownership frees 3:20.
+    cache._free_context_kv_row(req, [(0, 7), (7, 20)])
+    assert allocator.available_size() == 121
+    assert len(torch.unique(allocator.get_all_free_pages())) == 121
+    usage = ContextUsage(torch.empty(0, dtype=torch.bool), torch.empty(0, dtype=torch.bool))
+    receipt = ContextPrefillCompletion(slots[20:], usage,
+        torch.empty(0, dtype=torch.bool), torch.empty(0, dtype=torch.bool), 4)
+    receipt.complete(allocator)
+    receipt.complete(allocator)
+    assert allocator.available_size() == 125
+    assert usage.snapshot().actual_prefill_tokens == 4
+    allocator.free(slots[:3])
+    assert_allocator(cache, allocator, 0)
 
 
 @pytest.mark.parametrize("native_cache", ["full"], indirect=True)
@@ -519,178 +524,9 @@ def test_sparse_insert_rejects_unproven_hole_before_mutation(compiler, native_ca
     assert_allocator(cache, allocator, 0)
 
 
-def test_swa_holes_remain_independent_across_insert_recovery_and_cow(
-    compiler, native_cache
-):
-    from sglang.srt.mem_cache.base_prefix_cache import (
-        EvictParams,
-        InsertParams,
-        MatchPrefixParams,
-        zero_match_result,
-    )
-    from sglang.srt.mem_cache.radix_cache import RadixKey
-
-    cache, allocator = native_cache
-    if not hasattr(allocator, "swa_attn_allocator"):
-        pytest.skip("SWA-specific ownership")
-    key = RadixKey.from_context(compiler(*args(list(range(32)), {}, [])))
-    expected = torch.ones(24, dtype=torch.bool)
-    expected[1:4] = False
-    expected[7:12] = False
-
-    def insert(length, resident):
-        slots = allocator.alloc(length)
-        allocator.free_swa(slots[~resident])
-        cache.insert(
-            InsertParams(key=key[:length], value=slots, context_swa_resident=resident)
-        )
-        assert_allocator(cache, allocator, length)
-        return cache.match_prefix(
-            MatchPrefixParams(key=key[:length], context_retry=True)
-        )
-
-    first = insert(24, expected)
-    assert first.context_resident.all()
-    assert first.context_swa_resident.tolist() == expected.tolist()
-    assert first.context_swa_window == 5
-    lease = cache.inc_lock_ref(first.last_device_node)
-    repair = torch.ones(24, dtype=torch.bool)
-    repair[:2] = False
-    repair[7:10] = False
-    repaired = insert(24, repair)
-    expected |= repair
-    assert repaired.context_swa_resident.tolist() == expected.tolist()
-    # The live reader keeps Full page identities while SWA-only recovery binds
-    # fresh peers; unprovided SWA must not invalidate a resident tree component.
-    assert repaired.device_indices.tolist() == first.device_indices.tolist()
-    appended = torch.zeros(32, dtype=torch.bool)
-    appended[-4:] = True
-    final = insert(32, appended)
-    expected = torch.cat((expected, appended[24:]))
-    assert final.context_swa_resident.tolist() == expected.tolist()
-    assert allocator.swa_attn_allocator.available_size() == 128 - int(expected.sum())
-    forced_miss = zero_match_result(cache, final)
-    assert len(forced_miss.device_indices) == 0
-    assert forced_miss.context_source_positions is None
-    assert forced_miss.context_resident is None
-    assert forced_miss.context_swa_resident is None
-    assert forced_miss.context_exact_prefix_len == 0
-    cache.dec_lock_ref(first.last_device_node, lease.to_dec_params())
-    cache.evict(EvictParams(num_tokens=128))
-    assert_allocator(cache, allocator, 0)
-
-
-@pytest.mark.parametrize("early_release", [False, True])
-def test_exact_swa_lease_survives_split_and_reclaims_only_unread_pages(
-    compiler, native_cache, early_release
-):
-    from sglang.srt.mem_cache.base_prefix_cache import (
-        EvictParams,
-        InsertParams,
-        MatchPrefixParams,
-    )
-    from sglang.srt.mem_cache.radix_cache import RadixKey
-
-    cache, allocator = native_cache
-    if not hasattr(allocator, "swa_attn_allocator"):
-        pytest.skip("SWA-specific ownership")
-    key = RadixKey.from_context(compiler(*args(list(range(24)), {}, [])))
-    cache.insert(InsertParams(key=key, value=allocator.alloc(24)))
-    matched = cache.match_prefix(MatchPrefixParams(key=key, context_retry=True))
-    lease = cache.inc_lock_ref(matched.last_device_node)
-    needed = torch.zeros(24, dtype=torch.bool)
-    needed[2:5] = True
-    needed[14:17] = True
-    cache.configure_context_swa_lock(matched.last_device_node, lease, needed)
-    assert lease.context_swa_ranges == ((2, 5), (14, 17))
-    cache.tree_core.sanity_check([], [])
-    # A later match splits a held historical range; the receipt follows raw
-    # intervals through the new parent instead of relying on stale leaf IDs.
-    cache.match_prefix(MatchPrefixParams(key=key[:4], context_retry=True))
-    cache.evict(EvictParams(num_tokens=0, swa_num_tokens=128))
-    assert allocator.swa_attn_allocator.available_size() == 128 - 6
-    assert_allocator(cache, allocator, 24)
-    extended = needed.clone()
-    extended[18] = True
-    with pytest.raises(ValueError, match="cannot reacquire"):
-        cache.configure_context_swa_lock(matched.last_device_node, lease, extended)
-    shrunk = needed.clone()
-    shrunk[14:17] = False
-    cache.configure_context_swa_lock(matched.last_device_node, lease, shrunk)
-    cache.evict(EvictParams(num_tokens=0, swa_num_tokens=128))
-    assert allocator.swa_attn_allocator.available_size() == 128 - 3
-    receipt = lease.to_dec_params()
-    if early_release:
-        cache.dec_swa_lock_only(matched.last_device_node, receipt)
-        cache.evict(EvictParams(num_tokens=0, swa_num_tokens=128))
-        assert allocator.swa_attn_allocator.available_size() == 128
-    cache.dec_lock_ref(matched.last_device_node, receipt, skip_swa=early_release)
-    cache.evict(EvictParams(num_tokens=128, swa_num_tokens=128))
-    assert_allocator(cache, allocator, 0)
-
-
-def test_sparse_swa_request_release_and_completion(native_cache):
-    from sglang.srt.context_system.occurrence import (
-        ContextPrefillCompletion,
-        OccurrenceState,
-    )
-    from sglang.srt.context_system.usage import ContextUsage
-
-    cache, allocator = native_cache
-    if not hasattr(allocator, "swa_attn_allocator"):
-        pytest.skip("SWA-specific ownership")
-    slots = allocator.alloc(24)
-    swa = torch.ones(24, dtype=torch.bool)
-    swa[[0, 1, 2, 5, 8, 9, 13, 19, 23]] = False
-    allocator.free_swa(slots[~swa])
-    # Raw 8 is a Full hole; 20:24 are generated after prefill. Raw 0:3 was
-    # released by native window eviction, independently of Context SWA metadata.
-    allocator.free_full(slots[8:9])
-    rows = torch.arange(20)
-    rows[8] = -1
-    state = OccurrenceState(
-        slots[:20],
-        torch.ones(20, dtype=torch.bool),
-        rows.clone(),
-        rows.clone(),
-        torch.arange(20, dtype=torch.int32),
-        0,
-        swa[:20].clone(),
-    )
-    state.swa_resident[:3] = True  # The native floor must win over stale metadata.
-    cache.req_to_token_pool = SimpleNamespace(req_to_token=slots[None, :])
-    req = SimpleNamespace(
-        context_state=state,
-        kv=SimpleNamespace(req_pool_idx=0, swa_evicted_seqlen=3, cache_protected_len=0),
-    )
-    # Leave the final four slots to an overlapped completion receipt. In native
-    # decode all new peers are resident; this separate receipt tests mixed COW.
-    cache._free_context_kv_row(req, [(0, 7), (7, 20)])
-    assert allocator.full_attn_allocator.available_size() == 124
-    assert len(torch.unique(allocator.full_attn_allocator.get_all_free_pages())) == 124
-    assert allocator.swa_attn_allocator.available_size() == 125
-    usage = ContextUsage(
-        torch.empty(0, dtype=torch.bool), torch.empty(0, dtype=torch.bool)
-    )
-    receipt = ContextPrefillCompletion(
-        slots[20:],
-        usage,
-        torch.empty(0, dtype=torch.bool),
-        torch.empty(0, dtype=torch.bool),
-        4,
-        retired_swa_resident=swa[20:],
-    )
-    receipt.complete(allocator)
-    receipt.complete(allocator)
-    assert usage.snapshot().actual_prefill_tokens == 4
-    assert_allocator(cache, allocator, 0)
-    assert allocator.swa_attn_allocator.available_size() == 128
-    assert allocator.full_to_swa_index_mapping[slots].count_nonzero() == 0
-
-
 @pytest.mark.parametrize("source_cache", [False, True])
 @pytest.mark.parametrize("drop_aware", [False, True])
-def test_swa_req_recovery_publication_and_pressure(
+def test_shared_req_recovery_publication_and_pressure(
     compiler, native_cache, source_cache, drop_aware
 ):
     from array import array
@@ -708,8 +544,6 @@ def test_swa_req_recovery_publication_and_pressure(
     from test_occurrence_ownership import expiry_for
 
     cache, allocator = native_cache
-    if not hasattr(allocator, "swa_attn_allocator"):
-        pytest.skip("SWA-specific ownership")
     reset_context()
     publish(
         ServerArgs(
@@ -727,18 +561,13 @@ def test_swa_req_recovery_publication_and_pressure(
             source_tokens[24] = 999
             source = compiler(*args(source_tokens, drops, repos))
             full = program.visible_until > 48
-            swa = torch.zeros(48, dtype=torch.bool)
-            swa[20:24] = True
-            swa[44:] = True
             slots = torch.full((48,), -1, dtype=torch.int64)
             slots[full] = allocator.alloc(int(full.sum()))
-            allocator.free_swa(slots[full & ~swa])
             cache.insert(
                 InsertParams(
                     key=RadixKey.from_context(source),
                     value=slots,
                     context_resident=full,
-                    context_swa_resident=swa,
                 )
             )
         req = Req(
@@ -752,11 +581,9 @@ def test_swa_req_recovery_publication_and_pressure(
         cache.req_to_token_pool = pool
         pool.alloc([req])
         req.init_next_round_input(cache)
-        assert req.context_swa_window == 5
-        assert req.context_swa_resident is not None
         if source_cache:
             assert req.context_recovery_plan.matched_length == 24
-            assert req.context_recovery_plan.start < 8
+            assert req.context_recovery_plan.start == 24
         PrefillAdder._req_inc_lock_ref(SimpleNamespace(tree_cache=cache), req)
         for start, end in req.context_recovery_plan.intervals:
             for cursor in range(start, end, 7):
@@ -772,27 +599,17 @@ def test_swa_req_recovery_publication_and_pressure(
                     allocator.alloc(extra),
                     program.visible_until,
                 )
-                allocator.free_swa(advance.unused_swa_slots)
                 req.context_state = advance.state
                 req.set_extend_range(cursor, stop)
                 req.kv.kv_committed_len = stop
                 free_context_slots(
-                    allocator, advance.retired_slots, advance.retired_swa_resident
+                    allocator, advance.retired_slots
                 )
                 cache.cache_unfinished_req(req, chunked=stop < 48)
-                # Every future SWA copy/read remains pinned while cold SWA is
-                # reclaimed between native chunks. Full ownership stays intact.
-                cache.evict(
-                    EvictParams(num_tokens=128 if drop_aware else 0, swa_num_tokens=128)
-                )
+                # Full/shared pages read by future chunks remain leased.
+                cache.evict(EvictParams(num_tokens=128 if drop_aware else 0))
                 state = req.context_state
-                valid = state.swa_resident
-                mapping = allocator.full_to_swa_index_mapping[state.slots]
-                assert torch.all(mapping[valid] > 0)
-                assert (
-                    len(torch.unique(allocator.swa_attn_allocator.get_all_free_pages()))
-                    == allocator.swa_attn_allocator.available_size()
-                )
+                assert len(torch.unique(allocator.get_all_free_pages())) == allocator.available_size()
                 cache.sanity_check()
                 if drop_aware and req.kv.cache_protected_len > 32:
                     assert req.lock_receipt.context_skip_ranges
@@ -807,57 +624,5 @@ def test_swa_req_recovery_publication_and_pressure(
         pool.free(req)
         cache.evict(EvictParams(num_tokens=128, swa_num_tokens=128))
         assert_allocator(cache, allocator, 0)
-        assert allocator.swa_attn_allocator.available_size() == 128
     finally:
         reset_context()
-
-
-def test_context_decode_window_releases_sparse_prompt_then_generated_peers(
-    compiler, native_cache
-):
-    from sglang.srt.context_system.occurrence import (
-        ContextDecodeLayout,
-        OccurrenceState,
-    )
-    from sglang.srt.mem_cache.unified_cache.component_type import ComponentType
-
-    cache, allocator = native_cache
-    if not hasattr(allocator, "swa_attn_allocator"):
-        pytest.skip("SWA-specific ownership")
-    layout = compiler(*args(list(range(24)), {16: [(8, 9)]}, [15]))
-    slots = allocator.alloc(40)
-    valid = torch.ones(40, dtype=torch.bool)
-    valid[[1, 3, 8, 12, 18]] = False
-    allocator.free_swa(slots[~valid])
-    allocator.free_full(slots[8:9])
-    rows = torch.arange(24)
-    rows[8] = -1
-    state = OccurrenceState(
-        slots[:24],
-        torch.ones(24, dtype=torch.bool),
-        rows.clone(),
-        rows.clone(),
-        layout.positions,
-        0,
-        valid[:24].clone(),
-    )
-    decode = ContextDecodeLayout.from_layout(layout, "cpu")
-    cache.req_to_token_pool = SimpleNamespace(req_to_token=slots[None])
-    req = SimpleNamespace(
-        context_program=True,
-        context_state=state,
-        context_decode_layout=decode,
-        kv=SimpleNamespace(
-            req_pool_idx=0, swa_evicted_seqlen=0, holds_kv=True, swa_dead_lo=lambda _: 0,
-            cache_protected_len=0, swa_evict_floor=0,
-        ),
-    )
-    for computed in (24, 25, 30, 40):
-        cache.components[ComponentType.SWA]._free_out_of_window_slots(req, computed)
-        floor = decode.swa_raw_floor(computed, 4)
-        assert req.kv.swa_evicted_seqlen == floor
-        valid[:floor] = False
-        assert torch.equal(allocator.full_to_swa_index_mapping[slots] > 0, valid)
-    cache._free_context_kv_row(req, [(0, 40)])
-    assert_allocator(cache, allocator, 0)
-    assert allocator.swa_attn_allocator.available_size() == 128

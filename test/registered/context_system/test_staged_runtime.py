@@ -198,14 +198,12 @@ def test_staged_native_ownership_cleanup(
                 allocator.alloc(extra),
                 program.visible_until,
             )
-            if hasattr(allocator, "free_swa"):
-                allocator.free_swa(advance.unused_swa_slots)
             req.context_state = advance.state
             req.context_prefill_started = True
             req.set_extend_range(start, end)
             req.kv.kv_committed_len = end
             free_context_slots(
-                allocator, advance.retired_slots, advance.retired_swa_resident
+                allocator, advance.retired_slots
             )
             if end < 48 or not defer_final_publication:
                 cache.cache_unfinished_req(req, chunked=end < 48)

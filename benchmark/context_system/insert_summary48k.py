@@ -208,6 +208,9 @@ def run(args):
     out.mkdir(parents=True, exist_ok=False)
     session = requests.Session()
     session.trust_env = False
+    from shared_swa import check_shared_swa
+    server = check_shared_swa(args.url, args.model)
+    (out / "server-info.json").write_text(json.dumps(server, indent=2))
     cases, tools = load_cases(args.data, args.cases)
     tools = [Tool.model_validate(t).model_dump() for t in tools]
     serial, results = 0, []

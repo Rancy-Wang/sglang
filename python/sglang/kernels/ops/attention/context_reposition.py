@@ -41,7 +41,6 @@ def _reposition_layers_kernel(
     position_stride_token,
     rope_stride_position,
     NEOX_STYLE: tl.constexpr,
-    SKIP_UNMAPPED: tl.constexpr,
     head_dim: tl.constexpr,
     rotary_dim: tl.constexpr,
     half_dim: tl.constexpr,
@@ -57,9 +56,6 @@ def _reposition_layers_kernel(
 
     source = tl.load(source_slots + token).to(tl.int64)
     destination = tl.load(destination_slots + token).to(tl.int64)
-    if SKIP_UNMAPPED:  # noqa: SIM102 -- erase the branch for Full pools at compile time
-        if source <= 0 or destination <= 0:
-            return
     position_row = position_pairs + token * position_stride_token
     old_position = tl.load(position_row).to(tl.int64)
     new_position = tl.load(position_row + 1).to(tl.int64)
@@ -135,15 +131,13 @@ def reposition_kv_layers(
     *,
     is_neox_style: bool = True,
     page_size: int = 1,
-    skip_unmapped: bool = False,
     rotary_dim: int | None = None,
 ) -> None:
     """Rotate K and copy V across native per-layer pools in one GPU launch.
 
     Pointer tables are constructed once by the native KV pool. Each table's
     layers must have the exemplar's dtype and strides. Supports native NHD
-    [slot, head, dim] with page_size=1. SWA and full pools
-    invoke this separately with their own physical slot mappings.
+    [slot, head, dim] with page_size=1. Full and SWA layers share token slots.
 
     The caller owns fresh, distinct destination slots disjoint from all source
     slots, validates CPU positions/slots before H2D, and holds the source KV and
@@ -225,7 +219,6 @@ def reposition_kv_layers(
         position_pairs.stride(0),
         cos_sin_cache.stride(0),
         NEOX_STYLE=is_neox_style,
-        SKIP_UNMAPPED=skip_unmapped,
         head_dim=head_dim,
         rotary_dim=rotary_dim,
         half_dim=rotary_dim // 2,

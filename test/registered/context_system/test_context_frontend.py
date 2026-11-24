@@ -666,11 +666,24 @@ def test_native_usage_context_aggregation_counts_prompt_once(cache_report):
 
 @pytest.mark.parametrize("architecture", ["QWenLMHeadModel", "Qwen2ForCausalLM", "Qwen2MoeForCausalLM", "Qwen3ForCausalLM", "Qwen3MoeForCausalLM", "GptOssForCausalLM"])
 def test_context_model_permissions_are_checked_per_request(chat, architecture):
+    chat.tokenizer_manager.server_args.disable_hybrid_swa_memory = True
     chat.tokenizer_manager.model_config._resolved_model_arch = architecture
     chat.tokenizer_manager.model_config.hf_config.architectures = [architecture]
     result = chat._process_messages(request(drop_message={"1": [0]}, reposition=[1]), False)
     assert result.context_program is not None
     assert result.prompt_ids
+
+
+def test_gpt_oss_independent_swa_rejected_only_for_context(chat):
+    manager = chat.tokenizer_manager
+    manager.model_config._resolved_model_arch = "GptOssForCausalLM"
+    manager.model_config.hf_config.architectures = ["GptOssForCausalLM"]
+    manager.server_args.disable_hybrid_swa_memory = False
+    assert chat._process_messages(request(), False).context_program is None
+    with pytest.raises(ValueError, match="--disable-hybrid-swa-memory"):
+        chat._process_messages(request(drop_message={"1": [0]}), False)
+    manager.server_args.disable_hybrid_swa_memory = True
+    assert chat._process_messages(request(drop_message={"1": [0]}), False).context_program is not None
 
 
 def test_slow_tokenizer_exact_bytes_preserve_unicode_boundaries():

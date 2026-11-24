@@ -44,8 +44,8 @@ def test_recovery_second_pass_only_removed_for_identical_b_inputs(monkeypatch, p
             positions=positions, birth_positions=positions, cache_policy=policy),
             visible_until=torch.full((4,), 10, dtype=torch.int32)),
         prefix_indices=torch.arange(3), context_source_positions=stored,
-        context_resident=torch.ones(3, dtype=torch.bool), context_swa_resident=None,
-        context_swa_window=None, context_swa_query_starts=None, context_usage=object(),
+        context_resident=torch.ones(3, dtype=torch.bool),
+        context_usage=object(),
         context_exact_prefix_len=3, kv=SimpleNamespace(cache_protected_len=3),
     )
     Req.prepare_context_recovery(req)
@@ -531,14 +531,6 @@ def test_real_cuda_attention_against_independent_event_reads(
     torch.testing.assert_close(output, expected, rtol=0.0078125, atol=0.0078125)
 
 
-@pytest.mark.parametrize("policy", POLICIES)
-def test_zero_window_is_rejected_by_context_recovery(policy_modules, policy):
-    recovery = importlib.import_module(policy_modules[2].__package__ + ".recovery")
-    p = compile_policy(policy_modules, policy, list(range(8)), {5: [(1, 3)]})
-    with pytest.raises(ValueError, match="window must be positive"):
-        recovery.sliding_window_starts(p.layout, p.visible_until, 0)
-
-
 @pytest.fixture(scope="module")
 def cache_policy_model_runtime():
     """Isolated TP fixture; torchrun supplies a consistent rank/port on all GPUs."""
@@ -580,7 +572,7 @@ def cache_policy_model_runtime():
         context_length=max(2048, capacity + 1),
         # Plain native allocation is only scaffolding for independent KV.
         # Retain the full logical prefix in this reference-only runner.
-        disable_hybrid_swa_memory=bool(jobs_path),
+        disable_hybrid_swa_memory=bool(jobs_path) or "gpt-oss" in os.environ["CONTEXT_MODEL_PATH"].lower(),
         mem_fraction_static=0.85,
         attention_backend=os.environ.get("CONTEXT_TEST_ATTENTION_BACKEND", "triton"),
         # Match the frozen BCP server backend. Auto can select triton_kernels,

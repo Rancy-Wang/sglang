@@ -94,31 +94,3 @@ class LogicalSWAWindowIndex:
             yield offset, self.tail(
                 query_position + offset - (capacity - 1), capacity - offset - 1
             )
-
-
-def terminal_swa_mask(layout, capacity):
-    """Prompt KV needed by any future decode query, before its window fills."""
-    order = getattr(layout, "logical_order", None)
-    raw = (
-        order.numpy()
-        if order is not None and order.numel()
-        else np.arange(len(layout.positions))
-    )
-    raw = raw[layout.keep_mask.numpy()[raw]]
-    result = np.zeros(len(layout.positions), dtype=np.bool_)
-    positions = layout.positions.numpy()[raw]
-    if capacity <= 1 or not len(raw):
-        return result
-    if np.all(np.diff(positions) > 0):
-        # Ordinary summaries after R: future decode reads are subsets of this
-        # first window. No run index or W separate selections are needed.
-        start = max(
-            int(np.searchsorted(positions, layout.next_position - capacity + 1)),
-            len(raw) - capacity + 1,
-        )
-        result[raw[start:]] = True
-        return result
-    index = LogicalSWAWindowIndex(positions)
-    for _, selected in index.prefix_reads(layout.next_position, capacity - 1, capacity):
-        result[raw[selected]] = True
-    return result

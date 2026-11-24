@@ -1,5 +1,11 @@
 # 统一 staged Drop / Reposition
 
+> 2026-11-24 / PLAN-CS-20261124-R1：GPT-OSS Context 统一要求
+> `--disable-hybrid-swa-memory`。共享页统一持有 Full/SWA 各层 KV，不再支持独立 SWA
+> residency、恢复、租约和 tail-only 分配。原有 logical SWA 窗口和共享页所有权不变。
+> 下文既有版本与实验结果保留为历史记录；当前实现和新验证见 [Insert 共享页策略](insert.md)。
+
+
 `PLAN-CS-20261107-R4` 新增 staged 的 PD 支持，见文末。下文 R2 的版本、限制和
 数值结果保留为历史记录；mini Drop 已由后续 R3 修复，R4 使用修复后的参考。
 

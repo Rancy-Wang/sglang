@@ -1002,11 +1002,6 @@ class Req(ReqDllmMixin):
         self.context_key_data = None
         self.context_source_positions = None
         self.context_resident = None
-        self.context_swa_resident = None
-        self.context_swa_window = None
-        self.context_swa_query_starts = None
-        self.context_swa_source_required = None
-        self.context_swa_terminal_required = None
         self.context_recovery_plan = None
         self.context_recovery_source = None
         self.context_gap_prefix = None
@@ -1580,7 +1575,7 @@ class Req(ReqDllmMixin):
 
     def prepare_context_recovery(self):
         """Choose repair intervals while the match is still admission-only."""
-        from sglang.srt.context_system.recovery import plan_recovery, sliding_window_starts
+        from sglang.srt.context_system.recovery import plan_recovery
         from sglang.srt.context_system.usage import ContextUsage
 
         program = self.context_recompute_program or self.context_program
@@ -1594,30 +1589,12 @@ class Req(ReqDllmMixin):
         if resident is None:
             resident = torch.ones(matched, dtype=torch.bool)
         rewind = resident & (positions != program.layout.birth_positions[:matched])
-        swa = self.context_swa_resident
-        terminal = None
-        if self.context_swa_window is not None:
-            if swa is None:
-                swa = torch.ones(matched, dtype=torch.bool)
-            self.context_swa_query_starts = sliding_window_starts(
-                program.layout, program.visible_until, self.context_swa_window
-            )
-            from sglang.srt.context_system.window import terminal_swa_mask
-
-            self.context_swa_terminal_required = torch.from_numpy(
-                terminal_swa_mask(program.layout, self.context_swa_window)
-            )
-            terminal = self.context_swa_terminal_required[:matched]
         recovery = plan_recovery(
             resident,
             program.visible_until,
             len(program.layout.positions),
             rewind,
-            swa_resident=swa,
-            swa_query_starts=self.context_swa_query_starts,
-            swa_terminal_required=terminal,
             layout=program.layout,
-            swa_window=self.context_swa_window,
             source_positions=positions,
         )
         incompatible = positions != program.layout.positions[:matched]
@@ -1635,11 +1612,7 @@ class Req(ReqDllmMixin):
                 len(program.layout.positions),
                 rewind,
                 incompatible,
-                swa_resident=swa,
-                swa_query_starts=self.context_swa_query_starts,
-                swa_terminal_required=terminal,
                 layout=program.layout,
-                swa_window=self.context_swa_window,
                 source_positions=positions,
             )
         self.context_recovery_plan = recovery
@@ -1651,51 +1624,18 @@ class Req(ReqDllmMixin):
                 ~program.layout.keep_mask[:matched],
                 query_intervals=recovery.intervals,
             )
-        if swa is not None:
-            required = self.context_swa_read_demand(matched, recovery.start)
-            required &= swa & recovery.reusable_prefix
-            self.context_swa_source_required = required
-            # The cache may reclaim cold peers after admission. Never advertise
-            # those peers as valid copy sources merely because they existed at match.
-            swa = swa & required
-            self.context_swa_resident = swa
         if recovery.start < matched:
             self.context_recovery_source = (
                 self.prefix_indices,
                 positions,
                 resident,
                 self.context_exact_prefix_len,
-                swa,
             )
             self.prefix_indices = self.prefix_indices[: recovery.start]
             self.context_source_positions = positions[: recovery.start]
             self.context_resident = resident[: recovery.start]
-            self.context_swa_resident = swa[: recovery.start] if swa is not None else None
             self.kv.cache_protected_len = min(self.kv.cache_protected_len, recovery.start)
 
-    def context_swa_read_demand(self, length, cursor):
-        from sglang.srt.context_system.recovery import sliding_window_read_mask
-
-        if self.context_swa_query_starts is None:
-            return None
-        program = self.context_recompute_program or self.context_program
-        n = len(program.layout.positions)
-        required = sliding_window_read_mask(
-            self.context_swa_query_starts,
-            program.visible_until,
-            tuple(
-                (max(a, cursor), b)
-                for a, b in self.context_recovery_plan.intervals
-                if b > cursor
-            ),
-            min(length, n),
-            layout=program.layout,
-            window=self.context_swa_window,
-        )
-        required |= self.context_swa_terminal_required[:len(required)]
-        if length > n:
-            required = torch.cat((required, torch.ones(length - n, dtype=torch.bool)))
-        return required
 
     def advance_context_recovery_gap(self):
         recovery = self.context_recovery_plan
@@ -1705,14 +1645,13 @@ class Req(ReqDllmMixin):
         cursor = len(self.context_state.canonical_rows)
         start, _ = recovery.next_interval(cursor)
         if start > cursor:
-            slots, positions, resident, exact, swa = source
+            slots, positions, resident, exact = source
             self.context_state = self.context_state.reuse_match_gap(
                 slots,
                 positions,
                 resident,
                 start,
                 exact_prefix_len=exact,
-                swa_resident=swa,
             )
             self.prefix_indices = torch.cat(
                 (self.prefix_indices[:cursor], slots[cursor:start])
@@ -1750,7 +1689,6 @@ class Req(ReqDllmMixin):
                 positions,
                 exact_prefix_len=min(start, self.context_exact_prefix_len),
                 resident=self.context_resident,
-                swa_resident=self.context_swa_resident,
             )
             if self.context_usage is None:
                 self.context_usage = ContextUsage(
@@ -1899,8 +1837,6 @@ class Req(ReqDllmMixin):
             if self.context_program is not None:
                 self.context_source_positions = match_result.context_source_positions
                 self.context_resident = match_result.context_resident
-                self.context_swa_resident = match_result.context_swa_resident
-                self.context_swa_window = match_result.context_swa_window
                 self.context_exact_prefix_len = match_result.context_exact_prefix_len
             if match_result.cache_protected_len is not None:
                 self.kv.cache_protected_len = match_result.cache_protected_len
@@ -2194,10 +2130,6 @@ class Req(ReqDllmMixin):
             self.context_source_positions = None
             self.context_exact_prefix_len = 0
             self.context_resident = None
-            self.context_swa_resident = None
-            self.context_swa_window = None
-            self.context_swa_query_starts = None
-            self.context_swa_source_required = None
             self.context_recovery_plan = None
             self.context_recovery_source = None
             self.context_gap_prefix = None
@@ -3269,8 +3201,6 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
                 window, plan, birth, allocated,
                 (req.context_recompute_program or req.context_program).visible_until,
             )
-            if step.unused_swa_slots is not None:
-                self.token_to_kv_pool_allocator.free_swa(step.unused_swa_slots)
             req.context_state = step.state
             logger.debug(
                 "Context KV versions rid=%s raw=%d:%d new=%d copies=%d retained=%d retired=%d",
@@ -3298,7 +3228,6 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             completions.append(ContextPrefillCompletion(
                 step.retired_slots, req.context_usage, plan.read_cached,
                 plan.repositioned_cached, length,
-                retired_swa_resident=step.retired_swa_resident,
             ))
         self.context_prefill_input = ContextPrefillInput(
             ContextAttentionPlan.merge(sequences), torch.cat(slots),
@@ -4222,25 +4151,6 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
 
     def _evict_swa(self, req: Req, pre_len: int):
         assert self.tree_cache.supports_swa(), "prefix cache must support swa"
-        if req.context_program is not None:
-            if req.context_decode_layout is None or not req.kv.holds_kv:
-                # Prefill owns stage-specific occurrences until completion.
-                return
-            start = req.context_state.swa_retire_start(req.kv)
-            end = req.context_decode_layout.swa_raw_floor(
-                pre_len, self.tree_cache.sliding_window_size
-            )
-            retain_floor = self.tree_cache.swa_retain_floor(req)
-            if retain_floor is not None:
-                end = min(end, retain_floor)
-            end = max(start, end)
-            row = request_row(self.req_to_token_pool, req.kv.req_pool_idx)
-            for left, right in req.context_state.live_swa_ranges(start, end, owned_only=True):
-                self.token_to_kv_pool_allocator.free_swa_segment(
-                    row[left:right], start_pos=left
-                )
-            req.kv.swa_evicted_seqlen = end
-            return
         free_swa_out_of_window_slots(
             req,
             pre_len,

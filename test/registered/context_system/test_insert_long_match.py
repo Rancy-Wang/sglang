@@ -14,8 +14,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.mark.parametrize("swa", [False, True])
-def test_long_mixed_native_frontier(context_modules, monkeypatch, swa):
+def test_long_mixed_native_frontier(context_modules, monkeypatch):
     monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "unit/mem_cache"))
     import test_unified_radix_cache_unittest as native
     from sglang.srt.mem_cache.base_prefix_cache import (
@@ -29,13 +28,13 @@ def test_long_mixed_native_frontier(context_modules, monkeypatch, swa):
 
     monkeypatch.setattr(native, "get_device", lambda: "cpu")
     components = (
-        (ComponentType.FULL, ComponentType.SWA) if swa else (ComponentType.FULL,)
+        (ComponentType.FULL,)
     )
     cache, allocator, _ = native.build_fixture(
         native.CacheConfig(
             components=components,
             kv_size=32768,
-            sliding_window_size=16 if swa else None,
+            sliding_window_size=None,
         )
     )
     rules, _, planner = context_modules

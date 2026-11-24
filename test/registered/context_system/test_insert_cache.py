@@ -44,24 +44,23 @@ def create_insert_cache_probe(config):
 
     def recovery(req):
         matched = len(req.prefix_indices)
-        before_swa = req.context_swa_resident
         before_positions = req.context_source_positions
         before_resident = req.context_resident
         result = native_recovery(req)
         plan = req.context_recovery_plan
         if plan is not None:
-            missing = (plan.required_prefix & ~before_swa).nonzero().flatten().tolist() if before_swa is not None else []
+            missing = (plan.required_prefix & ~before_resident).nonzero().flatten().tolist() if before_resident is not None else []
             emit({"kind": "recovery", "rid": req.rid, "matched": matched,
                   "start": plan.start, "intervals": plan.intervals,
-                  "missing_swa_required": len(missing), "missing_first": missing[:8],
+                  "missing_shared_required": len(missing), "missing_first": missing[:8],
                   "missing_last": missing[-8:]})
             if config.get("trace_dir") and plan.start < matched and (
                     not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0):
                 root = Path(config["trace_dir"])
                 root.mkdir(parents=True, exist_ok=True)
                 torch.save({"program": req.context_program.to_wire(), "resident": before_resident,
-                            "swa": before_swa, "positions": before_positions,
-                            "matched": matched, "window": req.context_swa_window,
+                            "positions": before_positions,
+                            "matched": matched,
                             "intervals": plan.intervals}, root / f"{req.rid}.pt")
         return result
 
@@ -137,8 +136,7 @@ def create_insert_kv_probe(config):
     return hook
 
 
-@pytest.mark.parametrize("swa", [False, True])
-def test_insert_match_publication_and_branch_isolation(context_modules, monkeypatch, swa):
+def test_insert_match_publication_and_branch_isolation(context_modules, monkeypatch):
     monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "unit/mem_cache"))
     import test_unified_radix_cache_unittest as native
     from sglang.srt.mem_cache.base_prefix_cache import (
@@ -150,8 +148,8 @@ def test_insert_match_publication_and_branch_isolation(context_modules, monkeypa
     from sglang.srt.mem_cache.unified_cache.component_type import ComponentType
     from sglang.srt.runtime_context import reset_context
     monkeypatch.setattr(native, "get_device", lambda: "cpu")
-    components = (ComponentType.FULL, ComponentType.SWA) if swa else (ComponentType.FULL,)
-    cache, allocator, _ = native.build_fixture(native.CacheConfig(components=components, kv_size=512, sliding_window_size=16 if swa else None))
+    components = (ComponentType.FULL,)
+    cache, allocator, _ = native.build_fixture(native.CacheConfig(components=components, kv_size=512, sliding_window_size=None))
     try:
         p = program(context_modules, nested=True, width=7)
         target = RadixKey.from_context(p.layout)
@@ -187,53 +185,6 @@ def test_insert_match_publication_and_branch_isolation(context_modules, monkeypa
         cache.evict(EvictParams(num_tokens=512, swa_num_tokens=512))
         assert allocator.available_size() == 512
         reset_context()
-
-
-@pytest.mark.parametrize("path", ["schedule", "publication"])
-@pytest.mark.parametrize("extended_row", [False, True])
-def test_swa_retires_private_cow_below_source_match(path, extended_row):
-    """A source prefix lease cannot hide private rotated target SWA owners."""
-    from types import SimpleNamespace
-
-    from sglang.srt.context_system.occurrence import OccurrenceState
-    from sglang.srt.managers.schedule_batch import ScheduleBatch
-    from sglang.srt.mem_cache.unified_cache.components.swa import SWAComponent
-
-    rows = torch.arange(400, dtype=torch.int64)
-    owned = (rows >= 100) & ((rows < 200) | (rows >= 300))
-    swa = torch.ones(400, dtype=torch.bool)
-    swa[110:120] = False
-    state = OccurrenceState(rows, owned, rows, rows, rows.to(torch.int32), 100, swa)
-    assert state.first_private_terminal == 100
-    released = []
-    allocator = SimpleNamespace(free_swa_segment=lambda slots, **kw: released.extend(slots.tolist()))
-    pool = SimpleNamespace(req_to_token=torch.arange(512).reshape(1, 512))
-    offset = 1000 if extended_row else 0
-    if extended_row:
-        pool._context_rows = {0: torch.arange(512) + offset}
-    cache = SimpleNamespace(supports_swa=lambda: True, sliding_window_size=128,
-                            page_size=1, swa_retain_floor=lambda req: None,
-                            req_to_token_pool=pool, token_to_kv_pool_allocator=allocator)
-    boundary = [350]
-    req = SimpleNamespace(context_program=object(), context_state=state,
-        context_decode_layout=SimpleNamespace(swa_raw_floor=lambda *args: boundary[0]),
-        kv=SimpleNamespace(holds_kv=True, req_pool_idx=0, cache_protected_len=300,
-                           swa_evicted_seqlen=0, swa_evict_floor=0))
-    def retire():
-        if path == "schedule":
-            batch = SimpleNamespace(tree_cache=cache, req_to_token_pool=pool,
-                                    token_to_kv_pool_allocator=allocator)
-            ScheduleBatch._evict_swa(batch, req, 400)
-        else:
-            component = SimpleNamespace(cache=cache, sliding_window_size=128)
-            SWAComponent._free_context_decode_window(component, req, 400)
-    retire()
-    assert released == [offset+i for i in [*range(100, 110), *range(120, 200), *range(300, 350)]]
-    assert req.kv.swa_evicted_seqlen == 350
-    boundary[0] = 450
-    retire()
-    assert released[-100:] == list(range(offset+350, offset+450))  # includes generated slots
-    assert len(released) == len(set(released))
 
 
 @pytest.mark.skipif(not os.environ.get("CONTEXT_SERVER_MODEL"), reason="isolated model server required")

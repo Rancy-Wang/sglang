@@ -565,7 +565,7 @@ class UnifiedRadixCache(BasePrefixCache):
         if result is not None:
             return result
         if self.disable:
-            return self._context_match_metadata(params, self.tree_core.empty_match_result)
+            return self.tree_core.empty_match_result
         result = self.tree_core.match_prefix(params)
         # Apply the walk's actions (e.g. a pending write-through relocation on
         # a split) before the finalizers, which can evict or raise.
@@ -576,18 +576,6 @@ class UnifiedRadixCache(BasePrefixCache):
         assert not result.cache_actions
         if self.linker is not None and params.req is not None:
             result = self.linker.match(params.key, params.req, result)
-        return self._context_match_metadata(params, result)
-
-    def _context_match_metadata(self, params, result):
-        if params.context_retry and ComponentType.SWA in self.components:
-            if result.context_swa_window is None:
-                swa = self.components[ComponentType.SWA]
-                result = result._replace(
-                    context_swa_resident=torch.ones(
-                        len(result.device_indices), dtype=torch.bool
-                    ),
-                    context_swa_window=swa.sliding_window_size + 1,
-                )
         return result
 
     def supports_fast_match_prefix(self) -> bool:
@@ -1022,12 +1010,6 @@ class UnifiedRadixCache(BasePrefixCache):
                 cursor = start
         return count
 
-    def configure_context_swa_lock(self, node_id, receipt, required_raw):
-        if self.disable:
-            return receipt
-        if not isinstance(self.tree_core, UnifiedTreeCore):
-            raise ValueError("Context SWA leases require the Python tree core")
-        return self.tree_core.configure_context_swa_lock(node_id, receipt, required_raw)
 
     def dec_swa_lock_only(
         self,
@@ -1072,7 +1054,6 @@ class UnifiedRadixCache(BasePrefixCache):
 
             free_context_slots(
                 self.token_to_kv_pool_allocator, state.nonterminal_private_slots(),
-                state.nonterminal_private_residency(),
             )
             self._release_context_source_lease(req)
             req.context_state = None
@@ -1155,9 +1136,7 @@ class UnifiedRadixCache(BasePrefixCache):
                 insert_params.context_resident = self._context_cache_residency(
                     req, page_aligned_len
                 )
-                insert_params.context_swa_resident = self._context_cache_swa_residency(
-                    req, page_aligned_len
-                )
+
                 insert_params.context_owned = self._context_cache_ownership(
                     req, page_aligned_len
                 )
@@ -1291,7 +1270,6 @@ class UnifiedRadixCache(BasePrefixCache):
         if published and state is not None and not self.disable:
             req.context_state = state.publish(
                 req.prefix_indices, cache_len=req.kv.cache_protected_len,
-                swa_resident=req.context_swa_resident,
             )
             req.context_cache_published = True
             if not get_memory().disable_drop_aware_eviction:
@@ -1325,7 +1303,6 @@ class UnifiedRadixCache(BasePrefixCache):
         required[:count] = program.layout.keep_mask[:count]
         if next_query is not None and next_query < len(program.layout.positions):
             required[:count] |= program.visible_until[:count] > next_query
-        # SWA leases were installed first and protect the same future read set.
         # Only actual Delta records on this target path authorize Full release.
         self.configure_context_drop_lock(req.last_node, req.lock_receipt, required)
         spans = req.lock_receipt.context_skip_ranges
@@ -1345,13 +1322,6 @@ class UnifiedRadixCache(BasePrefixCache):
             source_required = torch.ones(source_length, dtype=torch.bool)
             for start, end in spans:
                 source_required[start : min(end, source_length)] = False
-            if req.context_swa_source_required is not None:
-                req.context_swa_source_required = (
-                    req.context_swa_source_required & source_required
-                )
-                self.configure_context_swa_lock(
-                    node, receipt, req.context_swa_source_required
-                )
             self.configure_context_drop_lock(node, receipt, source_required)
 
     def _prepare_context_cache_row(self, req: Req, *, retain_source: bool):
@@ -1373,10 +1343,6 @@ class UnifiedRadixCache(BasePrefixCache):
                 # The native request lease moves to the target branch below.
                 # Keep the Retry source branch alive for remaining birth reads.
                 receipt = self.inc_lock_ref(req.last_node).to_dec_params()
-                if req.context_swa_source_required is not None:
-                    self.configure_context_swa_lock(
-                        req.last_node, receipt, req.context_swa_source_required
-                    )
                 req.context_source_lease = (req.last_node, receipt)
             prepared_len = min(prepared_len, req.context_exact_prefix_len)
             # Unfinished publication may defer. Keep the old lease length until
@@ -1414,68 +1380,28 @@ class UnifiedRadixCache(BasePrefixCache):
         result[:len(rows)][present] = state.owned[rows[present]]
         return result
 
-    @staticmethod
-    def _context_cache_swa_residency(req, length):
-        state = getattr(req, "context_state", None)
-        swa = state.terminal_swa_residency() if state is not None else None
-        if swa is None:
-            return None
-        result = torch.ones(length, dtype=torch.bool)
-        count = min(length, len(swa))
-        result[:count] = swa[:count]
-        result[: min(length, req.kv.swa_evicted_seqlen)] = False
-        return result
 
     def _free_context_kv_row(self, req, ranges):
-        """Exclude Full holes and absent SWA peers using CPU ownership data."""
+        """Release only present, request-owned shared pages; skip borrowed holes."""
         if not ranges:
             return
         state = getattr(req, "context_state", None)
         if state is None:
             self.free_kv_row(req.kv, ranges)
             return
-        length = max(end for _, end in ranges)
-        resident = self._context_cache_residency(req, length)
-        swa = state.terminal_swa_residency()
-        owned = self._context_cache_ownership(req, length)
         from sglang.srt.context_system.recovery import mask_ranges
         from sglang.srt.mem_cache.common import coalesce_ranges
 
-        present = (
-            resident if resident is not None else torch.ones(length, dtype=torch.bool)
-        )
-        if owned is not None:
-            present &= owned
-        if swa is None:
-            ranges = [
-                (start + a, start + b)
-                for start, end in coalesce_ranges(ranges)
-                for a, b in mask_ranges(present[start:end].numpy())
-            ]
-            self.free_kv_row(req.kv, ranges)
-            return
-        # Generated tokens beyond the prefill state have native fresh SWA peers;
-        # the native eviction floor remains authoritative for those positions.
-        alive = torch.ones(length, dtype=torch.bool)
-        count = min(length, len(swa))
-        alive[:count] = swa[:count]
-        alive[: min(length, req.kv.swa_evicted_seqlen)] = False
-        row = request_row(self.req_to_token_pool, req.kv.req_pool_idx)
-        live_segments, dead_segments = [], []
-        for start, end in coalesce_ranges(ranges):
-            for selected, output in (
-                (present[start:end] & alive[start:end], live_segments),
-                (present[start:end] & ~alive[start:end], dead_segments),
-            ):
-                output.extend(
-                    (row[start + a : start + b], start + a)
-                    for a, b in mask_ranges(selected.numpy())
-                )
-        allocator = self.token_to_kv_pool_allocator
-        if live_segments:
-            allocator.free_segments(live_segments)
-        if dead_segments:
-            allocator.free_full_segments(dead_segments)
+        length = max(end for _, end in ranges)
+        resident = self._context_cache_residency(req, length)
+        owned = self._context_cache_ownership(req, length)
+        present = resident if resident is not None else torch.ones(length, dtype=torch.bool)
+        present &= owned
+        self.free_kv_row(req.kv, [
+            (start + a, start + b)
+            for start, end in coalesce_ranges(ranges)
+            for a, b in mask_ranges(present[start:end].numpy())
+        ])
 
     def _release_context_source_lease(self, req: Req):
         if req.context_source_lease is not None:
@@ -1558,9 +1484,7 @@ class UnifiedRadixCache(BasePrefixCache):
             insert_params.context_resident = self._context_cache_residency(
                 req, page_aligned_len
             )
-            insert_params.context_swa_resident = self._context_cache_swa_residency(
-                req, page_aligned_len
-            )
+
             insert_params.context_owned = self._context_cache_ownership(req, page_aligned_len)
         result = self.insert(insert_params)
 
@@ -1621,17 +1545,6 @@ class UnifiedRadixCache(BasePrefixCache):
                 else ()
             ),
         )
-
-        if getattr(req, "context_swa_query_starts", None) is not None:
-            demand = req.context_swa_read_demand(
-                len(new_indices), len(req.context_state.canonical_rows)
-            )
-            demand &= match_result.context_swa_resident
-            self.configure_context_swa_lock(new_last_node, lock_result, demand)
-            req.context_swa_resident = torch.cat((
-                demand,
-                self._context_cache_swa_residency(req, len(kv_indices_orig))[len(new_indices):],
-            ))
 
         # Update req fields
         if len(new_indices) < len(kv_indices_orig):
