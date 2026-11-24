@@ -22,7 +22,7 @@ from sglang.srt.layers.vocab_parallel_embedding import (
 from sglang.srt.model_loader.weight_utils import default_weight_loader
 from sglang.srt.model_executor.forward_context import get_token_to_kv_pool
 from sglang.srt.models.llama import LlamaAttention, LlamaMLP
-from sglang.srt.runtime_context import get_parallel
+from sglang.srt.runtime_context import get_model, get_parallel
 from sglang.srt.utils import add_prefix
 from sglang.srt.utils.recurrent_trace import span
 
@@ -43,6 +43,21 @@ class OuroRotaryEmbedding(nn.Module):
     def __init__(self, rotary):
         super().__init__()
         self.rotary = rotary
+        self.optimized = get_model().ouro_decode_profile == "optimized"
+        self.decode_key_scratch = {}
+
+    def decode(self, positions, query, key, preserve_key):
+        if not self.optimized:
+            return self.forward(positions, query, key)
+        if preserve_key:
+            # The fused op writes both outputs. LoopVQ stores unrotated K.
+            shape_key = (key.device, key.dtype, key.shape)
+            if shape_key not in self.decode_key_scratch:
+                self.decode_key_scratch[shape_key] = torch.empty_like(
+                    key, memory_format=torch.contiguous_format
+                )
+            key = self.decode_key_scratch[shape_key]
+        return self.rotary(positions, query, key)
 
     def forward(self, positions, query, key):
         # The native torch path casts cos/sin and each product to input dtype.
@@ -93,15 +108,18 @@ class OuroAttention(LlamaAttention):
 
     def forward(self, positions, hidden_states, forward_batch, depth):
         pool = get_token_to_kv_pool()
-        if getattr(pool, "loopvq_enabled", False):
-            # Coupled codes describe raw K from all four recurrence depths.
-            # Preserve HF's native RoPE arithmetic for the live query/key.
-            qkv, _ = self.qkv_proj(hidden_states)
-            q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+        vq = getattr(pool, "loopvq_enabled", False)
+        decode = forward_batch.forward_mode.is_decode_or_idle()
+        qkv, _ = self.qkv_proj(hidden_states)
+        q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+        if decode:
+            q, k_rope = self.rotary_emb.decode(positions, q, k, preserve_key=vq)
+        else:
             q, k_rope = self.rotary_emb(positions, q, k)
+        if vq:
             attention = self.attn[depth]
             cos_sin_cache = self.rotary_emb.rotary.cos_sin_cache
-            if forward_batch.forward_mode.is_decode_or_idle():
+            if decode:
                 output = attention(
                     q, k, v, forward_batch, cos_sin_cache=cos_sin_cache
                 )
@@ -118,8 +136,7 @@ class OuroAttention(LlamaAttention):
                     is_decode=False,
                 )
             return self.o_proj(output)[0]
-        q, k, v = self.forward_prepare_native(positions, hidden_states)
-        output = self.attn[depth](q, k, v, forward_batch)
+        output = self.attn[depth](q, k_rope, v, forward_batch)
         return self.o_proj(output)[0]
 
 

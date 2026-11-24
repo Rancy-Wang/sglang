@@ -792,3 +792,22 @@ Accuracy reporting consumes only TP2 full-cell completion markers, validates the
 ### Candidate 19/20 and 20/20 results
 
 A10 tmux. Official b5f821d (released serving tree d5d58c83) and port fbe1b00a2 (inference tree unchanged from cccc70a47). Candidate20 instrumentation 4a0d07cc9. Same training bundle, same card pair per experiment. Uninstrumented TP2 2K/1K bs4 full graph medians 132.615 / 103.597 tok/s. Independent native PyTorch profiles on the same card pair for both stacks captured both ranks. The post-flush ordinary rank0 step has RoPE/layout 1.407 / 9.118 ms, quant 9.910 / 9.901 ms. Port graph-only NVTX confirmed four H2D indices and a blocking stream synchronization during allocation, overlapping the previous forward, followed by 4.706 ms between graphs in a measured ordinary step. Both native clients, official/port timing, port node and both graph/NVTX arms completed. Official Nsight node conversion and offline retry stalled at 20%, raw backup preserved, official kernel evidence recovered by independent native profiling. Native official first launch lacked ninja on PATH; same interpreter with its bin directory restored worked. TIME_WAIT port prechecks were retried on fresh ports; input/config and previous evidence retained. No inference edits. Cumulative budget 20/20. [单步报告、事件、算子和来源](evidence/tp2/official-step/report.md).
+
+## 官方 RoPE、提交顺序和 MLP 对齐计划（待实施）
+
+**目的与基线。** 从移植 c1955c114 出发，官方为 b5f821d（相关服务树 d5d58c83），以相同自训 bundle 比较。A10 双 A100、TP2/DP1、bs4、2K 输入/1K 输出，已测官方 132.615、移植 103.597 tok/s。现有预算已用 20/20。建议另授权最多 6 轮（累计 21–26），其中 4 组改动、2 轮留给有明确证据的修正。本节只记录计划。
+
+**修改步骤与范围。** 每项独立提交，按顺序累加。保留各提交以便回到单变量对照。
+1. 在 srt/models/ouro.py 的优化 decode 路径中，复用融合 RoPE 入口。VQ decode 采用官方 Q 与按设备、dtype、形状持久复用的临时 K 做对照；不覆盖原 K，JIT 与缓冲初始化在 graph capture 前完成。普通 BF16 decode 旋转真实 Q/K。参考路径保持现有 HF 舍入。先对齐官方算术，暂不引入 Q-only 新算子。
+2. 同一文件中的优化 MLP 用已有 SiluAndMul 处理 gate_up_proj 的输出，保留 down_proj 与 TP 通信。BF16 和 VQ 走同一优化策略；显式选择 decode 与参考/prefill 的边界，核对模型 forward 对模式的传递。
+3. 在 srt/mem_cache/loopvq_allocator.py 先做批量 HP 分配，保留现有等待以隔离收益。复用设备端请求索引；处理前缀/最近窗口混合 batch、按原顺序返回位置、空行和容量不足的预留回收。
+4. 修改 srt/managers/scheduler.py、loopvq_allocator.py、loopvq_pool.py 的 decode 事件所有权及 flush 调度。在选批前保存 forward_done；批量预留和只读 GPU plan 先行；旧映射覆盖、槽位复用等有冲突的操作在相应 stream 等待 event 后执行；K/V 编码完成后发布映射。审查 abort/free/reuse/retract 与 prefill/decode 切换，保持非重叠路径。检查实际 next graph launch 和旧结果回收顺序，按需修改；不做全局同步。
+
+**效果与判据。** R4 每 rank 每步约 192 次 fused RoPE 和 192 次融合激活；逐请求 8 字节 H2D+随后的阻塞消失；全 recent 的 bs4 每步一次 HP 分配；普通稳态步在上一图结束前提交下一图，flush 保持顺序，双 rank 均记录。建议把主点最终移植/同期官方纯 decode 中位吞吐 ≥0.95 定义为性能接近，同时报告实际倍率及各次范围；边界附近增加重复。计数、时序和数值三类结果独立验收。
+
+**风险与正确性。** 融合涉及 HF 与官方中间舍入差异，优化算子以官方为 oracle，HF 参考路径按旧回归验收。真实码本和实际 TP 切片测试 pre/post-RoPE K、V、logits、固定 greedy 输出和首个差异；调度单独改动应保持同路径确定性输出。对照显式 KV 状态，覆盖 8/64 窗口切换、8-token flush 前后、不同历史长度、abort、重用、padding 和交替请求；验证两个 rank 的 mask、映射、槽位释放及 JIT 后 eager/full graph。用短请求做服务正确性验收，准确率 benchmark 继续暂停。
+
+**运行与交付。** 实施后先跑 py_compile、test_loopvq_core.py、test_loopvq_wiring.py、test_loopvq_official_kernels.py 和 serving_probe.py 的对应场景。通过 X5 到 A10，在空闲同卡对用 tmux 复用 compare_vq_step.py 与 tp2_worker.py。每候选固定 2K 输入、1K 新输出、bs4、HP8+64、ignore EOS，2 次预热、至少 3 次无 profiler 测量；从整批共同第 2 个输出至最后一个输出，单列输入、输出、实际 batch、graph 和三次原值。独立采两个 rank 的原生 PyTorch 节点 trace，以及图级 Nsight/NVTX；按普通/flush 分开核对 launch 进入/返回、GPU 图始末、图间 GPU busy 并集、剩余时间和 CPU 同步重叠，报告分布。最终按 1K/2K/4K/8K 输出 × bs1/2/4/8/16 复验，分别记录官方 VQ、新移植 VQ 与同优化策略的移植 BF16；每格各臂在同机同卡对比较，容量不足记 N/A。交付逐项消融、两种倍率、双 rank 单步证据、运行命令、退出码、SHA 与残余差额。只在 loopspec-test 实施与同步。
+
+### Candidate 21/26 — optimized decode RoPE
+User approved implementation and validation of the plan above. Start with fused RoPE for optimized Ouro decode, a per-shape scratch K for VQ, and real K for BF16. Preserve all prefill and reference arithmetic. Validate using the frozen official implementation and separate timing/profile runs.
