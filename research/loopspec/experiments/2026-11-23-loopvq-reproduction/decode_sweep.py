@@ -204,10 +204,9 @@ def profile_batch(method, bs, manifest, log):
         result = ORIGINAL_BATCH(args, inputs, "profile", 1, cfg, m, capture)
     finally:
         bench.StreamStats = ORIGINAL_STATS
-    response = context.request("/stop_profile", {}, timeout=120)
     safe.new_json(out / "summary.json", {"status": result["status"], "method": method, "bs": bs,
                   "input_tokens": INPUT_LEN, "output_tokens": 8192, "triggers": ProfileStats.triggers,
-                  "requested_steps_per_capture": 8, "final_stop_response": response.decode(errors="replace"),
+                  "requested_steps_per_capture": 8, "stop_mode": "automatic num_steps; no redundant manual stop",
                   "not_a_primary_throughput_measurement": True})
     assert result["status"] == "ok" and len(ProfileStats.triggers) == 4
 
@@ -246,6 +245,68 @@ for row in x['rows']:
 u=r.url;r.finish();(p.parent/'wandb.json').write_text(json.dumps({'url':u},indent=2))
 """
     subprocess.run([str(safe.BUILD_PYTHON), "-c", code, str(ROOT / "decode-throughput.json")], check=True)
+
+
+def recover_profile():
+    """Narrow recovery of candidate12's already-completed BF16 bs1 request."""
+    assert os.environ.get("TMUX")
+    context.ROOT = ROOT
+    old = safe.read_json(ROOT / "profile-status.json")
+    assert old["status"] == "failed" and old["method"] == "bf16" and old["bs"] == 1
+    assert old["error"] == "HTTP Error 500: Internal Server Error"
+    assert old["helper_sha256"] == "6bdb1af57b867c05c91a0170d66b36880a3efa94d709f722b97aa09c4280933c"
+    assert old["inference_sha"] == safe.FROZEN_SHA
+    assert safe.capture(["git", "-C", str(safe.FROZEN_REPO), "rev-parse", "HEAD"]) == safe.FROZEN_SHA
+    candidates = list(ROOT.glob("context-bf16-nodes-*.manifest.json"))
+    assert len(candidates) == 1
+    manifest = safe.read_json(candidates[0])
+    identity = manifest["process_identity"]
+    safe.same_process(identity, safe.proc_snapshot(identity["pid"]))
+    safe.validate_parent(identity, safe.Paths().target_python, port=context.PORT)
+    owned = safe.process_tree(identity["pid"])
+    assert context.gpu_pids() and context.gpu_pids() <= owned and safe.listener_owned(owned, context.PORT)
+    assert all(value == 0 for rows in safe.idle_values(context.request("/metrics").decode()).values() for value in rows)
+    label = candidates[0].name.removesuffix(".manifest.json")
+    log = safe.TASK / "logs" / f"{label}.log"
+    with log.open("rb") as stream:
+        stream.seek(max(0, log.stat().st_size - 32000))
+        assert "Profiling is not in progress. Call /start_profile first." in stream.read().decode(errors="replace")
+    out = ROOT / "profile/bf16/bs1"
+    completed = safe.read_json(out / "profile-01.json")
+    assert completed["status"] == "ok" and completed["output_tokens"] == 8192
+    assert completed["batch_evidence"]["verified"] and completed["batch_evidence"]["target_batch_fraction"] == 1
+    assert completed["requests"][0]["prompt_tokens"] == INPUT_LEN
+    captures = list(ROOT.glob("bf16-nodes.*.nsys-rep"))
+    assert len(captures) == 4 and all(p.stat().st_size > 0 for p in captures)
+    state = ROOT / "profile-recovery-status.json"
+    assert not state.exists() and not (out / "summary.json").exists()
+    base = {"status": "running", "started_unix": time.time(), "inference_sha": safe.FROZEN_SHA,
+            "helper_sha256": safe.sha256(__file__), "prior_failure": str(ROOT / "profile-status.json")}
+    safe.new_json(state, base)
+    safe.new_json(out / "summary.json", {"status": "ok", "method": "bf16", "bs": 1,
+                  "input_tokens": INPUT_LEN, "output_tokens": 8192, "requested_steps_per_capture": 8,
+                  "recovered_completed_request": True, "stop_mode": "automatic num_steps",
+                  "thresholds_from_candidate12_source": [1024, 2048, 4096, 8160],
+                  "callback_timestamps": None, "note": "Callback list was not persisted before the redundant-stop failure; no timestamps reconstructed",
+                  "report_sha256": {p.name: safe.sha256(p) for p in captures},
+                  "not_a_primary_throughput_measurement": True})
+    try:
+        bench.atomic_json(state, {**base, "method": "bf16", "bs": 4, "server": identity})
+        profile_batch("bf16", 4, manifest, log)
+        context.stop(identity)
+        export_profiles("bf16", ROOT / f"{label}.launcher.log")
+        identity, manifest, log, launcher = context.start("loopvq", True,
+            launch_script=HERE / "a10_throughput_server.sh", server_protocol="decode-sweep")
+        for bs in (1, 4):
+            bench.atomic_json(state, {**base, "method": "loopvq", "bs": bs, "server": identity})
+            profile_batch("loopvq", bs, manifest, log)
+        context.stop(identity)
+        export_profiles("loopvq", launcher)
+        bench.atomic_json(state, {**base, "status": "completed", "ended_unix": time.time(), "gpu_released": True})
+    except BaseException as exc:
+        bench.atomic_json(state, {**safe.read_json(state), "status": "failed", "error_type": type(exc).__name__,
+                                  "error": str(exc), "ended_unix": time.time()})
+        raise
 
 
 def run(profile):
@@ -287,7 +348,7 @@ def run(profile):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("mode", choices=("fixture", "timing", "profile", "aggregate", "publish"))
+    p.add_argument("mode", choices=("fixture", "timing", "profile", "recover-profile", "aggregate", "publish"))
     args = p.parse_args()
     ROOT.mkdir(parents=True, exist_ok=True)
     if args.mode == "fixture":
@@ -296,5 +357,7 @@ if __name__ == "__main__":
         print(json.dumps(aggregate(), indent=2))
     elif args.mode == "publish":
         publish()
+    elif args.mode == "recover-profile":
+        recover_profile()
     else:
         run(args.mode == "profile")
