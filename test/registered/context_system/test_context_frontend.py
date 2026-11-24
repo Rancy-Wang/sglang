@@ -35,6 +35,7 @@ def chat():
     manager.model_config.hf_config.dual_chunk_attention_config = None
     manager.model_config._resolved_model_arch = "Qwen2ForCausalLM"
     manager.model_config.dtype = torch.bfloat16
+    manager.model_config.is_hybrid_swa = False
     manager._config_overrides["page_size"] = 1
     template = fixture._MockTemplateManager()
     template.chat_template_name = None

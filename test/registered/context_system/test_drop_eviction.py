@@ -173,7 +173,7 @@ def test_shared_private_pages_below_source_match_release_once(native_cache):
                             torch.arange(20, dtype=torch.int32), 20)
     cache.req_to_token_pool = SimpleNamespace(req_to_token=slots[None, :])
     req = SimpleNamespace(context_state=state,
-                         kv=SimpleNamespace(req_pool_idx=0, cache_protected_len=20))
+                         kv=SimpleNamespace(req_pool_idx=0, cache_protected_len=20, swa_evicted_seqlen=0))
     # The source match protects 0:20, but actual COW ownership frees 3:20.
     cache._free_context_kv_row(req, [(0, 7), (7, 20)])
     assert allocator.available_size() == 121
@@ -583,7 +583,8 @@ def test_shared_req_recovery_publication_and_pressure(
         req.init_next_round_input(cache)
         if source_cache:
             assert req.context_recovery_plan.matched_length == 24
-            assert req.context_recovery_plan.start == 24
+            # Queries 24:32 precede the new Drop and need the evicted 8:16 pages.
+            assert req.context_recovery_plan.intervals == ((8, 16), (24, 48))
         PrefillAdder._req_inc_lock_ref(SimpleNamespace(tree_cache=cache), req)
         for start, end in req.context_recovery_plan.intervals:
             for cursor in range(start, end, 7):
