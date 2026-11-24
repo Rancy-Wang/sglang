@@ -1,0 +1,440 @@
+{
+  "source": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/decode-20261124-r12/bf16-out1024-bs4.sqlite",
+  "decode_graphs": 8,
+  "units": "GPU kernel milliseconds per decoded batch step; exclusive categories, loop index 1..4",
+  "note": "Node profiling perturbs scheduling. Offgraph includes prefill/encoding; not isolated CPU cost. Graph gaps can overlap offgraph work.",
+  "categories": [
+    {
+      "loop": "outside",
+      "category": "embedding_lmhead_sampling",
+      "mean_ms": 0.140388,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "attention.bf16_stage1",
+      "mean_ms": 4.2759475,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "attention.bf16_stage2",
+      "mean_ms": 0.20998312499999996,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "cache.write",
+      "mean_ms": 0.08870725000000003,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "mlp.activation",
+      "mean_ms": 0.33080550000000003,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "mlp.down",
+      "mean_ms": 0.9434067499999996,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "mlp.gate_up",
+      "mean_ms": 1.560108625,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "norm.loop_end",
+      "mean_ms": 0.003456,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "norm.sandwich",
+      "mean_ms": 0.6751667500000001,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "projection.o",
+      "mean_ms": 0.5394933749999999,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "projection.qkv",
+      "mean_ms": 0.93831225,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "residual.add",
+      "mean_ms": 0.18860600000000002,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "rope_layout_pointwise",
+      "mean_ms": 2.3149037499999987,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "attention.bf16_stage1",
+      "mean_ms": 4.253004000000001,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "attention.bf16_stage2",
+      "mean_ms": 0.20829912499999992,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "cache.write",
+      "mean_ms": 0.08812775000000003,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "mlp.activation",
+      "mean_ms": 0.325574125,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "mlp.down",
+      "mean_ms": 0.9387549999999998,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "mlp.gate_up",
+      "mean_ms": 1.556028,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "norm.loop_end",
+      "mean_ms": 0.0034435,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "norm.sandwich",
+      "mean_ms": 0.6713640000000001,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "projection.o",
+      "mean_ms": 0.5350356249999999,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "projection.qkv",
+      "mean_ms": 0.93351225,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "residual.add",
+      "mean_ms": 0.186892875,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "rope_layout_pointwise",
+      "mean_ms": 2.2687673750000017,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "attention.bf16_stage1",
+      "mean_ms": 4.253752125,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "attention.bf16_stage2",
+      "mean_ms": 0.20813112499999997,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "cache.write",
+      "mean_ms": 0.08809112500000003,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "mlp.activation",
+      "mean_ms": 0.3255260000000001,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "mlp.down",
+      "mean_ms": 0.9366998749999998,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "mlp.gate_up",
+      "mean_ms": 1.5563733749999997,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "norm.loop_end",
+      "mean_ms": 0.003428,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "norm.sandwich",
+      "mean_ms": 0.6714875,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "projection.o",
+      "mean_ms": 0.5350088749999999,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "projection.qkv",
+      "mean_ms": 0.9336107499999999,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "residual.add",
+      "mean_ms": 0.186871,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "rope_layout_pointwise",
+      "mean_ms": 2.2675088750000016,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "attention.bf16_stage1",
+      "mean_ms": 4.263035875,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "attention.bf16_stage2",
+      "mean_ms": 0.20799524999999996,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "cache.write",
+      "mean_ms": 0.08792712500000002,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "mlp.activation",
+      "mean_ms": 0.3259307500000001,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "mlp.down",
+      "mean_ms": 0.9375658749999998,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "mlp.gate_up",
+      "mean_ms": 1.55585175,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "norm.loop_end",
+      "mean_ms": 0.003528,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "norm.sandwich",
+      "mean_ms": 0.671036,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "projection.o",
+      "mean_ms": 0.535425,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "projection.qkv",
+      "mean_ms": 0.9339603749999998,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "residual.add",
+      "mean_ms": 0.18740987499999998,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "rope_layout_pointwise",
+      "mean_ms": 2.2680853750000005,
+      "observed_graphs": 8
+    }
+  ],
+  "graph_kernel_ms_mean": 48.122328375,
+  "graph_span_ms_mean": 48.49623425,
+  "intergraph_gap_ms": [
+    0.072095,
+    0.071455,
+    0.071871,
+    0.071775,
+    0.071807,
+    0.072351,
+    0.071872
+  ],
+  "offgraph_kernel_totals": [
+    {
+      "kernel": "void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<float, at::native::ArgMaxOps<float>, unsigned int, long, (int)4, (int)4>>(T3)",
+      "gpu_ms": 0.15667,
+      "calls": 8
+    },
+    {
+      "kernel": "void at::native::vectorized_elementwise_kernel<(int)2, at::native::CUDAFunctorOnSelf_add<long>, std::array<char *, (unsigned long)2>, (bool)0>(int, T2, T3)",
+      "gpu_ms": 0.105152,
+      "calls": 35
+    },
+    {
+      "kernel": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_put_kernel_impl<at::native::OpaqueType<(int)4>>(at::TensorIterator &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)",
+      "gpu_ms": 0.07056,
+      "calls": 9
+    },
+    {
+      "kernel": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)4>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)",
+      "gpu_ms": 0.058432,
+      "calls": 9
+    },
+    {
+      "kernel": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_put_kernel_impl<at::native::OpaqueType<(int)8>>(at::TensorIterator &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)",
+      "gpu_ms": 0.054656,
+      "calls": 16
+    },
+    {
+      "kernel": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(int) (instance 1)], std::array<char *, (unsigned long)2>, (int)4, TrivialOffsetCalculator<(int)1, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithCast<(int)1>, at::native::memory::StoreWithCast<(int)1>>(int, T1, T2, T4, T5, T6, T7)",
+      "gpu_ms": 0.05104,
+      "calls": 17
+    },
+    {
+      "kernel": "create_flashinfer_kv_indices_triton",
+      "gpu_ms": 0.048127,
+      "calls": 8
+    },
+    {
+      "kernel": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)8>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)",
+      "gpu_ms": 0.030752,
+      "calls": 8
+    },
+    {
+      "kernel": "alloc_decode_kernel",
+      "gpu_ms": 0.029152,
+      "calls": 9
+    },
+    {
+      "kernel": "get_num_kv_splits_triton",
+      "gpu_ms": 0.024671,
+      "calls": 8
+    },
+    {
+      "kernel": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::CUDAFunctorOnSelf_add<int>, std::array<char *, (unsigned long)2>, (bool)0>(int, T2, T3)",
+      "gpu_ms": 0.022944,
+      "calls": 9
+    },
+    {
+      "kernel": "_small_copy_kernel",
+      "gpu_ms": 0.02064,
+      "calls": 8
+    },
+    {
+      "kernel": "void at_cuda_detail::cub::detail::scan::DeviceScanKernel<at_cuda_detail::cub::detail::scan::policy_hub<long, long, long, unsigned int, std::plus<long>>::Policy1000, const long *, long *, at_cuda_detail::cub::ScanTileState<long, (bool)1>, std::plus<long>, at_cuda_detail::cub::NullType, unsigned int, long, (bool)0, at_cuda_detail::cub::NullType>(T2, T3, T4, int, T5, T6, T7)",
+      "gpu_ms": 0.01888,
+      "calls": 8
+    },
+    {
+      "kernel": "void sglang::clamp_position_kernel<long>(T1 *, const T1 *, unsigned long)",
+      "gpu_ms": 0.014848,
+      "calls": 8
+    },
+    {
+      "kernel": "void at_cuda_detail::cub::detail::scan::DeviceScanInitKernel<at_cuda_detail::cub::ScanTileState<long, (bool)1>>(T1, int)",
+      "gpu_ms": 0.01104,
+      "calls": 8
+    }
+  ],
+  "graphs": [
+    {
+      "correlation": 3942096,
+      "start": 32205178,
+      "end": 81718872,
+      "kernel_ms": 48.173072
+    },
+    {
+      "correlation": 3942537,
+      "start": 81790967,
+      "end": 130158746,
+      "kernel_ms": 48.133103
+    },
+    {
+      "correlation": 3942983,
+      "start": 130230201,
+      "end": 178533212,
+      "kernel_ms": 48.067324
+    },
+    {
+      "correlation": 3943430,
+      "start": 178605083,
+      "end": 226960158,
+      "kernel_ms": 48.11914
+    },
+    {
+      "correlation": 3943877,
+      "start": 227031933,
+      "end": 275404096,
+      "kernel_ms": 48.13588
+    },
+    {
+      "correlation": 3944324,
+      "start": 275475903,
+      "end": 323819234,
+      "kernel_ms": 48.107607
+    },
+    {
+      "correlation": 3944771,
+      "start": 323891585,
+      "end": 372212996,
+      "kernel_ms": 48.084374
+    },
+    {
+      "correlation": 3945218,
+      "start": 372284868,
+      "end": 420678278,
+      "kernel_ms": 48.158127
+    }
+  ]
+}

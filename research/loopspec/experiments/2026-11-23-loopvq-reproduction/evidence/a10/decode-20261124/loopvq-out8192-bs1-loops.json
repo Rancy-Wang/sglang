@@ -1,0 +1,534 @@
+{
+  "source": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/decode-20261124-r12/loopvq-out8192-bs1.sqlite",
+  "decode_graphs": 8,
+  "units": "GPU kernel milliseconds per decoded batch step; exclusive categories, loop index 1..4",
+  "note": "Node profiling perturbs scheduling. Offgraph includes prefill/encoding; not isolated CPU cost. Graph gaps can overlap offgraph work.",
+  "categories": [
+    {
+      "loop": "outside",
+      "category": "embedding_lmhead_sampling",
+      "mean_ms": 0.1222635,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "attention.hp",
+      "mean_ms": 0.348039,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "attention.lse_reset",
+      "mean_ms": 0.07142725,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "attention.quant",
+      "mean_ms": 3.193470625,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "attention.reduce",
+      "mean_ms": 0.1584515,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "cache.metadata",
+      "mean_ms": 0.007736,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "cache.write",
+      "mean_ms": 0.09593537499999999,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "mlp.activation",
+      "mean_ms": 0.20354687500000002,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "mlp.down",
+      "mean_ms": 1.167803625,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "mlp.gate_up",
+      "mean_ms": 1.56050675,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "norm.loop_end",
+      "mean_ms": 0.003943875,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "norm.sandwich",
+      "mean_ms": 0.7039042499999998,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "projection.o",
+      "mean_ms": 0.505572625,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "projection.qkv",
+      "mean_ms": 0.8919132500000001,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "residual.add",
+      "mean_ms": 0.18487025000000004,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 1,
+      "category": "rope_layout_pointwise",
+      "mean_ms": 2.1136587500000084,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "attention.hp",
+      "mean_ms": 0.348054375,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "attention.lse_reset",
+      "mean_ms": 0.071202875,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "attention.quant",
+      "mean_ms": 3.158071875,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "attention.reduce",
+      "mean_ms": 0.15755475000000002,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "cache.write",
+      "mean_ms": 0.09545024999999999,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "mlp.activation",
+      "mean_ms": 0.20168312500000002,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "mlp.down",
+      "mean_ms": 1.1664151249999999,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "mlp.gate_up",
+      "mean_ms": 1.5516835,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "norm.loop_end",
+      "mean_ms": 0.003924,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "norm.sandwich",
+      "mean_ms": 0.7019078749999996,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "projection.o",
+      "mean_ms": 0.503177625,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "projection.qkv",
+      "mean_ms": 0.8854048750000001,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "residual.add",
+      "mean_ms": 0.18359437500000003,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 2,
+      "category": "rope_layout_pointwise",
+      "mean_ms": 2.067911375000009,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "attention.hp",
+      "mean_ms": 0.3483626249999999,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "attention.lse_reset",
+      "mean_ms": 0.07105125,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "attention.quant",
+      "mean_ms": 3.1581903749999998,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "attention.reduce",
+      "mean_ms": 0.15746700000000002,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "cache.write",
+      "mean_ms": 0.09509187499999998,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "mlp.activation",
+      "mean_ms": 0.20199087500000001,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "mlp.down",
+      "mean_ms": 1.166431625,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "mlp.gate_up",
+      "mean_ms": 1.5517711250000001,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "norm.loop_end",
+      "mean_ms": 0.003892,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "norm.sandwich",
+      "mean_ms": 0.7019806249999996,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "projection.o",
+      "mean_ms": 0.5024965,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "projection.qkv",
+      "mean_ms": 0.885121375,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "residual.add",
+      "mean_ms": 0.18363837500000005,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 3,
+      "category": "rope_layout_pointwise",
+      "mean_ms": 2.067209875000009,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "attention.hp",
+      "mean_ms": 0.34851424999999997,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "attention.lse_reset",
+      "mean_ms": 0.07106275,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "attention.quant",
+      "mean_ms": 3.15860625,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "attention.reduce",
+      "mean_ms": 0.15746700000000002,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "cache.write",
+      "mean_ms": 0.09491462499999999,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "mlp.activation",
+      "mean_ms": 0.20213037500000003,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "mlp.down",
+      "mean_ms": 1.164467125,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "mlp.gate_up",
+      "mean_ms": 1.551619125,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "norm.loop_end",
+      "mean_ms": 0.003896,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "norm.sandwich",
+      "mean_ms": 0.7011809999999997,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "projection.o",
+      "mean_ms": 0.5037229999999999,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "projection.qkv",
+      "mean_ms": 0.8849571250000001,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "residual.add",
+      "mean_ms": 0.18353075000000002,
+      "observed_graphs": 8
+    },
+    {
+      "loop": 4,
+      "category": "rope_layout_pointwise",
+      "mean_ms": 2.066949750000009,
+      "observed_graphs": 8
+    }
+  ],
+  "graph_kernel_ms_mean": 44.616794125,
+  "graph_span_ms_mean": 44.918366125,
+  "intergraph_gap_ms": [
+    10.799197,
+    7.857351,
+    9.812512,
+    8.556804,
+    6.965482,
+    8.700739,
+    9.943359
+  ],
+  "offgraph_kernel_totals": [
+    {
+      "kernel": "_encode",
+      "gpu_ms": 0.331775,
+      "calls": 2
+    },
+    {
+      "kernel": "void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<float, at::native::ArgMaxOps<float>, unsigned int, long, (int)4, (int)4>>(T3)",
+      "gpu_ms": 0.151808,
+      "calls": 8
+    },
+    {
+      "kernel": "create_flashinfer_kv_indices_triton",
+      "gpu_ms": 0.095328,
+      "calls": 8
+    },
+    {
+      "kernel": "void at::native::vectorized_elementwise_kernel<(int)2, at::native::CUDAFunctorOnSelf_add<long>, std::array<char *, (unsigned long)2>, (bool)0>(int, T2, T3)",
+      "gpu_ms": 0.085567,
+      "calls": 36
+    },
+    {
+      "kernel": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_put_kernel_impl<at::native::OpaqueType<(int)4>>(at::TensorIterator &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)",
+      "gpu_ms": 0.072512,
+      "calls": 18
+    },
+    {
+      "kernel": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 3)]::operator ()() const::[lambda(int) (instance 1)], std::array<char *, (unsigned long)2>, (int)4, TrivialOffsetCalculator<(int)1, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithCast<(int)1>, at::native::memory::StoreWithCast<(int)1>>(int, T1, T2, T4, T5, T6, T7)",
+      "gpu_ms": 0.059007,
+      "calls": 27
+    },
+    {
+      "kernel": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_put_kernel_impl<at::native::OpaqueType<(int)8>>(at::TensorIterator &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)",
+      "gpu_ms": 0.057504,
+      "calls": 16
+    },
+    {
+      "kernel": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)4>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)",
+      "gpu_ms": 0.041472,
+      "calls": 9
+    },
+    {
+      "kernel": "void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)8>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)",
+      "gpu_ms": 0.032416,
+      "calls": 8
+    },
+    {
+      "kernel": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 4)]::operator ()() const::[lambda(long) (instance 1)], std::array<char *, (unsigned long)2>, (int)4, TrivialOffsetCalculator<(int)1, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithCast<(int)1>, at::native::memory::StoreWithCast<(int)1>>(int, T1, T2, T4, T5, T6, T7)",
+      "gpu_ms": 0.025504,
+      "calls": 10
+    },
+    {
+      "kernel": "void at::native::vectorized_elementwise_kernel<(int)2, at::native::BUnaryFunctor<long, long, long, at::native::remainder_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 4)]::operator ()() const::[lambda(long, long) (instance 1)]>, std::array<char *, (unsigned long)2>, (bool)0>(int, T2, T3)",
+      "gpu_ms": 0.024191,
+      "calls": 9
+    },
+    {
+      "kernel": "void at::native::vectorized_elementwise_kernel<(int)2, at::native::AUnaryFunctor<long, long, long, at::native::binary_internal::MulFunctor<long>>, std::array<char *, (unsigned long)2>, (bool)0>(int, T2, T3)",
+      "gpu_ms": 0.02416,
+      "calls": 9
+    },
+    {
+      "kernel": "get_num_kv_splits_triton",
+      "gpu_ms": 0.023008,
+      "calls": 8
+    },
+    {
+      "kernel": "void at::native::vectorized_elementwise_kernel<(int)2, at::native::CUDAFunctor_add<long>, std::array<char *, (unsigned long)3>, (bool)0>(int, T2, T3)",
+      "gpu_ms": 0.02128,
+      "calls": 9
+    },
+    {
+      "kernel": "void at_cuda_detail::cub::detail::scan::DeviceScanKernel<at_cuda_detail::cub::detail::scan::policy_hub<long, long, long, unsigned int, std::plus<long>>::Policy1000, const long *, long *, at_cuda_detail::cub::ScanTileState<long, (bool)1>, std::plus<long>, at_cuda_detail::cub::NullType, unsigned int, long, (bool)0, at_cuda_detail::cub::NullType>(T2, T3, T4, int, T5, T6, T7)",
+      "gpu_ms": 0.020224,
+      "calls": 8
+    },
+    {
+      "kernel": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::CUDAFunctorOnSelf_add<int>, std::array<char *, (unsigned long)2>, (bool)0>(int, T2, T3)",
+      "gpu_ms": 0.020128,
+      "calls": 9
+    },
+    {
+      "kernel": "_small_copy_kernel",
+      "gpu_ms": 0.019872,
+      "calls": 8
+    },
+    {
+      "kernel": "void sglang::clamp_position_kernel<long>(T1 *, const T1 *, unsigned long)",
+      "gpu_ms": 0.012992,
+      "calls": 8
+    },
+    {
+      "kernel": "void at_cuda_detail::cub::detail::scan::DeviceScanInitKernel<at_cuda_detail::cub::ScanTileState<long, (bool)1>>(T1, int)",
+      "gpu_ms": 0.011008,
+      "calls": 8
+    },
+    {
+      "kernel": "void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<long>>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)",
+      "gpu_ms": 0.002528,
+      "calls": 1
+    },
+    {
+      "kernel": "void at::native::unrolled_elementwise_kernel<at::native::AUnaryFunctor<long, long, long, at::native::binary_internal::MulFunctor<long>>, std::array<char *, (unsigned long)2>, (int)4, TrivialOffsetCalculator<(int)1, unsigned int>, TrivialOffsetCalculator<(int)1, unsigned int>, at::native::memory::LoadWithoutCast, at::native::memory::StoreWithoutCast>(int, T1, T2, T4, T5, T6, T7)",
+      "gpu_ms": 0.002176,
+      "calls": 1
+    },
+    {
+      "kernel": "void at::native::vectorized_elementwise_kernel<(int)4, at::native::FillFunctor<bool>, std::array<char *, (unsigned long)1>, (bool)0>(int, T2, T3)",
+      "gpu_ms": 0.001856,
+      "calls": 1
+    },
+    {
+      "kernel": "void <unnamed>::elementwise_kernel_with_index<int, at::native::arange_cuda_out(const c10::Scalar &, const c10::Scalar &, const c10::Scalar &, at::Tensor &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 4)]::operator ()() const::[lambda(long) (instance 1)]>(T1, T2, function_traits<T2>::result_type *)",
+      "gpu_ms": 0.00176,
+      "calls": 1
+    }
+  ],
+  "graphs": [
+    {
+      "correlation": 3849365,
+      "start": 39864340,
+      "end": 84774114,
+      "kernel_ms": 44.60904
+    },
+    {
+      "correlation": 3849881,
+      "start": 95573311,
+      "end": 140484781,
+      "kernel_ms": 44.610033
+    },
+    {
+      "correlation": 3850397,
+      "start": 148342132,
+      "end": 193268834,
+      "kernel_ms": 44.628564
+    },
+    {
+      "correlation": 3850913,
+      "start": 203081346,
+      "end": 247988656,
+      "kernel_ms": 44.602481
+    },
+    {
+      "correlation": 3851429,
+      "start": 256545460,
+      "end": 301481858,
+      "kernel_ms": 44.636331
+    },
+    {
+      "correlation": 3851945,
+      "start": 308447340,
+      "end": 353380922,
+      "kernel_ms": 44.63515
+    },
+    {
+      "correlation": 3852648,
+      "start": 362081661,
+      "end": 406995852,
+      "kernel_ms": 44.609339
+    },
+    {
+      "correlation": 3853164,
+      "start": 416939211,
+      "end": 461846713,
+      "kernel_ms": 44.603415
+    }
+  ]
+}

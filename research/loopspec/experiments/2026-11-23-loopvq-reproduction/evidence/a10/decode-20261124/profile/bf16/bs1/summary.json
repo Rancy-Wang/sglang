@@ -1,0 +1,25 @@
+{
+  "status": "ok",
+  "method": "bf16",
+  "bs": 1,
+  "input_tokens": 2048,
+  "output_tokens": 8192,
+  "requested_steps_per_capture": 8,
+  "recovered_completed_request": true,
+  "stop_mode": "automatic num_steps",
+  "thresholds_from_candidate12_source": [
+    1024,
+    2048,
+    4096,
+    8160
+  ],
+  "callback_timestamps": null,
+  "note": "Callback list was not persisted before the redundant-stop failure; no timestamps reconstructed",
+  "report_sha256": {
+    "bf16-nodes.3.nsys-rep": "5f97bb5a2178921e858b39e0e33f744226e6a51f1c4ac3ece6045f9c7495bb9e",
+    "bf16-nodes.1.nsys-rep": "f6ad3eb50efc1dc32a250a4747384d148f24ed8918731401bc4d873e03ee2b2a",
+    "bf16-nodes.4.nsys-rep": "c14b99a89ce271128a88f9bb298e155031bd0c6b8ac1fbed48b71cae4af1cd9b",
+    "bf16-nodes.2.nsys-rep": "6bc479e86cc8779199606de42434183a46ccd8a652cef718a35f21cb79d1bfd9"
+  },
+  "not_a_primary_throughput_measurement": true
+}

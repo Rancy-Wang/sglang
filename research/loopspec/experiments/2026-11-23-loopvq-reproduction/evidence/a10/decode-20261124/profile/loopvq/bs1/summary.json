@@ -1,0 +1,48 @@
+{
+  "status": "ok",
+  "method": "loopvq",
+  "bs": 1,
+  "input_tokens": 2048,
+  "output_tokens": 8192,
+  "triggers": [
+    {
+      "target_completion": 1024,
+      "observed_counts_before_start": [
+        1024
+      ],
+      "start_unix": 1795491399.1162312,
+      "response_unix": 1795491401.0340292,
+      "response": "Start profiling.\n"
+    },
+    {
+      "target_completion": 2048,
+      "observed_counts_before_start": [
+        2048
+      ],
+      "start_unix": 1795491446.530901,
+      "response_unix": 1795491446.848449,
+      "response": "Start profiling.\n"
+    },
+    {
+      "target_completion": 4096,
+      "observed_counts_before_start": [
+        4096
+      ],
+      "start_unix": 1795491537.479029,
+      "response_unix": 1795491537.8127675,
+      "response": "Start profiling.\n"
+    },
+    {
+      "target_completion": 8160,
+      "observed_counts_before_start": [
+        8160
+      ],
+      "start_unix": 1795491726.166333,
+      "response_unix": 1795491726.5092177,
+      "response": "Start profiling.\n"
+    }
+  ],
+  "requested_steps_per_capture": 8,
+  "stop_mode": "automatic num_steps; no redundant manual stop",
+  "not_a_primary_throughput_measurement": true
+}

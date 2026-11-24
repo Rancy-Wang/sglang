@@ -320,7 +320,9 @@ def run(profile):
             "helper_sha256": safe.sha256(__file__), "inference_sha": safe.FROZEN_SHA, "gpu_uuid": context.UUID}
     bench.atomic_json(state, base)
     try:
-        for method in ("bf16", "loopvq"):
+        jobs = [(None, method) for method in ("bf16", "loopvq")] if profile else [
+            (output, method) for output in OUTPUTS for method in ("bf16", "loopvq")]
+        for output, method in jobs:
             identity, manifest, log, launcher = context.start(method, profile,
                 launch_script=HERE / "a10_throughput_server.sh", server_protocol="decode-sweep")
             if profile:
@@ -328,11 +330,10 @@ def run(profile):
                     bench.atomic_json(state, {**base, "method": method, "bs": bs, "server": identity})
                     profile_batch(method, bs, manifest, log)
             else:
-                for output in OUTPUTS:
-                    for bs in BATCHES:
-                        bench.atomic_json(state, {**base, "method": method, "output": output, "bs": bs, "server": identity})
-                        measure_cell(method, output, bs, manifest, log)
-                        aggregate()
+                for bs in BATCHES:
+                    bench.atomic_json(state, {**base, "method": method, "output": output, "bs": bs, "server": identity})
+                    measure_cell(method, output, bs, manifest, log)
+                    aggregate()
             context.stop(identity)
             if profile:
                 export_profiles(method, launcher)

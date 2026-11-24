@@ -8,7 +8,7 @@
 - 官方参考及用户 LoopVQ fork main：d5d58c83fe5bc9a4ce470ae96c69b55f085e2977。
 - 本地 SGLang：loopspec-test，915e79f4ce7dc08e7e980987e0c8729f523eb74b；包含 v0.5.22 基线 baa9befa381511cd4d56f83980951e5a45fffc6d。
 - 用户新约定：LoopVQ 的 origin 使用 git@github.com:Rancy-Wang/LoopVQ.git，test 用于开发/提交/push/pull；main 只作正式版本，晋升需明确批准。保留 mscheong01/LoopVQ 为 upstream。SGLang 仍仅通过 Rancy-Wang/sglang 的 loopspec-test 开发和远端同步，正式 loopspec 分支不变。
-- 统一候选轮次 **14/20（用户于2026-11-24明确追加10轮；推理数学保持候选6）**。本任务的训练/评测脚本及推理代码候选修改加验证累计计数；跨阶段不重置，固定候选多项测试不重复计数。只读调查、写计划、纯环境准备不伪计代码轮次。
+- 统一候选轮次 **15/20（用户于2026-11-24明确追加10轮；推理数学保持候选6）**。本任务的训练/评测脚本及推理代码候选修改加验证累计计数；跨阶段不重置，固定候选多项测试不重复计数。只读调查、写计划、纯环境准备不伪计代码轮次。
 - 主范围：Ouro-2.6B-Thinking、完整 R4，BF16 对照和纯 LoopVQ **0.5 bit（G16/c4）**。原计划0.25 bit移至后续，不在首期训练或评测。不运行 TaSQ 统计、TaSQ/TaSQ+LoopVQ。CQ可作后续附加对照，未列为必需工作。保留微调前码本用于诊断。
 - 用户验收口径：不要求跨机器答案或论文分数完全一致；必须记录真实准确率、差异和运行条件。吞吐是必需交付：bs=1/2/4/8/16分别与同机无LoopVQ的BF16普通AR比较。工程正确性测试不因容许采样差异而放宽。
 - 首期运行：TP/PP/DP=1，普通多请求 AR server，验证 eager 和 decode CUDA graph；按参考评测关闭 radix cache、chunked prefill 和 piecewise graph。显式禁止与 LoopSpec、DFLASH、recurrent-CDB 混用；关闭 LoopVQ 时现有功能必须回归通过。
@@ -692,3 +692,45 @@ Six-part plan: (1) remove redundant stop and continue completed work safely; (2)
 New evidence justifies this additional diagnostic: BF16 out8192/bs4 node trace reports cudaGraphLaunch CPU mean10.268ms, much larger than an ordinary graph submission. Node trace gaps therefore cannot be equated with unprofiled scheduling loss. BF16 first bs1 capture also shows per-graph kernel sums43.5ms for four graphs, falling to37.6ms; retain this transient, do not silently discard it or attribute it to model changes.
 
 Six-part plan: (1) distinguish graph-execution time and scheduling gaps with lower instrumentation overhead; (2) separate graph-only Nsight runs, fixed2K input/8192 output, bs4, four automatic eight-step ranges near1K/2K/4K/8K output; then unprofiled matrix; (3) optional graph_trace argument in context launcher and new light_decode_timeline.py, no inference changes; (4) four runtime-correlated graph ranges per method,8–9 complete graph records/range, same GPU/input/config, explicitly separate from node kernel breakdown and primary throughput; (5) graph tracing still perturbs timing, CPU waits overlap GPU, never add them; (6) schema checked against prior successful light SQLite, validate parser on its511 captured graphs, static checks, tmux execution and source/ownership verification. Keep ongoing candidate13 node run and its source provenance intact; queue lightweight pass after it and before primary timing. No completed node profiles are rerun.
+
+
+### Candidate15/20: temporally adjacent throughput pairs
+
+Six-part plan: (1) reduce multi-hour separation between BF16 and VQ at a given output length, making pairs available progressively; (2) timing loop orders output length outermost, then BF16/VQ, then batches; (3) only decode_sweep.run timing orchestration and record, no metrics/profiler/inference changes; (4) same40 cells, same capacity policy,2x32-token warmups and3 full measured outputs per feasible cell, same GPU, exact inputs and decode barriers; (5) eight rather than two server starts add untimed setup work, estimated minutes; (6) syntax/diff checks and verify first paired output-length group plus automatic complete-matrix checks. No completed timing cell is rerun: formal unprofiled timing has not started. Current node and graph-only profiling runs keep their loaded source and are not restarted.
+
+
+### 新口径逐内核 profile：完成，非正式吞吐加速比
+
+Candidate13 recovery exit0，16个采样区间全部导出；每段8个完整decode graph，每graph772个norm/192个attention slot。四个真实请求均为固定2048输入、8192输出、ignore_eos，bs1/4各两臂。采样位置靠近新增输出1K/2K/4K/8K（最后一次阈值8160），可见历史约3K/4K/6K/10K。以下单位为每个batch decode步的GPU kernel累计毫秒，包含四个loop，排除prefill；**不是端到端时间，也不是无profiler吞吐倍率**。
+
+| bs | 输出采样位置 | BF16 attention | VQ quant | HP | merge+LSE reset | VQ attention总计 | BF16全部graph kernels | VQ全部graph kernels |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 1K | 8.706 | 7.123 | 1.487 | 1.013 | 9.623 | 40.683 | 41.454 |
+| 1 | 2K | 9.987 | 7.177 | 1.379 | 0.909 | 9.466 | 39.562 | 39.152 |
+| 1 | 4K | 13.825 | 9.071 | 1.385 | 0.909 | 11.364 | 43.357 | 41.027 |
+| 1 | 8K | 21.527 | 12.668 | 1.393 | 0.916 | 14.977 | 51.075 | 44.617 |
+| 4 | 1K | 17.880 | 14.600 | 1.570 | 0.948 | 17.119 | 48.122 | 47.862 |
+| 4 | 2K | 22.683 | 18.201 | 1.591 | 0.980 | 20.772 | 52.968 | 51.520 |
+| 4 | 4K | 32.505 | 24.606 | 1.621 | 1.018 | 27.245 | 62.716 | 57.900 |
+| 4 | 8K | 50.963 | 36.517 | 1.626 | 1.042 | 39.185 | 81.084 | 69.809 |
+
+已能确认的时间来源：
+- bs1、输出约1K时，VQ attention多0.917ms；quant部分的节省不足以覆盖HP与合并。首段采样有transient，不能据它的几个百分点作精确的无profiler结论。
+- bs4、输出约1K时，attention只省0.762ms，非attention kernel多约0.501ms，GPU内净收益仅0.260ms；很小的额外调度成本就能抵消它。
+- 到输出约8K时，attention分别省6.550ms（bs1）和11.778ms（bs4）。四个loop的共同模型工作仍约30ms，因此attention收益被公共成本稀释；KV压缩倍数不是整模型加速倍数。
+- 输出约8K的GPU encoder平均仅0.0415ms/步（bs1）和0.0888ms/步（bs4），每个8步采样只有一次K/V flush共2个_encode kernel；metadata也很小。不能把主要损失归为“每步编码太慢”。GPU编码时间与CPU规划/同步成本必须分开。
+- bs4的非attention增量约0.44–0.50ms，8K样本主要来自同形GEMM的时间差（gate_up约+0.332ms、O projection约+0.145ms）。两臂这些模型算子的源码相同，不能把此差值说成VQ更改了MLP算法；cache/clock/layout等原因尚未做单变量证明。
+- node trace会显著放大cudaGraphLaunch的CPU时间（BF16 8K/bs4约10.27ms/call）；其CPU等待与GPU工作重叠，不能加总。Candidate14 graph-only时间线用于交叉核对，最终吞吐仍由无profiler的三次长输出测量决定。
+
+8K输出位置、bs4，逐loop GPU拆分（ms/step）：
+
+| loop | BF16 attention | VQ quant | HP | merge+reset | VQ其余kernel | BF16该loop合计 | VQ该loop合计 |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 12.756 | 9.162 | 0.407 | 0.261 | 7.678 | 20.286 | 17.509 |
+| 2 | 12.723 | 9.119 | 0.407 | 0.260 | 7.601 | 20.205 | 17.387 |
+| 3 | 12.739 | 9.118 | 0.406 | 0.260 | 7.604 | 20.222 | 17.388 |
+| 4 | 12.745 | 9.118 | 0.406 | 0.260 | 7.602 | 20.230 | 17.386 |
+
+Embedding/LM-head等graph内但loop外的kernel另约0.14ms，未硬塞到某个loop。所有loop/类别加总与graph kernel总量已核对。完整13类步骤见 `evidence/a10/decode-20261124/node-profile-per-loop.csv`；对照JSON/CSV、逐段原始统计、进程manifest、实际prompt IDs及原始trace SHA256均在同目录。大型SQLite/nsys-rep留A10 results/decode-20261124-r12。图 `decode-kernel-breakdown.png/.pdf` 已渲染检查，误差线保留每段8步的范围。
+
+开发HEAD相对feba还有候选8的allocator trait修补（3文件、5增3删），本次冻结性能服务未应用它；不能把开发HEAD冒充已运行推理SHA。本轮所有新增代码均为实验工具。旧64+256/2K+512的E2E加速比不能替代用户现在要求的8+64、固定2K输入、纯decode结果。

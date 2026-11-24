@@ -1,0 +1,9 @@
+{
+  "status": "completed",
+  "started_unix": 1795490719.5479043,
+  "inference_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+  "helper_sha256": "af713c63777ee7231c8dba82ef3cb68b51724f3a1453d6d0c1c15648a1be846e",
+  "prior_failure": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/decode-20261124-r12/profile-status.json",
+  "ended_unix": 1795492300.898406,
+  "gpu_released": true
+}

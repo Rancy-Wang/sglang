@@ -1,0 +1,1730 @@
+{
+  "phase": "profile",
+  "number": 1,
+  "started_unix": 1795490098.0304053,
+  "status": "ok",
+  "server_log_start_offset": 36156,
+  "output_tokens": 8192,
+  "input_tokens": 2048,
+  "e2e_seconds": 359.63494908064604,
+  "e2e_output_tokens_s": 22.778653801421818,
+  "overall_input_output_tokens_s": 28.473317251777274,
+  "server_decode_seconds": null,
+  "server_decode_tokens_s": null,
+  "server_prefill_seconds": null,
+  "timing_note": "TTFT/TPOT use client SSE arrival times; server decode/prefill timing is unavailable",
+  "requests": [
+    {
+      "completion_tokens": 8192,
+      "first_chunk_seconds": 0.6851888298988342,
+      "first_chunk_tokens": 1,
+      "last_token_seconds": 359.6348684206605,
+      "finish_reason": {
+        "type": "length",
+        "length": 8192
+      },
+      "prompt_tokens": 2048,
+      "client_ttft_seconds": 0.6851888298988342,
+      "client_tpot_seconds": 0.04382244897946059
+    }
+  ],
+  "gpu": {
+    "samples": [
+      {
+        "time_unix": 1795490098.0300877,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490099.121129,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490100.2131422,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490101.305839,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490102.413951,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490103.5033903,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490104.596012,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490105.6880283,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490106.7767837,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490107.8689933,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490108.959274,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490110.0556624,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490111.1516335,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490112.2449267,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490113.3358572,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490114.4341016,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490115.5360913,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490116.6274316,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490117.7320464,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490118.8323317,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490119.9234364,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490121.02116,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490122.1135807,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490123.2034683,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490124.2963924,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490125.3854015,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490126.4767592,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490127.5775332,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490128.665776,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490129.760554,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490130.8523927,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490131.9447002,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490133.043952,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490134.1336813,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490135.2704782,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 0.0
+      },
+      {
+        "time_unix": 1795490136.4149613,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 0.0
+      },
+      {
+        "time_unix": 1795490137.5087695,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 0.0
+      },
+      {
+        "time_unix": 1795490138.6047034,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 0.0
+      },
+      {
+        "time_unix": 1795490139.6926794,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 0.0
+      },
+      {
+        "time_unix": 1795490140.7851343,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490141.933118,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490143.022293,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490144.114272,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490145.2140849,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490146.3036244,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490147.431217,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490148.5211182,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490149.6126888,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490150.7113423,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490151.8024688,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490152.8933885,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490153.9851632,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490155.0754614,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490156.1703303,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490157.2632878,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490158.3541713,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490159.4519036,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490160.5444903,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490161.6353276,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490162.744355,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490163.8351114,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490164.9277775,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490166.0227757,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490167.113775,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490168.2155652,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490169.3049543,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490170.394423,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490171.4899044,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490172.580241,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490173.670624,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490174.7748058,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490175.8679569,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490176.9583504,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490178.0478644,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 54.0
+      },
+      {
+        "time_unix": 1795490179.145514,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 0.0
+      },
+      {
+        "time_unix": 1795490180.2468798,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 0.0
+      },
+      {
+        "time_unix": 1795490181.3468347,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 0.0
+      },
+      {
+        "time_unix": 1795490182.439728,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490183.5327332,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490184.627581,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490185.724533,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490186.8149803,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490187.907309,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490188.9988623,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490190.0885258,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490191.1792693,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490192.3012857,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490193.39257,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490194.4807243,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490195.5713892,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490196.6603868,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490197.768553,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490198.8593698,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490199.9496574,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490201.0382912,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490202.1307433,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490203.2221773,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490204.3138812,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490205.408802,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490206.5003903,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490207.6134346,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490208.7051113,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490209.7979681,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490210.8966668,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490211.9863708,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490213.0788908,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490214.1691167,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490215.2682624,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490216.3620756,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490217.45429,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490218.5431213,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490219.6312108,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490220.7249274,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490221.815423,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490222.9062088,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490223.9956381,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490225.0871546,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490226.1852756,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490227.2873635,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490228.3785372,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490229.4697752,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490230.5612628,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490231.6536546,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490232.7541678,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490233.8473244,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490234.9405227,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490236.0312312,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490237.1258035,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490238.2182572,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490239.310043,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490240.4023592,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490241.4937372,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490242.5886464,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490243.679674,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490244.7837753,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490245.8755844,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490246.9700544,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490248.0615158,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490249.1516037,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490250.2585464,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490251.3502548,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490252.4845665,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490253.574379,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490254.667677,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490255.761015,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490256.8610554,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490257.9541197,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490259.0458086,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490260.136198,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490261.2289603,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490262.3312678,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490263.4237943,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 21.0
+      },
+      {
+        "time_unix": 1795490264.5159612,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 0.0
+      },
+      {
+        "time_unix": 1795490265.6057484,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 0.0
+      },
+      {
+        "time_unix": 1795490266.6989412,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 0.0
+      },
+      {
+        "time_unix": 1795490267.798577,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490268.8895319,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490269.984376,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490271.074694,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490272.171065,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490273.261084,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490274.3687084,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490275.4626398,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490276.5518966,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490277.6430566,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490278.73459,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490279.831034,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490280.9249017,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490282.020139,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490283.1130002,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490284.2045755,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490285.306504,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490286.397061,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490287.4890554,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490288.5788465,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490289.6758778,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490290.7690864,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490291.867,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490292.9589968,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490294.048809,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490295.1389244,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490296.2332263,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490297.3498628,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490298.4397914,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490299.5321107,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490300.6234493,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490301.7131116,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490302.8049893,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490303.89495,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490304.9863636,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490306.0772498,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490307.1746693,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490308.2669492,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490309.3773484,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490310.4696734,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490311.5668917,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490312.669912,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490313.7633636,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490314.8686912,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490315.9592342,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490317.0503387,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490318.142251,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490319.2358055,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490320.3311255,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490321.421798,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490322.5163512,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490323.606528,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490324.7048078,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490325.7953258,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490326.8957076,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490327.9885402,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490329.0784452,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490330.1693778,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490331.2645586,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490332.3591182,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490333.4500604,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490334.5461342,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490335.6375647,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490336.727645,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490337.8186953,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490338.9083688,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490340.0037518,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490341.0970273,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490342.2047634,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490343.2987509,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490344.399307,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490345.488048,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490346.5778022,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490347.668767,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490348.7585688,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490349.8513129,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490350.9439564,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490352.0355463,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490353.127386,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490354.217737,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490355.3074782,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490356.4187179,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490357.5262973,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490358.620272,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490359.7133532,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490360.8096778,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490361.9127996,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490363.0055232,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490364.0982316,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490365.1925905,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490366.282717,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490367.3809996,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490368.4743464,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490369.5647588,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490370.6563184,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490371.747868,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490372.840846,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490373.952003,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490375.0421777,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490376.139535,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490377.2314262,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490378.324787,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490379.423678,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490380.5200803,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490381.6097126,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490382.705928,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490383.7979746,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490384.8943825,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490385.9872708,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490387.0789187,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490388.1708987,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490389.2646513,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490390.3555882,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490391.4592907,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490392.5511265,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490393.640086,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490394.7320838,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490395.822103,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490396.9224043,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490398.01468,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490399.1062205,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490400.2010107,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490401.2950075,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490402.4194868,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490403.517462,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490404.62632,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490405.7223494,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490406.8175023,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490407.9063911,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490409.0064816,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490410.0994422,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490411.192723,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490412.2823853,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490413.372603,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490414.4719012,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490415.5630236,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490416.6525226,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490417.7569704,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490418.8472192,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490419.941111,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490421.037262,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490422.1316273,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490423.2251582,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490424.3163757,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490425.4082437,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490426.5020208,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490427.5932612,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490428.6864855,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490429.7786098,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490430.8679895,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490431.9663758,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490433.0594857,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490434.152399,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490435.2446465,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490436.3435783,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490437.4363868,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490438.5433018,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490439.6331651,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490440.7246766,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490441.8158507,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490442.9061365,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490444.0087948,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490445.1009183,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490446.1959245,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490447.3023224,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490448.3922625,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490449.491844,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490450.5822394,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490451.6724257,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490452.764291,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490453.855204,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490454.944721,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 0.0
+      },
+      {
+        "time_unix": 1795490456.05477,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 0.0
+      },
+      {
+        "time_unix": 1795490457.1460047,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      },
+      {
+        "time_unix": 1795490457.7715127,
+        "memory_used_mib": 69998.0,
+        "utilization_percent": 100.0
+      }
+    ],
+    "errors": [],
+    "sampled_peak_device_memory_mib": 69998.0,
+    "note": "Whole-device sampled usage, not allocator peak or exclusive process memory"
+  },
+  "server_log_end_offset": 1274723,
+  "batch_evidence": {
+    "verified": true,
+    "reasons": [],
+    "source": "scheduler report_decode_stats: len(batch.reqs), ordinary AR, decode_log_interval=1",
+    "decode_records": 8191,
+    "active_batch_counts": {
+      "1": 8191
+    },
+    "target_batch_fraction": 1.0,
+    "longest_target_batch_streak": 8191,
+    "cuda_graph_true_records": 8191,
+    "cuda_graph_unknown_records": 0,
+    "graph_padding_at_target_bs": 0,
+    "decode_graph_backend": "full",
+    "canonical_capture_bs": [
+      1,
+      2,
+      4,
+      8,
+      16
+    ],
+    "actual_capture_evidence": {
+      "capture_bs": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "source": "target decode runner.capture_bs startup log",
+      "line": "[2026-11-24 03:14:39] Capture target decode CUDA graph end. bs=[1, 2, 4, 8, 16], elapsed=5.17 s, mem usage=0.30 GB, avail mem=11.06 GB.",
+      "byte_offset": 23091
+    },
+    "retraction_log_lines": [],
+    "criteria": {
+      "min_target_fraction": 0.9,
+      "min_target_streak": 8,
+      "min_decode_records": 8190
+    }
+  },
+  "ended_unix": 1795490458.0263467
+}
