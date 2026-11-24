@@ -67,7 +67,7 @@ def main(args):
     assert len(args.cards.split(','))==2 and not gpu('pid','compute-apps')
     with socket.socket() as sock: sock.bind(('127.0.0.1',args.port))
     url = 'http://127.0.0.1:'+str(args.port)
-    official = args.stack == 'official'
+    official = args.stack in ('official','official-bf16')
     repo = OFFICIAL if official else (args.port_repo or HERE.parents[3]).resolve()
     python = str(Path.home()/'anaconda3/envs/loopvq-reference-serve/bin/python') if official else os.environ['LOOPVQ_PYTHON']
     env = dict(os.environ,CUDA_VISIBLE_DEVICES=args.cards,PYTHONPATH=str(repo/'python'),TORCH_CUDA_ARCH_LIST='8.0',MAX_JOBS='3')
@@ -76,7 +76,10 @@ def main(args):
         for key in ('LD_LIBRARY_PATH','CUDA_HOME','VIRTUAL_ENV','SGLANG_CACHE_DIR','SGLANG_JIT_CACHE_DIR','TORCH_EXTENSIONS_DIR','TRITON_CACHE_DIR','PYTORCH_CUDA_ALLOC_CONF'):
             env.pop(key,None)
         env.update(PATH=str(Path(python).parent)+':'+os.defpath+':/usr/local/bin',TP='2',PREFIX_TOKENS='8',RECENT_TOKENS='64',MAX_TOKENS='172032',PREFILL_BACKEND='triton',SERVE_PYTHON=python)
-        command = ['bash',str(repo/'scripts/serve_method.sh'),str(MODEL),'vq',str(BUNDLE),*common,'--cuda-graph-bs','1','2','4','8','16','--disable-piecewise-cuda-graph']
+        method = 'bf16' if args.stack == 'official-bf16' else 'vq'
+        if method == 'bf16':
+            env.pop('MAX_TOKENS')
+        command = ['bash',str(repo/'scripts/serve_method.sh'),str(MODEL),method,str(BUNDLE),*common,'--cuda-graph-bs','1','2','4','8','16','--disable-piecewise-cuda-graph']
     else:
         command = [python,'-m','sglang.launch_server','--tp-size','2','--model-path',str(MODEL),'--trust-remote-code','--host','127.0.0.1','--attention-backend','triton','--sampling-backend','pytorch','--max-running-requests','16','--disable-radix-cache','--cuda-graph-backend-decode','full','--cuda-graph-bs-decode','1','2','4','8','16','--cuda-graph-backend-prefill','disabled','--ouro-decode-profile','optimized','--triton-attention-num-kv-splits','48','--loopvq-codebook-dir',str(BUNDLE),'--loopvq-prefix-tokens','8','--loopvq-recent-tokens','64','--max-total-tokens','172032',*common]
         if args.stack == 'bf16':
@@ -90,11 +93,21 @@ def main(args):
     for binary in ('g++','c++'):
         (tools/binary).symlink_to(compiler)
     env.update(CXX=compiler, PATH=str(tools)+os.pathsep+env['PATH'])
-    if args.mode == 'eager':
+    if args.mode in ('eager','audit'):
         if official:
             command.append('--disable-cuda-graph')
         else:
             command[command.index('--cuda-graph-backend-decode')+1] = 'disabled'
+    if args.mode == 'audit':
+        env['PYTHONPATH'] += os.pathsep + str(HERE)
+        modules = {'projection': 'model.layers.0.self_attn.qkv_proj',
+                   'attention': 'model.layers.0.self_attn.attn.0',
+                   'activation': 'model.layers.0.mlp.act_fn',
+                   'logits': 'logits_processor'}
+        specs = [dict(name=name, target_modules=[module],
+                      hook_factory='alignment_tensor_hook:make_hook',
+                      config=dict(stage=name, root=str(root))) for name, module in modules.items()]
+        command.extend(['--forward-hooks', json.dumps(specs)])
     profile = args.mode != 'timing'
     if args.mode in ('trace', 'light'):
         temp = Path('/tmp')/f'loopvq-nsys-{os.getuid()}'
@@ -145,10 +158,16 @@ def main(args):
         bench.atomic_json(root/'rank-pids.json',ranks)
         probe = {'input_ids': inputs[0], 'return_logprob': True, 'top_logprobs_num': 3,
                  'sampling_params': {'temperature': 0, 'ignore_eos': True, 'max_new_tokens': 16}}
+        if args.mode == 'audit':
+            (root/'armed').touch()
         with request(url+'/generate', probe, 180) as response:
             answer = json.load(response)
         assert len(answer['output_ids']) == 16
         bench.atomic_json(root/'greedy-probe.json', answer)
+        if args.mode == 'audit':
+            assert all((root/f'rank-{rank}.pt').stat().st_size > 0 for rank in range(2))
+            bench.atomic_json(root/'complete.json', {'output_ids': answer['output_ids']})
+            return
         if args.mode in ('probe','eager'):
             # Force asynchronous cancellation of our own live request. A fresh
             # request must see exactly the same greedy output after slab reuse.
@@ -221,8 +240,8 @@ def main(args):
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('run')
-    parser.add_argument('mode', choices=['timing','trace','light','native','probe','eager'])
-    parser.add_argument('stack', choices=['official','port','bf16'])
+    parser.add_argument('mode', choices=['timing','trace','light','native','probe','eager','audit'])
+    parser.add_argument('stack', choices=['official','port','bf16','official-bf16'])
     parser.add_argument('cards')
     parser.add_argument('port', type=int)
     parser.add_argument('--port-repo', type=Path)
