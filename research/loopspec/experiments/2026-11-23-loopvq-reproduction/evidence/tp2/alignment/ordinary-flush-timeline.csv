@@ -1,0 +1,46 @@
+rank,step,phase,track,event,start_ms,end_ms
+0,5,flush,GPU graph,current graph,0.0,29.426707
+0,5,flush,GPU graph,next graph,29.895792,58.10414
+0,5,flush,Python NVTX,sglang.srt.managers.scheduler.Scheduler.process_batch_result,-29.39709,0.479496
+0,5,flush,Python NVTX,sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run,0.802215,2.281961
+0,5,flush,Python NVTX,sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode,0.835405,2.213761
+0,5,flush,Python NVTX,sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent,0.847495,1.132904
+0,5,flush,Python NVTX,sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_quant,1.137944,1.274074
+0,5,flush,Python NVTX,sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward,1.667113,1.706922
+0,5,flush,Python NVTX,sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.vq_flush_k,1.709513,1.814002
+0,5,flush,Python NVTX,sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.vq_flush_v,1.816562,1.892742
+0,5,flush,Python NVTX,sglang.srt.managers.scheduler.Scheduler.run_batch,2.290351,4.480066
+0,5,flush,Python NVTX,sglang.srt.managers.scheduler.Scheduler.process_batch_result,4.515046,30.395571
+0,5,flush,CPU CUDA API,cudaStreamWaitEvent_v3020,1.698553,1.700942
+0,5,flush,CPU CUDA API,cudaMemcpyAsync_v3020,1.950862,1.968622
+0,5,flush,CPU CUDA API,cudaMemcpyAsync_v3020,2.016542,2.026252
+0,5,flush,CPU CUDA API,cudaMemcpyAsync_v3020,2.069301,2.077901
+0,5,flush,CPU CUDA API,cudaMemcpyAsync_v3020,2.119692,2.128471
+0,5,flush,CPU CUDA API,cudaStreamWaitEvent_v3020,2.341911,2.343901
+0,5,flush,CPU CUDA API,cudaGraphLaunch_v10000,3.051109,4.041387
+0,5,flush,CPU CUDA API,cudaStreamWaitEvent_v3020,4.313176,4.315136
+0,5,flush,CPU CUDA API,cudaMemcpyAsync_v3020,4.390036,4.402046
+0,5,flush,CPU CUDA API,cudaStreamWaitEvent_v3020,4.490215,4.492586
+0,5,flush,CPU CUDA API,cudaEventSynchronize_v3020,4.527215,29.826862
+0,5,flush,GPU memcpy,32 bytes kind 2,29.815377,29.818033
+0,5,flush,GPU memcpy,32 bytes kind 8,29.819696,29.82216
+0,5,flush,GPU memcpy,32 bytes kind 8,29.82648,29.8284
+0,5,flush,GPU memcpy,32 bytes kind 8,29.832816,29.834736
+0,5,flush,GPU memcpy,32 bytes kind 8,29.839216,29.841136
+0,6,ordinary,GPU graph,current graph,0.0,28.208348
+0,6,ordinary,GPU graph,next graph,28.288284,56.502488
+0,6,ordinary,Python NVTX,sglang.srt.managers.scheduler.Scheduler.process_batch_result,-25.380746,0.499779
+0,6,ordinary,Python NVTX,sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run,0.849188,1.363556
+0,6,ordinary,Python NVTX,sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode,0.881048,1.299347
+0,6,ordinary,Python NVTX,sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent,0.893008,1.175607
+0,6,ordinary,Python NVTX,sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward,1.180827,1.219117
+0,6,ordinary,Python NVTX,sglang.srt.managers.scheduler.Scheduler.run_batch,1.371396,3.641041
+0,6,ordinary,Python NVTX,sglang.srt.managers.scheduler.Scheduler.process_batch_result,3.686271,28.789768
+0,6,ordinary,CPU CUDA API,cudaStreamWaitEvent_v3020,1.210667,1.213127
+0,6,ordinary,CPU CUDA API,cudaStreamWaitEvent_v3020,1.420146,1.422096
+0,6,ordinary,CPU CUDA API,cudaGraphLaunch_v10000,2.152325,3.204202
+0,6,ordinary,CPU CUDA API,cudaStreamWaitEvent_v3020,3.474941,3.476921
+0,6,ordinary,CPU CUDA API,cudaMemcpyAsync_v3020,3.552341,3.564471
+0,6,ordinary,CPU CUDA API,cudaStreamWaitEvent_v3020,3.650971,3.653281
+0,6,ordinary,CPU CUDA API,cudaEventSynchronize_v3020,3.698911,28.258419
+0,6,ordinary,GPU memcpy,32 bytes kind 2,28.248572,28.250524

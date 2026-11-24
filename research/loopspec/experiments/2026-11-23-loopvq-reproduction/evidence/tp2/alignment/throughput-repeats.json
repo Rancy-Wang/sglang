@@ -1,0 +1,1670 @@
+[
+  {
+    "output_tokens": 1024,
+    "bs": 1,
+    "arm": "official",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-5a664f81-ad65-8947-c6c2-cbb7b4b50d4e",
+      "GPU-c078abcf-b59b-9999-9e5f-1c89b8ae654c"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "96aa6b1ca5c9b03fc3a40a1a0e6b2a6f1137c5164ab57a1173cdd96eed33abd5",
+    "path": "align-a12a/timing/official/out1024-bs1/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 45.054036321930234,
+    "rates": [
+      45.055410984633525,
+      45.054036321930234,
+      45.04043004458508
+    ]
+  },
+  {
+    "output_tokens": 1024,
+    "bs": 1,
+    "arm": "port",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-5a664f81-ad65-8947-c6c2-cbb7b4b50d4e",
+      "GPU-c078abcf-b59b-9999-9e5f-1c89b8ae654c"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "96aa6b1ca5c9b03fc3a40a1a0e6b2a6f1137c5164ab57a1173cdd96eed33abd5",
+    "path": "align-a12a/timing/port/out1024-bs1/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 47.11658823241623,
+    "rates": [
+      47.12203893736622,
+      47.11658823241623,
+      47.110429249085506
+    ]
+  },
+  {
+    "output_tokens": 1024,
+    "bs": 1,
+    "arm": "bf16",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-5a664f81-ad65-8947-c6c2-cbb7b4b50d4e",
+      "GPU-c078abcf-b59b-9999-9e5f-1c89b8ae654c"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "96aa6b1ca5c9b03fc3a40a1a0e6b2a6f1137c5164ab57a1173cdd96eed33abd5",
+    "path": "align-a12a/timing/bf16/out1024-bs1/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 46.54452306254171,
+    "rates": [
+      46.54452306254171,
+      46.54377463293261,
+      46.54484143356575
+    ]
+  },
+  {
+    "output_tokens": 1024,
+    "bs": 2,
+    "arm": "official",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-70859fd0-1839-71a2-2ad4-76f495f0d055",
+      "GPU-39c78864-d732-8bfa-43f0-8180d77e086c"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "20e2dd6f43179a8d8a89092c70cc9cc4f23e996bb8ee4820f9489733a64bf06b",
+    "path": "align-a12b/timing/official/out1024-bs2/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 78.88358671079095,
+    "rates": [
+      78.88358671079095,
+      78.88181733136733,
+      78.88575526833874
+    ]
+  },
+  {
+    "output_tokens": 1024,
+    "bs": 2,
+    "arm": "port",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-70859fd0-1839-71a2-2ad4-76f495f0d055",
+      "GPU-39c78864-d732-8bfa-43f0-8180d77e086c"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "20e2dd6f43179a8d8a89092c70cc9cc4f23e996bb8ee4820f9489733a64bf06b",
+    "path": "align-a12b/timing/port/out1024-bs2/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 84.43709360258836,
+    "rates": [
+      84.43709360258836,
+      84.4346714247579,
+      84.45499968371121
+    ]
+  },
+  {
+    "output_tokens": 1024,
+    "bs": 2,
+    "arm": "bf16",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-70859fd0-1839-71a2-2ad4-76f495f0d055",
+      "GPU-39c78864-d732-8bfa-43f0-8180d77e086c"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "20e2dd6f43179a8d8a89092c70cc9cc4f23e996bb8ee4820f9489733a64bf06b",
+    "path": "align-a12b/timing/bf16/out1024-bs2/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 88.39190183241219,
+    "rates": [
+      88.38205456501647,
+      88.39190183241219,
+      88.44506151990547
+    ]
+  },
+  {
+    "output_tokens": 1024,
+    "bs": 4,
+    "arm": "official",
+    "host": "a10.mit.edu",
+    "cards": [
+      "GPU-28724466-676c-013c-747a-ae88ed3f11ec",
+      "GPU-148b5edb-ba34-b6a7-fbdd-17480baea43f"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "47573797b1a6b95678ac42f119dce696be8e0afd7b0c01278d1636524e9b4253",
+    "path": "align-main/timing/official/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 132.57706969180677,
+    "rates": [
+      132.54412788215484,
+      132.57706969180677,
+      132.58757965721975
+    ]
+  },
+  {
+    "output_tokens": 1024,
+    "bs": 4,
+    "arm": "port",
+    "host": "a10.mit.edu",
+    "cards": [
+      "GPU-28724466-676c-013c-747a-ae88ed3f11ec",
+      "GPU-148b5edb-ba34-b6a7-fbdd-17480baea43f"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "47573797b1a6b95678ac42f119dce696be8e0afd7b0c01278d1636524e9b4253",
+    "path": "align-r24/timing/port/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 141.40177250116483,
+    "rates": [
+      141.40177250116483,
+      141.4100266935043,
+      141.38168111795557
+    ]
+  },
+  {
+    "output_tokens": 1024,
+    "bs": 4,
+    "arm": "bf16",
+    "host": "a10.mit.edu",
+    "cards": [
+      "GPU-28724466-676c-013c-747a-ae88ed3f11ec",
+      "GPU-148b5edb-ba34-b6a7-fbdd-17480baea43f"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "47573797b1a6b95678ac42f119dce696be8e0afd7b0c01278d1636524e9b4253",
+    "path": "align-main/timing/bf16/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 164.58800403251985,
+    "rates": [
+      164.58800403251985,
+      164.48127930367525,
+      164.78010858310597
+    ]
+  },
+  {
+    "output_tokens": 1024,
+    "bs": 8,
+    "arm": "official",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-0018860f-1a7d-12a8-fd44-1cb92a511fa0",
+      "GPU-dd758a5b-7f25-6e0d-84cf-1f58b217f9cf"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "616a0ca174643971a294c09a561806d73a108aa58617faa5e1615160d5585809",
+    "path": "align-a12d/timing/official/out1024-bs8/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 228.69710211767577,
+    "rates": [
+      228.6701952632949,
+      228.702982299271,
+      228.69710211767577
+    ]
+  },
+  {
+    "output_tokens": 1024,
+    "bs": 8,
+    "arm": "port",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-0018860f-1a7d-12a8-fd44-1cb92a511fa0",
+      "GPU-dd758a5b-7f25-6e0d-84cf-1f58b217f9cf"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "616a0ca174643971a294c09a561806d73a108aa58617faa5e1615160d5585809",
+    "path": "align-a12d/timing/port/out1024-bs8/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 244.64738988914547,
+    "rates": [
+      244.5735219021047,
+      244.65046547839947,
+      244.64738988914547
+    ]
+  },
+  {
+    "output_tokens": 1024,
+    "bs": 8,
+    "arm": "bf16",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-0018860f-1a7d-12a8-fd44-1cb92a511fa0",
+      "GPU-dd758a5b-7f25-6e0d-84cf-1f58b217f9cf"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "616a0ca174643971a294c09a561806d73a108aa58617faa5e1615160d5585809",
+    "path": "align-a12d/timing/bf16/out1024-bs8/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 249.39756845289662,
+    "rates": [
+      249.4457962886006,
+      249.39756845289662,
+      249.3104407637576
+    ]
+  },
+  {
+    "output_tokens": 1024,
+    "bs": 16,
+    "arm": "official",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-1264edf7-8c15-8b2e-b454-a4c38b2f1978",
+      "GPU-5c246b45-e69d-f105-7e30-c7a2d2b4f4c8"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "path": "align-a13b/timing/official/out1024-bs16/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 359.67961762396317,
+    "rates": [
+      359.67961762396317,
+      359.70291459880576,
+      359.6662641567504
+    ]
+  },
+  {
+    "output_tokens": 1024,
+    "bs": 16,
+    "arm": "port",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-1264edf7-8c15-8b2e-b454-a4c38b2f1978",
+      "GPU-5c246b45-e69d-f105-7e30-c7a2d2b4f4c8"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "path": "align-a13b/timing/port/out1024-bs16/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 382.7184681735117,
+    "rates": [
+      382.7184681735117,
+      382.70282611709086,
+      382.78460891178827
+    ]
+  },
+  {
+    "output_tokens": 1024,
+    "bs": 16,
+    "arm": "bf16",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-1264edf7-8c15-8b2e-b454-a4c38b2f1978",
+      "GPU-5c246b45-e69d-f105-7e30-c7a2d2b4f4c8"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "path": "align-a13b/timing/bf16/out1024-bs16/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 382.591108862465,
+    "rates": [
+      382.58703548227084,
+      383.0210108171537,
+      382.591108862465
+    ]
+  },
+  {
+    "output_tokens": 2048,
+    "bs": 1,
+    "arm": "official",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-25a02b46-4353-43fa-acf3-62bedbd98cb6",
+      "GPU-77884f42-7b1e-cd9f-5040-d63776da5190"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "96aa6b1ca5c9b03fc3a40a1a0e6b2a6f1137c5164ab57a1173cdd96eed33abd5",
+    "path": "align-a12c/timing/official/out2048-bs1/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 43.45867187462679,
+    "rates": [
+      43.46008156574688,
+      43.45867187462679,
+      43.45063441741805
+    ]
+  },
+  {
+    "output_tokens": 2048,
+    "bs": 1,
+    "arm": "port",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-25a02b46-4353-43fa-acf3-62bedbd98cb6",
+      "GPU-77884f42-7b1e-cd9f-5040-d63776da5190"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "96aa6b1ca5c9b03fc3a40a1a0e6b2a6f1137c5164ab57a1173cdd96eed33abd5",
+    "path": "align-a12c/timing/port/out2048-bs1/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 45.54992414509548,
+    "rates": [
+      45.5422504629433,
+      45.55108186684457,
+      45.54992414509548
+    ]
+  },
+  {
+    "output_tokens": 2048,
+    "bs": 1,
+    "arm": "bf16",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-25a02b46-4353-43fa-acf3-62bedbd98cb6",
+      "GPU-77884f42-7b1e-cd9f-5040-d63776da5190"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "96aa6b1ca5c9b03fc3a40a1a0e6b2a6f1137c5164ab57a1173cdd96eed33abd5",
+    "path": "align-a12c/timing/bf16/out2048-bs1/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 44.94602473668786,
+    "rates": [
+      44.94254359827005,
+      44.94769028478462,
+      44.94602473668786
+    ]
+  },
+  {
+    "output_tokens": 2048,
+    "bs": 2,
+    "arm": "official",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-0018860f-1a7d-12a8-fd44-1cb92a511fa0",
+      "GPU-dd758a5b-7f25-6e0d-84cf-1f58b217f9cf"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "20e2dd6f43179a8d8a89092c70cc9cc4f23e996bb8ee4820f9489733a64bf06b",
+    "path": "align-a12d/timing/official/out2048-bs2/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 75.0701069919469,
+    "rates": [
+      75.05700152259531,
+      75.0701069919469,
+      75.07798032371164
+    ]
+  },
+  {
+    "output_tokens": 2048,
+    "bs": 2,
+    "arm": "port",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-0018860f-1a7d-12a8-fd44-1cb92a511fa0",
+      "GPU-dd758a5b-7f25-6e0d-84cf-1f58b217f9cf"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "20e2dd6f43179a8d8a89092c70cc9cc4f23e996bb8ee4820f9489733a64bf06b",
+    "path": "align-a12d/timing/port/out2048-bs2/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 80.25409362165874,
+    "rates": [
+      80.24175091347227,
+      80.2569922122006,
+      80.25409362165874
+    ]
+  },
+  {
+    "output_tokens": 2048,
+    "bs": 2,
+    "arm": "bf16",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-0018860f-1a7d-12a8-fd44-1cb92a511fa0",
+      "GPU-dd758a5b-7f25-6e0d-84cf-1f58b217f9cf"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "20e2dd6f43179a8d8a89092c70cc9cc4f23e996bb8ee4820f9489733a64bf06b",
+    "path": "align-a12d/timing/bf16/out2048-bs2/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 84.69809949532808,
+    "rates": [
+      84.7080902758671,
+      84.69809949532808,
+      84.67193496283865
+    ]
+  },
+  {
+    "output_tokens": 2048,
+    "bs": 4,
+    "arm": "official",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-16632623-0b5c-85fd-e6c4-8b7be50f1906",
+      "GPU-9fea3133-209f-8ce6-4d9b-b5a323f6318f"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "47573797b1a6b95678ac42f119dce696be8e0afd7b0c01278d1636524e9b4253",
+    "path": "align-a13d/timing/official/out2048-bs4/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 131.02609977839552,
+    "rates": [
+      131.01955537772105,
+      131.02609977839552,
+      131.03911356717722
+    ]
+  },
+  {
+    "output_tokens": 2048,
+    "bs": 4,
+    "arm": "port",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-16632623-0b5c-85fd-e6c4-8b7be50f1906",
+      "GPU-9fea3133-209f-8ce6-4d9b-b5a323f6318f"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "47573797b1a6b95678ac42f119dce696be8e0afd7b0c01278d1636524e9b4253",
+    "path": "align-a13d/timing/port/out2048-bs4/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 140.45710836458917,
+    "rates": [
+      140.45710836458917,
+      140.45915547023958,
+      140.45563124533115
+    ]
+  },
+  {
+    "output_tokens": 2048,
+    "bs": 4,
+    "arm": "bf16",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-16632623-0b5c-85fd-e6c4-8b7be50f1906",
+      "GPU-9fea3133-209f-8ce6-4d9b-b5a323f6318f"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "47573797b1a6b95678ac42f119dce696be8e0afd7b0c01278d1636524e9b4253",
+    "path": "align-a13d/timing/bf16/out2048-bs4/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 158.4372137229146,
+    "rates": [
+      158.34220961997835,
+      158.52657262941705,
+      158.4372137229146
+    ]
+  },
+  {
+    "output_tokens": 2048,
+    "bs": 8,
+    "arm": "official",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-1264edf7-8c15-8b2e-b454-a4c38b2f1978",
+      "GPU-5c246b45-e69d-f105-7e30-c7a2d2b4f4c8"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "616a0ca174643971a294c09a561806d73a108aa58617faa5e1615160d5585809",
+    "path": "align-a13b/timing/official/out2048-bs8/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 217.1434977184814,
+    "rates": [
+      217.1393539094863,
+      217.1434977184814,
+      217.1612510386449
+    ]
+  },
+  {
+    "output_tokens": 2048,
+    "bs": 8,
+    "arm": "port",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-1264edf7-8c15-8b2e-b454-a4c38b2f1978",
+      "GPU-5c246b45-e69d-f105-7e30-c7a2d2b4f4c8"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "616a0ca174643971a294c09a561806d73a108aa58617faa5e1615160d5585809",
+    "path": "align-a13b/timing/port/out2048-bs8/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 231.23788559658047,
+    "rates": [
+      231.1206943049913,
+      231.23788559658047,
+      231.24065211119878
+    ]
+  },
+  {
+    "output_tokens": 2048,
+    "bs": 8,
+    "arm": "bf16",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-1264edf7-8c15-8b2e-b454-a4c38b2f1978",
+      "GPU-5c246b45-e69d-f105-7e30-c7a2d2b4f4c8"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "616a0ca174643971a294c09a561806d73a108aa58617faa5e1615160d5585809",
+    "path": "align-a13b/timing/bf16/out2048-bs8/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 233.12278576210187,
+    "rates": [
+      233.12278576210187,
+      233.1351910020032,
+      232.8338591836039
+    ]
+  },
+  {
+    "output_tokens": 2048,
+    "bs": 16,
+    "arm": "official",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-ed8ecaa8-e2c4-e1a2-f2ab-31ea2406b5f5",
+      "GPU-59f5ff86-90f7-34a8-f400-c047533e8548"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "path": "align-a13c/timing/official/out2048-bs16/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 321.64668742096495,
+    "rates": [
+      321.6554144227295,
+      321.64668742096495,
+      321.63119477842196
+    ]
+  },
+  {
+    "output_tokens": 2048,
+    "bs": 16,
+    "arm": "port",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-ed8ecaa8-e2c4-e1a2-f2ab-31ea2406b5f5",
+      "GPU-59f5ff86-90f7-34a8-f400-c047533e8548"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "path": "align-a13c/timing/port/out2048-bs16/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 340.7177071680592,
+    "rates": [
+      340.7177071680592,
+      340.7059775391436,
+      340.7397468175301
+    ]
+  },
+  {
+    "output_tokens": 2048,
+    "bs": 16,
+    "arm": "bf16",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-ed8ecaa8-e2c4-e1a2-f2ab-31ea2406b5f5",
+      "GPU-59f5ff86-90f7-34a8-f400-c047533e8548"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "path": "align-a13c/timing/bf16/out2048-bs16/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 351.02079318932334,
+    "rates": [
+      350.7108412861845,
+      351.53302265061194,
+      351.02079318932334
+    ]
+  },
+  {
+    "output_tokens": 4096,
+    "bs": 1,
+    "arm": "official",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-16632623-0b5c-85fd-e6c4-8b7be50f1906",
+      "GPU-9fea3133-209f-8ce6-4d9b-b5a323f6318f"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "96aa6b1ca5c9b03fc3a40a1a0e6b2a6f1137c5164ab57a1173cdd96eed33abd5",
+    "path": "align-a13d/timing/official/out4096-bs1/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 41.58819370054553,
+    "rates": [
+      41.582167992749724,
+      41.58895280641651,
+      41.58819370054553
+    ]
+  },
+  {
+    "output_tokens": 4096,
+    "bs": 1,
+    "arm": "port",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-16632623-0b5c-85fd-e6c4-8b7be50f1906",
+      "GPU-9fea3133-209f-8ce6-4d9b-b5a323f6318f"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "96aa6b1ca5c9b03fc3a40a1a0e6b2a6f1137c5164ab57a1173cdd96eed33abd5",
+    "path": "align-a13d/timing/port/out4096-bs1/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 43.51089987540728,
+    "rates": [
+      38.32000384229382,
+      43.51089987540728,
+      43.51297966141342
+    ]
+  },
+  {
+    "output_tokens": 4096,
+    "bs": 1,
+    "arm": "bf16",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-16632623-0b5c-85fd-e6c4-8b7be50f1906",
+      "GPU-9fea3133-209f-8ce6-4d9b-b5a323f6318f"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "96aa6b1ca5c9b03fc3a40a1a0e6b2a6f1137c5164ab57a1173cdd96eed33abd5",
+    "path": "align-a13d/timing/bf16/out4096-bs1/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 41.73667440591798,
+    "rates": [
+      41.735740911949115,
+      41.736811543303105,
+      41.73667440591798
+    ]
+  },
+  {
+    "output_tokens": 4096,
+    "bs": 2,
+    "arm": "official",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-ed8ecaa8-e2c4-e1a2-f2ab-31ea2406b5f5",
+      "GPU-59f5ff86-90f7-34a8-f400-c047533e8548"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "20e2dd6f43179a8d8a89092c70cc9cc4f23e996bb8ee4820f9489733a64bf06b",
+    "path": "align-a13c/timing/official/out4096-bs2/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 70.39592112159856,
+    "rates": [
+      70.37498046071471,
+      70.39592112159856,
+      70.42122130587126
+    ]
+  },
+  {
+    "output_tokens": 4096,
+    "bs": 2,
+    "arm": "port",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-ed8ecaa8-e2c4-e1a2-f2ab-31ea2406b5f5",
+      "GPU-59f5ff86-90f7-34a8-f400-c047533e8548"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "20e2dd6f43179a8d8a89092c70cc9cc4f23e996bb8ee4820f9489733a64bf06b",
+    "path": "align-a13c/timing/port/out4096-bs2/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 75.406723414848,
+    "rates": [
+      75.39522961942843,
+      75.41233228489308,
+      75.406723414848
+    ]
+  },
+  {
+    "output_tokens": 4096,
+    "bs": 2,
+    "arm": "bf16",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-ed8ecaa8-e2c4-e1a2-f2ab-31ea2406b5f5",
+      "GPU-59f5ff86-90f7-34a8-f400-c047533e8548"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "20e2dd6f43179a8d8a89092c70cc9cc4f23e996bb8ee4820f9489733a64bf06b",
+    "path": "align-a13c/timing/bf16/out4096-bs2/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 78.82146859878854,
+    "rates": [
+      78.82146859878854,
+      78.8270658516692,
+      78.74611343998122
+    ]
+  },
+  {
+    "output_tokens": 4096,
+    "bs": 4,
+    "arm": "official",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-1264edf7-8c15-8b2e-b454-a4c38b2f1978",
+      "GPU-5c246b45-e69d-f105-7e30-c7a2d2b4f4c8"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "47573797b1a6b95678ac42f119dce696be8e0afd7b0c01278d1636524e9b4253",
+    "path": "align-a13b/timing/official/out4096-bs4/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 125.59422815944875,
+    "rates": [
+      125.66930033313324,
+      125.56608837137934,
+      125.59422815944875
+    ]
+  },
+  {
+    "output_tokens": 4096,
+    "bs": 4,
+    "arm": "port",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-1264edf7-8c15-8b2e-b454-a4c38b2f1978",
+      "GPU-5c246b45-e69d-f105-7e30-c7a2d2b4f4c8"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "47573797b1a6b95678ac42f119dce696be8e0afd7b0c01278d1636524e9b4253",
+    "path": "align-a13b/timing/port/out4096-bs4/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 134.0021846452114,
+    "rates": [
+      133.99035507729783,
+      134.0021846452114,
+      134.0089939163726
+    ]
+  },
+  {
+    "output_tokens": 4096,
+    "bs": 4,
+    "arm": "bf16",
+    "host": "a13.mit.edu",
+    "cards": [
+      "GPU-1264edf7-8c15-8b2e-b454-a4c38b2f1978",
+      "GPU-5c246b45-e69d-f105-7e30-c7a2d2b4f4c8"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "47573797b1a6b95678ac42f119dce696be8e0afd7b0c01278d1636524e9b4253",
+    "path": "align-a13b/timing/bf16/out4096-bs4/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 144.68335195453312,
+    "rates": [
+      144.74162071329235,
+      144.68335195453312,
+      144.56608331921788
+    ]
+  },
+  {
+    "output_tokens": 4096,
+    "bs": 8,
+    "arm": "official",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-0018860f-1a7d-12a8-fd44-1cb92a511fa0",
+      "GPU-dd758a5b-7f25-6e0d-84cf-1f58b217f9cf"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "616a0ca174643971a294c09a561806d73a108aa58617faa5e1615160d5585809",
+    "path": "align-a12d/timing/official/out4096-bs8/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 198.99396295907826,
+    "rates": [
+      199.01548964492088,
+      198.99396295907826,
+      198.9634135294343
+    ]
+  },
+  {
+    "output_tokens": 4096,
+    "bs": 8,
+    "arm": "port",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-0018860f-1a7d-12a8-fd44-1cb92a511fa0",
+      "GPU-dd758a5b-7f25-6e0d-84cf-1f58b217f9cf"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "616a0ca174643971a294c09a561806d73a108aa58617faa5e1615160d5585809",
+    "path": "align-a12d/timing/port/out4096-bs8/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 211.1821462518847,
+    "rates": [
+      211.14293198399184,
+      211.20147929352075,
+      211.1821462518847
+    ]
+  },
+  {
+    "output_tokens": 4096,
+    "bs": 8,
+    "arm": "bf16",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-0018860f-1a7d-12a8-fd44-1cb92a511fa0",
+      "GPU-dd758a5b-7f25-6e0d-84cf-1f58b217f9cf"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "616a0ca174643971a294c09a561806d73a108aa58617faa5e1615160d5585809",
+    "path": "align-a12d/timing/bf16/out4096-bs8/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 204.23960954670665,
+    "rates": [
+      204.23960954670665,
+      204.32746609384367,
+      204.05116523749268
+    ]
+  },
+  {
+    "output_tokens": 4096,
+    "bs": 16,
+    "arm": "official",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-25a02b46-4353-43fa-acf3-62bedbd98cb6",
+      "GPU-77884f42-7b1e-cd9f-5040-d63776da5190"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "path": "align-a12c/timing/official/out4096-bs16/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 284.64069809475143,
+    "rates": [
+      284.6295597531691,
+      284.6503228219213,
+      284.64069809475143
+    ]
+  },
+  {
+    "output_tokens": 4096,
+    "bs": 16,
+    "arm": "port",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-25a02b46-4353-43fa-acf3-62bedbd98cb6",
+      "GPU-77884f42-7b1e-cd9f-5040-d63776da5190"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "path": "align-a12c/timing/port/out4096-bs16/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 299.8471248779091,
+    "rates": [
+      299.8023586122387,
+      299.8478677018743,
+      299.8471248779091
+    ]
+  },
+  {
+    "output_tokens": 4096,
+    "bs": 16,
+    "arm": "bf16",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-25a02b46-4353-43fa-acf3-62bedbd98cb6",
+      "GPU-77884f42-7b1e-cd9f-5040-d63776da5190"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": null,
+    "path": "align-a12c/timing/bf16/out4096-bs16/summary.json",
+    "status": "capacity_limited",
+    "capacity": 92432
+  },
+  {
+    "output_tokens": 8192,
+    "bs": 1,
+    "arm": "official",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-70859fd0-1839-71a2-2ad4-76f495f0d055",
+      "GPU-39c78864-d732-8bfa-43f0-8180d77e086c"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "96aa6b1ca5c9b03fc3a40a1a0e6b2a6f1137c5164ab57a1173cdd96eed33abd5",
+    "path": "align-a12b/timing/official/out8192-bs1/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 39.92448161262796,
+    "rates": [
+      39.92448161262796,
+      39.932266997529695,
+      39.92418021826274
+    ]
+  },
+  {
+    "output_tokens": 8192,
+    "bs": 1,
+    "arm": "port",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-70859fd0-1839-71a2-2ad4-76f495f0d055",
+      "GPU-39c78864-d732-8bfa-43f0-8180d77e086c"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "96aa6b1ca5c9b03fc3a40a1a0e6b2a6f1137c5164ab57a1173cdd96eed33abd5",
+    "path": "align-a12b/timing/port/out8192-bs1/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 41.36663682411632,
+    "rates": [
+      41.36152194464732,
+      41.37169994906594,
+      41.36663682411632
+    ]
+  },
+  {
+    "output_tokens": 8192,
+    "bs": 1,
+    "arm": "bf16",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-70859fd0-1839-71a2-2ad4-76f495f0d055",
+      "GPU-39c78864-d732-8bfa-43f0-8180d77e086c"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "96aa6b1ca5c9b03fc3a40a1a0e6b2a6f1137c5164ab57a1173cdd96eed33abd5",
+    "path": "align-a12b/timing/bf16/out8192-bs1/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 36.35098584852676,
+    "rates": [
+      36.3483617859649,
+      36.35417937779369,
+      36.35098584852676
+    ]
+  },
+  {
+    "output_tokens": 8192,
+    "bs": 2,
+    "arm": "official",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-5a664f81-ad65-8947-c6c2-cbb7b4b50d4e",
+      "GPU-c078abcf-b59b-9999-9e5f-1c89b8ae654c"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "20e2dd6f43179a8d8a89092c70cc9cc4f23e996bb8ee4820f9489733a64bf06b",
+    "path": "align-a12a/timing/official/out8192-bs2/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 66.91952869428336,
+    "rates": [
+      66.91766546405489,
+      66.91952869428336,
+      66.92899716517988
+    ]
+  },
+  {
+    "output_tokens": 8192,
+    "bs": 2,
+    "arm": "port",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-5a664f81-ad65-8947-c6c2-cbb7b4b50d4e",
+      "GPU-c078abcf-b59b-9999-9e5f-1c89b8ae654c"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "20e2dd6f43179a8d8a89092c70cc9cc4f23e996bb8ee4820f9489733a64bf06b",
+    "path": "align-a12a/timing/port/out8192-bs2/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 71.15770047668354,
+    "rates": [
+      71.14758961490446,
+      71.15770047668354,
+      71.15776319796197
+    ]
+  },
+  {
+    "output_tokens": 8192,
+    "bs": 2,
+    "arm": "bf16",
+    "host": "a12.mit.edu",
+    "cards": [
+      "GPU-5a664f81-ad65-8947-c6c2-cbb7b4b50d4e",
+      "GPU-c078abcf-b59b-9999-9e5f-1c89b8ae654c"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "20e2dd6f43179a8d8a89092c70cc9cc4f23e996bb8ee4820f9489733a64bf06b",
+    "path": "align-a12a/timing/bf16/out8192-bs2/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 68.56229868744383,
+    "rates": [
+      68.59160571218611,
+      68.56229868744383,
+      68.41229220668566
+    ]
+  },
+  {
+    "output_tokens": 8192,
+    "bs": 4,
+    "arm": "official",
+    "host": "a10.mit.edu",
+    "cards": [
+      "GPU-cb6f61c7-9ca8-fe07-b00e-6f4b177a93e6",
+      "GPU-e6c98e24-0316-204b-2aa5-a657d5b7a113"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "47573797b1a6b95678ac42f119dce696be8e0afd7b0c01278d1636524e9b4253",
+    "path": "align-a10d/timing/official/out8192-bs4/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 113.87949747586579,
+    "rates": [
+      113.89710136954163,
+      113.87438129304148,
+      113.87949747586579
+    ]
+  },
+  {
+    "output_tokens": 8192,
+    "bs": 4,
+    "arm": "port",
+    "host": "a10.mit.edu",
+    "cards": [
+      "GPU-cb6f61c7-9ca8-fe07-b00e-6f4b177a93e6",
+      "GPU-e6c98e24-0316-204b-2aa5-a657d5b7a113"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "47573797b1a6b95678ac42f119dce696be8e0afd7b0c01278d1636524e9b4253",
+    "path": "align-a10d/timing/port/out8192-bs4/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 121.05627044431702,
+    "rates": [
+      121.0565945042388,
+      121.0499384539643,
+      121.05627044431702
+    ]
+  },
+  {
+    "output_tokens": 8192,
+    "bs": 4,
+    "arm": "bf16",
+    "host": "a10.mit.edu",
+    "cards": [
+      "GPU-cb6f61c7-9ca8-fe07-b00e-6f4b177a93e6",
+      "GPU-e6c98e24-0316-204b-2aa5-a657d5b7a113"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "47573797b1a6b95678ac42f119dce696be8e0afd7b0c01278d1636524e9b4253",
+    "path": "align-a10d/timing/bf16/out8192-bs4/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 123.24692599359496,
+    "rates": [
+      123.4958165208435,
+      123.24692599359496,
+      123.0534098935359
+    ]
+  },
+  {
+    "output_tokens": 8192,
+    "bs": 8,
+    "arm": "official",
+    "host": "a10.mit.edu",
+    "cards": [
+      "GPU-575dd5f1-b403-133c-30e6-0b044cde33d7",
+      "GPU-82009e07-07c1-3a6c-5613-df2e45f63980"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "616a0ca174643971a294c09a561806d73a108aa58617faa5e1615160d5585809",
+    "path": "align-a10c/timing/official/out8192-bs8/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 165.8198196938417,
+    "rates": [
+      165.8323033795722,
+      165.8198196938417,
+      165.81888981052575
+    ]
+  },
+  {
+    "output_tokens": 8192,
+    "bs": 8,
+    "arm": "port",
+    "host": "a10.mit.edu",
+    "cards": [
+      "GPU-575dd5f1-b403-133c-30e6-0b044cde33d7",
+      "GPU-82009e07-07c1-3a6c-5613-df2e45f63980"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "616a0ca174643971a294c09a561806d73a108aa58617faa5e1615160d5585809",
+    "path": "align-a10c/timing/port/out8192-bs8/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 174.34831831844508,
+    "rates": [
+      174.35572674781832,
+      174.34831831844508,
+      174.33248164770885
+    ]
+  },
+  {
+    "output_tokens": 8192,
+    "bs": 8,
+    "arm": "bf16",
+    "host": "a10.mit.edu",
+    "cards": [
+      "GPU-575dd5f1-b403-133c-30e6-0b044cde33d7",
+      "GPU-82009e07-07c1-3a6c-5613-df2e45f63980"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "616a0ca174643971a294c09a561806d73a108aa58617faa5e1615160d5585809",
+    "path": "align-a10c/timing/bf16/out8192-bs8/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 163.42147771420022,
+    "rates": [
+      163.7113021197311,
+      163.42147771420022,
+      162.99469951171838
+    ]
+  },
+  {
+    "output_tokens": 8192,
+    "bs": 16,
+    "arm": "official",
+    "host": "a10.mit.edu",
+    "cards": [
+      "GPU-7d4b6573-1ea1-7389-a083-e9eb003347cd",
+      "GPU-70c9272b-3d2a-e46d-bf9b-411e3f17870c"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "b5f821d5366cd1411cd9b58c69df9bdf7a66c908",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "path": "align-a10b-retry/timing/official/out8192-bs16/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 216.66716871688968,
+    "rates": [
+      216.69106755443127,
+      216.66588792005473,
+      216.66716871688968
+    ]
+  },
+  {
+    "output_tokens": 8192,
+    "bs": 16,
+    "arm": "port",
+    "host": "a10.mit.edu",
+    "cards": [
+      "GPU-7d4b6573-1ea1-7389-a083-e9eb003347cd",
+      "GPU-70c9272b-3d2a-e46d-bf9b-411e3f17870c"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "path": "align-a10b-retry/timing/port/out8192-bs16/summary.json",
+    "status": "ok",
+    "capacity": null,
+    "median": 225.7325419887501,
+    "rates": [
+      225.72811841451974,
+      225.7325419887501,
+      225.76713657390087
+    ]
+  },
+  {
+    "output_tokens": 8192,
+    "bs": 16,
+    "arm": "bf16",
+    "host": "a10.mit.edu",
+    "cards": [
+      "GPU-7d4b6573-1ea1-7389-a083-e9eb003347cd",
+      "GPU-70c9272b-3d2a-e46d-bf9b-411e3f17870c"
+    ],
+    "bundle": {
+      "codebook.pt": "01082911f0f352058aaffa8589f2a641e8bd6fd257ace7082beb7236653277f0",
+      "vq_v_codebook.pt": "49641d553b891cc87ac571134111a3629891d8f8bdb7f54e0fb4a51d0cfdcfd4",
+      "v_rotation_sst_r_h_pbr.pt": "d64d18855f8792a63c7a8700fe3faf9aa23598884859620a77489b8fc4238fa1",
+      "k_rotation_qqt_r_h_pbr.pt": "24ed2ed6fbb397bc1146a8dbafa3e713fc0c76997bcb152979f4c99bfb32c2bb"
+    },
+    "sha": "7a1bc3234fadab595d801c82a3af7b33e1e2f6b6",
+    "client_input_hash": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+    "input_hash": null,
+    "path": "align-a10b-retry/timing/bf16/out8192-bs16/summary.json",
+    "status": "capacity_limited",
+    "capacity": 92432
+  }
+]

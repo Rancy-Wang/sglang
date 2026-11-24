@@ -1,0 +1,400 @@
+[
+  {
+    "rank": 0,
+    "invariants": {
+      "port": {
+        "q_change": {
+          "elements": 1024,
+          "max_abs": 4.6875,
+          "mean_abs": 0.5602224469184875,
+          "exact_fraction": 0.0361328125
+        },
+        "k_change": {
+          "elements": 1024,
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "exact_fraction": 1.0
+        },
+        "v_change": {
+          "elements": 1024,
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "exact_fraction": 1.0
+        },
+        "argmax": 28,
+        "logit_shape": [
+          1,
+          49152
+        ]
+      },
+      "official": {
+        "q_change": {
+          "elements": 1024,
+          "max_abs": 4.6875,
+          "mean_abs": 0.5602480173110962,
+          "exact_fraction": 0.0361328125
+        },
+        "k_change": {
+          "elements": 1024,
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "exact_fraction": 1.0
+        },
+        "v_change": {
+          "elements": 1024,
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "exact_fraction": 1.0
+        },
+        "argmax": 28,
+        "logit_shape": [
+          1,
+          49152
+        ]
+      },
+      "bf16": {
+        "q_change": {
+          "elements": 1024,
+          "max_abs": 4.6875,
+          "mean_abs": 0.5602224469184875,
+          "exact_fraction": 0.0361328125
+        },
+        "k_change": {
+          "elements": 1024,
+          "max_abs": 5.15625,
+          "mean_abs": 0.6136932373046875,
+          "exact_fraction": 0.04296875
+        },
+        "v_change": {
+          "elements": 1024,
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "exact_fraction": 1.0
+        },
+        "argmax": 28,
+        "logit_shape": [
+          1,
+          49152
+        ]
+      },
+      "official-bf16": {
+        "q_change": {
+          "elements": 1024,
+          "max_abs": 4.6875,
+          "mean_abs": 0.5602480173110962,
+          "exact_fraction": 0.0361328125
+        },
+        "k_change": {
+          "elements": 1024,
+          "max_abs": 5.15625,
+          "mean_abs": 0.6139057874679565,
+          "exact_fraction": 0.04296875
+        },
+        "v_change": {
+          "elements": 1024,
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "exact_fraction": 1.0
+        },
+        "argmax": 28,
+        "logit_shape": [
+          1,
+          49152
+        ]
+      }
+    },
+    "cross_stack": {
+      "port": {
+        "raw_qkv": {
+          "elements": 3072,
+          "max_abs": 0.015625,
+          "mean_abs": 0.0002998787385877222,
+          "exact_fraction": 0.7203776041666666
+        },
+        "attention_q": {
+          "elements": 1024,
+          "max_abs": 0.015625,
+          "mean_abs": 0.00031397491693496704,
+          "exact_fraction": 0.8515625
+        },
+        "attention_k": {
+          "elements": 1024,
+          "max_abs": 0.015625,
+          "mean_abs": 0.0004592984914779663,
+          "exact_fraction": 0.8017578125
+        },
+        "attention_v": {
+          "elements": 1024,
+          "max_abs": 0.001953125,
+          "mean_abs": 0.00016407016664743423,
+          "exact_fraction": 0.515625
+        },
+        "gate_up": {
+          "elements": 5632,
+          "max_abs": 0.001953125,
+          "mean_abs": 0.00019605107081588358,
+          "exact_fraction": 0.3389559659090909
+        },
+        "activation": {
+          "elements": 2816,
+          "max_abs": 0.00048828125,
+          "mean_abs": 7.529495178459911e-06,
+          "exact_fraction": 0.19957386363636365
+        },
+        "logits": {
+          "elements": 49152,
+          "max_abs": 0.1640625,
+          "mean_abs": 0.029829220846295357,
+          "exact_fraction": 0.18290201822916666
+        },
+        "same_top1": true,
+        "top20_intersection": 19
+      },
+      "bf16": {
+        "raw_qkv": {
+          "elements": 3072,
+          "max_abs": 0.015625,
+          "mean_abs": 0.0002998787385877222,
+          "exact_fraction": 0.7203776041666666
+        },
+        "attention_q": {
+          "elements": 1024,
+          "max_abs": 0.015625,
+          "mean_abs": 0.00031397491693496704,
+          "exact_fraction": 0.8515625
+        },
+        "attention_k": {
+          "elements": 1024,
+          "max_abs": 0.015625,
+          "mean_abs": 0.0005432441830635071,
+          "exact_fraction": 0.796875
+        },
+        "attention_v": {
+          "elements": 1024,
+          "max_abs": 0.001953125,
+          "mean_abs": 0.00016407016664743423,
+          "exact_fraction": 0.515625
+        },
+        "gate_up": {
+          "elements": 5632,
+          "max_abs": 0.001953125,
+          "mean_abs": 0.00018641827045939863,
+          "exact_fraction": 0.3467684659090909
+        },
+        "activation": {
+          "elements": 2816,
+          "max_abs": 0.000244140625,
+          "mean_abs": 7.374716005870141e-06,
+          "exact_fraction": 0.2080965909090909
+        },
+        "logits": {
+          "elements": 49152,
+          "max_abs": 0.1875,
+          "mean_abs": 0.03333134576678276,
+          "exact_fraction": 0.16200764973958334
+        },
+        "same_top1": true,
+        "top20_intersection": 20
+      }
+    }
+  },
+  {
+    "rank": 1,
+    "invariants": {
+      "port": {
+        "q_change": {
+          "elements": 1024,
+          "max_abs": 5.640625,
+          "mean_abs": 0.5009225010871887,
+          "exact_fraction": 0.041015625
+        },
+        "k_change": {
+          "elements": 1024,
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "exact_fraction": 1.0
+        },
+        "v_change": {
+          "elements": 1024,
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "exact_fraction": 1.0
+        },
+        "argmax": 28,
+        "logit_shape": [
+          1,
+          49152
+        ]
+      },
+      "official": {
+        "q_change": {
+          "elements": 1024,
+          "max_abs": 5.640625,
+          "mean_abs": 0.5009034872055054,
+          "exact_fraction": 0.041015625
+        },
+        "k_change": {
+          "elements": 1024,
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "exact_fraction": 1.0
+        },
+        "v_change": {
+          "elements": 1024,
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "exact_fraction": 1.0
+        },
+        "argmax": 28,
+        "logit_shape": [
+          1,
+          49152
+        ]
+      },
+      "bf16": {
+        "q_change": {
+          "elements": 1024,
+          "max_abs": 5.640625,
+          "mean_abs": 0.5009225010871887,
+          "exact_fraction": 0.041015625
+        },
+        "k_change": {
+          "elements": 1024,
+          "max_abs": 4.5,
+          "mean_abs": 0.555878221988678,
+          "exact_fraction": 0.046875
+        },
+        "v_change": {
+          "elements": 1024,
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "exact_fraction": 1.0
+        },
+        "argmax": 28,
+        "logit_shape": [
+          1,
+          49152
+        ]
+      },
+      "official-bf16": {
+        "q_change": {
+          "elements": 1024,
+          "max_abs": 5.640625,
+          "mean_abs": 0.5009034872055054,
+          "exact_fraction": 0.041015625
+        },
+        "k_change": {
+          "elements": 1024,
+          "max_abs": 4.5,
+          "mean_abs": 0.5558938384056091,
+          "exact_fraction": 0.0458984375
+        },
+        "v_change": {
+          "elements": 1024,
+          "max_abs": 0.0,
+          "mean_abs": 0.0,
+          "exact_fraction": 1.0
+        },
+        "argmax": 28,
+        "logit_shape": [
+          1,
+          49152
+        ]
+      }
+    },
+    "cross_stack": {
+      "port": {
+        "raw_qkv": {
+          "elements": 3072,
+          "max_abs": 0.015625,
+          "mean_abs": 0.0002931815979536623,
+          "exact_fraction": 0.6858723958333334
+        },
+        "attention_q": {
+          "elements": 1024,
+          "max_abs": 0.015625,
+          "mean_abs": 0.0004195272922515869,
+          "exact_fraction": 0.7890625
+        },
+        "attention_k": {
+          "elements": 1024,
+          "max_abs": 0.0078125,
+          "mean_abs": 0.0003815889358520508,
+          "exact_fraction": 0.765625
+        },
+        "attention_v": {
+          "elements": 1024,
+          "max_abs": 0.00390625,
+          "mean_abs": 0.00017049163579940796,
+          "exact_fraction": 0.5029296875
+        },
+        "gate_up": {
+          "elements": 5632,
+          "max_abs": 0.001953125,
+          "mean_abs": 0.00019705820886883885,
+          "exact_fraction": 0.3338068181818182
+        },
+        "activation": {
+          "elements": 2816,
+          "max_abs": 0.00048828125,
+          "mean_abs": 7.765206646581646e-06,
+          "exact_fraction": 0.19069602272727273
+        },
+        "logits": {
+          "elements": 49152,
+          "max_abs": 0.1640625,
+          "mean_abs": 0.029829220846295357,
+          "exact_fraction": 0.18290201822916666
+        },
+        "same_top1": true,
+        "top20_intersection": 19
+      },
+      "bf16": {
+        "raw_qkv": {
+          "elements": 3072,
+          "max_abs": 0.015625,
+          "mean_abs": 0.0002931815979536623,
+          "exact_fraction": 0.6858723958333334
+        },
+        "attention_q": {
+          "elements": 1024,
+          "max_abs": 0.015625,
+          "mean_abs": 0.0004195272922515869,
+          "exact_fraction": 0.7890625
+        },
+        "attention_k": {
+          "elements": 1024,
+          "max_abs": 0.0078125,
+          "mean_abs": 0.00045310892164707184,
+          "exact_fraction": 0.7890625
+        },
+        "attention_v": {
+          "elements": 1024,
+          "max_abs": 0.00390625,
+          "mean_abs": 0.00017049163579940796,
+          "exact_fraction": 0.5029296875
+        },
+        "gate_up": {
+          "elements": 5632,
+          "max_abs": 0.00390625,
+          "mean_abs": 0.00018721520609688014,
+          "exact_fraction": 0.3488991477272727
+        },
+        "activation": {
+          "elements": 2816,
+          "max_abs": 0.00048828125,
+          "mean_abs": 7.718892447883263e-06,
+          "exact_fraction": 0.20774147727272727
+        },
+        "logits": {
+          "elements": 49152,
+          "max_abs": 0.1875,
+          "mean_abs": 0.03333134576678276,
+          "exact_fraction": 0.16200764973958334
+        },
+        "same_top1": true,
+        "top20_intersection": 20
+      }
+    }
+  }
+]

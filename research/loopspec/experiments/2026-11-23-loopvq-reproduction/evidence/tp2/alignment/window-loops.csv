@@ -1,0 +1,1297 @@
+arm,output_boundary,trigger_history,rank,phase,intervals,depth,category,median_ms
+port,1024,2976,0,ordinary,8,1,HP attention,0.36756849999999996
+port,1024,2976,0,ordinary,8,1,KV metadata,0.007984
+port,1024,2976,0,ordinary,8,1,KV write,0.095967
+port,1024,2976,0,ordinary,8,1,LSE reset,0.07065649999999998
+port,1024,2976,0,ordinary,8,1,MLP activation/pointwise,0.0937915
+port,1024,2976,0,ordinary,8,1,O projection,0.38275000000000003
+port,1024,2976,0,ordinary,8,1,QKV projection,0.5956635
+port,1024,2976,0,ordinary,8,1,RMSNorm,0.6726469999999993
+port,1024,2976,0,ordinary,8,1,RoPE/layout/other attention-side ops,0.10500799999999999
+port,1024,2976,0,ordinary,8,1,TP collective,0.34663300000000014
+port,1024,2976,0,ordinary,8,1,attention merge,0.15908599999999992
+port,1024,2976,0,ordinary,8,1,down projection,0.6631774999999999
+port,1024,2976,0,ordinary,8,1,gate/up projection,0.9360304999999998
+port,1024,2976,0,ordinary,8,1,quant attention,2.466978
+port,1024,2976,0,ordinary,8,1,residual add,0.183728
+port,1024,2976,0,ordinary,8,2,HP attention,0.36804749999999997
+port,1024,2976,0,ordinary,8,2,KV write,0.09575799999999997
+port,1024,2976,0,ordinary,8,2,LSE reset,0.07041649999999999
+port,1024,2976,0,ordinary,8,2,MLP activation/pointwise,0.09359750000000003
+port,1024,2976,0,ordinary,8,2,O projection,0.38174149999999996
+port,1024,2976,0,ordinary,8,2,QKV projection,0.5942535
+port,1024,2976,0,ordinary,8,2,RMSNorm,0.6707014999999993
+port,1024,2976,0,ordinary,8,2,RoPE/layout/other attention-side ops,0.105039
+port,1024,2976,0,ordinary,8,2,TP collective,0.345519
+port,1024,2976,0,ordinary,8,2,attention merge,0.1589919999999999
+port,1024,2976,0,ordinary,8,2,down projection,0.6615669999999998
+port,1024,2976,0,ordinary,8,2,gate/up projection,0.9355785000000001
+port,1024,2976,0,ordinary,8,2,quant attention,2.462100499999999
+port,1024,2976,0,ordinary,8,2,residual add,0.18242749999999996
+port,1024,2976,0,ordinary,8,3,HP attention,0.36813899999999994
+port,1024,2976,0,ordinary,8,3,KV write,0.09567899999999999
+port,1024,2976,0,ordinary,8,3,LSE reset,0.07036599999999998
+port,1024,2976,0,ordinary,8,3,MLP activation/pointwise,0.09478000000000002
+port,1024,2976,0,ordinary,8,3,O projection,0.381601
+port,1024,2976,0,ordinary,8,3,QKV projection,0.5933109999999999
+port,1024,2976,0,ordinary,8,3,RMSNorm,0.6702609999999994
+port,1024,2976,0,ordinary,8,3,RoPE/layout/other attention-side ops,0.1051355
+port,1024,2976,0,ordinary,8,3,TP collective,0.34440249999999994
+port,1024,2976,0,ordinary,8,3,attention merge,0.1589889999999999
+port,1024,2976,0,ordinary,8,3,down projection,0.6613049999999998
+port,1024,2976,0,ordinary,8,3,gate/up projection,0.937403
+port,1024,2976,0,ordinary,8,3,quant attention,2.4615229999999997
+port,1024,2976,0,ordinary,8,3,residual add,0.18275200000000003
+port,1024,2976,0,ordinary,8,4,HP attention,0.36834900000000004
+port,1024,2976,0,ordinary,8,4,KV write,0.09606749999999999
+port,1024,2976,0,ordinary,8,4,LSE reset,0.07042949999999998
+port,1024,2976,0,ordinary,8,4,MLP activation/pointwise,0.09433800000000003
+port,1024,2976,0,ordinary,8,4,O projection,0.3817745
+port,1024,2976,0,ordinary,8,4,QKV projection,0.593661
+port,1024,2976,0,ordinary,8,4,RMSNorm,0.6713429999999998
+port,1024,2976,0,ordinary,8,4,RoPE/layout/other attention-side ops,0.10526350000000001
+port,1024,2976,0,ordinary,8,4,TP collective,0.34275249999999996
+port,1024,2976,0,ordinary,8,4,attention merge,0.1589439999999999
+port,1024,2976,0,ordinary,8,4,down projection,0.6607624999999999
+port,1024,2976,0,ordinary,8,4,gate/up projection,0.9360729999999999
+port,1024,2976,0,ordinary,8,4,quant attention,2.4619244999999994
+port,1024,2976,0,ordinary,8,4,residual add,0.18287949999999992
+port,1024,2976,0,flush,1,1,HP attention,0.36784100000000003
+port,1024,2976,0,flush,1,1,KV metadata,0.00816
+port,1024,2976,0,flush,1,1,KV write,0.09613099999999998
+port,1024,2976,0,flush,1,1,LSE reset,0.07033999999999996
+port,1024,2976,0,flush,1,1,MLP activation/pointwise,0.09552000000000002
+port,1024,2976,0,flush,1,1,O projection,0.38105300000000014
+port,1024,2976,0,flush,1,1,QKV projection,0.598171
+port,1024,2976,0,flush,1,1,RMSNorm,0.6743279999999993
+port,1024,2976,0,flush,1,1,RoPE/layout/other attention-side ops,0.10428599999999999
+port,1024,2976,0,flush,1,1,TP collective,0.34694499999999995
+port,1024,2976,0,flush,1,1,attention merge,0.15910499999999989
+port,1024,2976,0,flush,1,1,down projection,0.6611719999999996
+port,1024,2976,0,flush,1,1,gate/up projection,0.9417910000000002
+port,1024,2976,0,flush,1,1,quant attention,2.4681169999999995
+port,1024,2976,0,flush,1,1,residual add,0.18540399999999996
+port,1024,2976,0,flush,1,2,HP attention,0.36831900000000006
+port,1024,2976,0,flush,1,2,KV write,0.095453
+port,1024,2976,0,flush,1,2,LSE reset,0.07049699999999998
+port,1024,2976,0,flush,1,2,MLP activation/pointwise,0.09360000000000002
+port,1024,2976,0,flush,1,2,O projection,0.3820469999999999
+port,1024,2976,0,flush,1,2,QKV projection,0.5916190000000001
+port,1024,2976,0,flush,1,2,RMSNorm,0.6695029999999994
+port,1024,2976,0,flush,1,2,RoPE/layout/other attention-side ops,0.10467299999999999
+port,1024,2976,0,flush,1,2,TP collective,0.3455959999999999
+port,1024,2976,0,flush,1,2,attention merge,0.1589119999999999
+port,1024,2976,0,flush,1,2,down projection,0.659965
+port,1024,2976,0,flush,1,2,gate/up projection,0.9362499999999998
+port,1024,2976,0,flush,1,2,quant attention,2.462617
+port,1024,2976,0,flush,1,2,residual add,0.1832329999999999
+port,1024,2976,0,flush,1,3,HP attention,0.36931
+port,1024,2976,0,flush,1,3,KV write,0.09571199999999998
+port,1024,2976,0,flush,1,3,LSE reset,0.07046399999999997
+port,1024,2976,0,flush,1,3,MLP activation/pointwise,0.09507500000000003
+port,1024,2976,0,flush,1,3,O projection,0.38025000000000003
+port,1024,2976,0,flush,1,3,QKV projection,0.5929260000000001
+port,1024,2976,0,flush,1,3,RMSNorm,0.672033
+port,1024,2976,0,flush,1,3,RoPE/layout/other attention-side ops,0.104258
+port,1024,2976,0,flush,1,3,TP collective,0.3460480000000001
+port,1024,2976,0,flush,1,3,attention merge,0.15871599999999986
+port,1024,2976,0,flush,1,3,down projection,0.6609979999999999
+port,1024,2976,0,flush,1,3,gate/up projection,0.9365059999999997
+port,1024,2976,0,flush,1,3,quant attention,2.4616239999999996
+port,1024,2976,0,flush,1,3,residual add,0.18338900000000005
+port,1024,2976,0,flush,1,4,HP attention,0.369635
+port,1024,2976,0,flush,1,4,KV write,0.09638399999999998
+port,1024,2976,0,flush,1,4,LSE reset,0.07014399999999998
+port,1024,2976,0,flush,1,4,MLP activation/pointwise,0.09424200000000003
+port,1024,2976,0,flush,1,4,O projection,0.3818859999999999
+port,1024,2976,0,flush,1,4,QKV projection,0.5935649999999999
+port,1024,2976,0,flush,1,4,RMSNorm,0.6705899999999997
+port,1024,2976,0,flush,1,4,RoPE/layout/other attention-side ops,0.10467399999999999
+port,1024,2976,0,flush,1,4,TP collective,0.34691000000000005
+port,1024,2976,0,flush,1,4,attention merge,0.15894099999999986
+port,1024,2976,0,flush,1,4,down projection,0.6600609999999999
+port,1024,2976,0,flush,1,4,gate/up projection,0.936092
+port,1024,2976,0,flush,1,4,quant attention,2.4603409999999992
+port,1024,2976,0,flush,1,4,residual add,0.18202099999999996
+port,1024,2976,1,ordinary,8,1,HP attention,0.3700445000000001
+port,1024,2976,1,ordinary,8,1,KV metadata,0.007103999999999999
+port,1024,2976,1,ordinary,8,1,KV write,0.09536199999999997
+port,1024,2976,1,ordinary,8,1,LSE reset,0.0708175
+port,1024,2976,1,ordinary,8,1,MLP activation/pointwise,0.09404799999999999
+port,1024,2976,1,ordinary,8,1,O projection,0.3835645
+port,1024,2976,1,ordinary,8,1,QKV projection,0.5946054999999999
+port,1024,2976,1,ordinary,8,1,RMSNorm,0.7085444999999997
+port,1024,2976,1,ordinary,8,1,RoPE/layout/other attention-side ops,0.1048995
+port,1024,2976,1,ordinary,8,1,TP collective,0.30321549999999997
+port,1024,2976,1,ordinary,8,1,attention merge,0.15897299999999992
+port,1024,2976,1,ordinary,8,1,down projection,0.6669394999999998
+port,1024,2976,1,ordinary,8,1,gate/up projection,0.9378055000000001
+port,1024,2976,1,ordinary,8,1,quant attention,2.4692685
+port,1024,2976,1,ordinary,8,1,residual add,0.1829159999999999
+port,1024,2976,1,ordinary,8,2,HP attention,0.37012749999999994
+port,1024,2976,1,ordinary,8,2,KV write,0.09513849999999997
+port,1024,2976,1,ordinary,8,2,LSE reset,0.070543
+port,1024,2976,1,ordinary,8,2,MLP activation/pointwise,0.0934885
+port,1024,2976,1,ordinary,8,2,O projection,0.3836495
+port,1024,2976,1,ordinary,8,2,QKV projection,0.594605
+port,1024,2976,1,ordinary,8,2,RMSNorm,0.7075940000000001
+port,1024,2976,1,ordinary,8,2,RoPE/layout/other attention-side ops,0.10456100000000002
+port,1024,2976,1,ordinary,8,2,TP collective,0.29826900000000006
+port,1024,2976,1,ordinary,8,2,attention merge,0.1590054999999999
+port,1024,2976,1,ordinary,8,2,down projection,0.6651635
+port,1024,2976,1,ordinary,8,2,gate/up projection,0.9351799999999997
+port,1024,2976,1,ordinary,8,2,quant attention,2.4647425
+port,1024,2976,1,ordinary,8,2,residual add,0.1814175
+port,1024,2976,1,ordinary,8,3,HP attention,0.3699335000000001
+port,1024,2976,1,ordinary,8,3,KV write,0.09503799999999998
+port,1024,2976,1,ordinary,8,3,LSE reset,0.07046299999999998
+port,1024,2976,1,ordinary,8,3,MLP activation/pointwise,0.09393250000000003
+port,1024,2976,1,ordinary,8,3,O projection,0.38266800000000006
+port,1024,2976,1,ordinary,8,3,QKV projection,0.5931500000000001
+port,1024,2976,1,ordinary,8,3,RMSNorm,0.7083469999999998
+port,1024,2976,1,ordinary,8,3,RoPE/layout/other attention-side ops,0.10478400000000002
+port,1024,2976,1,ordinary,8,3,TP collective,0.3015495
+port,1024,2976,1,ordinary,8,3,attention merge,0.1590359999999999
+port,1024,2976,1,ordinary,8,3,down projection,0.6660640000000002
+port,1024,2976,1,ordinary,8,3,gate/up projection,0.935532
+port,1024,2976,1,ordinary,8,3,quant attention,2.4642155
+port,1024,2976,1,ordinary,8,3,residual add,0.18188699999999997
+port,1024,2976,1,ordinary,8,4,HP attention,0.36985350000000006
+port,1024,2976,1,ordinary,8,4,KV write,0.0954195
+port,1024,2976,1,ordinary,8,4,LSE reset,0.07064299999999998
+port,1024,2976,1,ordinary,8,4,MLP activation/pointwise,0.09379300000000002
+port,1024,2976,1,ordinary,8,4,O projection,0.38229949999999996
+port,1024,2976,1,ordinary,8,4,QKV projection,0.5937584999999999
+port,1024,2976,1,ordinary,8,4,RMSNorm,0.7090669999999997
+port,1024,2976,1,ordinary,8,4,RoPE/layout/other attention-side ops,0.10472000000000001
+port,1024,2976,1,ordinary,8,4,TP collective,0.30327649999999995
+port,1024,2976,1,ordinary,8,4,attention merge,0.15876699999999988
+port,1024,2976,1,ordinary,8,4,down projection,0.6652920000000001
+port,1024,2976,1,ordinary,8,4,gate/up projection,0.9356905
+port,1024,2976,1,ordinary,8,4,quant attention,2.4630924999999992
+port,1024,2976,1,ordinary,8,4,residual add,0.18194650000000004
+port,1024,2976,1,flush,1,1,HP attention,0.37036399999999997
+port,1024,2976,1,flush,1,1,KV metadata,0.007266
+port,1024,2976,1,flush,1,1,KV write,0.09493799999999998
+port,1024,2976,1,flush,1,1,LSE reset,0.070882
+port,1024,2976,1,flush,1,1,MLP activation/pointwise,0.095646
+port,1024,2976,1,flush,1,1,O projection,0.38428900000000005
+port,1024,2976,1,flush,1,1,QKV projection,0.5981749999999999
+port,1024,2976,1,flush,1,1,RMSNorm,0.7115180000000002
+port,1024,2976,1,flush,1,1,RoPE/layout/other attention-side ops,0.10438299999999999
+port,1024,2976,1,flush,1,1,TP collective,0.29996700000000004
+port,1024,2976,1,flush,1,1,attention merge,0.1592619999999999
+port,1024,2976,1,flush,1,1,down projection,0.666845
+port,1024,2976,1,flush,1,1,gate/up projection,0.939844
+port,1024,2976,1,flush,1,1,quant attention,2.4758620000000002
+port,1024,2976,1,flush,1,1,residual add,0.18163700000000002
+port,1024,2976,1,flush,1,2,HP attention,0.37081500000000006
+port,1024,2976,1,flush,1,2,KV write,0.09478399999999998
+port,1024,2976,1,flush,1,2,LSE reset,0.070561
+port,1024,2976,1,flush,1,2,MLP activation/pointwise,0.09366400000000003
+port,1024,2976,1,flush,1,2,O projection,0.3839330000000001
+port,1024,2976,1,flush,1,2,QKV projection,0.5923840000000001
+port,1024,2976,1,flush,1,2,RMSNorm,0.708891
+port,1024,2976,1,flush,1,2,RoPE/layout/other attention-side ops,0.10447900000000002
+port,1024,2976,1,flush,1,2,TP collective,0.29506899999999997
+port,1024,2976,1,flush,1,2,attention merge,0.1591999999999999
+port,1024,2976,1,flush,1,2,down projection,0.6642879999999999
+port,1024,2976,1,flush,1,2,gate/up projection,0.9365439999999999
+port,1024,2976,1,flush,1,2,quant attention,2.4681529999999996
+port,1024,2976,1,flush,1,2,residual add,0.18169500000000008
+port,1024,2976,1,flush,1,3,HP attention,0.3696309999999999
+port,1024,2976,1,flush,1,3,KV write,0.09507799999999995
+port,1024,2976,1,flush,1,3,LSE reset,0.0704
+port,1024,2976,1,flush,1,3,MLP activation/pointwise,0.09398400000000001
+port,1024,2976,1,flush,1,3,O projection,0.384126
+port,1024,2976,1,flush,1,3,QKV projection,0.5929249999999999
+port,1024,2976,1,flush,1,3,RMSNorm,0.709566
+port,1024,2976,1,flush,1,3,RoPE/layout/other attention-side ops,0.10454400000000001
+port,1024,2976,1,flush,1,3,TP collective,0.29519800000000007
+port,1024,2976,1,flush,1,3,attention merge,0.1589439999999999
+port,1024,2976,1,flush,1,3,down projection,0.6657270000000001
+port,1024,2976,1,flush,1,3,gate/up projection,0.9362219999999998
+port,1024,2976,1,flush,1,3,quant attention,2.46831
+port,1024,2976,1,flush,1,3,residual add,0.18192200000000006
+port,1024,2976,1,flush,1,4,HP attention,0.36998200000000014
+port,1024,2976,1,flush,1,4,KV write,0.09542199999999998
+port,1024,2976,1,flush,1,4,LSE reset,0.070682
+port,1024,2976,1,flush,1,4,MLP activation/pointwise,0.09356499999999997
+port,1024,2976,1,flush,1,4,O projection,0.384288
+port,1024,2976,1,flush,1,4,QKV projection,0.5942729999999999
+port,1024,2976,1,flush,1,4,RMSNorm,0.7080940000000003
+port,1024,2976,1,flush,1,4,RoPE/layout/other attention-side ops,0.10409300000000002
+port,1024,2976,1,flush,1,4,TP collective,0.29366000000000014
+port,1024,2976,1,flush,1,4,attention merge,0.15909999999999988
+port,1024,2976,1,flush,1,4,down projection,0.6657930000000003
+port,1024,2976,1,flush,1,4,gate/up projection,0.9356789999999998
+port,1024,2976,1,flush,1,4,quant attention,2.469779
+port,1024,2976,1,flush,1,4,residual add,0.181535
+port,2048,4000,0,ordinary,8,1,HP attention,0.36787450000000005
+port,2048,4000,0,ordinary,8,1,KV metadata,0.006977
+port,2048,4000,0,ordinary,8,1,KV write,0.09583999999999998
+port,2048,4000,0,ordinary,8,1,LSE reset,0.07084349999999998
+port,2048,4000,0,ordinary,8,1,MLP activation/pointwise,0.093519
+port,2048,4000,0,ordinary,8,1,O projection,0.38116900000000004
+port,2048,4000,0,ordinary,8,1,QKV projection,0.594687
+port,2048,4000,0,ordinary,8,1,RMSNorm,0.6725889999999997
+port,2048,4000,0,ordinary,8,1,RoPE/layout/other attention-side ops,0.1052485
+port,2048,4000,0,ordinary,8,1,TP collective,0.3448635000000001
+port,2048,4000,0,ordinary,8,1,attention merge,0.16007549999999993
+port,2048,4000,0,ordinary,8,1,down projection,0.6601079999999998
+port,2048,4000,0,ordinary,8,1,gate/up projection,0.939229
+port,2048,4000,0,ordinary,8,1,quant attention,2.7716699999999994
+port,2048,4000,0,ordinary,8,1,residual add,0.18641350000000004
+port,2048,4000,0,ordinary,8,2,HP attention,0.36748450000000005
+port,2048,4000,0,ordinary,8,2,KV write,0.09571149999999998
+port,2048,4000,0,ordinary,8,2,LSE reset,0.07033549999999997
+port,2048,4000,0,ordinary,8,2,MLP activation/pointwise,0.09371300000000002
+port,2048,4000,0,ordinary,8,2,O projection,0.3802875
+port,2048,4000,0,ordinary,8,2,QKV projection,0.5934570000000001
+port,2048,4000,0,ordinary,8,2,RMSNorm,0.6708404999999997
+port,2048,4000,0,ordinary,8,2,RoPE/layout/other attention-side ops,0.10534450000000001
+port,2048,4000,0,ordinary,8,2,TP collective,0.34227100000000005
+port,2048,4000,0,ordinary,8,2,attention merge,0.15996799999999994
+port,2048,4000,0,ordinary,8,2,down projection,0.659481
+port,2048,4000,0,ordinary,8,2,gate/up projection,0.9378534999999999
+port,2048,4000,0,ordinary,8,2,quant attention,2.7645179999999994
+port,2048,4000,0,ordinary,8,2,residual add,0.1853725
+port,2048,4000,0,ordinary,8,3,HP attention,0.367743
+port,2048,4000,0,ordinary,8,3,KV write,0.09564749999999997
+port,2048,4000,0,ordinary,8,3,LSE reset,0.07042799999999998
+port,2048,4000,0,ordinary,8,3,MLP activation/pointwise,0.09476700000000002
+port,2048,4000,0,ordinary,8,3,O projection,0.38046349999999995
+port,2048,4000,0,ordinary,8,3,QKV projection,0.5941144999999999
+port,2048,4000,0,ordinary,8,3,RMSNorm,0.6704449999999995
+port,2048,4000,0,ordinary,8,3,RoPE/layout/other attention-side ops,0.1049755
+port,2048,4000,0,ordinary,8,3,TP collective,0.3419835000000001
+port,2048,4000,0,ordinary,8,3,attention merge,0.16003349999999994
+port,2048,4000,0,ordinary,8,3,down projection,0.6598175
+port,2048,4000,0,ordinary,8,3,gate/up projection,0.9396294999999999
+port,2048,4000,0,ordinary,8,3,quant attention,2.7634809999999996
+port,2048,4000,0,ordinary,8,3,residual add,0.1851015
+port,2048,4000,0,ordinary,8,4,HP attention,0.3672780000000001
+port,2048,4000,0,ordinary,8,4,KV write,0.09595000000000001
+port,2048,4000,0,ordinary,8,4,LSE reset,0.070524
+port,2048,4000,0,ordinary,8,4,MLP activation/pointwise,0.09443150000000003
+port,2048,4000,0,ordinary,8,4,O projection,0.38060650000000007
+port,2048,4000,0,ordinary,8,4,QKV projection,0.5935324999999999
+port,2048,4000,0,ordinary,8,4,RMSNorm,0.6702355
+port,2048,4000,0,ordinary,8,4,RoPE/layout/other attention-side ops,0.10544049999999999
+port,2048,4000,0,ordinary,8,4,TP collective,0.34337450000000014
+port,2048,4000,0,ordinary,8,4,attention merge,0.15982149999999995
+port,2048,4000,0,ordinary,8,4,down projection,0.6603019999999997
+port,2048,4000,0,ordinary,8,4,gate/up projection,0.9383309999999999
+port,2048,4000,0,ordinary,8,4,quant attention,2.764868999999999
+port,2048,4000,0,ordinary,8,4,residual add,0.1853265
+port,2048,4000,0,flush,1,1,HP attention,0.367553
+port,2048,4000,0,flush,1,1,KV metadata,0.007231999999999999
+port,2048,4000,0,flush,1,1,KV write,0.10172799999999997
+port,2048,4000,0,flush,1,1,LSE reset,0.07049599999999998
+port,2048,4000,0,flush,1,1,MLP activation/pointwise,0.09337600000000001
+port,2048,4000,0,flush,1,1,O projection,0.3810510000000001
+port,2048,4000,0,flush,1,1,QKV projection,0.5995199999999999
+port,2048,4000,0,flush,1,1,RMSNorm,0.6773959999999996
+port,2048,4000,0,flush,1,1,RoPE/layout/other attention-side ops,0.10521600000000003
+port,2048,4000,0,flush,1,1,TP collective,0.35084899999999997
+port,2048,4000,0,flush,1,1,attention merge,0.16115099999999996
+port,2048,4000,0,flush,1,1,down projection,0.659132
+port,2048,4000,0,flush,1,1,gate/up projection,0.9382029999999998
+port,2048,4000,0,flush,1,1,quant attention,2.774198
+port,2048,4000,0,flush,1,1,residual add,0.18495999999999996
+port,2048,4000,0,flush,1,2,HP attention,0.3676150000000001
+port,2048,4000,0,flush,1,2,KV write,0.095617
+port,2048,4000,0,flush,1,2,LSE reset,0.07046499999999999
+port,2048,4000,0,flush,1,2,MLP activation/pointwise,0.09353700000000001
+port,2048,4000,0,flush,1,2,O projection,0.38041400000000014
+port,2048,4000,0,flush,1,2,QKV projection,0.5948169999999997
+port,2048,4000,0,flush,1,2,RMSNorm,0.6707149999999996
+port,2048,4000,0,flush,1,2,RoPE/layout/other attention-side ops,0.105369
+port,2048,4000,0,flush,1,2,TP collective,0.33923000000000003
+port,2048,4000,0,flush,1,2,attention merge,0.16022099999999997
+port,2048,4000,0,flush,1,2,down projection,0.658851
+port,2048,4000,0,flush,1,2,gate/up projection,0.9384919999999999
+port,2048,4000,0,flush,1,2,quant attention,2.765209
+port,2048,4000,0,flush,1,2,residual add,0.18438600000000008
+port,2048,4000,0,flush,1,3,HP attention,0.36915400000000004
+port,2048,4000,0,flush,1,3,KV write,0.09609599999999999
+port,2048,4000,0,flush,1,3,LSE reset,0.07036899999999999
+port,2048,4000,0,flush,1,3,MLP activation/pointwise,0.09472100000000004
+port,2048,4000,0,flush,1,3,O projection,0.3805740000000001
+port,2048,4000,0,flush,1,3,QKV projection,0.5935950000000001
+port,2048,4000,0,flush,1,3,RMSNorm,0.6723509999999995
+port,2048,4000,0,flush,1,3,RoPE/layout/other attention-side ops,0.10489600000000002
+port,2048,4000,0,flush,1,3,TP collective,0.33890800000000026
+port,2048,4000,0,flush,1,3,attention merge,0.16002899999999992
+port,2048,4000,0,flush,1,3,down projection,0.6587859999999998
+port,2048,4000,0,flush,1,3,gate/up projection,0.940857
+port,2048,4000,0,flush,1,3,quant attention,2.7642749999999996
+port,2048,4000,0,flush,1,3,residual add,0.185957
+port,2048,4000,0,flush,1,4,HP attention,0.368099
+port,2048,4000,0,flush,1,4,KV write,0.096642
+port,2048,4000,0,flush,1,4,LSE reset,0.070688
+port,2048,4000,0,flush,1,4,MLP activation/pointwise,0.09408200000000003
+port,2048,4000,0,flush,1,4,O projection,0.38099400000000005
+port,2048,4000,0,flush,1,4,QKV projection,0.5936300000000001
+port,2048,4000,0,flush,1,4,RMSNorm,0.6701749999999996
+port,2048,4000,0,flush,1,4,RoPE/layout/other attention-side ops,0.105152
+port,2048,4000,0,flush,1,4,TP collective,0.34448
+port,2048,4000,0,flush,1,4,attention merge,0.16006799999999996
+port,2048,4000,0,flush,1,4,down projection,0.6589679999999998
+port,2048,4000,0,flush,1,4,gate/up projection,0.9390040000000001
+port,2048,4000,0,flush,1,4,quant attention,2.7655589999999997
+port,2048,4000,0,flush,1,4,residual add,0.18470300000000006
+port,2048,4000,1,ordinary,8,1,HP attention,0.3693105
+port,2048,4000,1,ordinary,8,1,KV metadata,0.007232
+port,2048,4000,1,ordinary,8,1,KV write,0.09539349999999999
+port,2048,4000,1,ordinary,8,1,LSE reset,0.07102549999999999
+port,2048,4000,1,ordinary,8,1,MLP activation/pointwise,0.094254
+port,2048,4000,1,ordinary,8,1,O projection,0.38267199999999996
+port,2048,4000,1,ordinary,8,1,QKV projection,0.5951964999999998
+port,2048,4000,1,ordinary,8,1,RMSNorm,0.7086540000000001
+port,2048,4000,1,ordinary,8,1,RoPE/layout/other attention-side ops,0.10473600000000002
+port,2048,4000,1,ordinary,8,1,TP collective,0.3021600000000001
+port,2048,4000,1,ordinary,8,1,attention merge,0.1594569999999999
+port,2048,4000,1,ordinary,8,1,down projection,0.6657569999999999
+port,2048,4000,1,ordinary,8,1,gate/up projection,0.9418064999999998
+port,2048,4000,1,ordinary,8,1,quant attention,2.7693984999999994
+port,2048,4000,1,ordinary,8,1,residual add,0.1839985
+port,2048,4000,1,ordinary,8,2,HP attention,0.369726
+port,2048,4000,1,ordinary,8,2,KV write,0.09534299999999998
+port,2048,4000,1,ordinary,8,2,LSE reset,0.07051149999999998
+port,2048,4000,1,ordinary,8,2,MLP activation/pointwise,0.0935985
+port,2048,4000,1,ordinary,8,2,O projection,0.382271
+port,2048,4000,1,ordinary,8,2,QKV projection,0.5930399999999999
+port,2048,4000,1,ordinary,8,2,RMSNorm,0.7086675000000002
+port,2048,4000,1,ordinary,8,2,RoPE/layout/other attention-side ops,0.1046215
+port,2048,4000,1,ordinary,8,2,TP collective,0.30254300000000006
+port,2048,4000,1,ordinary,8,2,attention merge,0.1590889999999999
+port,2048,4000,1,ordinary,8,2,down projection,0.6639164999999998
+port,2048,4000,1,ordinary,8,2,gate/up projection,0.9379979999999999
+port,2048,4000,1,ordinary,8,2,quant attention,2.7627935
+port,2048,4000,1,ordinary,8,2,residual add,0.18372300000000003
+port,2048,4000,1,ordinary,8,3,HP attention,0.3697425
+port,2048,4000,1,ordinary,8,3,KV write,0.09502499999999998
+port,2048,4000,1,ordinary,8,3,LSE reset,0.07055849999999998
+port,2048,4000,1,ordinary,8,3,MLP activation/pointwise,0.09406350000000001
+port,2048,4000,1,ordinary,8,3,O projection,0.38177249999999996
+port,2048,4000,1,ordinary,8,3,QKV projection,0.592849
+port,2048,4000,1,ordinary,8,3,RMSNorm,0.7075469999999999
+port,2048,4000,1,ordinary,8,3,RoPE/layout/other attention-side ops,0.10449649999999999
+port,2048,4000,1,ordinary,8,3,TP collective,0.30269099999999993
+port,2048,4000,1,ordinary,8,3,attention merge,0.1592619999999999
+port,2048,4000,1,ordinary,8,3,down projection,0.6647024999999999
+port,2048,4000,1,ordinary,8,3,gate/up projection,0.9382479999999997
+port,2048,4000,1,ordinary,8,3,quant attention,2.7633194999999997
+port,2048,4000,1,ordinary,8,3,residual add,0.18383900000000003
+port,2048,4000,1,ordinary,8,4,HP attention,0.36953499999999995
+port,2048,4000,1,ordinary,8,4,KV write,0.09510499999999998
+port,2048,4000,1,ordinary,8,4,LSE reset,0.07061049999999999
+port,2048,4000,1,ordinary,8,4,MLP activation/pointwise,0.09371100000000002
+port,2048,4000,1,ordinary,8,4,O projection,0.38230450000000005
+port,2048,4000,1,ordinary,8,4,QKV projection,0.5928765
+port,2048,4000,1,ordinary,8,4,RMSNorm,0.7070089999999999
+port,2048,4000,1,ordinary,8,4,RoPE/layout/other attention-side ops,0.104882
+port,2048,4000,1,ordinary,8,4,TP collective,0.3033760000000001
+port,2048,4000,1,ordinary,8,4,attention merge,0.15913349999999987
+port,2048,4000,1,ordinary,8,4,down projection,0.6646515
+port,2048,4000,1,ordinary,8,4,gate/up projection,0.939054
+port,2048,4000,1,ordinary,8,4,quant attention,2.7633514999999997
+port,2048,4000,1,ordinary,8,4,residual add,0.18329499999999999
+port,2048,4000,1,flush,1,1,HP attention,0.3698529999999999
+port,2048,4000,1,flush,1,1,KV metadata,0.007039999999999999
+port,2048,4000,1,flush,1,1,KV write,0.09715199999999999
+port,2048,4000,1,flush,1,1,LSE reset,0.07020499999999998
+port,2048,4000,1,flush,1,1,MLP activation/pointwise,0.094113
+port,2048,4000,1,flush,1,1,O projection,0.38217700000000004
+port,2048,4000,1,flush,1,1,QKV projection,0.594812
+port,2048,4000,1,flush,1,1,RMSNorm,0.7111070000000006
+port,2048,4000,1,flush,1,1,RoPE/layout/other attention-side ops,0.10442
+port,2048,4000,1,flush,1,1,TP collective,0.3138209999999999
+port,2048,4000,1,flush,1,1,attention merge,0.15939099999999992
+port,2048,4000,1,flush,1,1,down projection,0.6654379999999996
+port,2048,4000,1,flush,1,1,gate/up projection,0.9438020000000003
+port,2048,4000,1,flush,1,1,quant attention,2.768895
+port,2048,4000,1,flush,1,1,residual add,0.19203499999999993
+port,2048,4000,1,flush,1,2,HP attention,0.36965999999999993
+port,2048,4000,1,flush,1,2,KV write,0.09535899999999999
+port,2048,4000,1,flush,1,2,LSE reset,0.07055799999999998
+port,2048,4000,1,flush,1,2,MLP activation/pointwise,0.09350300000000002
+port,2048,4000,1,flush,1,2,O projection,0.38207500000000005
+port,2048,4000,1,flush,1,2,QKV projection,0.5911019999999999
+port,2048,4000,1,flush,1,2,RMSNorm,0.707903
+port,2048,4000,1,flush,1,2,RoPE/layout/other attention-side ops,0.10518299999999997
+port,2048,4000,1,flush,1,2,TP collective,0.3048910000000001
+port,2048,4000,1,flush,1,2,attention merge,0.15906799999999988
+port,2048,4000,1,flush,1,2,down projection,0.6632619999999997
+port,2048,4000,1,flush,1,2,gate/up projection,0.9386199999999998
+port,2048,4000,1,flush,1,2,quant attention,2.7630019999999993
+port,2048,4000,1,flush,1,2,residual add,0.184039
+port,2048,4000,1,flush,1,3,HP attention,0.37049200000000004
+port,2048,4000,1,flush,1,3,KV write,0.09497899999999997
+port,2048,4000,1,flush,1,3,LSE reset,0.07033699999999997
+port,2048,4000,1,flush,1,3,MLP activation/pointwise,0.09443200000000002
+port,2048,4000,1,flush,1,3,O projection,0.3815660000000002
+port,2048,4000,1,flush,1,3,QKV projection,0.5923789999999999
+port,2048,4000,1,flush,1,3,RMSNorm,0.7091880000000003
+port,2048,4000,1,flush,1,3,RoPE/layout/other attention-side ops,0.10502100000000003
+port,2048,4000,1,flush,1,3,TP collective,0.30441300000000004
+port,2048,4000,1,flush,1,3,attention merge,0.15913699999999992
+port,2048,4000,1,flush,1,3,down projection,0.664446
+port,2048,4000,1,flush,1,3,gate/up projection,0.93929
+port,2048,4000,1,flush,1,3,quant attention,2.7624849999999985
+port,2048,4000,1,flush,1,3,residual add,0.18275400000000006
+port,2048,4000,1,flush,1,4,HP attention,0.37116099999999996
+port,2048,4000,1,flush,1,4,KV write,0.09542400000000001
+port,2048,4000,1,flush,1,4,LSE reset,0.07085099999999998
+port,2048,4000,1,flush,1,4,MLP activation/pointwise,0.09379199999999997
+port,2048,4000,1,flush,1,4,O projection,0.382397
+port,2048,4000,1,flush,1,4,QKV projection,0.593439
+port,2048,4000,1,flush,1,4,RMSNorm,0.7073910000000005
+port,2048,4000,1,flush,1,4,RoPE/layout/other attention-side ops,0.10531100000000002
+port,2048,4000,1,flush,1,4,TP collective,0.29971200000000014
+port,2048,4000,1,flush,1,4,attention merge,0.15903499999999993
+port,2048,4000,1,flush,1,4,down projection,0.6655979999999999
+port,2048,4000,1,flush,1,4,gate/up projection,0.9374709999999997
+port,2048,4000,1,flush,1,4,quant attention,2.7681569999999995
+port,2048,4000,1,flush,1,4,residual add,0.184255
+port,4096,6048,0,ordinary,8,1,HP attention,0.36974700000000005
+port,4096,6048,0,ordinary,8,1,KV metadata,0.00736
+port,4096,6048,0,ordinary,8,1,KV write,0.0957285
+port,4096,6048,0,ordinary,8,1,LSE reset,0.07057649999999999
+port,4096,6048,0,ordinary,8,1,MLP activation/pointwise,0.0934905
+port,4096,6048,0,ordinary,8,1,O projection,0.38179399999999997
+port,4096,6048,0,ordinary,8,1,QKV projection,0.5960025
+port,4096,6048,0,ordinary,8,1,RMSNorm,0.6714119999999997
+port,4096,6048,0,ordinary,8,1,RoPE/layout/other attention-side ops,0.10942450000000002
+port,4096,6048,0,ordinary,8,1,TP collective,0.3470909999999999
+port,4096,6048,0,ordinary,8,1,attention merge,0.16252849999999996
+port,4096,6048,0,ordinary,8,1,down projection,0.6586124999999997
+port,4096,6048,0,ordinary,8,1,gate/up projection,0.9439385
+port,4096,6048,0,ordinary,8,1,quant attention,3.5274900000000002
+port,4096,6048,0,ordinary,8,1,residual add,0.186695
+port,4096,6048,0,ordinary,8,2,HP attention,0.368838
+port,4096,6048,0,ordinary,8,2,KV write,0.09601549999999998
+port,4096,6048,0,ordinary,8,2,LSE reset,0.07043149999999998
+port,4096,6048,0,ordinary,8,2,MLP activation/pointwise,0.09352000000000002
+port,4096,6048,0,ordinary,8,2,O projection,0.3806915
+port,4096,6048,0,ordinary,8,2,QKV projection,0.5930424999999999
+port,4096,6048,0,ordinary,8,2,RMSNorm,0.6722214999999998
+port,4096,6048,0,ordinary,8,2,RoPE/layout/other attention-side ops,0.10904050000000001
+port,4096,6048,0,ordinary,8,2,TP collective,0.344611
+port,4096,6048,0,ordinary,8,2,attention merge,0.1617785
+port,4096,6048,0,ordinary,8,2,down projection,0.6577489999999999
+port,4096,6048,0,ordinary,8,2,gate/up projection,0.9424075000000001
+port,4096,6048,0,ordinary,8,2,quant attention,3.5193309999999993
+port,4096,6048,0,ordinary,8,2,residual add,0.1859065
+port,4096,6048,0,ordinary,8,3,HP attention,0.37082
+port,4096,6048,0,ordinary,8,3,KV write,0.09571049999999998
+port,4096,6048,0,ordinary,8,3,LSE reset,0.07030449999999996
+port,4096,6048,0,ordinary,8,3,MLP activation/pointwise,0.09467100000000003
+port,4096,6048,0,ordinary,8,3,O projection,0.3806115000000001
+port,4096,6048,0,ordinary,8,3,QKV projection,0.5922314999999999
+port,4096,6048,0,ordinary,8,3,RMSNorm,0.6719269999999995
+port,4096,6048,0,ordinary,8,3,RoPE/layout/other attention-side ops,0.10924950000000003
+port,4096,6048,0,ordinary,8,3,TP collective,0.3437365000000001
+port,4096,6048,0,ordinary,8,3,attention merge,0.16161699999999998
+port,4096,6048,0,ordinary,8,3,down projection,0.6579104999999998
+port,4096,6048,0,ordinary,8,3,gate/up projection,0.9442754999999998
+port,4096,6048,0,ordinary,8,3,quant attention,3.518737000000001
+port,4096,6048,0,ordinary,8,3,residual add,0.1859510000000001
+port,4096,6048,0,ordinary,8,4,HP attention,0.3717285
+port,4096,6048,0,ordinary,8,4,KV write,0.09603099999999999
+port,4096,6048,0,ordinary,8,4,LSE reset,0.07052449999999999
+port,4096,6048,0,ordinary,8,4,MLP activation/pointwise,0.09425450000000002
+port,4096,6048,0,ordinary,8,4,O projection,0.38150399999999995
+port,4096,6048,0,ordinary,8,4,QKV projection,0.5938929999999999
+port,4096,6048,0,ordinary,8,4,RMSNorm,0.6713259999999996
+port,4096,6048,0,ordinary,8,4,RoPE/layout/other attention-side ops,0.10918650000000005
+port,4096,6048,0,ordinary,8,4,TP collective,0.343249
+port,4096,6048,0,ordinary,8,4,attention merge,0.16182749999999996
+port,4096,6048,0,ordinary,8,4,down projection,0.6574919999999997
+port,4096,6048,0,ordinary,8,4,gate/up projection,0.942434
+port,4096,6048,0,ordinary,8,4,quant attention,3.5188499999999996
+port,4096,6048,0,ordinary,8,4,residual add,0.18601650000000006
+port,4096,6048,0,flush,1,1,HP attention,0.37154899999999996
+port,4096,6048,0,flush,1,1,KV metadata,0.00736
+port,4096,6048,0,flush,1,1,KV write,0.096543
+port,4096,6048,0,flush,1,1,LSE reset,0.07056199999999997
+port,4096,6048,0,flush,1,1,MLP activation/pointwise,0.09532900000000002
+port,4096,6048,0,flush,1,1,O projection,0.3813510000000001
+port,4096,6048,0,flush,1,1,QKV projection,0.5947250000000001
+port,4096,6048,0,flush,1,1,RMSNorm,0.6727419999999994
+port,4096,6048,0,flush,1,1,RoPE/layout/other attention-side ops,0.10889700000000004
+port,4096,6048,0,flush,1,1,TP collective,0.35833600000000015
+port,4096,6048,0,flush,1,1,attention merge,0.16256199999999996
+port,4096,6048,0,flush,1,1,down projection,0.658782
+port,4096,6048,0,flush,1,1,gate/up projection,0.942338
+port,4096,6048,0,flush,1,1,quant attention,3.528435
+port,4096,6048,0,flush,1,1,residual add,0.185313
+port,4096,6048,0,flush,1,2,HP attention,0.37008299999999994
+port,4096,6048,0,flush,1,2,KV write,0.09568399999999999
+port,4096,6048,0,flush,1,2,LSE reset,0.07027199999999997
+port,4096,6048,0,flush,1,2,MLP activation/pointwise,0.09321600000000002
+port,4096,6048,0,flush,1,2,O projection,0.380958
+port,4096,6048,0,flush,1,2,QKV projection,0.5935039999999999
+port,4096,6048,0,flush,1,2,RMSNorm,0.6710469999999994
+port,4096,6048,0,flush,1,2,RoPE/layout/other attention-side ops,0.11020599999999998
+port,4096,6048,0,flush,1,2,TP collective,0.3461120000000001
+port,4096,6048,0,flush,1,2,attention merge,0.161539
+port,4096,6048,0,flush,1,2,down projection,0.6565469999999995
+port,4096,6048,0,flush,1,2,gate/up projection,0.9424079999999999
+port,4096,6048,0,flush,1,2,quant attention,3.5196360000000007
+port,4096,6048,0,flush,1,2,residual add,0.18540799999999996
+port,4096,6048,0,flush,1,3,HP attention,0.371107
+port,4096,6048,0,flush,1,3,KV write,0.095586
+port,4096,6048,0,flush,1,3,LSE reset,0.07037099999999999
+port,4096,6048,0,flush,1,3,MLP activation/pointwise,0.09497200000000001
+port,4096,6048,0,flush,1,3,O projection,0.38128799999999996
+port,4096,6048,0,flush,1,3,QKV projection,0.591747
+port,4096,6048,0,flush,1,3,RMSNorm,0.6722619999999996
+port,4096,6048,0,flush,1,3,RoPE/layout/other attention-side ops,0.10905600000000001
+port,4096,6048,0,flush,1,3,TP collective,0.3415459999999999
+port,4096,6048,0,flush,1,3,attention merge,0.16147199999999995
+port,4096,6048,0,flush,1,3,down projection,0.6569639999999998
+port,4096,6048,0,flush,1,3,gate/up projection,0.9480080000000003
+port,4096,6048,0,flush,1,3,quant attention,3.516467999999999
+port,4096,6048,0,flush,1,3,residual add,0.18556599999999998
+port,4096,6048,0,flush,1,4,HP attention,0.3724510000000001
+port,4096,6048,0,flush,1,4,KV write,0.09590399999999998
+port,4096,6048,0,flush,1,4,LSE reset,0.07049399999999999
+port,4096,6048,0,flush,1,4,MLP activation/pointwise,0.09414200000000002
+port,4096,6048,0,flush,1,4,O projection,0.380646
+port,4096,6048,0,flush,1,4,QKV projection,0.5933780000000001
+port,4096,6048,0,flush,1,4,RMSNorm,0.6711060000000002
+port,4096,6048,0,flush,1,4,RoPE/layout/other attention-side ops,0.111139
+port,4096,6048,0,flush,1,4,TP collective,0.34669399999999995
+port,4096,6048,0,flush,1,4,attention merge,0.16150799999999993
+port,4096,6048,0,flush,1,4,down projection,0.6565519999999999
+port,4096,6048,0,flush,1,4,gate/up projection,0.9430200000000001
+port,4096,6048,0,flush,1,4,quant attention,3.52248
+port,4096,6048,0,flush,1,4,residual add,0.18697999999999992
+port,4096,6048,1,ordinary,8,1,HP attention,0.37196700000000005
+port,4096,6048,1,ordinary,8,1,KV metadata,0.0073124999999999996
+port,4096,6048,1,ordinary,8,1,KV write,0.09540699999999998
+port,4096,6048,1,ordinary,8,1,LSE reset,0.07089649999999997
+port,4096,6048,1,ordinary,8,1,MLP activation/pointwise,0.09379199999999999
+port,4096,6048,1,ordinary,8,1,O projection,0.3825305
+port,4096,6048,1,ordinary,8,1,QKV projection,0.5949135
+port,4096,6048,1,ordinary,8,1,RMSNorm,0.7093504999999999
+port,4096,6048,1,ordinary,8,1,RoPE/layout/other attention-side ops,0.10948700000000003
+port,4096,6048,1,ordinary,8,1,TP collective,0.304738
+port,4096,6048,1,ordinary,8,1,attention merge,0.16209849999999992
+port,4096,6048,1,ordinary,8,1,down projection,0.6623564999999999
+port,4096,6048,1,ordinary,8,1,gate/up projection,0.945287
+port,4096,6048,1,ordinary,8,1,quant attention,3.5278619999999994
+port,4096,6048,1,ordinary,8,1,residual add,0.18477
+port,4096,6048,1,ordinary,8,2,HP attention,0.37075250000000004
+port,4096,6048,1,ordinary,8,2,KV write,0.09516949999999996
+port,4096,6048,1,ordinary,8,2,LSE reset,0.07049399999999997
+port,4096,6048,1,ordinary,8,2,MLP activation/pointwise,0.09366450000000003
+port,4096,6048,1,ordinary,8,2,O projection,0.381746
+port,4096,6048,1,ordinary,8,2,QKV projection,0.592595
+port,4096,6048,1,ordinary,8,2,RMSNorm,0.7080654999999996
+port,4096,6048,1,ordinary,8,2,RoPE/layout/other attention-side ops,0.10924550000000002
+port,4096,6048,1,ordinary,8,2,TP collective,0.3032124999999999
+port,4096,6048,1,ordinary,8,2,attention merge,0.16125099999999992
+port,4096,6048,1,ordinary,8,2,down projection,0.6621139999999996
+port,4096,6048,1,ordinary,8,2,gate/up projection,0.9450924999999999
+port,4096,6048,1,ordinary,8,2,quant attention,3.5197930000000004
+port,4096,6048,1,ordinary,8,2,residual add,0.18435199999999996
+port,4096,6048,1,ordinary,8,3,HP attention,0.3718739999999999
+port,4096,6048,1,ordinary,8,3,KV write,0.09497499999999998
+port,4096,6048,1,ordinary,8,3,LSE reset,0.07064249999999998
+port,4096,6048,1,ordinary,8,3,MLP activation/pointwise,0.09398300000000001
+port,4096,6048,1,ordinary,8,3,O projection,0.38187550000000003
+port,4096,6048,1,ordinary,8,3,QKV projection,0.5924539999999998
+port,4096,6048,1,ordinary,8,3,RMSNorm,0.7081615000000001
+port,4096,6048,1,ordinary,8,3,RoPE/layout/other attention-side ops,0.10899150000000002
+port,4096,6048,1,ordinary,8,3,TP collective,0.30257800000000007
+port,4096,6048,1,ordinary,8,3,attention merge,0.16049799999999992
+port,4096,6048,1,ordinary,8,3,down projection,0.6627579999999997
+port,4096,6048,1,ordinary,8,3,gate/up projection,0.9436400000000001
+port,4096,6048,1,ordinary,8,3,quant attention,3.5183675
+port,4096,6048,1,ordinary,8,3,residual add,0.184307
+port,4096,6048,1,ordinary,8,4,HP attention,0.37301150000000005
+port,4096,6048,1,ordinary,8,4,KV write,0.0955395
+port,4096,6048,1,ordinary,8,4,LSE reset,0.070686
+port,4096,6048,1,ordinary,8,4,MLP activation/pointwise,0.09368100000000001
+port,4096,6048,1,ordinary,8,4,O projection,0.38243399999999994
+port,4096,6048,1,ordinary,8,4,QKV projection,0.592962
+port,4096,6048,1,ordinary,8,4,RMSNorm,0.7088710000000003
+port,4096,6048,1,ordinary,8,4,RoPE/layout/other attention-side ops,0.10912050000000004
+port,4096,6048,1,ordinary,8,4,TP collective,0.3026420000000001
+port,4096,6048,1,ordinary,8,4,attention merge,0.16102599999999995
+port,4096,6048,1,ordinary,8,4,down projection,0.6623714999999994
+port,4096,6048,1,ordinary,8,4,gate/up projection,0.9439255
+port,4096,6048,1,ordinary,8,4,quant attention,3.5208199999999996
+port,4096,6048,1,ordinary,8,4,residual add,0.1844815
+port,4096,6048,1,flush,1,1,HP attention,0.3719679999999999
+port,4096,6048,1,flush,1,1,KV metadata,0.007456
+port,4096,6048,1,flush,1,1,KV write,0.09638699999999996
+port,4096,6048,1,flush,1,1,LSE reset,0.070785
+port,4096,6048,1,flush,1,1,MLP activation/pointwise,0.09654400000000002
+port,4096,6048,1,flush,1,1,O projection,0.38202100000000005
+port,4096,6048,1,flush,1,1,QKV projection,0.599048
+port,4096,6048,1,flush,1,1,RMSNorm,0.7123829999999999
+port,4096,6048,1,flush,1,1,RoPE/layout/other attention-side ops,0.11043300000000003
+port,4096,6048,1,flush,1,1,TP collective,0.306339
+port,4096,6048,1,flush,1,1,attention merge,0.16137799999999994
+port,4096,6048,1,flush,1,1,down projection,0.661129
+port,4096,6048,1,flush,1,1,gate/up projection,0.9484810000000001
+port,4096,6048,1,flush,1,1,quant attention,3.531726999999999
+port,4096,6048,1,flush,1,1,residual add,0.183873
+port,4096,6048,1,flush,1,2,HP attention,0.37117399999999995
+port,4096,6048,1,flush,1,2,KV write,0.09609499999999999
+port,4096,6048,1,flush,1,2,LSE reset,0.07033799999999998
+port,4096,6048,1,flush,1,2,MLP activation/pointwise,0.09354000000000003
+port,4096,6048,1,flush,1,2,O projection,0.38105700000000003
+port,4096,6048,1,flush,1,2,QKV projection,0.593128
+port,4096,6048,1,flush,1,2,RMSNorm,0.7085729999999999
+port,4096,6048,1,flush,1,2,RoPE/layout/other attention-side ops,0.10995400000000002
+port,4096,6048,1,flush,1,2,TP collective,0.3030419999999999
+port,4096,6048,1,flush,1,2,attention merge,0.1611829999999999
+port,4096,6048,1,flush,1,2,down projection,0.6608609999999995
+port,4096,6048,1,flush,1,2,gate/up projection,0.9460529999999999
+port,4096,6048,1,flush,1,2,quant attention,3.5187389999999996
+port,4096,6048,1,flush,1,2,residual add,0.18544099999999997
+port,4096,6048,1,flush,1,3,HP attention,0.3736670000000001
+port,4096,6048,1,flush,1,3,KV write,0.09491199999999997
+port,4096,6048,1,flush,1,3,LSE reset,0.07039899999999998
+port,4096,6048,1,flush,1,3,MLP activation/pointwise,0.09433799999999999
+port,4096,6048,1,flush,1,3,O projection,0.3815710000000001
+port,4096,6048,1,flush,1,3,QKV projection,0.5907220000000001
+port,4096,6048,1,flush,1,3,RMSNorm,0.7098630000000001
+port,4096,6048,1,flush,1,3,RoPE/layout/other attention-side ops,0.11113700000000003
+port,4096,6048,1,flush,1,3,TP collective,0.3009279999999998
+port,4096,6048,1,flush,1,3,attention merge,0.16106099999999993
+port,4096,6048,1,flush,1,3,down projection,0.6625909999999998
+port,4096,6048,1,flush,1,3,gate/up projection,0.943105
+port,4096,6048,1,flush,1,3,quant attention,3.51794
+port,4096,6048,1,flush,1,3,residual add,0.184445
+port,4096,6048,1,flush,1,4,HP attention,0.373093
+port,4096,6048,1,flush,1,4,KV write,0.09529399999999996
+port,4096,6048,1,flush,1,4,LSE reset,0.07042899999999999
+port,4096,6048,1,flush,1,4,MLP activation/pointwise,0.09388600000000002
+port,4096,6048,1,flush,1,4,O projection,0.3815390000000001
+port,4096,6048,1,flush,1,4,QKV projection,0.595682
+port,4096,6048,1,flush,1,4,RMSNorm,0.7090929999999999
+port,4096,6048,1,flush,1,4,RoPE/layout/other attention-side ops,0.11049500000000002
+port,4096,6048,1,flush,1,4,TP collective,0.30537699999999984
+port,4096,6048,1,flush,1,4,attention merge,0.16044899999999993
+port,4096,6048,1,flush,1,4,down projection,0.6617929999999996
+port,4096,6048,1,flush,1,4,gate/up projection,0.945666
+port,4096,6048,1,flush,1,4,quant attention,3.519248
+port,4096,6048,1,flush,1,4,residual add,0.18576499999999999
+port,8192,10144,0,ordinary,8,1,HP attention,0.379556
+port,8192,10144,0,ordinary,8,1,KV metadata,0.008368500000000001
+port,8192,10144,0,ordinary,8,1,KV write,0.0958415
+port,8192,10144,0,ordinary,8,1,LSE reset,0.07070399999999999
+port,8192,10144,0,ordinary,8,1,MLP activation/pointwise,0.093587
+port,8192,10144,0,ordinary,8,1,O projection,0.387278
+port,8192,10144,0,ordinary,8,1,QKV projection,0.594083
+port,8192,10144,0,ordinary,8,1,RMSNorm,0.6758149999999997
+port,8192,10144,0,ordinary,8,1,RoPE/layout/other attention-side ops,0.10900950000000001
+port,8192,10144,0,ordinary,8,1,TP collective,0.3548034999999999
+port,8192,10144,0,ordinary,8,1,attention merge,0.176798
+port,8192,10144,0,ordinary,8,1,down projection,0.6571769999999999
+port,8192,10144,0,ordinary,8,1,gate/up projection,0.9362474999999999
+port,8192,10144,0,ordinary,8,1,quant attention,5.156480500000001
+port,8192,10144,0,ordinary,8,1,residual add,0.1867525
+port,8192,10144,0,ordinary,8,2,HP attention,0.3783725
+port,8192,10144,0,ordinary,8,2,KV write,0.09583699999999998
+port,8192,10144,0,ordinary,8,2,LSE reset,0.07036649999999998
+port,8192,10144,0,ordinary,8,2,MLP activation/pointwise,0.09360100000000002
+port,8192,10144,0,ordinary,8,2,O projection,0.38664250000000006
+port,8192,10144,0,ordinary,8,2,QKV projection,0.5931400000000001
+port,8192,10144,0,ordinary,8,2,RMSNorm,0.6748515000000002
+port,8192,10144,0,ordinary,8,2,RoPE/layout/other attention-side ops,0.10837400000000004
+port,8192,10144,0,ordinary,8,2,TP collective,0.35446199999999994
+port,8192,10144,0,ordinary,8,2,attention merge,0.176046
+port,8192,10144,0,ordinary,8,2,down projection,0.6553924999999997
+port,8192,10144,0,ordinary,8,2,gate/up projection,0.935673
+port,8192,10144,0,ordinary,8,2,quant attention,5.148064
+port,8192,10144,0,ordinary,8,2,residual add,0.18618100000000004
+port,8192,10144,0,ordinary,8,3,HP attention,0.3799515
+port,8192,10144,0,ordinary,8,3,KV write,0.09580999999999998
+port,8192,10144,0,ordinary,8,3,LSE reset,0.07036799999999999
+port,8192,10144,0,ordinary,8,3,MLP activation/pointwise,0.09469
+port,8192,10144,0,ordinary,8,3,O projection,0.38635800000000003
+port,8192,10144,0,ordinary,8,3,QKV projection,0.5932
+port,8192,10144,0,ordinary,8,3,RMSNorm,0.6738104999999996
+port,8192,10144,0,ordinary,8,3,RoPE/layout/other attention-side ops,0.10851050000000004
+port,8192,10144,0,ordinary,8,3,TP collective,0.354927
+port,8192,10144,0,ordinary,8,3,attention merge,0.17617849999999996
+port,8192,10144,0,ordinary,8,3,down projection,0.6552679999999997
+port,8192,10144,0,ordinary,8,3,gate/up projection,0.9362755
+port,8192,10144,0,ordinary,8,3,quant attention,5.1491050000000005
+port,8192,10144,0,ordinary,8,3,residual add,0.18710450000000006
+port,8192,10144,0,ordinary,8,4,HP attention,0.37920599999999993
+port,8192,10144,0,ordinary,8,4,KV write,0.0959045
+port,8192,10144,0,ordinary,8,4,LSE reset,0.0704815
+port,8192,10144,0,ordinary,8,4,MLP activation/pointwise,0.09435150000000003
+port,8192,10144,0,ordinary,8,4,O projection,0.38692950000000004
+port,8192,10144,0,ordinary,8,4,QKV projection,0.5925489999999998
+port,8192,10144,0,ordinary,8,4,RMSNorm,0.6732564999999997
+port,8192,10144,0,ordinary,8,4,RoPE/layout/other attention-side ops,0.10894450000000001
+port,8192,10144,0,ordinary,8,4,TP collective,0.35600149999999986
+port,8192,10144,0,ordinary,8,4,attention merge,0.17603249999999998
+port,8192,10144,0,ordinary,8,4,down projection,0.6549194999999999
+port,8192,10144,0,ordinary,8,4,gate/up projection,0.9359239999999999
+port,8192,10144,0,ordinary,8,4,quant attention,5.148256
+port,8192,10144,0,ordinary,8,4,residual add,0.18674000000000007
+port,8192,10144,0,flush,1,1,HP attention,0.3805469999999999
+port,8192,10144,0,flush,1,1,KV metadata,0.008864
+port,8192,10144,0,flush,1,1,KV write,0.09580800000000002
+port,8192,10144,0,flush,1,1,LSE reset,0.07043499999999998
+port,8192,10144,0,flush,1,1,MLP activation/pointwise,0.09353800000000002
+port,8192,10144,0,flush,1,1,O projection,0.386499
+port,8192,10144,0,flush,1,1,QKV projection,0.5943999999999999
+port,8192,10144,0,flush,1,1,RMSNorm,0.6796539999999995
+port,8192,10144,0,flush,1,1,RoPE/layout/other attention-side ops,0.10963300000000004
+port,8192,10144,0,flush,1,1,TP collective,0.34880600000000006
+port,8192,10144,0,flush,1,1,attention merge,0.17568000000000003
+port,8192,10144,0,flush,1,1,down projection,0.6561279999999999
+port,8192,10144,0,flush,1,1,gate/up projection,0.9366760000000001
+port,8192,10144,0,flush,1,1,quant attention,5.162753
+port,8192,10144,0,flush,1,1,residual add,0.19273400000000002
+port,8192,10144,0,flush,1,2,HP attention,0.37951799999999986
+port,8192,10144,0,flush,1,2,KV write,0.09570999999999999
+port,8192,10144,0,flush,1,2,LSE reset,0.07014199999999997
+port,8192,10144,0,flush,1,2,MLP activation/pointwise,0.09366700000000001
+port,8192,10144,0,flush,1,2,O projection,0.38560099999999986
+port,8192,10144,0,flush,1,2,QKV projection,0.5934130000000001
+port,8192,10144,0,flush,1,2,RMSNorm,0.6743119999999991
+port,8192,10144,0,flush,1,2,RoPE/layout/other attention-side ops,0.10845000000000002
+port,8192,10144,0,flush,1,2,TP collective,0.358248
+port,8192,10144,0,flush,1,2,attention merge,0.17670899999999995
+port,8192,10144,0,flush,1,2,down projection,0.6550739999999997
+port,8192,10144,0,flush,1,2,gate/up projection,0.934757
+port,8192,10144,0,flush,1,2,quant attention,5.148866999999999
+port,8192,10144,0,flush,1,2,residual add,0.18716600000000014
+port,8192,10144,0,flush,1,3,HP attention,0.38103099999999995
+port,8192,10144,0,flush,1,3,KV write,0.09587499999999999
+port,8192,10144,0,flush,1,3,LSE reset,0.07040099999999998
+port,8192,10144,0,flush,1,3,MLP activation/pointwise,0.09465700000000002
+port,8192,10144,0,flush,1,3,O projection,0.38720399999999994
+port,8192,10144,0,flush,1,3,QKV projection,0.5923609999999999
+port,8192,10144,0,flush,1,3,RMSNorm,0.6726049999999999
+port,8192,10144,0,flush,1,3,RoPE/layout/other attention-side ops,0.109504
+port,8192,10144,0,flush,1,3,TP collective,0.3537630000000001
+port,8192,10144,0,flush,1,3,attention merge,0.176894
+port,8192,10144,0,flush,1,3,down projection,0.6542449999999996
+port,8192,10144,0,flush,1,3,gate/up projection,0.937094
+port,8192,10144,0,flush,1,3,quant attention,5.1477499999999985
+port,8192,10144,0,flush,1,3,residual add,0.187176
+port,8192,10144,0,flush,1,4,HP attention,0.38000500000000004
+port,8192,10144,0,flush,1,4,KV write,0.09581200000000001
+port,8192,10144,0,flush,1,4,LSE reset,0.07040099999999999
+port,8192,10144,0,flush,1,4,MLP activation/pointwise,0.09433700000000003
+port,8192,10144,0,flush,1,4,O projection,0.38548
+port,8192,10144,0,flush,1,4,QKV projection,0.594952
+port,8192,10144,0,flush,1,4,RMSNorm,0.6754569999999994
+port,8192,10144,0,flush,1,4,RoPE/layout/other attention-side ops,0.10905200000000001
+port,8192,10144,0,flush,1,4,TP collective,0.3524550000000001
+port,8192,10144,0,flush,1,4,attention merge,0.176028
+port,8192,10144,0,flush,1,4,down projection,0.6542429999999996
+port,8192,10144,0,flush,1,4,gate/up projection,0.9359390000000002
+port,8192,10144,0,flush,1,4,quant attention,5.1487989999999995
+port,8192,10144,0,flush,1,4,residual add,0.187618
+port,8192,10144,1,ordinary,8,1,HP attention,0.3807864999999999
+port,8192,10144,1,ordinary,8,1,KV metadata,0.007407500000000001
+port,8192,10144,1,ordinary,8,1,KV write,0.09515249999999997
+port,8192,10144,1,ordinary,8,1,LSE reset,0.07081799999999999
+port,8192,10144,1,ordinary,8,1,MLP activation/pointwise,0.09399950000000001
+port,8192,10144,1,ordinary,8,1,O projection,0.3878615000000001
+port,8192,10144,1,ordinary,8,1,QKV projection,0.593892
+port,8192,10144,1,ordinary,8,1,RMSNorm,0.7099065000000002
+port,8192,10144,1,ordinary,8,1,RoPE/layout/other attention-side ops,0.10862650000000003
+port,8192,10144,1,ordinary,8,1,TP collective,0.300548
+port,8192,10144,1,ordinary,8,1,attention merge,0.17656150000000004
+port,8192,10144,1,ordinary,8,1,down projection,0.6617794999999997
+port,8192,10144,1,ordinary,8,1,gate/up projection,0.9386915000000001
+port,8192,10144,1,ordinary,8,1,quant attention,5.173790499999999
+port,8192,10144,1,ordinary,8,1,residual add,0.18512099999999992
+port,8192,10144,1,ordinary,8,2,HP attention,0.37979599999999997
+port,8192,10144,1,ordinary,8,2,KV write,0.09487899999999998
+port,8192,10144,1,ordinary,8,2,LSE reset,0.07036949999999999
+port,8192,10144,1,ordinary,8,2,MLP activation/pointwise,0.09353550000000001
+port,8192,10144,1,ordinary,8,2,O projection,0.38736400000000004
+port,8192,10144,1,ordinary,8,2,QKV projection,0.592644
+port,8192,10144,1,ordinary,8,2,RMSNorm,0.7096635000000002
+port,8192,10144,1,ordinary,8,2,RoPE/layout/other attention-side ops,0.10846500000000003
+port,8192,10144,1,ordinary,8,2,TP collective,0.2993585000000001
+port,8192,10144,1,ordinary,8,2,attention merge,0.17672400000000002
+port,8192,10144,1,ordinary,8,2,down projection,0.6602764999999999
+port,8192,10144,1,ordinary,8,2,gate/up projection,0.9376989999999998
+port,8192,10144,1,ordinary,8,2,quant attention,5.164072000000001
+port,8192,10144,1,ordinary,8,2,residual add,0.18509200000000003
+port,8192,10144,1,ordinary,8,3,HP attention,0.3802564999999999
+port,8192,10144,1,ordinary,8,3,KV write,0.09494599999999997
+port,8192,10144,1,ordinary,8,3,LSE reset,0.07053049999999997
+port,8192,10144,1,ordinary,8,3,MLP activation/pointwise,0.09395350000000002
+port,8192,10144,1,ordinary,8,3,O projection,0.387744
+port,8192,10144,1,ordinary,8,3,QKV projection,0.5934589999999998
+port,8192,10144,1,ordinary,8,3,RMSNorm,0.708855
+port,8192,10144,1,ordinary,8,3,RoPE/layout/other attention-side ops,0.10867550000000005
+port,8192,10144,1,ordinary,8,3,TP collective,0.29443849999999994
+port,8192,10144,1,ordinary,8,3,attention merge,0.1766275
+port,8192,10144,1,ordinary,8,3,down projection,0.6606905000000001
+port,8192,10144,1,ordinary,8,3,gate/up projection,0.9389349999999999
+port,8192,10144,1,ordinary,8,3,quant attention,5.166076
+port,8192,10144,1,ordinary,8,3,residual add,0.18459449999999997
+port,8192,10144,1,ordinary,8,4,HP attention,0.3801805000000001
+port,8192,10144,1,ordinary,8,4,KV write,0.09501099999999998
+port,8192,10144,1,ordinary,8,4,LSE reset,0.07055999999999998
+port,8192,10144,1,ordinary,8,4,MLP activation/pointwise,0.09375900000000004
+port,8192,10144,1,ordinary,8,4,O projection,0.38736400000000004
+port,8192,10144,1,ordinary,8,4,QKV projection,0.5935075000000001
+port,8192,10144,1,ordinary,8,4,RMSNorm,0.7092880000000001
+port,8192,10144,1,ordinary,8,4,RoPE/layout/other attention-side ops,0.10897500000000004
+port,8192,10144,1,ordinary,8,4,TP collective,0.2946785
+port,8192,10144,1,ordinary,8,4,attention merge,0.176641
+port,8192,10144,1,ordinary,8,4,down projection,0.6605274999999998
+port,8192,10144,1,ordinary,8,4,gate/up projection,0.9389475
+port,8192,10144,1,ordinary,8,4,quant attention,5.165915499999999
+port,8192,10144,1,ordinary,8,4,residual add,0.18446649999999998
+port,8192,10144,1,flush,1,1,HP attention,0.381633
+port,8192,10144,1,flush,1,1,KV metadata,0.007456
+port,8192,10144,1,flush,1,1,KV write,0.09801799999999997
+port,8192,10144,1,flush,1,1,LSE reset,0.07107100000000001
+port,8192,10144,1,flush,1,1,MLP activation/pointwise,0.094144
+port,8192,10144,1,flush,1,1,O projection,0.38774600000000004
+port,8192,10144,1,flush,1,1,QKV projection,0.5945029999999999
+port,8192,10144,1,flush,1,1,RMSNorm,0.7097300000000003
+port,8192,10144,1,flush,1,1,RoPE/layout/other attention-side ops,0.10895800000000001
+port,8192,10144,1,flush,1,1,TP collective,0.303903
+port,8192,10144,1,flush,1,1,attention merge,0.17740799999999995
+port,8192,10144,1,flush,1,1,down projection,0.6624040000000001
+port,8192,10144,1,flush,1,1,gate/up projection,0.9377320000000001
+port,8192,10144,1,flush,1,1,quant attention,5.175388999999999
+port,8192,10144,1,flush,1,1,residual add,0.18466799999999997
+port,8192,10144,1,flush,1,2,HP attention,0.37907400000000013
+port,8192,10144,1,flush,1,2,KV write,0.09471699999999997
+port,8192,10144,1,flush,1,2,LSE reset,0.07033499999999998
+port,8192,10144,1,flush,1,2,MLP activation/pointwise,0.09385500000000001
+port,8192,10144,1,flush,1,2,O projection,0.38765299999999997
+port,8192,10144,1,flush,1,2,QKV projection,0.592802
+port,8192,10144,1,flush,1,2,RMSNorm,0.7099289999999999
+port,8192,10144,1,flush,1,2,RoPE/layout/other attention-side ops,0.110591
+port,8192,10144,1,flush,1,2,TP collective,0.2983
+port,8192,10144,1,flush,1,2,attention merge,0.17705499999999996
+port,8192,10144,1,flush,1,2,down projection,0.6612520000000001
+port,8192,10144,1,flush,1,2,gate/up projection,0.936711
+port,8192,10144,1,flush,1,2,quant attention,5.164857999999999
+port,8192,10144,1,flush,1,2,residual add,0.18659700000000004
+port,8192,10144,1,flush,1,3,HP attention,0.37980699999999995
+port,8192,10144,1,flush,1,3,KV write,0.09599999999999999
+port,8192,10144,1,flush,1,3,LSE reset,0.07026899999999997
+port,8192,10144,1,flush,1,3,MLP activation/pointwise,0.093919
+port,8192,10144,1,flush,1,3,O projection,0.38816100000000003
+port,8192,10144,1,flush,1,3,QKV projection,0.5927049999999998
+port,8192,10144,1,flush,1,3,RMSNorm,0.706658
+port,8192,10144,1,flush,1,3,RoPE/layout/other attention-side ops,0.108322
+port,8192,10144,1,flush,1,3,TP collective,0.29603500000000005
+port,8192,10144,1,flush,1,3,attention merge,0.17702700000000005
+port,8192,10144,1,flush,1,3,down projection,0.6607299999999997
+port,8192,10144,1,flush,1,3,gate/up projection,0.9368379999999997
+port,8192,10144,1,flush,1,3,quant attention,5.169049000000001
+port,8192,10144,1,flush,1,3,residual add,0.18528600000000003
+port,8192,10144,1,flush,1,4,HP attention,0.380961
+port,8192,10144,1,flush,1,4,KV write,0.09600599999999998
+port,8192,10144,1,flush,1,4,LSE reset,0.07043299999999998
+port,8192,10144,1,flush,1,4,MLP activation/pointwise,0.09363500000000001
+port,8192,10144,1,flush,1,4,O projection,0.388163
+port,8192,10144,1,flush,1,4,QKV projection,0.5936379999999999
+port,8192,10144,1,flush,1,4,RMSNorm,0.7084479999999996
+port,8192,10144,1,flush,1,4,RoPE/layout/other attention-side ops,0.10921700000000001
+port,8192,10144,1,flush,1,4,TP collective,0.29539900000000013
+port,8192,10144,1,flush,1,4,attention merge,0.17769599999999997
+port,8192,10144,1,flush,1,4,down projection,0.6608669999999998
+port,8192,10144,1,flush,1,4,gate/up projection,0.9360999999999998
+port,8192,10144,1,flush,1,4,quant attention,5.164824000000003
+port,8192,10144,1,flush,1,4,residual add,0.185535
+bf16,1024,2976,0,ordinary,9,1,BF16 attention,2.121097999999999
+bf16,1024,2976,0,ordinary,9,1,KV write,0.08816600000000005
+bf16,1024,2976,0,ordinary,9,1,MLP activation/pointwise,0.09222299999999999
+bf16,1024,2976,0,ordinary,9,1,O projection,0.37994099999999986
+bf16,1024,2976,0,ordinary,9,1,QKV projection,0.5935679999999998
+bf16,1024,2976,0,ordinary,9,1,RMSNorm,0.6716759999999996
+bf16,1024,2976,0,ordinary,9,1,RoPE/layout/other attention-side ops,0.10681299999999999
+bf16,1024,2976,0,ordinary,9,1,TP collective,0.356257
+bf16,1024,2976,0,ordinary,9,1,attention merge,0.20503100000000007
+bf16,1024,2976,0,ordinary,9,1,down projection,0.6512370000000001
+bf16,1024,2976,0,ordinary,9,1,gate/up projection,0.8468509999999999
+bf16,1024,2976,0,ordinary,9,1,residual add,0.18665900000000005
+bf16,1024,2976,0,ordinary,9,2,BF16 attention,2.1197870000000005
+bf16,1024,2976,0,ordinary,9,2,KV write,0.08787300000000002
+bf16,1024,2976,0,ordinary,9,2,MLP activation/pointwise,0.09203000000000001
+bf16,1024,2976,0,ordinary,9,2,O projection,0.37907100000000005
+bf16,1024,2976,0,ordinary,9,2,QKV projection,0.5915579999999998
+bf16,1024,2976,0,ordinary,9,2,RMSNorm,0.6695069999999993
+bf16,1024,2976,0,ordinary,9,2,RoPE/layout/other attention-side ops,0.10672199999999998
+bf16,1024,2976,0,ordinary,9,2,TP collective,0.3549729999999999
+bf16,1024,2976,0,ordinary,9,2,attention merge,0.20476900000000012
+bf16,1024,2976,0,ordinary,9,2,down projection,0.649087
+bf16,1024,2976,0,ordinary,9,2,gate/up projection,0.8444489999999997
+bf16,1024,2976,0,ordinary,9,2,residual add,0.18579200000000004
+bf16,1024,2976,0,ordinary,9,3,BF16 attention,2.117512
+bf16,1024,2976,0,ordinary,9,3,KV write,0.088192
+bf16,1024,2976,0,ordinary,9,3,MLP activation/pointwise,0.09087999999999999
+bf16,1024,2976,0,ordinary,9,3,O projection,0.378914
+bf16,1024,2976,0,ordinary,9,3,QKV projection,0.590854
+bf16,1024,2976,0,ordinary,9,3,RMSNorm,0.6693529999999994
+bf16,1024,2976,0,ordinary,9,3,RoPE/layout/other attention-side ops,0.10659299999999997
+bf16,1024,2976,0,ordinary,9,3,TP collective,0.3539890000000001
+bf16,1024,2976,0,ordinary,9,3,attention merge,0.20457400000000003
+bf16,1024,2976,0,ordinary,9,3,down projection,0.649213
+bf16,1024,2976,0,ordinary,9,3,gate/up projection,0.844194
+bf16,1024,2976,0,ordinary,9,3,residual add,0.18640699999999996
+bf16,1024,2976,0,ordinary,9,4,BF16 attention,2.117582
+bf16,1024,2976,0,ordinary,9,4,KV write,0.08803400000000004
+bf16,1024,2976,0,ordinary,9,4,MLP activation/pointwise,0.091583
+bf16,1024,2976,0,ordinary,9,4,O projection,0.378725
+bf16,1024,2976,0,ordinary,9,4,QKV projection,0.5909400000000002
+bf16,1024,2976,0,ordinary,9,4,RMSNorm,0.6681639999999999
+bf16,1024,2976,0,ordinary,9,4,RoPE/layout/other attention-side ops,0.10678099999999999
+bf16,1024,2976,0,ordinary,9,4,TP collective,0.3533120000000001
+bf16,1024,2976,0,ordinary,9,4,attention merge,0.2048640000000001
+bf16,1024,2976,0,ordinary,9,4,down projection,0.6486789999999996
+bf16,1024,2976,0,ordinary,9,4,gate/up projection,0.8446099999999999
+bf16,1024,2976,0,ordinary,9,4,residual add,0.18665599999999996
+bf16,1024,2976,1,ordinary,9,1,BF16 attention,2.1256409999999994
+bf16,1024,2976,1,ordinary,9,1,KV write,0.08733100000000002
+bf16,1024,2976,1,ordinary,9,1,MLP activation/pointwise,0.09458899999999999
+bf16,1024,2976,1,ordinary,9,1,O projection,0.382301
+bf16,1024,2976,1,ordinary,9,1,QKV projection,0.5946969999999999
+bf16,1024,2976,1,ordinary,9,1,RMSNorm,0.708991
+bf16,1024,2976,1,ordinary,9,1,RoPE/layout/other attention-side ops,0.105791
+bf16,1024,2976,1,ordinary,9,1,TP collective,0.301535
+bf16,1024,2976,1,ordinary,9,1,attention merge,0.20668700000000007
+bf16,1024,2976,1,ordinary,9,1,down projection,0.6547910000000002
+bf16,1024,2976,1,ordinary,9,1,gate/up projection,0.8495760000000001
+bf16,1024,2976,1,ordinary,9,1,residual add,0.19005100000000016
+bf16,1024,2976,1,ordinary,9,2,BF16 attention,2.124298
+bf16,1024,2976,1,ordinary,9,2,KV write,0.08697300000000002
+bf16,1024,2976,1,ordinary,9,2,MLP activation/pointwise,0.09455899999999998
+bf16,1024,2976,1,ordinary,9,2,O projection,0.3808640000000001
+bf16,1024,2976,1,ordinary,9,2,QKV projection,0.5923260000000004
+bf16,1024,2976,1,ordinary,9,2,RMSNorm,0.7072999999999999
+bf16,1024,2976,1,ordinary,9,2,RoPE/layout/other attention-side ops,0.10588700000000001
+bf16,1024,2976,1,ordinary,9,2,TP collective,0.2973800000000001
+bf16,1024,2976,1,ordinary,9,2,attention merge,0.2059840000000001
+bf16,1024,2976,1,ordinary,9,2,down projection,0.651493
+bf16,1024,2976,1,ordinary,9,2,gate/up projection,0.8462449999999998
+bf16,1024,2976,1,ordinary,9,2,residual add,0.19011600000000012
+bf16,1024,2976,1,ordinary,9,3,BF16 attention,2.1226320000000003
+bf16,1024,2976,1,ordinary,9,3,KV write,0.08719900000000004
+bf16,1024,2976,1,ordinary,9,3,MLP activation/pointwise,0.094591
+bf16,1024,2976,1,ordinary,9,3,O projection,0.380899
+bf16,1024,2976,1,ordinary,9,3,QKV projection,0.5922559999999998
+bf16,1024,2976,1,ordinary,9,3,RMSNorm,0.7072979999999998
+bf16,1024,2976,1,ordinary,9,3,RoPE/layout/other attention-side ops,0.10550599999999996
+bf16,1024,2976,1,ordinary,9,3,TP collective,0.29728699999999997
+bf16,1024,2976,1,ordinary,9,3,attention merge,0.20607500000000004
+bf16,1024,2976,1,ordinary,9,3,down projection,0.6531529999999997
+bf16,1024,2976,1,ordinary,9,3,gate/up projection,0.8468220000000002
+bf16,1024,2976,1,ordinary,9,3,residual add,0.18982200000000013
+bf16,1024,2976,1,ordinary,9,4,BF16 attention,2.1193670000000004
+bf16,1024,2976,1,ordinary,9,4,KV write,0.086913
+bf16,1024,2976,1,ordinary,9,4,MLP activation/pointwise,0.09526299999999999
+bf16,1024,2976,1,ordinary,9,4,O projection,0.38067200000000007
+bf16,1024,2976,1,ordinary,9,4,QKV projection,0.592
+bf16,1024,2976,1,ordinary,9,4,RMSNorm,0.7069159999999998
+bf16,1024,2976,1,ordinary,9,4,RoPE/layout/other attention-side ops,0.10582800000000002
+bf16,1024,2976,1,ordinary,9,4,TP collective,0.298306
+bf16,1024,2976,1,ordinary,9,4,attention merge,0.20618100000000011
+bf16,1024,2976,1,ordinary,9,4,down projection,0.6515859999999997
+bf16,1024,2976,1,ordinary,9,4,gate/up projection,0.8472969999999999
+bf16,1024,2976,1,ordinary,9,4,residual add,0.18966900000000014
+bf16,2048,4000,0,ordinary,9,1,BF16 attention,2.705711
+bf16,2048,4000,0,ordinary,9,1,KV write,0.08822900000000003
+bf16,2048,4000,0,ordinary,9,1,MLP activation/pointwise,0.091877
+bf16,2048,4000,0,ordinary,9,1,O projection,0.379843
+bf16,2048,4000,0,ordinary,9,1,QKV projection,0.5931529999999999
+bf16,2048,4000,0,ordinary,9,1,RMSNorm,0.6722659999999995
+bf16,2048,4000,0,ordinary,9,1,RoPE/layout/other attention-side ops,0.106336
+bf16,2048,4000,0,ordinary,9,1,TP collective,0.357122
+bf16,2048,4000,0,ordinary,9,1,attention merge,0.20530900000000007
+bf16,2048,4000,0,ordinary,9,1,down projection,0.6509119999999998
+bf16,2048,4000,0,ordinary,9,1,gate/up projection,0.8456680000000001
+bf16,2048,4000,0,ordinary,9,1,residual add,0.18752400000000002
+bf16,2048,4000,0,ordinary,9,2,BF16 attention,2.694861
+bf16,2048,4000,0,ordinary,9,2,KV write,0.08793600000000007
+bf16,2048,4000,0,ordinary,9,2,MLP activation/pointwise,0.092224
+bf16,2048,4000,0,ordinary,9,2,O projection,0.378688
+bf16,2048,4000,0,ordinary,9,2,QKV projection,0.591839
+bf16,2048,4000,0,ordinary,9,2,RMSNorm,0.6691579999999994
+bf16,2048,4000,0,ordinary,9,2,RoPE/layout/other attention-side ops,0.10624299999999999
+bf16,2048,4000,0,ordinary,9,2,TP collective,0.352318
+bf16,2048,4000,0,ordinary,9,2,attention merge,0.2048000000000001
+bf16,2048,4000,0,ordinary,9,2,down projection,0.6485799999999997
+bf16,2048,4000,0,ordinary,9,2,gate/up projection,0.8456999999999999
+bf16,2048,4000,0,ordinary,9,2,residual add,0.18669000000000002
+bf16,2048,4000,0,ordinary,9,3,BF16 attention,2.6949870000000007
+bf16,2048,4000,0,ordinary,9,3,KV write,0.08796900000000003
+bf16,2048,4000,0,ordinary,9,3,MLP activation/pointwise,0.09097699999999999
+bf16,2048,4000,0,ordinary,9,3,O projection,0.378948
+bf16,2048,4000,0,ordinary,9,3,QKV projection,0.5912660000000001
+bf16,2048,4000,0,ordinary,9,3,RMSNorm,0.6691599999999996
+bf16,2048,4000,0,ordinary,9,3,RoPE/layout/other attention-side ops,0.106152
+bf16,2048,4000,0,ordinary,9,3,TP collective,0.35410800000000003
+bf16,2048,4000,0,ordinary,9,3,attention merge,0.20490000000000014
+bf16,2048,4000,0,ordinary,9,3,down projection,0.6494780000000002
+bf16,2048,4000,0,ordinary,9,3,gate/up projection,0.8454420000000001
+bf16,2048,4000,0,ordinary,9,3,residual add,0.18646100000000004
+bf16,2048,4000,0,ordinary,9,4,BF16 attention,2.7006499999999987
+bf16,2048,4000,0,ordinary,9,4,KV write,0.08781199999999999
+bf16,2048,4000,0,ordinary,9,4,MLP activation/pointwise,0.09148999999999997
+bf16,2048,4000,0,ordinary,9,4,O projection,0.37901100000000004
+bf16,2048,4000,0,ordinary,9,4,QKV projection,0.5921299999999998
+bf16,2048,4000,0,ordinary,9,4,RMSNorm,0.6688039999999993
+bf16,2048,4000,0,ordinary,9,4,RoPE/layout/other attention-side ops,0.105984
+bf16,2048,4000,0,ordinary,9,4,TP collective,0.35312399999999977
+bf16,2048,4000,0,ordinary,9,4,attention merge,0.20489600000000008
+bf16,2048,4000,0,ordinary,9,4,down projection,0.6496339999999998
+bf16,2048,4000,0,ordinary,9,4,gate/up projection,0.8438150000000002
+bf16,2048,4000,0,ordinary,9,4,residual add,0.18591900000000003
+bf16,2048,4000,1,ordinary,9,1,BF16 attention,2.7047450000000004
+bf16,2048,4000,1,ordinary,9,1,KV write,0.087106
+bf16,2048,4000,1,ordinary,9,1,MLP activation/pointwise,0.094369
+bf16,2048,4000,1,ordinary,9,1,O projection,0.3820819999999999
+bf16,2048,4000,1,ordinary,9,1,QKV projection,0.594151
+bf16,2048,4000,1,ordinary,9,1,RMSNorm,0.7102429999999998
+bf16,2048,4000,1,ordinary,9,1,RoPE/layout/other attention-side ops,0.10566199999999999
+bf16,2048,4000,1,ordinary,9,1,TP collective,0.3042890000000001
+bf16,2048,4000,1,ordinary,9,1,attention merge,0.20694700000000008
+bf16,2048,4000,1,ordinary,9,1,down projection,0.6558409999999998
+bf16,2048,4000,1,ordinary,9,1,gate/up projection,0.848486
+bf16,2048,4000,1,ordinary,9,1,residual add,0.19068700000000008
+bf16,2048,4000,1,ordinary,9,2,BF16 attention,2.695725
+bf16,2048,4000,1,ordinary,9,2,KV write,0.08713400000000002
+bf16,2048,4000,1,ordinary,9,2,MLP activation/pointwise,0.09456600000000001
+bf16,2048,4000,1,ordinary,9,2,O projection,0.38092999999999994
+bf16,2048,4000,1,ordinary,9,2,QKV projection,0.5918799999999999
+bf16,2048,4000,1,ordinary,9,2,RMSNorm,0.7064670000000002
+bf16,2048,4000,1,ordinary,9,2,RoPE/layout/other attention-side ops,0.10540199999999998
+bf16,2048,4000,1,ordinary,9,2,TP collective,0.301754
+bf16,2048,4000,1,ordinary,9,2,attention merge,0.2065600000000001
+bf16,2048,4000,1,ordinary,9,2,down projection,0.6511969999999999
+bf16,2048,4000,1,ordinary,9,2,gate/up projection,0.8476149999999999
+bf16,2048,4000,1,ordinary,9,2,residual add,0.18940900000000016
+bf16,2048,4000,1,ordinary,9,3,BF16 attention,2.695533
+bf16,2048,4000,1,ordinary,9,3,KV write,0.08688100000000003
+bf16,2048,4000,1,ordinary,9,3,MLP activation/pointwise,0.09462699999999999
+bf16,2048,4000,1,ordinary,9,3,O projection,0.3808070000000001
+bf16,2048,4000,1,ordinary,9,3,QKV projection,0.59181
+bf16,2048,4000,1,ordinary,9,3,RMSNorm,0.707392
+bf16,2048,4000,1,ordinary,9,3,RoPE/layout/other attention-side ops,0.105089
+bf16,2048,4000,1,ordinary,9,3,TP collective,0.301119
+bf16,2048,4000,1,ordinary,9,3,attention merge,0.20627699999999996
+bf16,2048,4000,1,ordinary,9,3,down projection,0.6526489999999998
+bf16,2048,4000,1,ordinary,9,3,gate/up projection,0.8475829999999999
+bf16,2048,4000,1,ordinary,9,3,residual add,0.19026800000000008
+bf16,2048,4000,1,ordinary,9,4,BF16 attention,2.6991490000000002
+bf16,2048,4000,1,ordinary,9,4,KV write,0.08710300000000003
+bf16,2048,4000,1,ordinary,9,4,MLP activation/pointwise,0.095358
+bf16,2048,4000,1,ordinary,9,4,O projection,0.380992
+bf16,2048,4000,1,ordinary,9,4,QKV projection,0.5920339999999998
+bf16,2048,4000,1,ordinary,9,4,RMSNorm,0.7073030000000003
+bf16,2048,4000,1,ordinary,9,4,RoPE/layout/other attention-side ops,0.10560099999999997
+bf16,2048,4000,1,ordinary,9,4,TP collective,0.300103
+bf16,2048,4000,1,ordinary,9,4,attention merge,0.20620800000000014
+bf16,2048,4000,1,ordinary,9,4,down projection,0.651873
+bf16,2048,4000,1,ordinary,9,4,gate/up projection,0.8475869999999999
+bf16,2048,4000,1,ordinary,9,4,residual add,0.18976100000000015
+bf16,4096,6048,0,ordinary,9,1,BF16 attention,3.870865
+bf16,4096,6048,0,ordinary,9,1,KV write,0.08845400000000002
+bf16,4096,6048,0,ordinary,9,1,MLP activation/pointwise,0.092066
+bf16,4096,6048,0,ordinary,9,1,O projection,0.380067
+bf16,4096,6048,0,ordinary,9,1,QKV projection,0.5928030000000001
+bf16,4096,6048,0,ordinary,9,1,RMSNorm,0.6718039999999998
+bf16,4096,6048,0,ordinary,9,1,RoPE/layout/other attention-side ops,0.10947300000000006
+bf16,4096,6048,0,ordinary,9,1,TP collective,0.35645099999999996
+bf16,4096,6048,0,ordinary,9,1,attention merge,0.20521900000000012
+bf16,4096,6048,0,ordinary,9,1,down projection,0.6517829999999996
+bf16,4096,6048,0,ordinary,9,1,gate/up projection,0.8480369999999999
+bf16,4096,6048,0,ordinary,9,1,residual add,0.18636900000000003
+bf16,4096,6048,0,ordinary,9,2,BF16 attention,3.862687999999999
+bf16,4096,6048,0,ordinary,9,2,KV write,0.088063
+bf16,4096,6048,0,ordinary,9,2,MLP activation/pointwise,0.092093
+bf16,4096,6048,0,ordinary,9,2,O projection,0.3789119999999999
+bf16,4096,6048,0,ordinary,9,2,QKV projection,0.5929319999999998
+bf16,4096,6048,0,ordinary,9,2,RMSNorm,0.6698349999999998
+bf16,4096,6048,0,ordinary,9,2,RoPE/layout/other attention-side ops,0.10959999999999999
+bf16,4096,6048,0,ordinary,9,2,TP collective,0.35600399999999993
+bf16,4096,6048,0,ordinary,9,2,attention merge,0.20467000000000005
+bf16,4096,6048,0,ordinary,9,2,down projection,0.6492569999999996
+bf16,4096,6048,0,ordinary,9,2,gate/up projection,0.8468209999999998
+bf16,4096,6048,0,ordinary,9,2,residual add,0.18656300000000003
+bf16,4096,6048,0,ordinary,9,3,BF16 attention,3.8627350000000003
+bf16,4096,6048,0,ordinary,9,3,KV write,0.08812800000000003
+bf16,4096,6048,0,ordinary,9,3,MLP activation/pointwise,0.09091300000000001
+bf16,4096,6048,0,ordinary,9,3,O projection,0.37932999999999995
+bf16,4096,6048,0,ordinary,9,3,QKV projection,0.5915220000000001
+bf16,4096,6048,0,ordinary,9,3,RMSNorm,0.6689339999999996
+bf16,4096,6048,0,ordinary,9,3,RoPE/layout/other attention-side ops,0.10966400000000004
+bf16,4096,6048,0,ordinary,9,3,TP collective,0.3576640000000001
+bf16,4096,6048,0,ordinary,9,3,attention merge,0.20455200000000012
+bf16,4096,6048,0,ordinary,9,3,down projection,0.6494130000000001
+bf16,4096,6048,0,ordinary,9,3,gate/up projection,0.8459289999999997
+bf16,4096,6048,0,ordinary,9,3,residual add,0.18694500000000006
+bf16,4096,6048,0,ordinary,9,4,BF16 attention,3.860640000000001
+bf16,4096,6048,0,ordinary,9,4,KV write,0.08797000000000005
+bf16,4096,6048,0,ordinary,9,4,MLP activation/pointwise,0.091392
+bf16,4096,6048,0,ordinary,9,4,O projection,0.379011
+bf16,4096,6048,0,ordinary,9,4,QKV projection,0.591874
+bf16,4096,6048,0,ordinary,9,4,RMSNorm,0.6693479999999995
+bf16,4096,6048,0,ordinary,9,4,RoPE/layout/other attention-side ops,0.10941100000000004
+bf16,4096,6048,0,ordinary,9,4,TP collective,0.3509109999999999
+bf16,4096,6048,0,ordinary,9,4,attention merge,0.20470600000000008
+bf16,4096,6048,0,ordinary,9,4,down projection,0.649444
+bf16,4096,6048,0,ordinary,9,4,gate/up projection,0.8451569999999998
+bf16,4096,6048,0,ordinary,9,4,residual add,0.18579400000000004
+bf16,4096,6048,1,ordinary,9,1,BF16 attention,3.86501
+bf16,4096,6048,1,ordinary,9,1,KV write,0.08733400000000001
+bf16,4096,6048,1,ordinary,9,1,MLP activation/pointwise,0.09442999999999997
+bf16,4096,6048,1,ordinary,9,1,O projection,0.3809950000000001
+bf16,4096,6048,1,ordinary,9,1,QKV projection,0.5931240000000001
+bf16,4096,6048,1,ordinary,9,1,RMSNorm,0.7086960000000005
+bf16,4096,6048,1,ordinary,9,1,RoPE/layout/other attention-side ops,0.10950200000000004
+bf16,4096,6048,1,ordinary,9,1,TP collective,0.31101800000000007
+bf16,4096,6048,1,ordinary,9,1,attention merge,0.20659500000000008
+bf16,4096,6048,1,ordinary,9,1,down projection,0.6545979999999998
+bf16,4096,6048,1,ordinary,9,1,gate/up projection,0.849547
+bf16,4096,6048,1,ordinary,9,1,residual add,0.190591
+bf16,4096,6048,1,ordinary,9,2,BF16 attention,3.860527000000001
+bf16,4096,6048,1,ordinary,9,2,KV write,0.08716400000000003
+bf16,4096,6048,1,ordinary,9,2,MLP activation/pointwise,0.09459499999999998
+bf16,4096,6048,1,ordinary,9,2,O projection,0.380353
+bf16,4096,6048,1,ordinary,9,2,QKV projection,0.592004
+bf16,4096,6048,1,ordinary,9,2,RMSNorm,0.7068900000000002
+bf16,4096,6048,1,ordinary,9,2,RoPE/layout/other attention-side ops,0.10918299999999999
+bf16,4096,6048,1,ordinary,9,2,TP collective,0.30486500000000005
+bf16,4096,6048,1,ordinary,9,2,attention merge,0.20627300000000012
+bf16,4096,6048,1,ordinary,9,2,down projection,0.6513629999999998
+bf16,4096,6048,1,ordinary,9,2,gate/up projection,0.8488030000000002
+bf16,4096,6048,1,ordinary,9,2,residual add,0.19046800000000005
+bf16,4096,6048,1,ordinary,9,3,BF16 attention,3.861112
+bf16,4096,6048,1,ordinary,9,3,KV write,0.08701
+bf16,4096,6048,1,ordinary,9,3,MLP activation/pointwise,0.094558
+bf16,4096,6048,1,ordinary,9,3,O projection,0.3802600000000001
+bf16,4096,6048,1,ordinary,9,3,QKV projection,0.591649
+bf16,4096,6048,1,ordinary,9,3,RMSNorm,0.7068860000000002
+bf16,4096,6048,1,ordinary,9,3,RoPE/layout/other attention-side ops,0.10921400000000002
+bf16,4096,6048,1,ordinary,9,3,TP collective,0.3051559999999999
+bf16,4096,6048,1,ordinary,9,3,attention merge,0.2064010000000001
+bf16,4096,6048,1,ordinary,9,3,down projection,0.652519
+bf16,4096,6048,1,ordinary,9,3,gate/up projection,0.84791
+bf16,4096,6048,1,ordinary,9,3,residual add,0.18998300000000012
+bf16,4096,6048,1,ordinary,9,4,BF16 attention,3.8646290000000003
+bf16,4096,6048,1,ordinary,9,4,KV write,0.08713600000000006
+bf16,4096,6048,1,ordinary,9,4,MLP activation/pointwise,0.095457
+bf16,4096,6048,1,ordinary,9,4,O projection,0.38019200000000003
+bf16,4096,6048,1,ordinary,9,4,QKV projection,0.591108
+bf16,4096,6048,1,ordinary,9,4,RMSNorm,0.707039
+bf16,4096,6048,1,ordinary,9,4,RoPE/layout/other attention-side ops,0.10940900000000002
+bf16,4096,6048,1,ordinary,9,4,TP collective,0.302976
+bf16,4096,6048,1,ordinary,9,4,attention merge,0.2061400000000001
+bf16,4096,6048,1,ordinary,9,4,down projection,0.6511669999999997
+bf16,4096,6048,1,ordinary,9,4,gate/up projection,0.8478129999999999
+bf16,4096,6048,1,ordinary,9,4,residual add,0.1899880000000001
+bf16,8192,10144,0,ordinary,9,1,BF16 attention,6.182059000000001
+bf16,8192,10144,0,ordinary,9,1,KV write,0.08922300000000005
+bf16,8192,10144,0,ordinary,9,1,MLP activation/pointwise,0.091808
+bf16,8192,10144,0,ordinary,9,1,O projection,0.3805140000000001
+bf16,8192,10144,0,ordinary,9,1,QKV projection,0.5926129999999998
+bf16,8192,10144,0,ordinary,9,1,RMSNorm,0.6710559999999995
+bf16,8192,10144,0,ordinary,9,1,RoPE/layout/other attention-side ops,0.10883200000000004
+bf16,8192,10144,0,ordinary,9,1,TP collective,0.35926499999999995
+bf16,8192,10144,0,ordinary,9,1,attention merge,0.20509200000000005
+bf16,8192,10144,0,ordinary,9,1,down projection,0.6511729999999998
+bf16,8192,10144,0,ordinary,9,1,gate/up projection,0.8487399999999999
+bf16,8192,10144,0,ordinary,9,1,residual add,0.187098
+bf16,8192,10144,0,ordinary,9,2,BF16 attention,6.172462999999998
+bf16,8192,10144,0,ordinary,9,2,KV write,0.08876300000000002
+bf16,8192,10144,0,ordinary,9,2,MLP activation/pointwise,0.092129
+bf16,8192,10144,0,ordinary,9,2,O projection,0.3796500000000001
+bf16,8192,10144,0,ordinary,9,2,QKV projection,0.5924849999999998
+bf16,8192,10144,0,ordinary,9,2,RMSNorm,0.6687029999999998
+bf16,8192,10144,0,ordinary,9,2,RoPE/layout/other attention-side ops,0.10908900000000002
+bf16,8192,10144,0,ordinary,9,2,TP collective,0.35638400000000026
+bf16,8192,10144,0,ordinary,9,2,attention merge,0.2049910000000001
+bf16,8192,10144,0,ordinary,9,2,down projection,0.6486409999999999
+bf16,8192,10144,0,ordinary,9,2,gate/up projection,0.848712
+bf16,8192,10144,0,ordinary,9,2,residual add,0.185918
+bf16,8192,10144,0,ordinary,9,3,BF16 attention,6.168522
+bf16,8192,10144,0,ordinary,9,3,KV write,0.08889600000000006
+bf16,8192,10144,0,ordinary,9,3,MLP activation/pointwise,0.09091100000000002
+bf16,8192,10144,0,ordinary,9,3,O projection,0.37971900000000003
+bf16,8192,10144,0,ordinary,9,3,QKV projection,0.5915209999999999
+bf16,8192,10144,0,ordinary,9,3,RMSNorm,0.6693229999999996
+bf16,8192,10144,0,ordinary,9,3,RoPE/layout/other attention-side ops,0.10914799999999998
+bf16,8192,10144,0,ordinary,9,3,TP collective,0.36004200000000003
+bf16,8192,10144,0,ordinary,9,3,attention merge,0.20463800000000013
+bf16,8192,10144,0,ordinary,9,3,down projection,0.6489979999999996
+bf16,8192,10144,0,ordinary,9,3,gate/up projection,0.8489010000000002
+bf16,8192,10144,0,ordinary,9,3,residual add,0.186522
+bf16,8192,10144,0,ordinary,9,4,BF16 attention,6.167693
+bf16,8192,10144,0,ordinary,9,4,KV write,0.08861200000000001
+bf16,8192,10144,0,ordinary,9,4,MLP activation/pointwise,0.09142399999999999
+bf16,8192,10144,0,ordinary,9,4,O projection,0.379649
+bf16,8192,10144,0,ordinary,9,4,QKV projection,0.591971
+bf16,8192,10144,0,ordinary,9,4,RMSNorm,0.6696019999999993
+bf16,8192,10144,0,ordinary,9,4,RoPE/layout/other attention-side ops,0.10908900000000002
+bf16,8192,10144,0,ordinary,9,4,TP collective,0.3592040000000001
+bf16,8192,10144,0,ordinary,9,4,attention merge,0.2046760000000001
+bf16,8192,10144,0,ordinary,9,4,down projection,0.6489319999999996
+bf16,8192,10144,0,ordinary,9,4,gate/up projection,0.84785
+bf16,8192,10144,0,ordinary,9,4,residual add,0.18655700000000003
+bf16,8192,10144,1,ordinary,9,1,BF16 attention,6.183465999999998
+bf16,8192,10144,1,ordinary,9,1,KV write,0.08928500000000002
+bf16,8192,10144,1,ordinary,9,1,MLP activation/pointwise,0.094212
+bf16,8192,10144,1,ordinary,9,1,O projection,0.3809669999999999
+bf16,8192,10144,1,ordinary,9,1,QKV projection,0.5929939999999999
+bf16,8192,10144,1,ordinary,9,1,RMSNorm,0.7075570000000002
+bf16,8192,10144,1,ordinary,9,1,RoPE/layout/other attention-side ops,0.10874100000000007
+bf16,8192,10144,1,ordinary,9,1,TP collective,0.307934
+bf16,8192,10144,1,ordinary,9,1,attention merge,0.20704300000000006
+bf16,8192,10144,1,ordinary,9,1,down projection,0.6540489999999999
+bf16,8192,10144,1,ordinary,9,1,gate/up projection,0.8489950000000002
+bf16,8192,10144,1,ordinary,9,1,residual add,0.19084400000000018
+bf16,8192,10144,1,ordinary,9,2,BF16 attention,6.172873
+bf16,8192,10144,1,ordinary,9,2,KV write,0.08799800000000002
+bf16,8192,10144,1,ordinary,9,2,MLP activation/pointwise,0.09452799999999999
+bf16,8192,10144,1,ordinary,9,2,O projection,0.3805120000000001
+bf16,8192,10144,1,ordinary,9,2,QKV projection,0.5925790000000001
+bf16,8192,10144,1,ordinary,9,2,RMSNorm,0.7067629999999999
+bf16,8192,10144,1,ordinary,9,2,RoPE/layout/other attention-side ops,0.10898900000000002
+bf16,8192,10144,1,ordinary,9,2,TP collective,0.3080690000000001
+bf16,8192,10144,1,ordinary,9,2,attention merge,0.20665300000000003
+bf16,8192,10144,1,ordinary,9,2,down projection,0.6508229999999999
+bf16,8192,10144,1,ordinary,9,2,gate/up projection,0.8505030000000003
+bf16,8192,10144,1,ordinary,9,2,residual add,0.1894070000000001
+bf16,8192,10144,1,ordinary,9,3,BF16 attention,6.187815
+bf16,8192,10144,1,ordinary,9,3,KV write,0.08934400000000006
+bf16,8192,10144,1,ordinary,9,3,MLP activation/pointwise,0.09468699999999998
+bf16,8192,10144,1,ordinary,9,3,O projection,0.38089700000000004
+bf16,8192,10144,1,ordinary,9,3,QKV projection,0.5917159999999999
+bf16,8192,10144,1,ordinary,9,3,RMSNorm,0.7065960000000003
+bf16,8192,10144,1,ordinary,9,3,RoPE/layout/other attention-side ops,0.10876400000000006
+bf16,8192,10144,1,ordinary,9,3,TP collective,0.301573
+bf16,8192,10144,1,ordinary,9,3,attention merge,0.2067490000000001
+bf16,8192,10144,1,ordinary,9,3,down projection,0.6524219999999995
+bf16,8192,10144,1,ordinary,9,3,gate/up projection,0.8497339999999995
+bf16,8192,10144,1,ordinary,9,3,residual add,0.19001600000000016
+bf16,8192,10144,1,ordinary,9,4,BF16 attention,6.178950999999999
+bf16,8192,10144,1,ordinary,9,4,KV write,0.08835100000000004
+bf16,8192,10144,1,ordinary,9,4,MLP activation/pointwise,0.09529800000000001
+bf16,8192,10144,1,ordinary,9,4,O projection,0.38051799999999997
+bf16,8192,10144,1,ordinary,9,4,QKV projection,0.5922240000000002
+bf16,8192,10144,1,ordinary,9,4,RMSNorm,0.706891
+bf16,8192,10144,1,ordinary,9,4,RoPE/layout/other attention-side ops,0.109019
+bf16,8192,10144,1,ordinary,9,4,TP collective,0.30303699999999983
+bf16,8192,10144,1,ordinary,9,4,attention merge,0.20630500000000007
+bf16,8192,10144,1,ordinary,9,4,down projection,0.6517120000000001
+bf16,8192,10144,1,ordinary,9,4,gate/up projection,0.849227
+bf16,8192,10144,1,ordinary,9,4,residual add,0.18979200000000016
