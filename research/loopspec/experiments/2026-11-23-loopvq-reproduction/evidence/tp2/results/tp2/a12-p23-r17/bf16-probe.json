@@ -1,0 +1,55 @@
+{
+  "text": "Okay, let's see. The user provided a bunch of repeated text that says",
+  "output_ids": [
+    39122,
+    28,
+    1303,
+    506,
+    963,
+    30,
+    378,
+    2914,
+    2711,
+    253,
+    17991,
+    282,
+    6514,
+    1694,
+    338,
+    1921
+  ],
+  "meta_info": {
+    "id": "ba953a49b55d4ba59552f51e1acc7b0e",
+    "finish_reason": {
+      "type": "length",
+      "length": 16
+    },
+    "prompt_tokens": 2048,
+    "weight_version": "default",
+    "num_retractions": 0,
+    "storage_prefetch_wait": 0.0,
+    "storage_staging_wait": 0.0,
+    "forward_entry_time": 1795494806.4799066,
+    "prefill_finished_time": 1795494806.936944,
+    "queue_time": 0.0001709188800305128,
+    "reasoning_tokens": 0,
+    "completion_tokens": 16,
+    "cached_tokens": 0,
+    "weight_versions": [
+      {
+        "version": "default",
+        "start": 0,
+        "end": 16
+      }
+    ],
+    "cached_tokens_details": null,
+    "dp_rank": null,
+    "e2e_latency": 0.8894982729107141,
+    "request_received_ts": 1795494806.478479,
+    "first_token_latency": 0.4584651249460876,
+    "api_server_dispatch_finish_ts": 1795494806.478801,
+    "request_finished_ts": 1795494807.3679771,
+    "decode_throughput": 34.80010776626163,
+    "response_sent_to_client_ts": 1795494807.3682747
+  }
+}
