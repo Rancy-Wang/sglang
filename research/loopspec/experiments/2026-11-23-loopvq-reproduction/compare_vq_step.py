@@ -36,6 +36,8 @@ def batch(root, name, url, inputs, length, capture):
     start = time.perf_counter()
     done = False
     trigger = None
+    boundaries = list(sweep.OUTPUTS) if capture == 'windows' else [1024]
+    captures = []
     with request(url+'/generate', payload, 3600) as response, events.open('x') as out:
         for line in response:
             if not line.startswith(b'data:'): continue
@@ -45,16 +47,25 @@ def batch(root, name, url, inputs, length, capture):
                 break
             obs = stats.feed(json.loads(item), time.perf_counter()-start)
             out.write(json.dumps(obs)+'\n')
-            if capture and trigger is None and min(r['completion_tokens'] for r in stats.requests) >= 928:
-                options = ({'activities': ['CPU', 'GPU'], 'num_steps': 10, 'output_dir': str(root),
-                            'with_stack': False, 'record_shapes': False} if capture == 'native' else
+            if capture and len(captures) < len(boundaries):
+                count = min(r['completion_tokens'] for r in stats.requests)
+                boundary = boundaries[len(captures)]
+                if count < boundary - 96:
+                    continue
+                output_dir = root
+                if capture == 'windows':
+                    output_dir = root/f'near-{boundary}'
+                    output_dir.mkdir()
+                options = ({'activities': ['CPU', 'GPU'], 'num_steps': 10, 'output_dir': str(output_dir),
+                            'with_stack': False, 'record_shapes': False} if capture in ('native', 'windows') else
                            {'activities':['CUDA_PROFILER'], 'num_steps':16,'detailed_annotations':True})
                 with request(url+'/start_profile', options, 120) as r:
                     trigger = r.read().decode()
-    assert done and (not capture or trigger is not None)
+                captures.append(dict(output_boundary=boundary, min_observed_completion=count, response=trigger))
+    assert done and (not capture or len(captures) == len(boundaries))
     stats.finalize(time.perf_counter()-start)
     result = sweep.decode_interval(events, len(inputs), length)
-    result['profile_response'] = trigger
+    result['profile_response'] = captures if capture == 'windows' else trigger
     return result
 
 
@@ -196,7 +207,7 @@ def main(args):
             bench.atomic_json(root/'correctness.json', dict(aborted=True, reused=reused, ragged=answers))
             return
         if profile:
-            assert args.cells == [(1024, 4)]
+            assert args.cells == ([(8192, 4)] if args.mode == 'windows' else [(1024, 4)])
         for length, bs in args.cells:
             cell = root if not args.multi else root/f'out{length}-bs{bs}'
             cell.mkdir(exist_ok=True)
@@ -229,6 +240,11 @@ def main(args):
             for _ in range(120):
                 if any(p.stat().st_size>10000 for p in root.glob('*.nsys-rep')): break
                 time.sleep(1)
+        if args.mode == 'windows':
+            for boundary in sweep.OUTPUTS:
+                for rank in range(2):
+                    traces = list((root/f'near-{boundary}').glob(f'*TP-{rank}.trace.json.gz'))
+                    assert len(traces) == 1 and traces[0].stat().st_size > 10_000
         bench.atomic_json(root/'complete.json',dict(cells=args.cells))
     finally:
         if process.poll() is None:
@@ -240,7 +256,7 @@ def main(args):
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('run')
-    parser.add_argument('mode', choices=['timing','trace','light','native','probe','eager','audit'])
+    parser.add_argument('mode', choices=['timing','trace','light','native','windows','probe','eager','audit'])
     parser.add_argument('stack', choices=['official','port','bf16','official-bf16'])
     parser.add_argument('cards')
     parser.add_argument('port', type=int)
@@ -248,6 +264,6 @@ if __name__=='__main__':
     parser.add_argument('--cells', nargs='+', type=lambda v: tuple(map(int,v.split('/'))))
     args = parser.parse_args()
     args.multi = args.cells is not None
-    args.cells = args.cells or [(1024, 4)]
+    args.cells = args.cells or ([(8192, 4)] if args.mode == 'windows' else [(1024, 4)])
     assert all(n in sweep.OUTPUTS and b in sweep.BATCHES for n,b in args.cells)
     main(args)
