@@ -1,0 +1,25 @@
+{
+  "remote_root": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results",
+  "timing": "official-step-r19/timing/{official,port}",
+  "timing_cuda_visible_devices": "0,1",
+  "kineto": "official-step-r19/native-{official,port}",
+  "kineto_cuda_visible_devices": "6,7",
+  "gpu_model": "NVIDIA A100-SXM4-80GB",
+  "light_cuda_visible_devices": "4,5",
+  "light": {
+    "official": "official-step-r20-retry/light/official",
+    "port": "official-step-r20/light/port"
+  },
+  "node_port": "official-step-r19-retry/trace/port",
+  "official_failed_nsight_node": "official-step-r19/trace/official/saved.qdstrm",
+  "native_trace_sha256": {
+    "official/1795512698.8081346-TP-0.trace.json.gz": "cdc4a32a263ace0bb604fab096ae019a1077bed32e1dcd90020bed02bdb02c06",
+    "official/1795512698.8081346-TP-1.trace.json.gz": "b45c76b4e5551c497f5c061c9e3b6c56a4267dcc969d94e42fcb8140f4e0ec45",
+    "port/1795512852.3650484-TP-0.trace.json.gz": "d2ba4955f4d69eb9367c26cb4dfa7f384321693ebba613e3a9a5828facce4a76",
+    "port/1795512852.3650484-TP-1.trace.json.gz": "a7d24ee19991c3f605a1ec6b16b617c8a31b4460acbb0c8336ace4edba1bf2f1"
+  },
+  "light_nsys_rep_sha256": {
+    "official": "0103aa18bf5eac22754af2d38b38d1d626375f6c73412ae05e7c4f33cda13a39",
+    "port": "8c6b45ed483cc3eb7fbef44d3aecbff72fb9310480a8d715ea490e46e5aec0bc"
+  }
+}

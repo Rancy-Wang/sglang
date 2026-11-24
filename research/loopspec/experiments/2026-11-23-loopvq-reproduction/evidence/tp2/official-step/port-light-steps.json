@@ -1,0 +1,1918 @@
+[
+  {
+    "device": 1,
+    "pid": 328429941555200,
+    "idx": 0,
+    "correlation": 212504,
+    "graph_start_ns": 86234664,
+    "next_start_ns": 134800863,
+    "period_ms": 48.566199,
+    "graph_span_ms": 44.086116,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.480083,
+    "gap_busy_ms": 0.149725,
+    "gap_uncovered_ms": 4.330358,
+    "gap_uncovered_before_next_launch_api_ms": 1.937618,
+    "gap_uncovered_after_next_launch_api_ms": 2.39274,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006336,
+    "gap_launch_thread_in_cuda_api_ms": 2.873332,
+    "host_sync_intersect_graph_ms": 42.158977,
+    "host_sync_intersect_gap_ms": 0.063153,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.624465,
+        3.196547,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        42.247506,
+        1.274556,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.18955,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.897838,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.031829,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        42.210006,
+        1.202306,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.04265,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 1,
+    "pid": 328429941555200,
+    "idx": 1,
+    "correlation": 213404,
+    "graph_start_ns": 134800863,
+    "next_start_ns": 183663794,
+    "period_ms": 48.862931,
+    "graph_span_ms": 44.733949,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.128982,
+    "gap_busy_ms": 0.148703,
+    "gap_uncovered_ms": 3.980279,
+    "gap_uncovered_before_next_launch_api_ms": 1.836928,
+    "gap_uncovered_after_next_launch_api_ms": 2.143351,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006112,
+    "gap_launch_thread_in_cuda_api_ms": 2.613816,
+    "host_sync_intersect_graph_ms": 42.082699,
+    "host_sync_intersect_gap_ms": 0.062598,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.451749,
+        2.878738,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        42.180058,
+        1.242074,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.144239,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.885938,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.02869,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        42.142718,
+        1.183274,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.051989,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 1,
+    "pid": 328429941555200,
+    "idx": 2,
+    "correlation": 214304,
+    "graph_start_ns": 183663794,
+    "next_start_ns": 225974087,
+    "period_ms": 42.310293,
+    "graph_span_ms": 38.13744,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.172853,
+    "gap_busy_ms": 0.148095,
+    "gap_uncovered_ms": 4.024758,
+    "gap_uncovered_before_next_launch_api_ms": 1.898911,
+    "gap_uncovered_after_next_launch_api_ms": 2.125847,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006111,
+    "gap_launch_thread_in_cuda_api_ms": 2.586518,
+    "host_sync_intersect_graph_ms": 35.44806,
+    "host_sync_intersect_gap_ms": 0.062713,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.454879,
+        2.902495,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.527839,
+        1.262318,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.133339,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.903126,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.02957,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.4972,
+        1.203219,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.043259,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 1,
+    "pid": 328429941555200,
+    "idx": 3,
+    "correlation": 215204,
+    "graph_start_ns": 225974087,
+    "next_start_ns": 267890881,
+    "period_ms": 41.916794,
+    "graph_span_ms": 37.816131,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.100663,
+    "gap_busy_ms": 0.148894,
+    "gap_uncovered_ms": 3.951769,
+    "gap_uncovered_before_next_launch_api_ms": 1.859115,
+    "gap_uncovered_after_next_launch_api_ms": 2.092654,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006176,
+    "gap_launch_thread_in_cuda_api_ms": 2.569415,
+    "host_sync_intersect_graph_ms": 35.405047,
+    "host_sync_intersect_gap_ms": 0.060507,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.440553,
+        2.841421,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.485866,
+        1.250603,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.143699,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.895686,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.02946,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.454906,
+        1.192263,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.04352,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 1,
+    "pid": 328429941555200,
+    "idx": 4,
+    "correlation": 216104,
+    "graph_start_ns": 267890881,
+    "next_start_ns": 312184258,
+    "period_ms": 44.293377,
+    "graph_span_ms": 38.802393,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 5.490984,
+    "gap_busy_ms": 0.570299,
+    "gap_uncovered_ms": 4.920685,
+    "gap_uncovered_before_next_launch_api_ms": 2.692354,
+    "gap_uncovered_after_next_launch_api_ms": 2.228331,
+    "gap_gpu_encode_ms": 0.360285,
+    "gap_gpu_copy_ms": 0.012671,
+    "gap_launch_thread_in_cuda_api_ms": 2.989702,
+    "host_sync_intersect_graph_ms": 35.016819,
+    "host_sync_intersect_gap_ms": 0.061135,
+    "gap_kernel_calls": 82,
+    "gap_encode_calls": 2,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.vq_flush_k": [
+        0.0,
+        0.10655,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.654166,
+        2.992048,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.114489,
+        2.490716,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.133669,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.934996,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.02878,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.077179,
+        2.427746,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_quant": [
+        0.0,
+        0.39607,
+        4
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.062839,
+        0.0,
+        2
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.vq_flush_v": [
+        0.0,
+        0.07161,
+        1
+      ]
+    }
+  },
+  {
+    "device": 1,
+    "pid": 328429941555200,
+    "idx": 5,
+    "correlation": 217494,
+    "graph_start_ns": 312184258,
+    "next_start_ns": 354643094,
+    "period_ms": 42.458836,
+    "graph_span_ms": 38.142624,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.316212,
+    "gap_busy_ms": 0.15043,
+    "gap_uncovered_ms": 4.165782,
+    "gap_uncovered_before_next_launch_api_ms": 1.909811,
+    "gap_uncovered_after_next_launch_api_ms": 2.255971,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006144,
+    "gap_launch_thread_in_cuda_api_ms": 2.744883,
+    "host_sync_intersect_graph_ms": 35.229875,
+    "host_sync_intersect_gap_ms": 0.060869,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.462768,
+        3.003528,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.310205,
+        1.303414,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.13219,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.933758,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.02983,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.279665,
+        1.244244,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.04271,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 1,
+    "pid": 328429941555200,
+    "idx": 6,
+    "correlation": 218394,
+    "graph_start_ns": 354643094,
+    "next_start_ns": 396705646,
+    "period_ms": 42.062552,
+    "graph_span_ms": 37.759523,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.303029,
+    "gap_busy_ms": 0.151135,
+    "gap_uncovered_ms": 4.151894,
+    "gap_uncovered_before_next_launch_api_ms": 1.898538,
+    "gap_uncovered_after_next_launch_api_ms": 2.253356,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006144,
+    "gap_launch_thread_in_cuda_api_ms": 2.737834,
+    "host_sync_intersect_graph_ms": 35.466081,
+    "host_sync_intersect_gap_ms": 0.062291,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.454339,
+        3.014233,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.546811,
+        1.280287,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.13333,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.908176,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.03797,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.515461,
+        1.221407,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.04255,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 1,
+    "pid": 328429941555200,
+    "idx": 7,
+    "correlation": 219294,
+    "graph_start_ns": 396705646,
+    "next_start_ns": 438667687,
+    "period_ms": 41.962041,
+    "graph_span_ms": 37.756899,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.205142,
+    "gap_busy_ms": 0.150878,
+    "gap_uncovered_ms": 4.054264,
+    "gap_uncovered_before_next_launch_api_ms": 1.848985,
+    "gap_uncovered_after_next_launch_api_ms": 2.205279,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006304,
+    "gap_launch_thread_in_cuda_api_ms": 2.671847,
+    "host_sync_intersect_graph_ms": 35.335722,
+    "host_sync_intersect_gap_ms": 0.067461,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.446004,
+        2.932866,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.415812,
+        1.263786,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.132499,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.891457,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.02955,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.385592,
+        1.205076,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.04258,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 1,
+    "pid": 328429941555200,
+    "idx": 8,
+    "correlation": 220194,
+    "graph_start_ns": 438667687,
+    "next_start_ns": 480887389,
+    "period_ms": 42.219702,
+    "graph_span_ms": 37.843458,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.376244,
+    "gap_busy_ms": 0.149663,
+    "gap_uncovered_ms": 4.226581,
+    "gap_uncovered_before_next_launch_api_ms": 1.858498,
+    "gap_uncovered_after_next_launch_api_ms": 2.368083,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006144,
+    "gap_launch_thread_in_cuda_api_ms": 2.844135,
+    "host_sync_intersect_graph_ms": 35.439935,
+    "host_sync_intersect_gap_ms": 0.062988,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.464461,
+        3.12354,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.536384,
+        1.244504,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.133499,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.889116,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.029589,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.506104,
+        1.185734,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.04241,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 1,
+    "pid": 328429941555200,
+    "idx": 9,
+    "correlation": 221094,
+    "graph_start_ns": 480887389,
+    "next_start_ns": 523090836,
+    "period_ms": 42.203447,
+    "graph_span_ms": 38.046496,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.156951,
+    "gap_busy_ms": 0.148896,
+    "gap_uncovered_ms": 4.008055,
+    "gap_uncovered_before_next_launch_api_ms": 1.879831,
+    "gap_uncovered_after_next_launch_api_ms": 2.128224,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006176,
+    "gap_launch_thread_in_cuda_api_ms": 2.613183,
+    "host_sync_intersect_graph_ms": 35.328149,
+    "host_sync_intersect_gap_ms": 0.061374,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.452486,
+        2.884711,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.439359,
+        1.26385,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.326909,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.897876,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.028411,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.401939,
+        1.20486,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.05088,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 1,
+    "pid": 328429941555200,
+    "idx": 10,
+    "correlation": 221994,
+    "graph_start_ns": 523090836,
+    "next_start_ns": 564908270,
+    "period_ms": 41.817434,
+    "graph_span_ms": 37.709923,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.107511,
+    "gap_busy_ms": 0.151326,
+    "gap_uncovered_ms": 3.956185,
+    "gap_uncovered_before_next_launch_api_ms": 1.857235,
+    "gap_uncovered_after_next_launch_api_ms": 2.09895,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.00624,
+    "gap_launch_thread_in_cuda_api_ms": 2.569945,
+    "host_sync_intersect_graph_ms": 35.489764,
+    "host_sync_intersect_gap_ms": 0.063398,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.461206,
+        2.841717,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.570204,
+        1.257464,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.133109,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.898218,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.02902,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.539614,
+        1.199334,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.042419,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 1,
+    "pid": 328429941555200,
+    "idx": 11,
+    "correlation": 222894,
+    "graph_start_ns": 564908270,
+    "next_start_ns": 608256345,
+    "period_ms": 43.348075,
+    "graph_span_ms": 39.128789,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.219286,
+    "gap_busy_ms": 0.148832,
+    "gap_uncovered_ms": 4.070454,
+    "gap_uncovered_before_next_launch_api_ms": 1.891702,
+    "gap_uncovered_after_next_launch_api_ms": 2.178752,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006048,
+    "gap_launch_thread_in_cuda_api_ms": 2.655469,
+    "host_sync_intersect_graph_ms": 34.970163,
+    "host_sync_intersect_gap_ms": 0.065102,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.46201,
+        2.941469,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.067193,
+        1.269597,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.14455,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.907287,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.02955,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.029943,
+        1.210137,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.06026,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 1,
+    "pid": 328429941555200,
+    "idx": 12,
+    "correlation": 223794,
+    "graph_start_ns": 608256345,
+    "next_start_ns": 651359750,
+    "period_ms": 43.103405,
+    "graph_span_ms": 37.713444,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 5.389961,
+    "gap_busy_ms": 0.57132,
+    "gap_uncovered_ms": 4.818641,
+    "gap_uncovered_before_next_launch_api_ms": 2.594388,
+    "gap_uncovered_after_next_launch_api_ms": 2.224253,
+    "gap_gpu_encode_ms": 0.360125,
+    "gap_gpu_copy_ms": 0.012992,
+    "gap_launch_thread_in_cuda_api_ms": 2.952793,
+    "host_sync_intersect_graph_ms": 35.619541,
+    "host_sync_intersect_gap_ms": 0.061129,
+    "gap_kernel_calls": 82,
+    "gap_encode_calls": 2,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.vq_flush_k": [
+        0.0,
+        0.09101,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.455528,
+        3.00342,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.701922,
+        2.378221,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.136259,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.908066,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.03041,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.670682,
+        2.316441,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_quant": [
+        0.0,
+        0.371358,
+        4
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.04343,
+        0.0,
+        2
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.vq_flush_v": [
+        0.0,
+        0.069929,
+        1
+      ]
+    }
+  },
+  {
+    "device": 1,
+    "pid": 328429941555200,
+    "idx": 13,
+    "correlation": 225184,
+    "graph_start_ns": 651359750,
+    "next_start_ns": 692993314,
+    "period_ms": 41.633564,
+    "graph_span_ms": 37.409191,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.224373,
+    "gap_busy_ms": 0.151743,
+    "gap_uncovered_ms": 4.07263,
+    "gap_uncovered_before_next_launch_api_ms": 1.902852,
+    "gap_uncovered_after_next_launch_api_ms": 2.169778,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006176,
+    "gap_launch_thread_in_cuda_api_ms": 2.64554,
+    "host_sync_intersect_graph_ms": 35.59512,
+    "host_sync_intersect_gap_ms": 0.062492,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.457706,
+        2.968505,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.67713,
+        1.247448,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.13304,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.890286,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.03021,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.64546,
+        1.188288,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.042319,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 0,
+    "pid": 328428247056384,
+    "idx": 0,
+    "correlation": 212444,
+    "graph_start_ns": 36497589,
+    "next_start_ns": 85707953,
+    "period_ms": 49.210364,
+    "graph_span_ms": 44.134916,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 5.075448,
+    "gap_busy_ms": 0.205438,
+    "gap_uncovered_ms": 4.87001,
+    "gap_uncovered_before_next_launch_api_ms": 2.089911,
+    "gap_uncovered_after_next_launch_api_ms": 2.780099,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.008,
+    "gap_launch_thread_in_cuda_api_ms": 3.310059,
+    "host_sync_intersect_graph_ms": 41.533032,
+    "host_sync_intersect_gap_ms": 0.071628,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.622182,
+        3.697945,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        41.636761,
+        1.368303,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.849627,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.970795,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.03554,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        41.585122,
+        1.300613,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.052431,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 0,
+    "pid": 328428247056384,
+    "idx": 1,
+    "correlation": 213344,
+    "graph_start_ns": 85707953,
+    "next_start_ns": 135400648,
+    "period_ms": 49.692695,
+    "graph_span_ms": 44.614016,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 5.078679,
+    "gap_busy_ms": 0.206302,
+    "gap_uncovered_ms": 4.872377,
+    "gap_uncovered_before_next_launch_api_ms": 2.115971,
+    "gap_uncovered_after_next_launch_api_ms": 2.756406,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.00768,
+    "gap_launch_thread_in_cuda_api_ms": 3.287886,
+    "host_sync_intersect_graph_ms": 42.213045,
+    "host_sync_intersect_gap_ms": 0.075222,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.521918,
+        3.686392,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        42.301755,
+        1.382936,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.835947,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.964645,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.03559,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        42.263865,
+        1.313717,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.044639,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 0,
+    "pid": 328428247056384,
+    "idx": 2,
+    "correlation": 214244,
+    "graph_start_ns": 135400648,
+    "next_start_ns": 184533221,
+    "period_ms": 49.132573,
+    "graph_span_ms": 44.138916,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.993657,
+    "gap_busy_ms": 0.204861,
+    "gap_uncovered_ms": 4.788796,
+    "gap_uncovered_before_next_launch_api_ms": 2.069867,
+    "gap_uncovered_after_next_launch_api_ms": 2.718929,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.007744,
+    "gap_launch_thread_in_cuda_api_ms": 3.231049,
+    "host_sync_intersect_graph_ms": 42.22068,
+    "host_sync_intersect_gap_ms": 0.070797,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.548121,
+        3.634406,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        42.32121,
+        1.349742,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.761487,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.955305,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.03709,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        42.28334,
+        1.281892,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.04508,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 0,
+    "pid": 328428247056384,
+    "idx": 3,
+    "correlation": 215144,
+    "graph_start_ns": 184533221,
+    "next_start_ns": 226529657,
+    "period_ms": 41.996436,
+    "graph_span_ms": 37.270874,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.725562,
+    "gap_busy_ms": 0.167071,
+    "gap_uncovered_ms": 4.558491,
+    "gap_uncovered_before_next_launch_api_ms": 2.003193,
+    "gap_uncovered_after_next_launch_api_ms": 2.555298,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.0064,
+    "gap_launch_thread_in_cuda_api_ms": 3.046554,
+    "host_sync_intersect_graph_ms": 35.469141,
+    "host_sync_intersect_gap_ms": 0.062702,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.534968,
+        3.399435,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.56124,
+        1.317237,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.742607,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.940256,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.03245,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.52101,
+        1.253438,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.04435,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 0,
+    "pid": 328428247056384,
+    "idx": 4,
+    "correlation": 216044,
+    "graph_start_ns": 226529657,
+    "next_start_ns": 269439239,
+    "period_ms": 42.909582,
+    "graph_span_ms": 37.260922,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 5.64866,
+    "gap_busy_ms": 0.166208,
+    "gap_uncovered_ms": 5.482452,
+    "gap_uncovered_before_next_launch_api_ms": 2.378469,
+    "gap_uncovered_after_next_launch_api_ms": 3.103983,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006624,
+    "gap_launch_thread_in_cuda_api_ms": 3.638646,
+    "host_sync_intersect_graph_ms": 35.493037,
+    "host_sync_intersect_gap_ms": 0.062546,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.50964,
+        4.15033,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.594386,
+        1.486821,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.699117,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        1.045505,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.04102,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.557946,
+        1.407211,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.04552,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 0,
+    "pid": 328428247056384,
+    "idx": 5,
+    "correlation": 216944,
+    "graph_start_ns": 269439239,
+    "next_start_ns": 313103950,
+    "period_ms": 43.664711,
+    "graph_span_ms": 37.252154,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 6.412557,
+    "gap_busy_ms": 0.596924,
+    "gap_uncovered_ms": 5.815633,
+    "gap_uncovered_before_next_launch_api_ms": 2.942269,
+    "gap_uncovered_after_next_launch_api_ms": 2.873364,
+    "gap_gpu_encode_ms": 0.360413,
+    "gap_gpu_copy_ms": 0.014112,
+    "gap_launch_thread_in_cuda_api_ms": 3.676894,
+    "host_sync_intersect_graph_ms": 35.081978,
+    "host_sync_intersect_gap_ms": 0.062945,
+    "gap_kernel_calls": 82,
+    "gap_encode_calls": 2,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.vq_flush_k": [
+        0.0,
+        0.124319,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.700252,
+        3.782691,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.202917,
+        2.611617,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.886136,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.975286,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.038519,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.137158,
+        2.543167,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_quant": [
+        0.0,
+        0.424119,
+        4
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.04568,
+        0.0,
+        2
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.vq_flush_v": [
+        0.0,
+        0.07341,
+        1
+      ]
+    }
+  },
+  {
+    "device": 0,
+    "pid": 328428247056384,
+    "idx": 6,
+    "correlation": 218334,
+    "graph_start_ns": 313103950,
+    "next_start_ns": 355188162,
+    "period_ms": 42.084212,
+    "graph_span_ms": 37.220858,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.863354,
+    "gap_busy_ms": 0.165919,
+    "gap_uncovered_ms": 4.697435,
+    "gap_uncovered_before_next_launch_api_ms": 2.025036,
+    "gap_uncovered_after_next_launch_api_ms": 2.672399,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006432,
+    "gap_launch_thread_in_cuda_api_ms": 3.181171,
+    "host_sync_intersect_graph_ms": 35.32732,
+    "host_sync_intersect_gap_ms": 0.066931,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.530313,
+        3.513546,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.41834,
+        1.340878,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.749377,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.949277,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.03392,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.37825,
+        1.276548,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.04475,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 0,
+    "pid": 328428247056384,
+    "idx": 7,
+    "correlation": 219234,
+    "graph_start_ns": 355188162,
+    "next_start_ns": 397241462,
+    "period_ms": 42.0533,
+    "graph_span_ms": 37.218074,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.835226,
+    "gap_busy_ms": 0.166013,
+    "gap_uncovered_ms": 4.669213,
+    "gap_uncovered_before_next_launch_api_ms": 2.025881,
+    "gap_uncovered_after_next_launch_api_ms": 2.643332,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.0064,
+    "gap_launch_thread_in_cuda_api_ms": 3.142294,
+    "host_sync_intersect_graph_ms": 35.498511,
+    "host_sync_intersect_gap_ms": 0.063082,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.515238,
+        3.494899,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.58791,
+        1.331327,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.690097,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.951136,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.03215,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.55092,
+        1.266897,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.0446,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 0,
+    "pid": 328428247056384,
+    "idx": 8,
+    "correlation": 220134,
+    "graph_start_ns": 397241462,
+    "next_start_ns": 439291626,
+    "period_ms": 42.050164,
+    "graph_span_ms": 37.221243,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.828921,
+    "gap_busy_ms": 0.165118,
+    "gap_uncovered_ms": 4.663803,
+    "gap_uncovered_before_next_launch_api_ms": 2.037795,
+    "gap_uncovered_after_next_launch_api_ms": 2.626008,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006144,
+    "gap_launch_thread_in_cuda_api_ms": 3.134742,
+    "host_sync_intersect_graph_ms": 35.419422,
+    "host_sync_intersect_gap_ms": 0.060301,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.513726,
+        3.482695,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.522782,
+        1.337126,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.717318,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.962265,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.03326,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.485662,
+        1.273156,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.04532,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 0,
+    "pid": 328428247056384,
+    "idx": 9,
+    "correlation": 221034,
+    "graph_start_ns": 439291626,
+    "next_start_ns": 481716988,
+    "period_ms": 42.425362,
+    "graph_span_ms": 37.219675,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 5.205687,
+    "gap_busy_ms": 0.166399,
+    "gap_uncovered_ms": 5.039288,
+    "gap_uncovered_before_next_launch_api_ms": 2.041525,
+    "gap_uncovered_after_next_launch_api_ms": 2.997763,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006432,
+    "gap_launch_thread_in_cuda_api_ms": 3.499008,
+    "host_sync_intersect_graph_ms": 35.481661,
+    "host_sync_intersect_gap_ms": 0.063072,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.525299,
+        3.87803,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.56999,
+        1.318667,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.720357,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.941866,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.03337,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.53293,
+        1.253388,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.04411,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 0,
+    "pid": 328428247056384,
+    "idx": 10,
+    "correlation": 221934,
+    "graph_start_ns": 481716988,
+    "next_start_ns": 523590129,
+    "period_ms": 41.873141,
+    "graph_span_ms": 37.218106,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.655035,
+    "gap_busy_ms": 0.165757,
+    "gap_uncovered_ms": 4.489278,
+    "gap_uncovered_before_next_launch_api_ms": 2.00388,
+    "gap_uncovered_after_next_launch_api_ms": 2.485398,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006336,
+    "gap_launch_thread_in_cuda_api_ms": 2.974573,
+    "host_sync_intersect_graph_ms": 35.460477,
+    "host_sync_intersect_gap_ms": 0.060116,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.496914,
+        3.328374,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.561057,
+        1.318001,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.698638,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.945016,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.03257,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.511957,
+        1.253831,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.0469,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 0,
+    "pid": 328428247056384,
+    "idx": 11,
+    "correlation": 222834,
+    "graph_start_ns": 523590129,
+    "next_start_ns": 566820380,
+    "period_ms": 43.230251,
+    "graph_span_ms": 37.210011,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 6.02024,
+    "gap_busy_ms": 0.165952,
+    "gap_uncovered_ms": 5.854288,
+    "gap_uncovered_before_next_launch_api_ms": 2.816774,
+    "gap_uncovered_after_next_launch_api_ms": 3.037514,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006112,
+    "gap_launch_thread_in_cuda_api_ms": 3.656248,
+    "host_sync_intersect_graph_ms": 35.531425,
+    "host_sync_intersect_gap_ms": 0.087258,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.493871,
+        4.274509,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.621204,
+        1.720361,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.705358,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        1.151095,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.05397,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.583705,
+        1.621922,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.044819,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 0,
+    "pid": 328428247056384,
+    "idx": 12,
+    "correlation": 223734,
+    "graph_start_ns": 566820380,
+    "next_start_ns": 608743089,
+    "period_ms": 41.922709,
+    "graph_span_ms": 37.216858,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.705851,
+    "gap_busy_ms": 0.165182,
+    "gap_uncovered_ms": 4.540669,
+    "gap_uncovered_before_next_launch_api_ms": 1.982543,
+    "gap_uncovered_after_next_launch_api_ms": 2.558126,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006432,
+    "gap_launch_thread_in_cuda_api_ms": 3.055705,
+    "host_sync_intersect_graph_ms": 35.090182,
+    "host_sync_intersect_gap_ms": 0.060973,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.604992,
+        3.397503,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.188951,
+        1.299598,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.901477,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.919757,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.03248,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.141441,
+        1.237658,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.04505,
+        0.0,
+        2
+      ]
+    }
+  },
+  {
+    "device": 0,
+    "pid": 328428247056384,
+    "idx": 13,
+    "correlation": 224634,
+    "graph_start_ns": 608743089,
+    "next_start_ns": 651561119,
+    "period_ms": 42.81803,
+    "graph_span_ms": 37.224666,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 5.593364,
+    "gap_busy_ms": 0.594523,
+    "gap_uncovered_ms": 4.998841,
+    "gap_uncovered_before_next_launch_api_ms": 2.718008,
+    "gap_uncovered_after_next_launch_api_ms": 2.280833,
+    "gap_gpu_encode_ms": 0.35923,
+    "gap_gpu_copy_ms": 0.014111,
+    "gap_launch_thread_in_cuda_api_ms": 3.039703,
+    "host_sync_intersect_graph_ms": 35.690768,
+    "host_sync_intersect_gap_ms": 0.060144,
+    "gap_kernel_calls": 82,
+    "gap_encode_calls": 2,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.vq_flush_k": [
+        0.0,
+        0.114389,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.468892,
+        3.05805,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.773928,
+        2.519724,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.614887,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.922236,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.02958,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.741108,
+        2.456044,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_quant": [
+        0.0,
+        0.42107,
+        4
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.0439,
+        0.0,
+        2
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.vq_flush_v": [
+        0.0,
+        0.07243,
+        1
+      ]
+    }
+  },
+  {
+    "device": 0,
+    "pid": 328428247056384,
+    "idx": 14,
+    "correlation": 226024,
+    "graph_start_ns": 651561119,
+    "next_start_ns": 693095000,
+    "period_ms": 41.533881,
+    "graph_span_ms": 37.208123,
+    "kernel_union_ms": null,
+    "graph_kernel_sum_ms": null,
+    "graph_holes_ms": null,
+    "gap_ms": 4.325758,
+    "gap_busy_ms": 0.16499,
+    "gap_uncovered_ms": 4.160768,
+    "gap_uncovered_before_next_launch_api_ms": 1.883854,
+    "gap_uncovered_after_next_launch_api_ms": 2.276914,
+    "gap_gpu_encode_ms": 0.0,
+    "gap_gpu_copy_ms": 0.006272,
+    "gap_launch_thread_in_cuda_api_ms": 2.754552,
+    "host_sync_intersect_graph_ms": 35.682971,
+    "host_sync_intersect_gap_ms": 0.065361,
+    "gap_kernel_calls": 53,
+    "gap_encode_calls": 0,
+    "cat_ms": {},
+    "symbols_ms": {},
+    "cpu_named_graph_gap_calls": {
+      "sglang.srt.managers.scheduler.Scheduler.run_batch": [
+        0.446476,
+        3.042632,
+        2
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.get_next_batch_to_run": [
+        35.76969,
+        1.274597,
+        1
+      ],
+      "sglang.srt.managers.scheduler.Scheduler.process_batch_result": [
+        0.604967,
+        0.0,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.LoopVQKVAllocator.alloc_hp_recent": [
+        0.0,
+        0.907596,
+        4
+      ],
+      "cub::DeviceScan::InclusiveScan": [
+        0.0,
+        0.03004,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_allocator.alloc_for_decode": [
+        35.735,
+        1.213997,
+        1
+      ],
+      "sglang.srt.mem_cache.loopvq_pool.LoopVQKVPool.wait_pending_forward": [
+        0.044609,
+        0.0,
+        2
+      ]
+    }
+  }
+]
