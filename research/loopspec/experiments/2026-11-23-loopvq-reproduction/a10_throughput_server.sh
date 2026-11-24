@@ -2,12 +2,12 @@
 # Run inside this task's A10 tmux session. No processes are killed by this script.
 set -euo pipefail
 if [[ $# != 5 ]]; then
-  echo "Usage: bash a10_throughput_server.sh bf16|loopvq common-shape|paper-long GPU PORT LABEL" >&2
+  echo "Usage: bash a10_throughput_server.sh bf16|loopvq common-shape|paper-long|decode-sweep GPU PORT LABEL" >&2
   exit 2
 fi
 method=$1 protocol=$2 gpu=$3 port=$4 label=$5
 [[ $method == bf16 || $method == loopvq ]]
-[[ $protocol == common-shape || $protocol == paper-long ]]
+[[ $protocol == common-shape || $protocol == paper-long || $protocol == decode-sweep ]]
 [[ $gpu =~ ^[0-7]$ && $port =~ ^[0-9]+$ && $label =~ ^[a-zA-Z0-9_-]+$ ]]
 [[ -n ${TMUX:-} && $(hostname -s) == a10 ]]
 source "$(dirname "${BASH_SOURCE[0]}")/a10_target_env.sh"
@@ -25,6 +25,10 @@ export CUDA_VISIBLE_DEVICES="$gpu" TORCH_CUDA_ARCH_LIST=8.0 MAX_JOBS=4
 prefix=64 recent=256 capacity=41984 splits=8
 if [[ $protocol == paper-long ]]; then
   prefix=8 recent=64 capacity=40960
+  [[ $method == bf16 ]] || capacity=557568
+fi
+if [[ $protocol == decode-sweep ]]; then
+  prefix=8 recent=64 capacity=41984
   [[ $method == bf16 ]] || capacity=557568
 fi
 [[ $method == bf16 ]] || splits=48

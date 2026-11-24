@@ -614,3 +614,57 @@ User confirmed 1K/2K/4K/8K means visible decode history; HP window stays 8+64.
 4. Acceptance: all four contexts and bs1/2/4/8/16 measured or explicitly capacity limited; paired inputs, actual graph/batch evidence; each loop's attention/common GPU costs reconciled with all graph kernels.
 5. Risks: client TTFT is not server prefill; short E2E dominated by prefill; node profiling perturbs CPU/wall time. Keep primary throughput unprofiled. BF16 capacity prevents some large-context pairs. Generic pointwise kernels attributed by execution position, not invented fine-grained names.
 6. Validation: A10 GPU5, full R4 Thinking, frozen feba inference, same model/environment and HP8+64. Input L-1, 33 output tokens gives 32 decode steps at histories L..L+31. Profile uses 9 output tokens/8 decode steps at L..L+7, bs1 and4. Two warmups, three unprofiled measurements. Verify 772 norms/192 layers/4 loops per graph and preserve trace/schema/provenance. Use tmux throughout. Candidate10 starts here; no performance fix is attempted.
+
+
+### 完整服务路径对齐审计（冻结 feba，官方 d5d58c83 的 Python 树）
+
+这里的“官方”指作者仓库实际服务代码，不等同于论文每张图的配置。“移植”指本轮真正运行的 frozen feba，不以开发分支 HEAD 代替推理提交。以下覆盖本实验从请求到释放的活动路径；不声称整个两个 SGLang 仓库逐行相同。
+
+| 环节 | 官方实现 / 配置 | 当前移植状态 | 性能或正确性含义 |
+|---|---|---|---|
+| HTTP、tokenizer、scheduler、输出传输 | 作者 vendored SGLang | 基于 v0.5.22 的 fork；服务框架版本不同 | 整栈差异不能全归因某个内核；本次两臂同机同框架、相同 input_ids、增量 SSE |
+| 模型与循环 | Ouro 48 层共享权重、4 次循环、深度独立 KV | 对齐完整 R4，未启用 early exit 或 LoopSpec | 没有通过少算 loop 获得速度；不能跨深度直接共享 BF16 KV |
+| 码本与压缩 | 四循环耦合、G16、256 centroid；HP sink/recent、其余索引 | 0.5bit noTaSQ、相同训练 bundle；K/V FP16 centroid、8-bit 索引 | 0.5bit 是对原始四循环标量的有效位宽，不是每个索引半比特；无全历史解压中间张量 |
+| Q/K RoPE | fused RoPE；FP32 cache/product | native Torch，保持 HF 中间 BF16 舍入；有 index/cast/mul/add/cat 多个小 kernel | 两臂共同成本；不是完全官方模型算子路径。VQ decode 还计算未使用的 rotated K；官方 scratch 也仍参与 K RoPE，不能说官方完全不算 K |
+| RMSNorm / residual | 官方 fused 实现及其舍入语义 | 已使用 HF 语义 fused RMSNorm，cast_x_before_out_mul；residual 单独 add | 不是“全部 norm 未融合”；每图 772 次 norm 可用于核对四 loop |
+| MLP | SiluAndMul 融合 | SiLU 后 BF16 舍入，再独立 multiply | 公共模型路径更多小 kernel；直接换 fused 会改变数值，需单独正确性验收 |
+| Fresh prefill attention | 脚本默认 FA3；VQ wrapper 的 fresh 路径也可走 FA3 | 两臂保留 HF 舍入的两遍 ouro_attention | 明确未对齐，长输入 TTFT/E2E 可能受影响；不能用 client TTFT 直接充当 server prefill GPU 时间 |
+| Prefill KV 暂存与编码 | 官方 stash、producer、布局与预算 | 四 loop 原始 KV 暂存，专用融合 producer，完成 K/V 后发布索引 | 含独立内存预算和额外编码；新上下文测试记录此图外成本 |
+| Encoder | G16 的 64-token tile，预存 norm，高低两部分 MMA，后续 scatter | 16-token tile，现场 norm，一次 FP16 MMA，融合 gather/scatter | 不同实现；已有实际数据编码一致不构成 near-tie 全域逐位证明；旧 trace 中不是主要耗时 |
+| Decode BF16 baseline | 官方 generic Triton split stage1/2，split8 | 同类 split8，但显式 FP32 product/reduction 有差别 | baseline 也非逐行官方，不能只检验 VQ 一臂 |
+| Decode VQ quant | 官方 MODE1 G16 CUDA、动态 split、R1/R2 | 已移植这一计算核心，split 上限48、bs1 R1，其余 R2 | 不是仍在用逐元素参考解码。算术核对通过不等于 CUDA 编译产物/访存布局性能一致 |
+| HP attention | BF16 HP，经 FP32 RoPE 与 FP16 MMA，12 个 split slots | 核心算法、默认 tile/warp/stage 对齐 | HP 不是免费旁路；64+256 时有10–11非空段，8+64通常3段。优化空段是进一步优化建议，并非漏掉已有官方功能 |
+| Quant/HP 顺序与合并 | HP→quant→统一 LSE reduce | quant→HP→同类 reduce；每层先 LSE fill(-inf) | 顺序不同，潜在 cache 影响尚未做单变量验证。LSE fill 和 reduce 是真实额外开销 |
+| Metadata | 官方 tier index / split 元数据 | slot0 更新一次、191个后续 slot复用；int32 地址，固定最大 context 网格，debug assert | 并非每层重建；旧 trace 占比很小。官方部分地址int64，当前 unit scale 零stride，布局/模板不同 |
+| HP recent 分配 | 一次批量 alloc_hp_recent | CPU 遍历请求，每请求创建 CUDA id tensor，再调用分配 | 明确缺少官方批量路径；小 H2D/同步次数增加，不能把 CPU 同步等待和 GPU 耗时相加 |
+| Decode flush 调度 | GPU plan / free 先做，后 wait_forward，再 apply，尽量与旧 forward 重叠 | alloc_for_decode 入口先 wait，CPU逐请求规划，每8 token批量 encode后更新映射 | 明确未对齐，可能减少 CPU/GPU 重叠；必须保持前一轮读完才覆盖的正确性约束，不能简单删除等待 |
+| 缓存发布/生命周期 | 官方完整 mixed allocator/radix 生命周期 | 两种码本都编码后才发布；demote/free/reuse 有 stream 依赖；abort/reuse 已做真实服务验证 | 当前独立 AR 范围已验证；性能修复不能破坏拒绝/释放/复用顺序 |
+| CUDA graph | 官方支持 decode graph | 当前完整 graph，固定桶1/2/4/8/16；元数据缓冲持久化，分配在 graph 外 | 图外 CPU 循环没有被 graph 自动消除；每请求记录真实 batch 与 graph，不仅看启动参数 |
+| Memory / batch admission | 官方可按容量获得更大 batch，CPU stash /相关预算更完整 | 当前独立 pool / stash预算；BF16和VQ容量不同 | 相同 batch 的速度与最大容量吞吐是两种问题；容量不够的格子记录 N/A，不跨batch拼加速比 |
+| Radix / chunked prefill / prefix reuse | 官方 mixed 路径具有相关实现 | 当前显式禁用或拒绝；TP/PP/DP均1；无 speculative | 当前功能边界，不把“已禁用功能”说成本次活动路径的直接耗时；开启这些功能要另做移植和正确性验证 |
+| Sampling / stopping | 官方脚本 pytorch sampler，可随机采样 | 本次温度0、ignore_eos、固定 token数；准确率任务另用原设定 | 吞吐不受不同提前停止干扰；随机采样不能宣称同seed逐token一致 |
+| 编译与运行时 | 参考 Torch2.9.1+cu128、独立环境 | Torch2.14.1+cu130、Triton3.8，sm80 A100 | 同GPU整栈对比仍含运行时差异；不是 allocator 的严格因果消融 |
+| 论文口径 | Fig13为0.5bit bs1，Fig14高峰为0.25bit且容量batch不同；8+64窗口 | 旧common测试2K/512、64+256；本轮改为指定history长度、8+64 | 旧测试不能直接否定论文；本轮短decode扫描也不能冒充Fig14长输出复现 |
+
+关键源码：当前 `python/sglang/srt/mem_cache/loopvq_allocator.py:482`，官方 `LoopVQ/python/sglang/srt/mem_cache/common.py:831,866,929`；当前 `python/sglang/srt/models/ouro.py:29,40,53`、`python/sglang/srt/layers/attention/loopvq_backend.py:8`、`python/sglang/kernels/ops/loopvq/official_attention.py:37`、`official_metadata.py:73`、`encode.py`。这些代码证据分别支持批量分配、wait位置、模型舍入和attention dispatch，不替代运行时间测量。
+
+
+兼容性边界补充（`arg_groups/kv_cache_hook.py:34`）：当前还明确拒绝 CP/DCP>1、hierarchical/unified cache、KV sharding、LoRA、two-batch overlap、mixed chunk、torch.compile、memory saver、PD disaggregation、priority preemption、post-capture KV resizing、RoPE scaling 和非 Ouro-2.6B R4 几何；decode仅 full graph/eager，prefill graph关闭。它们均未在本次配对启用，故不能列为当前实际慢下来的已证实原因。普通 scheduler overlap 与 two-batch overlap 不是同一个开关。正式性能修复优先级应由下面的时间测量决定，而不是把所有功能都打开。
+
+Candidate10 validation so far: local py_compile and git diff --check exit0; commit 80c873d3815edb6446166e6ac1e197190acb5903 pushed and pulled into validation checkout. Frozen inference checkout stays feba. On A10, old BF16 and VQ bs1 node traces both pass exact 511 graph / 772 norm / 192 layer accounting. Their mean graph kernel sums are 35.8717485 ms and 38.2891168 ms; these are the OLD 64+256-window 2K+512 traces, not the new 8+64 sweep. New unprofiled run and queued short profiles use tmux on GPU5. Original long-output recovery verified exact K/V hashes and reached VQ bs1 measurement on GPU6; old failed pipeline directory remains unchanged.
+
+
+调度审计进一步定位：最早的等待不只在 allocator。当前 `scheduler.py:2014` 在 `get_next_batch_to_run` 之前已经调用 pool.wait_pending_forward；其内部是 schedule stream 的 wait_event 并清除 pending event，因此 allocator:494 的第二次调用通常已无待处理 event。官方 scheduler 的 `maybe_wait_mixed_kv_forward_done`（约1473行）仅 stash event，真正 wait 延后到 common.py:929 的 apply 前。当前把依赖提前到了整轮 batch planning 前，而不仅是 flush 前；随后逐请求 CUDA tensor创建/同步可能被排在上一轮forward之后。这是明确未对齐的调度位置，不能称为“只是alloc函数里多一次wait”。wait_event本身不等于CPU同步；是否变成host stall由后续同步和stream依赖决定。
+
+
+## 2026-11-24 user protocol correction; candidate 11/20
+
+User explicitly changed the primary requirement to DECODE throughput only, then clarified fixed 2048 input tokens and 1024/2048/4096/8192 NEW output tokens, ignore_eos=True. User explicitly authorized ten additional candidates, cumulative 11–20; prior count is preserved. The context-20261124 short-output experiment is auxiliary evidence only, NOT this requested matrix. Its controller PID2392663/start346283832 was verified and SIGSTOP'ed before the VQ arm; all 17 feasible BF16 cells completed, 3 capacity rows saved. No short-output E2E ratio will be substituted for requested decode throughput.
+
+Six-part plan:
+1. Purpose: measure pure, full-batch decode throughput under the corrected long-output protocol, with four-loop kernel attribution.
+2. Steps: archive short sweep; fixed native-chat 2048-token fixture; 2 short warmups plus 3 fixed-length measured runs per feasible cell; independent Nsight short capture windows during real 8192-token generation; automatic paired summaries/W&B.
+3. Scope: experiment launch wrapper (new decode-sweep protocol), context launch utility optional parameters, new decode sweep/analysis helper. Frozen inference remains feba; no model, cache or scheduling fixes in this candidate.
+4. Acceptance: outputs exactly requested length and actual full batch/graph verified; primary tokens/s uses earliest common emitted count >=2 through final output for all requests, all prefill excluded; raw SSE timestamps retained. Counts must start <=8, otherwise attribution fails. Same physical GPU and input IDs per BF/VQ pair. Missing capacity explicitly N/A. Each captured graph passes 772 norm /192 layer accounting.
+5. Risks: long matrix takes hours; SSE adds host/transport jitter, so profile reports GPU time separately. Nsight only runs in the separate profile arm. Long-output history grows from ~2K to 3K/4K/6K/10K; do not call those fixed-context tests. Capacity pools differ; reserve a BF16 safety margin by using the already validated 41984-token pool.
+6. Validation: static checks; pure event-analysis checks against completed real short-run evidence; initial actual long-output cell plus all planned matrix cells; preserve failures, return codes, GPU identity, source and environment provenance. Profile samples near output 1K/2K/4K/8K on bs1 and4 during actual fixed-2K generation, requesting eight steps per capture and recording actual captured count. Completed results are never inferred from a running tmux window.

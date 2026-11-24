@@ -66,12 +66,13 @@ def gpu_pids():
     return {int(x) for x in raw.splitlines()}
 
 
-def start(method, profile):
+def start(method, profile, *, launch_script=None, server_protocol="paper-long"):
     assert not gpu_pids(), "GPU5 must be empty"
     with socket.socket() as sock:
         assert sock.connect_ex(("127.0.0.1", PORT)) != 0
     label = f"context-{method}-{'nodes' if profile else 'timing'}-{time.time_ns()}"
-    command = ["bash", str(FROZEN / "a10_throughput_server.sh"), method, "paper-long", GPU, str(PORT), label]
+    script = launch_script or FROZEN / "a10_throughput_server.sh"
+    command = ["bash", str(script), method, server_protocol, GPU, str(PORT), label]
     trace = ROOT / f"{method}-nodes"
     if profile:
         assert not list(ROOT.glob(f"{method}-nodes*")), "Preserve previous traces"
