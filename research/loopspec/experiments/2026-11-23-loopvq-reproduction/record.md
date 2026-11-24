@@ -784,3 +784,7 @@ Accuracy reporting consumes only TP2 full-cell completion markers, validates the
 ## Candidate 19/20 — official and port, TP2 decode step
 
 1. Measure the official release and port with our same 0.5-bit bundle. 2. Run both stacks sequentially per pair in tmux, with independent uninstrumented timing and bounded Nsight capture. 3. Add the experiment driver only. 4. Check TP2, R4, exact inputs and lengths, actual bs4/full graph, both GPU UUIDs and bundle hashes. 5. Separate overlapping ranks, asynchronous CPU calls and unobserved gaps; preserve failures. 6. Fixed 2048 input/1024 output, HP8+64, 2 warmups/3 timing runs. Capture adjacent ordinary/flush steps and distinguish graph span, GPU busy union and residual intervals. No accuracy jobs or inference code changes.
+
+## Candidate 20/20 — CPU range and graph-only cross-check
+
+1. Identify where intergraph gaps start and end on the host. 2. Trace named scheduling, allocator, flush and submission ranges on both stacks with Nsight graph-level capture. 3. Only extend the experiment driver, using per-stack NVTX packages outside the serving environments. 4. Reconcile one ordinary and one flush interval per stack with rank-local GPU activity and inspect nested CPU intervals separately. 5. Timing differences across profiler modes and overlapping waits cannot be added. 6. Reuse the identical input, bs4 and 16-step capture protocol on a fresh exclusive A10 pair in tmux. Keep the two timing and node-trace arms at candidate19.
