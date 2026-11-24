@@ -1,0 +1,21 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 1024,
+  "decode_tokens": 4088,
+  "start_seconds": 1.509652293054387,
+  "end_seconds": 40.94111953000538,
+  "decode_seconds": 39.43146723695099,
+  "decode_tokens_s": 103.67354517736939,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 4088,
+      "seconds": 39.43146723695099,
+      "tokens_s": 103.67354517736939
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "31c790e58255bd537e9958a69090050ef1a33d6a6ca7f0ef9774f272863fc215"
+}

@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 8190,
+  "start_seconds": 0.4699261039495468,
+  "end_seconds": 265.0988906621933,
+  "decode_seconds": 264.62896455824375,
+  "decode_tokens_s": 30.948993106903135,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 1022,
+      "seconds": 30.245671194046736,
+      "tokens_s": 33.789959344699895
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 1024,
+      "seconds": 31.754840672016144,
+      "tokens_s": 32.24705205031612
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 1024,
+      "seconds": 33.010015888139606,
+      "tokens_s": 31.020887825986172
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 1024,
+      "seconds": 33.20802736096084,
+      "tokens_s": 30.835917739691105
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 1024,
+      "seconds": 33.44929661042988,
+      "tokens_s": 30.61349875084383
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 1024,
+      "seconds": 33.91604218445718,
+      "tokens_s": 30.19220209807593
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 1024,
+      "seconds": 34.315092992037535,
+      "tokens_s": 29.841096459730085
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 1024,
+      "seconds": 34.729977656155825,
+      "tokens_s": 29.484614419799314
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "9cddde2fd156b25a3d13cc0938c0040228b965f5290341da32dfb5ac41e31427"
+}

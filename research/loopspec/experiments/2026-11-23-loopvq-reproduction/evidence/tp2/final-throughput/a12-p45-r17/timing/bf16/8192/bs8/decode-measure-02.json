@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 65520,
+  "start_seconds": 2.8502329918555915,
+  "end_seconds": 484.65679859602824,
+  "decode_seconds": 481.80656560417265,
+  "decode_tokens_s": 135.98818421629363,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 8176,
+      "seconds": 42.799605892039835,
+      "tokens_s": 191.02979641035967
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 8192,
+      "seconds": 47.7958124789875,
+      "tokens_s": 171.39576827157094
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 8192,
+      "seconds": 52.80375956511125,
+      "tokens_s": 155.14046854748307
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 8192,
+      "seconds": 57.80613434803672,
+      "tokens_s": 141.71506350308695
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 8192,
+      "seconds": 62.75196759891696,
+      "tokens_s": 130.54570738498063
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 8192,
+      "seconds": 67.71919138007797,
+      "tokens_s": 120.97013908541693
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 8192,
+      "seconds": 72.60246225399897,
+      "tokens_s": 112.83363877302635
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 8192,
+      "seconds": 77.52763208700344,
+      "tokens_s": 105.66555148758746
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "4fd9fc43ef2c68f0f79314ca2624db99f3a76a626685206aef13afe2d00040d6"
+}

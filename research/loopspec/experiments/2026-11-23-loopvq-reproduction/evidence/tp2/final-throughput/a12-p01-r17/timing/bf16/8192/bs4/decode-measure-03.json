@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 32760,
+  "start_seconds": 1.4424774791114032,
+  "end_seconds": 341.6630268539302,
+  "decode_seconds": 340.2205493748188,
+  "decode_tokens_s": 96.29047998481866,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 4088,
+      "seconds": 34.06238577980548,
+      "tokens_s": 120.01508134006417
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 4096,
+      "seconds": 36.52112614409998,
+      "tokens_s": 112.15426336632044
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 4096,
+      "seconds": 38.9273416120559,
+      "tokens_s": 105.22167274662954
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 4096,
+      "seconds": 41.34141152887605,
+      "tokens_s": 99.07741048316736
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 4096,
+      "seconds": 43.755190225085244,
+      "tokens_s": 93.61175163287774
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 4096,
+      "seconds": 46.15121205197647,
+      "tokens_s": 88.75173192389829
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 4096,
+      "seconds": 48.53979480895214,
+      "tokens_s": 84.38436989940838
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 4096,
+      "seconds": 50.92208722396754,
+      "tokens_s": 80.43660861709793
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "2a7959b894bc9b487e4e4f59eef6b6e12758546b6e2f5e1f9c706d41f8c915a3"
+}

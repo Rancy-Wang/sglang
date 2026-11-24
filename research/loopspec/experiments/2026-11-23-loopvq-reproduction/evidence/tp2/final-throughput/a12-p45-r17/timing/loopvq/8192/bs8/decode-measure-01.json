@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 65520,
+  "start_seconds": 2.978670997079462,
+  "end_seconds": 474.2652977050748,
+  "decode_seconds": 471.2866267079953,
+  "decode_tokens_s": 139.02367749678493,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 8176,
+      "seconds": 45.42572392197326,
+      "tokens_s": 179.98612447087757
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 8192,
+      "seconds": 49.37924017291516,
+      "tokens_s": 165.89967709736786
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 8192,
+      "seconds": 52.43707579700276,
+      "tokens_s": 156.2253400954949
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 8192,
+      "seconds": 55.72445135097951,
+      "tokens_s": 147.0090741387982
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 8192,
+      "seconds": 64.74047486390918,
+      "tokens_s": 126.53598876468524
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 8192,
+      "seconds": 67.19733475218527,
+      "tokens_s": 121.90959701319991
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 8192,
+      "seconds": 67.93223184999079,
+      "tokens_s": 120.59076784183577
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 8192,
+      "seconds": 68.45009399903938,
+      "tokens_s": 119.67843316789259
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "4fcd9aaf52c5a2202532f544bce812ced552574e9338b5ed65d1b6a5e7fd455e"
+}

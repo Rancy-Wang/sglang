@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 65520,
+  "start_seconds": 2.842404074035585,
+  "end_seconds": 484.40870610205457,
+  "decode_seconds": 481.566302028019,
+  "decode_tokens_s": 136.05603158708527,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 8176,
+      "seconds": 42.76889686100185,
+      "tokens_s": 191.16696010588848
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 8192,
+      "seconds": 47.816780656110495,
+      "tokens_s": 171.32060936756406
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 8192,
+      "seconds": 52.826524616917595,
+      "tokens_s": 155.0736123454263
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 8192,
+      "seconds": 57.81124679907225,
+      "tokens_s": 141.70253114367125
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 8192,
+      "seconds": 62.736391031881794,
+      "tokens_s": 130.57812005534294
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 8192,
+      "seconds": 67.58179057692178,
+      "tokens_s": 121.21608394906086
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 8192,
+      "seconds": 72.55006644316018,
+      "tokens_s": 112.91512746467401
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 8192,
+      "seconds": 77.47460504295304,
+      "tokens_s": 105.73787366141765
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "62539e7112546bf54924be296cb6ef6c368f02606d8210a524f1b20f0713fb74"
+}

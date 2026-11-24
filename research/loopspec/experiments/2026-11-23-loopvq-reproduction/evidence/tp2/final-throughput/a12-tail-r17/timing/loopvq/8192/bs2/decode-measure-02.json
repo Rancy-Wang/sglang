@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 16380,
+  "start_seconds": 0.8034955749753863,
+  "end_seconds": 309.66625460097566,
+  "decode_seconds": 308.8627590260003,
+  "decode_tokens_s": 53.033263225564596,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 2044,
+      "seconds": 33.919162983074784,
+      "tokens_s": 60.260920973195276
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 2048,
+      "seconds": 36.53370540286414,
+      "tokens_s": 56.05782324613157
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 2048,
+      "seconds": 38.71780969505198,
+      "tokens_s": 52.89555416823406
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 2048,
+      "seconds": 38.87025037501007,
+      "tokens_s": 52.68810929287638
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 2048,
+      "seconds": 39.11668594693765,
+      "tokens_s": 52.356173597582924
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 2048,
+      "seconds": 39.846518476027995,
+      "tokens_s": 51.397213064727204
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 2048,
+      "seconds": 40.582937265979126,
+      "tokens_s": 50.464558210202505
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 2048,
+      "seconds": 41.27568888105452,
+      "tokens_s": 49.61758496391877
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "5f6be0afbc8eccda01c53794a361327ccdd51bb57d6a6cfe70a403e7b5c0da7f"
+}

@@ -1,0 +1,286 @@
+{
+  "complete": true,
+  "rows": [
+    {
+      "output_tokens": 1024,
+      "bs": 1,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-5a664f81-ad65-8947-c6c2-cbb7b4b50d4e",
+        "GPU-c078abcf-b59b-9999-9e5f-1c89b8ae654c"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 34.37533060922754,
+      "loopvq_tokens_s": 33.839442894172834,
+      "speedup": 0.984410689132082
+    },
+    {
+      "output_tokens": 1024,
+      "bs": 2,
+      "host": "a13.mit.edu",
+      "gpu_pair": [
+        "GPU-16632623-0b5c-85fd-e6c4-8b7be50f1906",
+        "GPU-9fea3133-209f-8ce6-4d9b-b5a323f6318f"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 64.56948730605752,
+      "loopvq_tokens_s": 60.245290010121714,
+      "speedup": 0.93303032939631
+    },
+    {
+      "output_tokens": 1024,
+      "bs": 4,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-70859fd0-1839-71a2-2ad4-76f495f0d055",
+        "GPU-39c78864-d732-8bfa-43f0-8180d77e086c"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 120.31141392537042,
+      "loopvq_tokens_s": 103.67354517736939,
+      "speedup": 0.8617099724360188
+    },
+    {
+      "output_tokens": 1024,
+      "bs": 8,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-25a02b46-4353-43fa-acf3-62bedbd98cb6",
+        "GPU-77884f42-7b1e-cd9f-5040-d63776da5190"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 191.48569817916388,
+      "loopvq_tokens_s": 179.98075048798867,
+      "speedup": 0.9399174570185885
+    },
+    {
+      "output_tokens": 1024,
+      "bs": 16,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-0018860f-1a7d-12a8-fd44-1cb92a511fa0",
+        "GPU-dd758a5b-7f25-6e0d-84cf-1f58b217f9cf"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 304.7695584393923,
+      "loopvq_tokens_s": 286.683959603917,
+      "speedup": 0.9406581191110926
+    },
+    {
+      "output_tokens": 2048,
+      "bs": 1,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-5a664f81-ad65-8947-c6c2-cbb7b4b50d4e",
+        "GPU-c078abcf-b59b-9999-9e5f-1c89b8ae654c"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 33.38721330382578,
+      "loopvq_tokens_s": 32.99247868122544,
+      "speedup": 0.9881770718925168
+    },
+    {
+      "output_tokens": 2048,
+      "bs": 2,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-70859fd0-1839-71a2-2ad4-76f495f0d055",
+        "GPU-39c78864-d732-8bfa-43f0-8180d77e086c"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 62.40417083050161,
+      "loopvq_tokens_s": 58.10023166992188,
+      "speedup": 0.9310312259052391
+    },
+    {
+      "output_tokens": 2048,
+      "bs": 4,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-70859fd0-1839-71a2-2ad4-76f495f0d055",
+        "GPU-39c78864-d732-8bfa-43f0-8180d77e086c"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 116.52734832740364,
+      "loopvq_tokens_s": 102.69474904909883,
+      "speedup": 0.8812931086405593
+    },
+    {
+      "output_tokens": 2048,
+      "bs": 8,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-25a02b46-4353-43fa-acf3-62bedbd98cb6",
+        "GPU-77884f42-7b1e-cd9f-5040-d63776da5190"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 181.11174365898583,
+      "loopvq_tokens_s": 172.51995915182587,
+      "speedup": 0.9525608647259375
+    },
+    {
+      "output_tokens": 2048,
+      "bs": 16,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-0018860f-1a7d-12a8-fd44-1cb92a511fa0",
+        "GPU-dd758a5b-7f25-6e0d-84cf-1f58b217f9cf"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 283.03244132632744,
+      "loopvq_tokens_s": 262.2161330420049,
+      "speedup": 0.926452571349155
+    },
+    {
+      "output_tokens": 4096,
+      "bs": 1,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-5a664f81-ad65-8947-c6c2-cbb7b4b50d4e",
+        "GPU-c078abcf-b59b-9999-9e5f-1c89b8ae654c"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 31.56882592114594,
+      "loopvq_tokens_s": 31.895388665018803,
+      "speedup": 1.0103444690875918
+    },
+    {
+      "output_tokens": 4096,
+      "bs": 2,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-70859fd0-1839-71a2-2ad4-76f495f0d055",
+        "GPU-39c78864-d732-8bfa-43f0-8180d77e086c"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 58.80883467988114,
+      "loopvq_tokens_s": 55.33309095562801,
+      "speedup": 0.9408975922891021
+    },
+    {
+      "output_tokens": 4096,
+      "bs": 4,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-70859fd0-1839-71a2-2ad4-76f495f0d055",
+        "GPU-39c78864-d732-8bfa-43f0-8180d77e086c"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 108.91103979181916,
+      "loopvq_tokens_s": 99.38399215655637,
+      "speedup": 0.9125245002391538
+    },
+    {
+      "output_tokens": 4096,
+      "bs": 8,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-70859fd0-1839-71a2-2ad4-76f495f0d055",
+        "GPU-39c78864-d732-8bfa-43f0-8180d77e086c"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 163.27484168223447,
+      "loopvq_tokens_s": 161.3564603229868,
+      "speedup": 0.9882506004018597
+    },
+    {
+      "output_tokens": 4096,
+      "bs": 16,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-0018860f-1a7d-12a8-fd44-1cb92a511fa0",
+        "GPU-dd758a5b-7f25-6e0d-84cf-1f58b217f9cf"
+      ],
+      "bf16_status": "capacity_limited_not_run",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": null,
+      "loopvq_tokens_s": 237.3379363416683,
+      "speedup": null
+    },
+    {
+      "output_tokens": 8192,
+      "bs": 1,
+      "host": "a13.mit.edu",
+      "gpu_pair": [
+        "GPU-16632623-0b5c-85fd-e6c4-8b7be50f1906",
+        "GPU-9fea3133-209f-8ce6-4d9b-b5a323f6318f"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 28.584393731400937,
+      "loopvq_tokens_s": 30.941261423872874,
+      "speedup": 1.0824529536858023
+    },
+    {
+      "output_tokens": 8192,
+      "bs": 2,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-70859fd0-1839-71a2-2ad4-76f495f0d055",
+        "GPU-39c78864-d732-8bfa-43f0-8180d77e086c"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 52.96886688494689,
+      "loopvq_tokens_s": 53.033263225564596,
+      "speedup": 1.0012157394410113
+    },
+    {
+      "output_tokens": 8192,
+      "bs": 4,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-5a664f81-ad65-8947-c6c2-cbb7b4b50d4e",
+        "GPU-c078abcf-b59b-9999-9e5f-1c89b8ae654c"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 96.39773544688343,
+      "loopvq_tokens_s": 92.19101862812909,
+      "speedup": 0.9563608335895784
+    },
+    {
+      "output_tokens": 8192,
+      "bs": 8,
+      "host": "a12.mit.edu",
+      "gpu_pair": [
+        "GPU-25a02b46-4353-43fa-acf3-62bedbd98cb6",
+        "GPU-77884f42-7b1e-cd9f-5040-d63776da5190"
+      ],
+      "bf16_status": "ok",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": 135.98818421629363,
+      "loopvq_tokens_s": 139.05498060556278,
+      "speedup": 1.0225519327796253
+    },
+    {
+      "output_tokens": 8192,
+      "bs": 16,
+      "host": "a13.mit.edu",
+      "gpu_pair": [
+        "GPU-16632623-0b5c-85fd-e6c4-8b7be50f1906",
+        "GPU-9fea3133-209f-8ce6-4d9b-b5a323f6318f"
+      ],
+      "bf16_status": "capacity_limited_not_run",
+      "loopvq_status": "ok",
+      "bf16_tokens_s": null,
+      "loopvq_tokens_s": 188.40566441288945,
+      "speedup": null
+    }
+  ],
+  "url": "https://forge.coreweave.com/wandb/529513043-tsinghua-university/loopvq-ouro-2p6b-thinking/runs/1oqu0dgq"
+}

@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 8190,
+  "start_seconds": 0.44893347285687923,
+  "end_seconds": 286.9689162634313,
+  "decode_seconds": 286.51998279057443,
+  "decode_tokens_s": 28.584393731400937,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 1022,
+      "seconds": 29.612519782036543,
+      "tokens_s": 34.51242945627216
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 1024,
+      "seconds": 31.435942579060793,
+      "tokens_s": 32.57417834457038
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 1024,
+      "seconds": 33.19924340955913,
+      "tokens_s": 30.844076395583084
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 1024,
+      "seconds": 34.93960853666067,
+      "tokens_s": 29.307712446908486
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 1024,
+      "seconds": 36.7132247146219,
+      "tokens_s": 27.891856625500075
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 1024,
+      "seconds": 38.47778829373419,
+      "tokens_s": 26.612756226603345
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 1024,
+      "seconds": 40.21405943483114,
+      "tokens_s": 25.463731202253836
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 1024,
+      "seconds": 41.92759604007006,
+      "tokens_s": 24.42305537911992
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "fb25fe27127a2636a7574db042901a48058ebcb0cb746cd2eb8f9537c0dc37c0"
+}

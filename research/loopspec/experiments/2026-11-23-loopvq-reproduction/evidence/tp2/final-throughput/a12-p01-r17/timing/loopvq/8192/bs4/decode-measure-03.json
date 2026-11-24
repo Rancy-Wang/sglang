@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 32760,
+  "start_seconds": 1.5119322799146175,
+  "end_seconds": 356.9979011199903,
+  "decode_seconds": 355.48596884007566,
+  "decode_tokens_s": 92.15553600299177,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 4088,
+      "seconds": 39.42784784594551,
+      "tokens_s": 103.68306218419127
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 4096,
+      "seconds": 40.26953962515108,
+      "tokens_s": 101.71459714035986
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 4096,
+      "seconds": 41.74972684402019,
+      "tokens_s": 98.1084263210376
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 4096,
+      "seconds": 43.33408467192203,
+      "tokens_s": 94.5214380552953
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 4096,
+      "seconds": 45.230071085039526,
+      "tokens_s": 90.55922092845901
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 4096,
+      "seconds": 47.05534661584534,
+      "tokens_s": 87.0464313745108
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 4096,
+      "seconds": 48.419900440145284,
+      "tokens_s": 84.59331726762447
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 4096,
+      "seconds": 49.9994517120067,
+      "tokens_s": 81.92089832489903
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "f49ab4fd9222ed658e4e916efecb67a195cc5d1ed371974e241de0c1a8356937"
+}

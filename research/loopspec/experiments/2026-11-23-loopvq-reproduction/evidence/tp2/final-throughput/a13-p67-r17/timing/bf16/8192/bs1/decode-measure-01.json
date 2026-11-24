@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 8190,
+  "start_seconds": 0.4453597627580166,
+  "end_seconds": 286.914481414482,
+  "decode_seconds": 286.469121651724,
+  "decode_tokens_s": 28.589468745455317,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 1022,
+      "seconds": 29.607246927917004,
+      "tokens_s": 34.51857589083519
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 1024,
+      "seconds": 31.428012792021036,
+      "tokens_s": 32.582397327392385
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 1024,
+      "seconds": 33.192922718822956,
+      "tokens_s": 30.849949812322876
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 1024,
+      "seconds": 34.93441119790077,
+      "tokens_s": 29.312072678114372
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 1024,
+      "seconds": 36.705521581694484,
+      "tokens_s": 27.897710095766136
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 1024,
+      "seconds": 38.470304587855935,
+      "tokens_s": 26.61793325970312
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 1024,
+      "seconds": 40.20764630101621,
+      "tokens_s": 25.467792676392484
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 1024,
+      "seconds": 41.92305554449558,
+      "tokens_s": 24.425700529227033
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "0fa267a92a104fb1962e24608d63a52ee43bdc40ee2e80e14a43191e362b0f02"
+}

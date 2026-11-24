@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 131040,
+  "start_seconds": 5.93300423771143,
+  "end_seconds": 701.764591647312,
+  "decode_seconds": 695.8315874096006,
+  "decode_tokens_s": 188.32143060338453,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 16352,
+      "seconds": 57.06517322733998,
+      "tokens_s": 286.5495551000227
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 16384,
+      "seconds": 68.0990362521261,
+      "tokens_s": 240.59077634139766
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 16384,
+      "seconds": 70.38797769136727,
+      "tokens_s": 232.76702268446357
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 16384,
+      "seconds": 80.74525892175734,
+      "tokens_s": 202.9097462660464
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 16384,
+      "seconds": 92.09664965979755,
+      "tokens_s": 177.90006542607182
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 16384,
+      "seconds": 104.0859950426966,
+      "tokens_s": 157.40830448206987
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 16384,
+      "seconds": 106.70201462134719,
+      "tokens_s": 153.54911580762374
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 16384,
+      "seconds": 116.64948199316859,
+      "tokens_s": 140.45497433893024
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "3e126930318bdca75d9d0890d1b9c14aaca556c641664deb271e8ca6748a201b"
+}

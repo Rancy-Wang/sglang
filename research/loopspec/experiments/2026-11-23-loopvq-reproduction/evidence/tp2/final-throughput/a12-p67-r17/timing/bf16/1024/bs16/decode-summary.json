@@ -1,0 +1,177 @@
+{
+  "status": "ok",
+  "method": "bf16",
+  "input_len": 2048,
+  "output_len": 1024,
+  "bs": 16,
+  "primary_metric": "full_batch_client_decode_tokens_s",
+  "server_manifest": {
+    "host": "a12.mit.edu",
+    "gpu_uuid": "GPU-0018860f-1a7d-12a8-fd44-1cb92a511fa0",
+    "tp_gpu_uuids": [
+      "GPU-0018860f-1a7d-12a8-fd44-1cb92a511fa0",
+      "GPU-dd758a5b-7f25-6e0d-84cf-1f58b217f9cf"
+    ],
+    "rank_pids": [
+      [
+        "1786039"
+      ],
+      [
+        "1786110"
+      ]
+    ],
+    "server_pid": 1785127,
+    "method": "bf16",
+    "exclusive_server": true,
+    "model_path": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+    "model_sha256": "c506a79247dc51fc0400d789365c3d43932f718abce9810f3606ace47d0a3080",
+    "sglang_sha": "cccc70a47ef8ede0047582314210956938ee4771",
+    "environment_sha256": "68f2eedc0586e5c3d86450a378ebf7809ad4b647497d1ef23e528cbbc75bc291",
+    "prefix_tokens": 8,
+    "recent_tokens": 64,
+    "config": {
+      "tp_size": 2,
+      "pp_size": 1,
+      "dp_size": 1,
+      "dtype": "bfloat16",
+      "attention_backend": "triton",
+      "speculative_algorithm": null,
+      "disable_radix_cache": true,
+      "chunked_prefill_size": -1,
+      "cuda_graph_config": {
+        "decode": {
+          "backend": "full",
+          "max_bs": 16,
+          "bs": [
+            1,
+            2,
+            4,
+            8,
+            16
+          ],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        },
+        "prefill": {
+          "backend": "disabled",
+          "max_bs": -1,
+          "bs": [],
+          "tc_compiler": "eager",
+          "max_context_size": null,
+          "full_prefill_max_req": null,
+          "full_prefill_prefix_chunk_tokens": null,
+          "max_seq_len": null
+        }
+      },
+      "cuda_graph_bs_decode": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "cuda_graph_backend_decode": "full",
+      "cuda_graph_backend_prefill": "disabled",
+      "disable_cuda_graph": false,
+      "disable_decode_cuda_graph": false,
+      "disable_prefill_cuda_graph": false,
+      "disable_cuda_graph_padding": false,
+      "decode_log_interval": 1,
+      "incremental_streaming_output": true,
+      "context_length": 40960,
+      "max_running_requests": 16,
+      "mem_fraction_static": 0.9,
+      "max_total_tokens": 92432,
+      "page_size": 8,
+      "loopvq_codebook_dir": null,
+      "loopvq_prefix_tokens": 64,
+      "loopvq_recent_tokens": 256,
+      "ouro_decode_profile": "optimized",
+      "triton_attention_num_kv_splits": 8,
+      "total_ut_steps": 4
+    },
+    "protocol": "decode-output-1024"
+  },
+  "server_config_readback": {
+    "tp_size": 2,
+    "pp_size": 1,
+    "dp_size": 1,
+    "dtype": "bfloat16",
+    "attention_backend": "triton",
+    "speculative_algorithm": null,
+    "disable_radix_cache": true,
+    "chunked_prefill_size": -1,
+    "cuda_graph_config": {
+      "decode": {
+        "backend": "full",
+        "max_bs": 16,
+        "bs": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "tc_compiler": "eager",
+        "max_context_size": null,
+        "full_prefill_max_req": null,
+        "full_prefill_prefix_chunk_tokens": null,
+        "max_seq_len": null
+      },
+      "prefill": {
+        "backend": "disabled",
+        "max_bs": -1,
+        "bs": [],
+        "tc_compiler": "eager",
+        "max_context_size": null,
+        "full_prefill_max_req": null,
+        "full_prefill_prefix_chunk_tokens": null,
+        "max_seq_len": null
+      }
+    },
+    "cuda_graph_bs_decode": [
+      1,
+      2,
+      4,
+      8,
+      16
+    ],
+    "cuda_graph_backend_decode": "full",
+    "cuda_graph_backend_prefill": "disabled",
+    "disable_cuda_graph": false,
+    "disable_decode_cuda_graph": false,
+    "disable_prefill_cuda_graph": false,
+    "disable_cuda_graph_padding": false,
+    "decode_log_interval": 1,
+    "incremental_streaming_output": true,
+    "context_length": 40960,
+    "max_running_requests": 16,
+    "mem_fraction_static": 0.9,
+    "max_total_tokens": null,
+    "page_size": 8,
+    "loopvq_codebook_dir": null,
+    "loopvq_prefix_tokens": 64,
+    "loopvq_recent_tokens": 256,
+    "ouro_decode_profile": "optimized",
+    "triton_attention_num_kv_splits": 8
+  },
+  "input_ids_sha256": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+  "input_fixture_sha256": "c5967c10f9a23be7704bbd7cd082bdefd6007c7e7164cd82d5df6cb43cda5ec1",
+  "decode_tokens_s_median": 304.7695584393923,
+  "decode_tokens_s_min": 304.68436164727393,
+  "decode_tokens_s_max": 305.19918917157526,
+  "rates": [
+    304.7695584393923,
+    305.19918917157526,
+    304.68436164727393
+  ],
+  "warmup_count": 2,
+  "warmup_output_len": 32,
+  "repeat_count": 3,
+  "actual_batch_fraction": 1.0,
+  "auxiliary_http_summary": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/tp2/a12-p67-r17/timing/bf16/1024/bs16/summary.json",
+  "prefill_in_primary_metric": false
+}

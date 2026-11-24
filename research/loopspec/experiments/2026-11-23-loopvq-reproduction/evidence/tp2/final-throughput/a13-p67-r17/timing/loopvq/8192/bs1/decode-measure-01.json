@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 8190,
+  "start_seconds": 0.4672737754881382,
+  "end_seconds": 265.5754449479282,
+  "decode_seconds": 265.10817117244005,
+  "decode_tokens_s": 30.893050047381607,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 1022,
+      "seconds": 30.127264885231853,
+      "tokens_s": 33.92276079137128
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 1024,
+      "seconds": 31.744048634544015,
+      "tokens_s": 32.25801509406959
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 1024,
+      "seconds": 33.047870023176074,
+      "tokens_s": 30.98535546411557
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 1024,
+      "seconds": 33.37657677382231,
+      "tokens_s": 30.680198479885355
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 1024,
+      "seconds": 33.67548366822302,
+      "tokens_s": 30.40787803045782
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 1024,
+      "seconds": 33.97183329239488,
+      "tokens_s": 30.142618185673197
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 1024,
+      "seconds": 34.319946778938174,
+      "tokens_s": 29.836876105775872
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 1024,
+      "seconds": 34.84514711610973,
+      "tokens_s": 29.38716248170411
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "8a4b8b7b3995c9968a18cfd7cfb76b5aab75138bf4711a7cf7bdecb58f0e2ab9"
+}

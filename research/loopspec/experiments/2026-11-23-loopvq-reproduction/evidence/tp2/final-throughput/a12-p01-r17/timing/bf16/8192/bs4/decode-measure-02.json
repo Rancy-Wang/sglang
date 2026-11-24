@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 32760,
+  "start_seconds": 1.4410951079335064,
+  "end_seconds": 341.28310330584645,
+  "decode_seconds": 339.84200819791295,
+  "decode_tokens_s": 96.39773544688343,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 4088,
+      "seconds": 34.03070523496717,
+      "tokens_s": 120.12680818026378
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 4096,
+      "seconds": 36.469142438145354,
+      "tokens_s": 112.3141298687555
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 4096,
+      "seconds": 38.89776040194556,
+      "tokens_s": 105.30169237700197
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 4096,
+      "seconds": 41.285696604987606,
+      "tokens_s": 99.21111515180718
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 4096,
+      "seconds": 43.69626389606856,
+      "tokens_s": 93.73799118712586
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 4096,
+      "seconds": 46.089213934959844,
+      "tokens_s": 88.87111864785092
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 4096,
+      "seconds": 48.48853081301786,
+      "tokens_s": 84.47358439864989
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 4096,
+      "seconds": 50.88469487382099,
+      "tokens_s": 80.49571703548327
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "424784146b7c1dc5c4846d586dd3eac6ee4eed3254e29441245d30bc13d7feec"
+}

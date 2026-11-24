@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 8190,
+  "start_seconds": 0.45071237720549107,
+  "end_seconds": 286.9884442612529,
+  "decode_seconds": 286.5377318840474,
+  "decode_tokens_s": 28.58262311964635,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 1022,
+      "seconds": 29.61037451028824,
+      "tokens_s": 34.514929881920345
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 1024,
+      "seconds": 31.458909360691905,
+      "tokens_s": 32.55039735355524
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 1024,
+      "seconds": 33.19827703386545,
+      "tokens_s": 30.84497424235062
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 1024,
+      "seconds": 34.940630784258246,
+      "tokens_s": 29.306854999920073
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 1024,
+      "seconds": 36.71226216852665,
+      "tokens_s": 27.89258791243524
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 1024,
+      "seconds": 38.476907696574926,
+      "tokens_s": 26.613365296274907
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 1024,
+      "seconds": 40.213813446462154,
+      "tokens_s": 25.46388696419656
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 1024,
+      "seconds": 41.92655688337982,
+      "tokens_s": 24.423660708612246
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "3adf08d2dc18cacccf6744f04593e15c5703c05aa934072479849b22725907c1"
+}

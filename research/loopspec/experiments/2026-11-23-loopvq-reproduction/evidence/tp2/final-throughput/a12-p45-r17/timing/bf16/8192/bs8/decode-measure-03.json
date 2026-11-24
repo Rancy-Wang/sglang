@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 65520,
+  "start_seconds": 2.8492251799907535,
+  "end_seconds": 485.0543227531016,
+  "decode_seconds": 482.20509757311083,
+  "decode_tokens_s": 135.87579295564376,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 8176,
+      "seconds": 42.8156904540956,
+      "tokens_s": 190.95803228411822
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 8192,
+      "seconds": 47.86859753285535,
+      "tokens_s": 171.13515795772574
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 8192,
+      "seconds": 52.838487087981775,
+      "tokens_s": 155.03850415624953
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 8192,
+      "seconds": 57.82378905406222,
+      "tokens_s": 141.67179519040008
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 8192,
+      "seconds": 62.78652558801696,
+      "tokens_s": 130.47385443419844
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 8192,
+      "seconds": 67.75632484909147,
+      "tokens_s": 120.9038420877375
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 8192,
+      "seconds": 72.68310210597701,
+      "tokens_s": 112.70845303294148
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 8192,
+      "seconds": 77.63258090103045,
+      "tokens_s": 105.522705865512
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "7b992f6f45e6ce5bcc06987e7fd7d3bdb78d9308f32aa61e0dfcac7ddf35c98a"
+}

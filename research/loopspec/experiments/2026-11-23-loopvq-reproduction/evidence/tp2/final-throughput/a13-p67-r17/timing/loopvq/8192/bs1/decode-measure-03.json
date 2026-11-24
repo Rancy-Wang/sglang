@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 8190,
+  "start_seconds": 0.46642139181494713,
+  "end_seconds": 265.1615121252835,
+  "decode_seconds": 264.69509073346853,
+  "decode_tokens_s": 30.941261423872874,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 1022,
+      "seconds": 30.115690361708403,
+      "tokens_s": 33.93579850653053
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 1024,
+      "seconds": 31.743657222017646,
+      "tokens_s": 32.25841284884294
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 1024,
+      "seconds": 33.01744673028588,
+      "tokens_s": 31.013906325491742
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 1024,
+      "seconds": 33.216274281963706,
+      "tokens_s": 30.828261812494354
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 1024,
+      "seconds": 33.54360664449632,
+      "tokens_s": 30.52742690589633
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 1024,
+      "seconds": 34.01384743861854,
+      "tokens_s": 30.105385809350516
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 1024,
+      "seconds": 34.31325771100819,
+      "tokens_s": 29.84269254246547
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 1024,
+      "seconds": 34.73131034336984,
+      "tokens_s": 29.4834830553832
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "cacdb30679a905cd6b65f023adfc20fc460ca44e3db6a3863b3e27efde3b47c6"
+}

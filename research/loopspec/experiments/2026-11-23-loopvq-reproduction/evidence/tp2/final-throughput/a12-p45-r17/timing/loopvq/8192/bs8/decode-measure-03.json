@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 65520,
+  "start_seconds": 2.9806081450078636,
+  "end_seconds": 474.0788450529799,
+  "decode_seconds": 471.098236907972,
+  "decode_tokens_s": 139.07927236161402,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 8176,
+      "seconds": 45.44837527000345,
+      "tokens_s": 179.896419870399
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 8192,
+      "seconds": 49.31016767700203,
+      "tokens_s": 166.13206537159476
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 8192,
+      "seconds": 52.414556885138154,
+      "tokens_s": 156.29245932484062
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 8192,
+      "seconds": 55.74829479097389,
+      "tokens_s": 146.9461986364891
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 8192,
+      "seconds": 64.84474770305678,
+      "tokens_s": 126.33251404591137
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 8192,
+      "seconds": 67.06263597588986,
+      "tokens_s": 122.15445875025195
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 8192,
+      "seconds": 67.85184075706638,
+      "tokens_s": 120.73364419589235
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 8192,
+      "seconds": 68.41761784884147,
+      "tokens_s": 119.73524155867284
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "b39f99725f07ca98b14eb30667dd3bf13e7b5371d6a3f724ba187787e968e37c"
+}

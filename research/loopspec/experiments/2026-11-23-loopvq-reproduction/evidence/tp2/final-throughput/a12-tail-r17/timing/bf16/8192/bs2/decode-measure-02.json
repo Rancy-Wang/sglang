@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 16380,
+  "start_seconds": 0.7667472390457988,
+  "end_seconds": 310.00500290305354,
+  "decode_seconds": 309.23825566400774,
+  "decode_tokens_s": 52.96886688494689,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 2044,
+      "seconds": 31.785964207956567,
+      "tokens_s": 64.30511236429166
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 2048,
+      "seconds": 33.782932611880824,
+      "tokens_s": 60.622327360643546
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 2048,
+      "seconds": 35.703656926052645,
+      "tokens_s": 57.361071002942346
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 2048,
+      "seconds": 37.654103303095326,
+      "tokens_s": 54.38982263140617
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 2048,
+      "seconds": 39.61935759196058,
+      "tokens_s": 51.69190326335763
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 2048,
+      "seconds": 41.584824756952,
+      "tokens_s": 49.24873465187857
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 2048,
+      "seconds": 43.56434477912262,
+      "tokens_s": 47.010921669627976
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 2048,
+      "seconds": 45.543071486987174,
+      "tokens_s": 44.9684207308057
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "ff97d103418a2e93ffce6872741609800c613b4b9772feb5810efa450b0ab1ad"
+}

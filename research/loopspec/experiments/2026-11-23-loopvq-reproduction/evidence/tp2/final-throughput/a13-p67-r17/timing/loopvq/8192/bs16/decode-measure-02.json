@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 131040,
+  "start_seconds": 5.929980993270874,
+  "end_seconds": 700.6480828654021,
+  "decode_seconds": 694.7181018721312,
+  "decode_tokens_s": 188.6232698512857,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 16352,
+      "seconds": 57.151994897052646,
+      "tokens_s": 286.11424727089064
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 16384,
+      "seconds": 67.75468776002526,
+      "tokens_s": 241.8135267338127
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 16384,
+      "seconds": 70.29341961070895,
+      "tokens_s": 233.08013880582297
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 16384,
+      "seconds": 80.55588274262846,
+      "tokens_s": 203.3867601245953
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 16384,
+      "seconds": 91.946658058092,
+      "tokens_s": 178.19027190361362
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 16384,
+      "seconds": 103.69100969471037,
+      "tokens_s": 158.00791262654474
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 16384,
+      "seconds": 106.57830009236932,
+      "tokens_s": 153.72735337118635
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 16384,
+      "seconds": 116.74614901654422,
+      "tokens_s": 140.33867616205657
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "b0317a0e3942e2192e43b6d1f1d8c8e3d3a279ef7a6dbe7d66a4c5a56d5601ba"
+}

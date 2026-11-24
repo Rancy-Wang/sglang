@@ -1,0 +1,70 @@
+{
+  "metric": "full_batch_client_decode_tokens_s",
+  "start_completion_count": 2,
+  "end_completion_count": 8192,
+  "decode_tokens": 65520,
+  "start_seconds": 2.983133772853762,
+  "end_seconds": 474.163667649962,
+  "decode_seconds": 471.18053387710825,
+  "decode_tokens_s": 139.05498060556278,
+  "windows": [
+    {
+      "from_completion_count": 2,
+      "to_completion_count": 1024,
+      "tokens": 8176,
+      "seconds": 45.42432602401823,
+      "tokens_s": 179.99166340248877
+    },
+    {
+      "from_completion_count": 1024,
+      "to_completion_count": 2048,
+      "tokens": 8192,
+      "seconds": 49.34955584211275,
+      "tokens_s": 165.99946767928773
+    },
+    {
+      "from_completion_count": 2048,
+      "to_completion_count": 3072,
+      "tokens": 8192,
+      "seconds": 52.454062315868214,
+      "tokens_s": 156.17474869094715
+    },
+    {
+      "from_completion_count": 3072,
+      "to_completion_count": 4096,
+      "tokens": 8192,
+      "seconds": 55.73167935013771,
+      "tokens_s": 146.9900081160888
+    },
+    {
+      "from_completion_count": 4096,
+      "to_completion_count": 5120,
+      "tokens": 8192,
+      "seconds": 64.8033229589928,
+      "tokens_s": 126.4132705846559
+    },
+    {
+      "from_completion_count": 5120,
+      "to_completion_count": 6144,
+      "tokens": 8192,
+      "seconds": 67.01711290702224,
+      "tokens_s": 122.23743525575868
+    },
+    {
+      "from_completion_count": 6144,
+      "to_completion_count": 7168,
+      "tokens": 8192,
+      "seconds": 67.92423136695288,
+      "tokens_s": 120.60497167415349
+    },
+    {
+      "from_completion_count": 7168,
+      "to_completion_count": 8192,
+      "tokens": 8192,
+      "seconds": 68.47624311200343,
+      "tokens_s": 119.63273140731047
+    }
+  ],
+  "definition": "Max first-arrival timestamp across requests at each common token-count barrier; prefill and first decode excluded",
+  "events_sha256": "8fc83f1b6fb0a286830cade0fe8fd623d78a5ed619167ae2b42778fc8138f6d7"
+}
