@@ -1,5 +1,6 @@
 """Run BF16 and LoopVQ on one exclusive local GPU pair in tmux."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -49,6 +50,16 @@ def serve(args, method, root):
     log = root / f"{method}.log"
     env = dict(os.environ, PYTHONPATH=str(REPO / "python"), CUDA_VISIBLE_DEVICES=args.cards,
                TORCH_CUDA_ARCH_LIST="8.0", MAX_JOBS="3")
+    compiler = shutil.which("g++") or shutil.which("g++-13")
+    if compiler is None:
+        raise RuntimeError("C++ host compiler unavailable")
+    tool_bin = root / "tool-bin"
+    tool_bin.mkdir(exist_ok=True)
+    if not (tool_bin / "g++").exists():
+        (tool_bin / "g++").symlink_to(compiler)
+    env.update(CXX=compiler, PATH=str(tool_bin) + os.pathsep + env["PATH"])
+    freeze = subprocess.check_output([cmd[0], "-m", "pip", "freeze", "--all"], env=env)
+    (root / "pip-freeze.txt").write_bytes(freeze)
     with log.open("x") as stream:
         process = subprocess.Popen(cmd, cwd=REPO, env=env, stdout=stream, stderr=subprocess.STDOUT)
     try:
@@ -78,7 +89,7 @@ def serve(args, method, root):
                         server_pid=process.pid,method=method,exclusive_server=True,model_path=str(model),
                         model_sha256=sweep.safe.sha256(model/"model.safetensors"),
                         sglang_sha=subprocess.check_output(["git","rev-parse","HEAD"],cwd=REPO,text=True).strip(),
-                        environment_sha256=sweep.safe.sha256(Path(os.environ["LOOPVQ_PYTHON"]).resolve()),
+                        environment_sha256=hashlib.sha256(freeze).hexdigest(),
                         prefix_tokens=8,recent_tokens=64,config=dict(cfg,total_ut_steps=4))
         if method == "loopvq":
             manifest["bundle_sha256"]={name:sweep.safe.sha256(bundle/name) for name in ("codebook.pt","vq_v_codebook.pt")}
