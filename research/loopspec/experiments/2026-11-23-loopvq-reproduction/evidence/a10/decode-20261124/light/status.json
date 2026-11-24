@@ -1,0 +1,10 @@
+{
+  "status": "completed",
+  "started_unix": 1795492304.2920399,
+  "inference_sha": "feba71a8927502fd334a94a86a6d312ff3f4e543",
+  "helper_sha256": "bb2545706a599613e652569eba7394ff9d1cccaa312f4cbc0f9a16008f3c55b7",
+  "gpu_uuid": "GPU-82009e07-07c1-3a6c-5613-df2e45f63980",
+  "bs": 4,
+  "ended_unix": 1795493841.4952505,
+  "gpu_released": true
+}

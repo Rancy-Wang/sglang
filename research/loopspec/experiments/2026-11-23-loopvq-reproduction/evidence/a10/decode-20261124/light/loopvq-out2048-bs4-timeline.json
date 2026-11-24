@@ -1,0 +1,135 @@
+{
+  "source": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/decode-20261124-r12/light/loopvq-out2048-bs4.sqlite",
+  "decode_graphs": 8,
+  "graph_ms_mean": 50.310762249999996,
+  "graph_ms_median": 50.3120065,
+  "graph_ms": [
+    50.311382,
+    50.312631,
+    50.313846,
+    50.29503,
+    50.306326,
+    50.321398,
+    50.316502,
+    50.308983
+  ],
+  "gap_ms_mean": 4.959381142857143,
+  "gap_ms_median": 4.651437,
+  "gap_ms": [
+    4.846476,
+    4.363662,
+    4.014256,
+    4.608398,
+    4.767053,
+    7.464386,
+    4.651437
+  ],
+  "cpu_apis": {
+    "cudaStreamIsCapturing_v10000": {
+      "calls": 117,
+      "total_ms": 0.100048,
+      "mean_ms": 0.0008551111111111111,
+      "median_ms": 0.00076,
+      "max_ms": 0.00662
+    },
+    "cudaStreamWaitEvent_v3020": {
+      "calls": 33,
+      "total_ms": 0.094151,
+      "mean_ms": 0.002853060606060606,
+      "median_ms": 0.00243,
+      "max_ms": 0.01338
+    },
+    "cudaEventDestroy_v3020": {
+      "calls": 33,
+      "total_ms": 0.04041,
+      "mean_ms": 0.0012245454545454545,
+      "median_ms": 0.00108,
+      "max_ms": 0.00411
+    },
+    "cudaEventQuery_v3020": {
+      "calls": 25,
+      "total_ms": 0.139372,
+      "mean_ms": 0.00557488,
+      "median_ms": 0.0048,
+      "max_ms": 0.01889
+    },
+    "cudaMemcpyAsync_v3020": {
+      "calls": 48,
+      "total_ms": 0.570585,
+      "mean_ms": 0.0118871875,
+      "median_ms": 0.010260499999999999,
+      "max_ms": 0.03969
+    },
+    "cudaStreamSynchronize_v3020": {
+      "calls": 36,
+      "total_ms": 391.221999,
+      "mean_ms": 10.86727775,
+      "median_ms": 0.008785,
+      "max_ms": 49.122272
+    },
+    "cudaLaunchKernel_v7000": {
+      "calls": 460,
+      "total_ms": 3.535586,
+      "mean_ms": 0.00768605652173913,
+      "median_ms": 0.00649,
+      "max_ms": 0.04496
+    },
+    "cudaEventCreateWithFlags_v3020": {
+      "calls": 32,
+      "total_ms": 0.060942,
+      "mean_ms": 0.0019044375,
+      "median_ms": 0.0016849999999999999,
+      "max_ms": 0.00393
+    },
+    "cudaEventRecordWithFlags_v11010": {
+      "calls": 40,
+      "total_ms": 0.120601,
+      "mean_ms": 0.003015025,
+      "median_ms": 0.00232,
+      "max_ms": 0.01625
+    },
+    "cudaLaunchKernelExC_v11060": {
+      "calls": 8,
+      "total_ms": 0.114,
+      "mean_ms": 0.01425,
+      "median_ms": 0.013829999999999999,
+      "max_ms": 0.0177
+    },
+    "cudaGraphLaunch_v10000": {
+      "calls": 8,
+      "total_ms": 21.052964,
+      "mean_ms": 2.6316205,
+      "median_ms": 2.5648239999999998,
+      "max_ms": 3.255729
+    },
+    "cudaEventRecord_v3020": {
+      "calls": 8,
+      "total_ms": 0.018781,
+      "mean_ms": 0.002347625,
+      "median_ms": 0.00241,
+      "max_ms": 0.00262
+    },
+    "cudaEventSynchronize_v3020": {
+      "calls": 8,
+      "total_ms": 0.047939,
+      "mean_ms": 0.005992375,
+      "median_ms": 0.005835,
+      "max_ms": 0.00756
+    },
+    "cuKernelGetName": {
+      "calls": 460,
+      "total_ms": 0.149809,
+      "mean_ms": 0.0003256717391304348,
+      "median_ms": 0.00027,
+      "max_ms": 0.00218
+    },
+    "cuLaunchKernelEx": {
+      "calls": 26,
+      "total_ms": 0.271569,
+      "mean_ms": 0.010444961538461538,
+      "median_ms": 0.009389999999999999,
+      "max_ms": 0.020189
+    }
+  },
+  "note": "Graph-only instrumented timeline. Gaps can include encoding and scheduling; CPU waits overlap GPU and must not be added to GPU time. Not unprofiled throughput."
+}

@@ -1,0 +1,37 @@
+{
+  "note": "Graph-only instrumented spans and gaps; not primary throughput. Graph intervals and gaps are disjoint; CPU waits overlap GPU and cannot be added.",
+  "rows": [
+    {
+      "output_position": 1024,
+      "bs": 4,
+      "bf16_graph_ms": 50.112114375000004,
+      "vq_graph_ms": 49.934790375,
+      "bf16_gap_ms": 0.07736671428571429,
+      "vq_gap_ms": 4.2898822857142855
+    },
+    {
+      "output_position": 2048,
+      "bs": 4,
+      "bf16_graph_ms": 51.88377575,
+      "vq_graph_ms": 50.310762249999996,
+      "bf16_gap_ms": 0.07190842857142857,
+      "vq_gap_ms": 4.959381142857143
+    },
+    {
+      "output_position": 4096,
+      "bs": 4,
+      "bf16_graph_ms": 61.5961475,
+      "vq_graph_ms": 56.669611125,
+      "bf16_gap_ms": 0.07383771428571428,
+      "vq_gap_ms": 4.384301
+    },
+    {
+      "output_position": 8192,
+      "bs": 4,
+      "bf16_graph_ms": 80.003378875,
+      "vq_graph_ms": 68.576711375,
+      "bf16_gap_ms": 0.07885214285714286,
+      "vq_gap_ms": 4.700036857142857
+    }
+  ]
+}

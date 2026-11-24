@@ -734,3 +734,30 @@ Candidate13 recovery exit0，16个采样区间全部导出；每段8个完整dec
 Embedding/LM-head等graph内但loop外的kernel另约0.14ms，未硬塞到某个loop。所有loop/类别加总与graph kernel总量已核对。完整13类步骤见 `evidence/a10/decode-20261124/node-profile-per-loop.csv`；对照JSON/CSV、逐段原始统计、进程manifest、实际prompt IDs及原始trace SHA256均在同目录。大型SQLite/nsys-rep留A10 results/decode-20261124-r12。图 `decode-kernel-breakdown.png/.pdf` 已渲染检查，误差线保留每段8步的范围。
 
 开发HEAD相对feba还有候选8的allocator trait修补（3文件、5增3删），本次冻结性能服务未应用它；不能把开发HEAD冒充已运行推理SHA。本轮所有新增代码均为实验工具。旧64+256/2K+512的E2E加速比不能替代用户现在要求的8+64、固定2K输入、纯decode结果。
+
+
+Candidate15 commit `0a0c0c1e2` 已 push/pull 至 validation checkout；`py_compile`、`git diff --cached --check` 均 exit0。正式 timing 尚未开始时完成同步；冻结推理仍为 feba。导出 CSV 仅统一为 LF，数值不变，完整 prompt 使用单条 2048 IDs + repeat_count16 无损保存。
+
+Candidate14 BF16 轻量 profile 的四个区间均通过8个 runtime-correlated graph 校验。最后一个区间已自动停止，但服务 shutdown 中断了异步报告转换；原始 `/tmp/loopvq-nsys-827600054/nsys-ruoxi07/nsys-report-700d.qdstrm` 完整保留。使用 `nsys import` 恢复，exit0，无推理重跑；原始与恢复报告SHA、动作及验证见 `evidence/a10/decode-20261124/light/bf16-report-recovery.json`。此操作是已有采样的离线转换，没有改候选代码。BF16四位置的graph间隙均值约0.077/0.072/0.074/0.079ms；graph tracing下cudaGraphLaunch仍约2ms，进一步证明不能把node trace的10ms调用时长视作正常调度开销。
+
+
+### Candidate14 完成：轻量时间线定位图间空隙
+
+两臂8个区间全部导出并校验，每区间8个完整graph，exit0。VQ四个报告自动导出成功；BF16末段按上述原始文件恢复。完整证据、输入对应manifest及8份原始报告SHA位于 `evidence/a10/decode-20261124/light/`。
+
+固定2K输入、bs4、HP8+64，以下为graph tracing观测的均值（ms），仍非正式吞吐：
+
+| 新增输出位置 | BF16 graph跨度 | VQ graph跨度 | BF16 graph间隔 | VQ graph间隔 |
+|---:|---:|---:|---:|---:|
+| 1024 | 50.112 | 49.935 | 0.077 | 4.290 |
+| 2048 | 51.884 | 50.311 | 0.072 | 4.959 |
+| 4096 | 61.596 | 56.670 | 0.074 | 4.384 |
+| 8192 | 80.003 | 68.577 | 0.079 | 4.700 |
+
+VQ存在约4.3–5.0ms的图间间隔，BF16约0.07–0.08ms。短位置attention收益小，被额外间隔抵消；长位置attention收益可超过这段间隔。这与提前wait、逐请求分配的源码差异一致，但尚未单变量消融，不能把全部间隔精确归因给某一行。图间间隔还含图外GPU编码/元数据与CPU规划。节点profile已量得8K/bs4编码GPU仅约0.089ms/步，因此不能简单称为“编码kernel慢”。
+
+8K/bs4的8步采样：BF16有8次cudaEventSynchronize、17次cudaMemcpyAsync；VQ有36次cudaStreamSynchronize、48次cudaMemcpyAsync。VQ的CPU stream同步累计537.7ms主要包含等待GPU的重叠时间，**不能除以8再加到GPU时间上**。cudaGraphLaunch本身在graph tracing中BF16约2.08ms、VQ约2.48ms，表明轻量采样仍有观测扰动；最终结论必须使用后续无profiler配对结果。
+
+### Candidate15 正式 decode 矩阵已启动，未完成
+
+A10 GPU5，2026-11-24 04:17:24 UTC启动，tmux `loopvq-20261123:decode-timing-r14-queue`（窗口名保留历史，实际helper为candidate15 SHA54e15c203aae6d37d5b9c48336f125b95e628e9a181494581c088b11a585fc71）。运行推理仍feba。结果根 `/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/decode-20261124-r12`，进度 `timing-status.json`，逐格 `timing/<method>/<output>/bs<batch>/decode-summary.json`，总表 `decode-throughput.json`，完成后发布W&B并写入wandb.json。日志 `logs/decode-timing-r14.log` 与退出码 `logs/decode-timing-r14.exit`。未生成的格子为pending，不把启动成功写成验证通过。

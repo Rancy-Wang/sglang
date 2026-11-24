@@ -1,0 +1,11 @@
+{
+  "action": "nsys import existing completed capture; no inference rerun",
+  "reason": "automatic final report conversion interrupted during server shutdown",
+  "raw_path": "/tmp/loopvq-nsys-827600054/nsys-ruoxi07/nsys-report-700d.qdstrm",
+  "raw_sha256": "2102a3b132305eacc654c58338cc2106d399308422f40dc0929a1cbe8940512e",
+  "report_path": "/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/decode-20261124-r12/light/bf16-nodes.4.nsys-rep",
+  "report_sha256": "89d6c4fef52f5fdff733e1787242f5eafeca040172a1471d2a1a4b2db70a7ca8",
+  "import_exit_code": 0,
+  "validated_decode_graphs": 8,
+  "recorded_unix": 1795493241.6377223
+}
