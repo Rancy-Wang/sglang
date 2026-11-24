@@ -41,7 +41,7 @@ class LoopVQCodebook:
         return self.cb16_enc.shape[0]
 
 
-def load_loopvq_codebook(path, *, layer_num, head_num, head_dim, device):
+def load_loopvq_codebook(path, *, layer_num, head_num, head_dim, device, tp_rank=0, tp_size=1):
     """Validate on CPU before allocating device tables; never mutate the bundle."""
     b = torch.load(Path(path), map_location="cpu", weights_only=True)
     if not isinstance(b, dict):
@@ -58,7 +58,10 @@ def load_loopvq_codebook(path, *, layer_num, head_num, head_dim, device):
     for name in ("loop_scale", "chan_weight", "freq_idx"):
         if b.get(name) is not None:
             raise ValueError(f"LoopVQ identity profile rejects {name}")
-    shape = (layer_num, head_num, head_dim, head_dim)
+    if tp_size not in (1, 2) or not 0 <= tp_rank < tp_size:
+        raise ValueError("Invalid LoopVQ tensor-parallel rank")
+    global_heads = head_num * tp_size
+    shape = (layer_num, global_heads, head_dim, head_dim)
     identity = torch.eye(head_dim)
     for name in ("forward", "inverse"):
         t = b.get(name)
@@ -74,7 +77,7 @@ def load_loopvq_codebook(path, *, layer_num, head_num, head_dim, device):
     if list(b.get("bounds", [])) != bounds:
         raise ValueError("LoopVQ serving requires uniform G16 8-bit code indices")
     books = b.get("codebooks", {})
-    expected = {(s, h) for s in range(layer_num) for h in range(head_num)}
+    expected = {(s, h) for s in range(layer_num) for h in range(global_heads)}
     if set(books) != expected:
         raise ValueError("LoopVQ codebook slot/head coverage does not match the model")
     for key, groups in books.items():
@@ -84,7 +87,9 @@ def load_loopvq_codebook(path, *, layer_num, head_num, head_dim, device):
             if (not isinstance(table, torch.Tensor) or table.shape != (256, 16)
                     or table.dtype != torch.float16 or not bool(torch.isfinite(table).all())):
                 raise ValueError(f"Invalid LoopVQ FP16 centroid table at {key}")
-    enc = build_coupled_codebook(books, lb, 4, 4, 4, head_num, head_dim)
+    local_books = {(s, h): books[s, tp_rank * head_num + h]
+                   for s in range(layer_num) for h in range(head_num)}
+    enc = build_coupled_codebook(local_books, lb, 4, 4, 4, head_num, head_dim)
     dec = slot_codebooks(enc, lb, 4, 4)
     return LoopVQCodebook(
         enc.to(device), dec.to(device), lb, 4, head_num, head_dim,

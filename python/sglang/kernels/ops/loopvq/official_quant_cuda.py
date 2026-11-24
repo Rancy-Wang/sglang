@@ -490,13 +490,13 @@ def official_quant_attention(q, k_idx, k_cb, v_idx, v_cb, kv_indptr, kv_indices,
     """
     if group_size not in (1, 2) or max_splits != MAX_SPLITS:
         raise ValueError("Official LoopVQ supports R1/R2 and 48 quant split slots")
-    if q.ndim != 3 or q.shape[1:] != (16, 128) or q.dtype != torch.bfloat16:
-        raise ValueError("Official LoopVQ requires BF16 [B,16,128] queries")
+    if q.ndim != 3 or q.shape[1] not in (8, 16) or q.shape[2] != 128 or q.dtype != torch.bfloat16:
+        raise ValueError("Official LoopVQ requires BF16 [B,local_heads,128] queries")
     key = _device_key(q.device)
     prepared = _PREPARED.get(key)
     if prepared is None:
         raise RuntimeError("Call prepare_official_quant before using this kernel")
-    b = q.shape[0]
+    b, heads, _ = q.shape
     if pos_offset < 0 or pos_offset >= cos_sin_cache.shape[0]:
         raise ValueError("Invalid quant-prefix RoPE offset")
     if cos_sin_cache.ndim != 2 or cos_sin_cache.shape[1] != 128 or cos_sin_cache.dtype != torch.float32:
@@ -504,11 +504,11 @@ def official_quant_attention(q, k_idx, k_cb, v_idx, v_cb, kv_indptr, kv_indices,
     if cos_sin_cache.shape[0] < prepared.max_context_len or not cos_sin_cache.is_contiguous():
         raise ValueError("RoPE table is noncontiguous or shorter than the configured context")
     for idx, cb in ((k_idx, k_cb), (v_idx, v_cb)):
-        if idx.ndim != 3 or idx.shape[1:] != (16, 32) or idx.dtype != torch.uint8:
-            raise ValueError("Official LoopVQ requires raw uint8 [slots,16,32] indices")
+        if idx.ndim != 3 or idx.shape[1:] != (heads, 32) or idx.dtype != torch.uint8:
+            raise ValueError("Official LoopVQ requires raw uint8 [slots,local_heads,32] indices")
         if idx.stride(-1) != 1 or idx.stride(-2) != 32:
             raise ValueError("LoopVQ index heads/groups must be contiguous")
-        if cb.shape != (16, 32, 256, 4) or cb.dtype != torch.float16 or not cb.is_contiguous():
+        if cb.shape != (heads, 32, 256, 4) or cb.dtype != torch.float16 or not cb.is_contiguous():
             raise ValueError("Official LoopVQ requires contiguous FP16 G16 decode tables")
     if kv_indptr.shape != (b + 1,) or kv_indptr.dtype != torch.int32:
         raise ValueError("Quant indptr must be int32 [B+1]")
@@ -516,7 +516,7 @@ def official_quant_attention(q, k_idx, k_cb, v_idx, v_cb, kv_indptr, kv_indices,
         raise ValueError("Quant split counts must be int32 [B]")
     if kv_indices.ndim != 1 or kv_indices.dtype not in (torch.int32, torch.int64):
         raise ValueError("Quant locations must be an int32/int64 vector")
-    if att_out.shape != (b, 16, max_splits, 128) or att_lse.shape != (b, 16, max_splits):
+    if att_out.shape != (b, heads, max_splits, 128) or att_lse.shape != (b, heads, max_splits):
         raise ValueError("Invalid official quant split scratch shape")
     if att_out.dtype != torch.float32 or att_lse.dtype != torch.float32:
         raise ValueError("Official split scratch must be FP32")
@@ -528,8 +528,8 @@ def official_quant_attention(q, k_idx, k_cb, v_idx, v_cb, kv_indptr, kv_indices,
         raise ValueError("Official LoopVQ requires contiguous innermost dimensions")
     prepared.extension.vqwide_v2_cuda(
         q, k_idx, k_cb, v_idx, v_cb,
-        prepared.unit_scale.expand(k_idx.shape[0], 16, 2),
-        prepared.unit_scale.expand(v_idx.shape[0], 16, 2),
+        prepared.unit_scale.expand(k_idx.shape[0], heads, 2),
+        prepared.unit_scale.expand(v_idx.shape[0], heads, 2),
         cos_sin_cache, prepared.dummy_long, prepared.dummy_float,
         kv_indptr, kv_indices, num_splits, att_out, att_lse,
         max_splits, float(sm_scale), int(pos_offset), 17 if group_size == 2 else 1,

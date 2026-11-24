@@ -54,15 +54,15 @@ def handle_loopvq_compatibility(server_args: Any) -> None:
         return
     if not cfg.device.startswith("cuda"):
         raise ValueError("LoopVQ requires a CUDA device.")
-    if any(
+    if cfg.tp_size not in (1, 2) or any(
         getattr(cfg, name) != 1
         for name in (
             # This hook runs before runtime publication. attn_dcp_size is a
             # Derived runtime-bag value, not a field of resolved ServerArgs.
-            "tp_size", "pp_size", "dp_size", "attn_dp_size", "attn_cp_size", "dcp_size"
+            "pp_size", "dp_size", "attn_dp_size", "attn_cp_size", "dcp_size"
         )
     ):
-        raise ValueError("LoopVQ currently requires TP/PP/DP/CP/DCP=1.")
+        raise ValueError("LoopVQ currently requires TP in {1,2} and PP/DP/CP/DCP=1.")
     if cfg.speculative_algorithm is not None:
         raise ValueError("LoopVQ cannot be combined with speculative decoding.")
     if set(attention_backends_of(cfg)) != {"triton"}:

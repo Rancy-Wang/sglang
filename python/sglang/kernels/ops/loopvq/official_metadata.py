@@ -71,11 +71,12 @@ def _tier_indices(PTR, LOC, QPTR, HPTR, QLEN, HLEN, FULL, QLOC, HLOC,
 
 class OfficialMetadata:
     def __init__(self, *, max_batch, max_context_len, prefix_tokens, recent_tokens,
-                 hp_offset, device, sm_count):
+                 hp_offset, device, sm_count, head_num=16):
         if not 1 <= max_context_len <= 40960 or max_batch < 1:
             raise ValueError("Official LoopVQ metadata requires context <= 40960 and positive batch")
         if min(prefix_tokens, recent_tokens) < 8 or prefix_tokens % 8 or recent_tokens % 8:
             raise ValueError("Official LoopVQ requires positive eight-aligned windows")
+        self.head_num = head_num
         self.max_batch, self.max_context_len = max_batch, max_context_len
         self.prefix, self.hp_offset, self.sm_count = prefix_tokens, hp_offset, sm_count
         self.hp_capacity = min(max_context_len, prefix_tokens + recent_tokens + 8)
@@ -90,7 +91,7 @@ class OfficialMetadata:
         if not 1 <= batch_size <= self.max_batch or kv_indptr.numel() < batch_size + 1:
             raise ValueError("Official LoopVQ metadata batch exceeds its persistent capacity")
         group = 1 if batch_size == 1 else 2
-        occupancy = 2 * self.sm_count // (triton.cdiv(batch_size, group) * 16)
+        occupancy = 2 * self.sm_count // (triton.cdiv(batch_size, group) * self.head_num)
         _tier_metadata[(1,)](
             kv_indptr, kv_indices, self.quant_indptr, self.hp_indptr,
             self.quant_lens, self.hp_lens, self.full_seq_len, self.quant_splits, self.hp_splits,

@@ -766,3 +766,7 @@ A10 GPU5，2026-11-24 04:17:24 UTC启动，tmux `loopvq-20261123:decode-timing-r
 Candidate15 首个真实计时格子通过：BF16/1024输出/bs1，三次纯decode吞吐28.431540、28.431314、28.432323 tokens/s，中位数28.431540。实际batch比例1.0，prefill_in_primary_metric=false。逐次measure原始证据均有1023条decode记录，1023条cuda graph=True，backend=full，padding=0；服务readback decode buckets=[1,2,4,8,16]。这是BF16单臂结果，VQ配对未完成，不能给加速比。
 
 5–7小时是整个矩阵的粗略总工期，绝不表示关闭CUDA graph：按当前池容量，有14个BF16、20个VQ可运行格子，每格3轮，共102轮长生成，合计377754个串行batch decode步骤。若平均每步50ms，单纯decode约5.25小时；不同batch/历史的步时不同，实际剩余时间须随完成格子更新。模型每步完整R4，CUDA graph减少提交开销，并不取消模型计算。
+
+### Candidate 16/20: two-rank attention
+
+User cancelled TP1 timing and requested TP2 across free pairs. (1) Enable head-parallel serving. (2) Shard the global book into contiguous heads per rank and use local head counts throughout the cache and decode path. (3) Limit changes to compatibility, cache sizing/loader, official attention and experiment helpers. (4) Verify both ranks and preserve the existing TP1 contract. (5) Wrong rank offsets can silently corrupt output, and distributed collectives change rounding. (6) Check rank slices against the global book, compare real greedy responses, inspect graph and batch evidence, then run matched BF16/VQ cells in tmux. Recheck occupancy and ports before launch. Training bundle remains global.

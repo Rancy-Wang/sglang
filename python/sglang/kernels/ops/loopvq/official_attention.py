@@ -15,7 +15,7 @@ from .official_reduce import official_reduce
 
 class OfficialAttention:
     def __init__(self, pool, *, max_batch, max_context_len):
-        if (pool.head_num, pool.head_dim, pool.layer_num) != (16, 128, 192):
+        if pool.head_num not in (8, 16) or (pool.head_dim, pool.layer_num) != (128, 192):
             raise ValueError("Official LoopVQ decode requires the full Ouro-2.6B R4 geometry")
         device = pool.hp_k.device
         self.pool = pool
@@ -23,18 +23,18 @@ class OfficialAttention:
             max_batch=max_batch, max_context_len=max_context_len,
             prefix_tokens=pool.hp_prefix_tokens, recent_tokens=pool.hp_recent_tokens,
             hp_offset=pool.hp_global_offset, device=device,
-            sm_count=torch.cuda.get_device_properties(device).multi_processor_count,
+            head_num=pool.head_num, sm_count=torch.cuda.get_device_properties(device).multi_processor_count,
         )
         # Compile and load both R1/R2 modules before any CUDA graph capture.
         prepare_official_quant(device=device, max_context_len=max_context_len, max_splits=48)
-        self.partial = torch.empty((max_batch, 16, 60, 128), dtype=torch.float32, device=device)
-        self.lse = torch.empty((max_batch, 16, 60), dtype=torch.float32, device=device)
+        self.partial = torch.empty((max_batch, pool.head_num, 60, 128), dtype=torch.float32, device=device)
+        self.lse = torch.empty((max_batch, pool.head_num, 60), dtype=torch.float32, device=device)
         self.k_books, self.v_books = list(pool.k_book.cb16.unbind(0)), list(pool.v_book.cb16.unbind(0))
 
     def forward(self, q, layer_id, kv_indptr, kv_indices, cos_sin_cache, sm_scale):
         batch = q.shape[0]
-        if q.ndim != 3 or q.shape[1:] != (16, 128) or q.dtype != torch.bfloat16:
-            raise ValueError("Official LoopVQ decode requires BF16 [batch,16,128] queries")
+        if q.ndim != 3 or q.shape[1:] != (self.pool.head_num, 128) or q.dtype != torch.bfloat16:
+            raise ValueError("Official LoopVQ decode requires BF16 [batch,local_heads,128] queries")
         if not 1 <= batch <= self.metadata.max_batch or not 0 <= layer_id < 192:
             raise ValueError("Official LoopVQ batch/slot exceeds its persistent capacity")
         if cos_sin_cache.dtype != torch.float32 or cos_sin_cache.ndim != 2 or cos_sin_cache.shape[1] != 128:

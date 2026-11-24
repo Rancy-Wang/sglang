@@ -30,7 +30,7 @@ class LoopVQKVPool(KVCache):
     shadow_enabled = False
 
     def __init__(self, size, page_size, dtype, head_num, head_dim, layer_num, device,
-                 *, codebook_path, v_codebook_path, max_req_slots,
+                 *, tp_rank=0, tp_size=1, codebook_path, v_codebook_path, max_req_slots,
                  hp_prefix_tokens=64, hp_recent_tokens=256, num_hp_prefix_slots=None,
                  enable_memory_saver=False, start_layer=0, end_layer=None,
                  **kwargs):
@@ -62,9 +62,11 @@ class LoopVQKVPool(KVCache):
         self.hp_size = self.num_hp_prefix_slots + max_req_slots * self.hp_recent_ring_size
         self._hp_offset, self._hp_recent_base = self.hp_global_offset, self.hp_recent_base
         self.k_book = load_loopvq_codebook(codebook_path, layer_num=layer_num,
-                                           head_num=head_num, head_dim=head_dim, device=device)
+                                           head_num=head_num, head_dim=head_dim, device=device,
+                                           tp_rank=tp_rank, tp_size=tp_size)
         self.v_book = load_loopvq_codebook(v_codebook_path, layer_num=layer_num,
-                                           head_num=head_num, head_dim=head_dim, device=device)
+                                           head_num=head_num, head_dim=head_dim, device=device,
+                                           tp_rank=tp_rank, tp_size=tp_size)
         self._vq, self._vq_v = self.k_book, self.v_book
         self.base_layers = self.k_book.base_layers
         self._next_slab_offset = torch.zeros(max_req_slots, dtype=torch.int32, device=device)

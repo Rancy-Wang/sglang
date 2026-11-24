@@ -49,8 +49,8 @@ def _official_reduce_kernel(Mid_O, Mid_O_1, O, stride_mid_ob, stride_mid_oh, str
 
 def official_reduce(att_out, att_lse, out):
     """Merge normalized split outputs, ignoring every -inf-LSE split."""
-    if out.ndim != 3 or out.shape[1:] != (16, 128) or out.dtype != torch.bfloat16:
-        raise ValueError("Official LoopVQ reduction requires BF16 [B,16,128] output")
+    if out.ndim != 3 or out.shape[1] not in (8, 16) or out.shape[2] != 128 or out.dtype != torch.bfloat16:
+        raise ValueError("Official LoopVQ reduction requires BF16 [B,local_heads,128] output")
     b, h, d = out.shape
     if att_out.ndim != 4 or att_out.shape[:2] != (b, h) or att_out.shape[-1] != d:
         raise ValueError("Official reduction scratch geometry mismatch")

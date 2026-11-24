@@ -105,7 +105,10 @@ def validate_manifest(manifest, actual, method, protocol, bs, prefix, recent):
         expected_splits = 48 if method == "loopvq" else 8
         if cfg.get("triton_attention_num_kv_splits") != expected_splits or actual.get("triton_attention_num_kv_splits") != expected_splits:
             raise ValueError(f"Optimized {method} measurements require {expected_splits} decode splits")
-    required_values = {"tp_size": 1, "pp_size": 1, "dp_size": 1,
+    pair = manifest.get("tp_gpu_uuids")
+    if pair is not None and (len(set(pair)) != 2 or pair[0] != manifest["gpu_uuid"]):
+        raise ValueError("Invalid two-rank GPU identity")
+    required_values = {"tp_size": 2 if pair is not None else 1, "pp_size": 1, "dp_size": 1,
                        "speculative_algorithm": None, "disable_radix_cache": True,
                        "chunked_prefill_size": -1, "decode_log_interval": 1}
     if cfg.get("total_ut_steps") != 4:

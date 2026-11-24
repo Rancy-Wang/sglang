@@ -231,6 +231,7 @@ class LoopVQPoolConfigurator(MemoryPoolConfigurator):
         dimension = kvc.model_config.head_dim
         if (layers, heads, dimension) != (192, 16, 128):
             raise ValueError("LoopVQ pool sizing requires Ouro-2.6B R4 geometry.")
+        heads = kvc.model_config.get_num_kv_heads(get_parallel().attn_tp_size)
         prefix = get_model().loopvq_prefix_tokens
         recent = get_model().loopvq_recent_tokens
         hp_slots = 8 + 2 * request_slots * prefix + request_slots * (recent + 8)

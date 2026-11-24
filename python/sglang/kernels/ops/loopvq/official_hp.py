@@ -96,15 +96,15 @@ def official_hp_attention(q, hp_k, hp_v, cos_sin_cache, full_seq_len,
     caller's -inf LSE; scratch output values for them are never consumed.
     """
     b = q.shape[0]
-    if q.shape != (b, 16, 128) or q.dtype != torch.bfloat16:
-        raise ValueError("Official HP attention requires BF16 [B,16,128]")
-    if hp_k.shape != hp_v.shape or hp_k.shape[1:] != (16, 128):
+    if q.ndim != 3 or q.shape[1] not in (8, 16) or q.shape[2] != 128 or q.dtype != torch.bfloat16:
+        raise ValueError("Official HP attention requires BF16 [B,local_heads,128]")
+    if hp_k.shape != hp_v.shape or hp_k.shape[1:] != q.shape[1:]:
         raise ValueError("Official HP K/V geometry mismatch")
     if hp_k.dtype != torch.bfloat16 or hp_v.dtype != torch.bfloat16:
         raise ValueError("Official HP K/V must be BF16")
     if max_splits != 12 or prefix_tokens < 0:
         raise ValueError("Official HP profile requires 12 split slots and a nonnegative prefix")
-    if att_out.shape != (b, 16, max_splits, 128) or att_lse.shape != (b, 16, max_splits):
+    if att_out.shape != (b, q.shape[1], max_splits, 128) or att_lse.shape != (b, q.shape[1], max_splits):
         raise ValueError("Official HP scratch geometry mismatch")
     if att_out.dtype != torch.float32 or att_lse.dtype != torch.float32:
         raise ValueError("Official HP scratch must be FP32")
@@ -124,13 +124,13 @@ def official_hp_attention(q, hp_k, hp_v, cos_sin_cache, full_seq_len,
     if any(t.stride(-1) != 1 for t in (q, hp_k, hp_v, cos_sin_cache, full_seq_len,
                                      att_out, att_lse, kv_indptr, kv_indices, num_splits)):
         raise ValueError("Official HP requires contiguous innermost dimensions")
-    _official_hp_stage1[(b, 16, max_splits)](
+    _official_hp_stage1[(b, q.shape[1], max_splits)](
         q, hp_k, hp_v, cos_sin_cache, full_seq_len, sm_scale,
         kv_indptr, kv_indices, att_out, att_lse, num_splits,
         q.stride(0), q.stride(1), hp_k.stride(0), hp_k.stride(1),
         hp_v.stride(0), hp_v.stride(1), cos_sin_cache.stride(0),
         att_out.stride(0), att_out.stride(1), att_out.stride(2),
-        kv_group_num=1, q_head_num=16, BLOCK_D=128, BLOCK_DV=128,
+        kv_group_num=1, q_head_num=q.shape[1], BLOCK_D=128, BLOCK_DV=128,
         BLOCK_N=32, BLOCK_H=4, MIN_BLOCK_KV=32, L=128, LV=128,
         PREFIX_TOKENS=int(prefix_tokens), num_warps=4, num_stages=1,
     )

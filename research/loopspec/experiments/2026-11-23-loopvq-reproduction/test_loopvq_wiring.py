@@ -112,7 +112,7 @@ class LoopVQCompatibilityTest(unittest.TestCase):
 
     def test_rejects_incompatible_cache_and_execution_paths(self):
         for key, value in (
-            ("tp_size", 2), ("attn_dp_size", 2), ("attn_cp_size", 2), ("dcp_size", 2),
+            ("tp_size", 4), ("attn_dp_size", 2), ("attn_cp_size", 2), ("dcp_size", 2),
             ("speculative_algorithm", "LOOPSPEC"),
             ("speculative_algorithm", "DFLASH"), ("page_size", 1),
             ("max_running_requests", None), ("kv_cache_dtype", "fp8_e4m3"),
@@ -151,7 +151,7 @@ class LoopVQPoolBudgetTest(unittest.TestCase):
         )
         with patch.object(pool_configurator, "get_schedule", return_value=NS(max_running_requests=16)), patch.object(
             pool_configurator, "get_model", return_value=model
-        ):
+        ), patch.object(pool_configurator, "get_parallel", return_value=NS(attn_tp_size=1)):
             sizer = pool_configurator.LoopVQPoolConfigurator(kvc)
         # 17 request slots include dummy row zero. 6672 HP rows at 1.5 MiB,
         # 768 MiB of codebooks and one reserved uint8 page are fixed costs.
