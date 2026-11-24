@@ -66,8 +66,14 @@ class OuroRotaryEmbedding(nn.Module):
 
 
 class OuroMLP(LlamaMLP):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.optimized = get_model().ouro_decode_profile == "optimized"
+
     def forward(self, hidden, forward_batch=None):
         gate_up, _ = self.gate_up_proj(hidden)
+        if self.optimized and forward_batch is not None and forward_batch.forward_mode.is_decode_or_idle():
+            return self.down_proj(self.act_fn(gate_up))[0]
         gate, up = gate_up.chunk(2, dim=-1)
         # HF rounds SiLU to BF16 before multiplying by up. Neither fused
         # SiLU-and-mul nor dual-GEMM preserves that intermediate rounding.

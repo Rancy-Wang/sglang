@@ -811,3 +811,6 @@ A10 tmux. Official b5f821d (released serving tree d5d58c83) and port fbe1b00a2 (
 
 ### Candidate 21/26 — optimized decode RoPE
 User approved implementation and validation of the plan above. Start with fused RoPE for optimized Ouro decode, a per-shape scratch K for VQ, and real K for BF16. Preserve all prefill and reference arithmetic. Validate using the frozen official implementation and separate timing/profile runs.
+
+### Candidate 22/26 — fused activation and paired measurement
+Candidate21 65b83d840 passed local compilation and remote CPU cache-lifecycle tests, and started a separate TP2 service. Retain its timing and binary identity. Candidate22 adds only the optimized decode activation in the model. Extend the timing client for arbitrary planned cells, native profiling, a fixed greedy/logprob probe, and BF16 capacity readback. Each revision is benchmarked separately.
