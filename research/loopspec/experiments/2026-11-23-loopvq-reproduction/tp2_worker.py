@@ -43,9 +43,10 @@ def serve(args, method, root):
            "--cuda-graph-bs-decode", "1", "2", "4", "8", "16", "--cuda-graph-backend-prefill", "disabled",
            "--enable-metrics", "--decode-log-interval", "1", "--incremental-streaming-output",
            "--ouro-decode-profile", "optimized", "--triton-attention-num-kv-splits", "48" if method=="loopvq" else "8"]
+    prefix, recent = (64, 256) if args.accuracy else (8, 64)
     if method == "loopvq":
-        cmd += ["--loopvq-codebook-dir", str(bundle), "--loopvq-prefix-tokens", "8",
-                "--loopvq-recent-tokens", "64", "--max-total-tokens", "172032"]
+        cmd += ["--loopvq-codebook-dir", str(bundle), "--loopvq-prefix-tokens", str(prefix),
+                "--loopvq-recent-tokens", str(recent), "--max-total-tokens", "557568" if args.accuracy else "172032"]
     url = f"http://127.0.0.1:{args.port}"
     log = root / f"{method}.log"
     env = dict(os.environ, PYTHONPATH=str(REPO / "python"), CUDA_VISIBLE_DEVICES=args.cards,
@@ -90,7 +91,7 @@ def serve(args, method, root):
                         model_sha256=sweep.safe.sha256(model/"model.safetensors"),
                         sglang_sha=subprocess.check_output(["git","rev-parse","HEAD"],cwd=REPO,text=True).strip(),
                         environment_sha256=hashlib.sha256(freeze).hexdigest(),
-                        prefix_tokens=8,recent_tokens=64,config=dict(cfg,total_ut_steps=4))
+                        prefix_tokens=prefix,recent_tokens=recent,config=dict(cfg,total_ut_steps=4))
         if method == "loopvq":
             manifest["bundle_sha256"]={name:sweep.safe.sha256(bundle/name) for name in ("codebook.pt","vq_v_codebook.pt")}
         # Read the allocated BF16 capacity when ServerArgs requested automatic sizing.
@@ -101,6 +102,10 @@ def serve(args, method, root):
                 raise ValueError("Missing scheduler token capacity")
             manifest["config"]["max_total_tokens"]=min(map(int,matches))
         bench.atomic_json(root / f"{method}-manifest.json",manifest)
+        if args.accuracy:
+            from tp2_accuracy import evaluate
+            evaluate(TASK, root, method, manifest, url)
+            return
         sweep.context.URL = url
         for output,bs in args.cells:
             sweep.measure_cell(method,output,bs,manifest,log)
@@ -118,10 +123,12 @@ def main():
     parser.add_argument("cards")
     parser.add_argument("port",type=int)
     parser.add_argument("run")
-    parser.add_argument("cells",nargs="+",type=lambda s: tuple(map(int,s.split("/"))))
+    parser.add_argument("--accuracy",action="store_true")
+    parser.add_argument("cells",nargs="*",type=lambda s: tuple(map(int,s.split("/"))))
     parser.add_argument("--methods",nargs="+",choices=["bf16","loopvq"],default=["bf16","loopvq"])
     args=parser.parse_args()
     assert os.environ.get("TMUX") and all(n in sweep.OUTPUTS and b in sweep.BATCHES for n,b in args.cells)
+    assert bool(args.cells) != args.accuracy
     root=TASK/"results/tp2"/args.run
     root.mkdir(parents=True,exist_ok=False)
     shutil.copyfile(sweep.ROOT/"input-2048.json",root/"input-2048.json")
