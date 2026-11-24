@@ -491,7 +491,6 @@ def alloc_for_decode(batch, token_per_req):
         raise ValueError("LoopVQ supports ordinary one-token AR decode only")
     allocator = batch.token_to_kv_pool_allocator
     pool = allocator.get_kvcache()
-    pool.wait_pending_forward()
     req_ids = batch.req_pool_indices_cpu.tolist()
     lengths = batch.seq_lens_cpu.tolist()
     indices = batch.req_pool_indices
@@ -546,6 +545,11 @@ def alloc_for_decode(batch, token_per_req):
         src = torch.cat(flush_src)
         plan = SimpleNamespace(src_hp_slot=src, dst_quant_slots=dst,
                                valid_mask=torch.ones_like(src, dtype=torch.bool))
+    # Reservations and cursor metadata are scheduler-owned. Source rows above
+    # are only read. Order writes to old KV/history after the previous forward
+    # on this stream; the next forward already waits for the schedule stream.
+    pool.wait_pending_forward()
+    if flush_src:
         pool.vq_flush_k(plan)
         pool.vq_flush_v(plan)
         for rid, start, target in flush_updates:

@@ -2007,12 +2007,6 @@ class Scheduler(
                 self._record_scheduler_state_for_paused_engine()
                 continue
 
-            pool = self.token_to_kv_pool_allocator.get_kvcache()
-            if getattr(pool, "loopvq_enabled", False):
-                # The next plan may demote/reuse a ring page or free a request.
-                # Its writes must follow the previous forward's KV reads.
-                pool.wait_pending_forward()
-
             # Get the next batch to run
             plan = self.get_next_batch_to_run(
                 running_batch=self.running_batch, last_batch=self.last_batch

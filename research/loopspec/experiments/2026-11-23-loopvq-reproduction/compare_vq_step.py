@@ -10,6 +10,7 @@ import socket
 import statistics
 import subprocess
 import time
+import uuid
 import urllib.request
 
 import benchmark_throughput as bench
@@ -82,12 +83,18 @@ def main(args):
             start, end = command.index('--loopvq-codebook-dir'), command.index('--max-total-tokens') + 2
             del command[start:end]
             command[command.index('--triton-attention-num-kv-splits')+1] = '8'
-        compiler = shutil.which('g++') or shutil.which('g++-13')
-        assert compiler
-        tools = root/'tool-bin'
-        tools.mkdir()
-        (tools/'g++').symlink_to(compiler)
-        env.update(CXX=compiler, PATH=str(tools)+os.pathsep+env['PATH'])
+    compiler = shutil.which('g++') or shutil.which('g++-13')
+    assert compiler
+    tools = root/'tool-bin'
+    tools.mkdir()
+    for binary in ('g++','c++'):
+        (tools/binary).symlink_to(compiler)
+    env.update(CXX=compiler, PATH=str(tools)+os.pathsep+env['PATH'])
+    if args.mode == 'eager':
+        if official:
+            command.append('--disable-cuda-graph')
+        else:
+            command[command.index('--cuda-graph-backend-decode')+1] = 'disabled'
     profile = args.mode != 'timing'
     if args.mode in ('trace', 'light'):
         temp = Path('/tmp')/f'loopvq-nsys-{os.getuid()}'
@@ -142,6 +149,33 @@ def main(args):
             answer = json.load(response)
         assert len(answer['output_ids']) == 16
         bench.atomic_json(root/'greedy-probe.json', answer)
+        if args.mode in ('probe','eager'):
+            # Force asynchronous cancellation of our own live request. A fresh
+            # request must see exactly the same greedy output after slab reuse.
+            rid = uuid.uuid4().hex
+            pending = {'rid': rid, 'input_ids': inputs[0], 'stream': True,
+                       'sampling_params': {'temperature': 0, 'ignore_eos': True, 'max_new_tokens': 512}}
+            with request(url+'/generate', pending, 180) as response:
+                for line in response:
+                    if line.startswith(b'data:') and b'completion_tokens' in line:
+                        with request(url+'/abort_request', {'rid': rid}) as stopped:
+                            stopped.read()
+                        break
+                else:
+                    raise ValueError('abort probe produced no tokens')
+                reasons = [json.loads(l[5:])['meta_info'].get('finish_reason') for l in response
+                           if l.startswith(b'data:') and l[5:].strip() != b'[DONE]']
+                assert any(isinstance(r,dict) and r.get('type')=='abort' for r in reasons), reasons[-2:]
+            with request(url+'/generate', probe, 180) as response:
+                reused = json.load(response)
+            assert reused['output_ids'] == answer['output_ids']
+            ragged = dict(probe, input_ids=[inputs[0][:n] for n in (7,64,79)],
+                          sampling_params={'temperature': 0, 'ignore_eos': True, 'max_new_tokens': 24})
+            with request(url+'/generate', ragged, 180) as response:
+                answers = json.load(response)
+            assert all(len(a['output_ids']) == 24 for a in answers)
+            bench.atomic_json(root/'correctness.json', dict(aborted=True, reused=reused, ragged=answers))
+            return
         if profile:
             assert args.cells == [(1024, 4)]
         for length, bs in args.cells:
@@ -187,7 +221,7 @@ def main(args):
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('run')
-    parser.add_argument('mode', choices=['timing','trace','light','native'])
+    parser.add_argument('mode', choices=['timing','trace','light','native','probe','eager'])
     parser.add_argument('stack', choices=['official','port','bf16'])
     parser.add_argument('cards')
     parser.add_argument('port', type=int)

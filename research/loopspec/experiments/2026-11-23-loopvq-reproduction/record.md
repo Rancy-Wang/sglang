@@ -817,3 +817,6 @@ Candidate21 65b83d840 passed local compilation and remote CPU cache-lifecycle te
 
 ### Candidate 23/26 — batched HP allocation
 Keep the original event ordering. Use existing device request IDs and reserve tier capacity for the complete batch before changing any cursor or ledger. Cover mixed prefix/recent lengths, ring wrap, failure rollback, empty rows, and pool reuse. Measure on the same A10 pair after the fused activation.
+
+### Candidate 24/26 — order conflicting writes after the last forward
+Candidate21 timing 131.269, 131.181, 131.360 tok/s; core, wiring and CUDA official-oracle checks exit 0. Candidate23 core --cuda exit 0, including insufficient capacity and ragged wrap/reuse. Move the LoopVQ stream dependency from before scheduling to just before old history mutation, after scheduler-only cursor/reservation and read-only source planning. Keep early waits on deallocation, reset and prefill and the generic shared-read barrier. Check greedy probes, abort/reuse, both ranks and timing. The benchmark runner also resolves the available compiler on each machine and supports eager-only correctness.

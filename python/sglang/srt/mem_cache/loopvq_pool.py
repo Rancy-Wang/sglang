@@ -97,6 +97,7 @@ class LoopVQKVPool(KVCache):
         self._pending_forward_done = event
 
     def wait_pending_forward(self):
+        """Order subsequent scheduler-stream writes after the last KV reader."""
         event = self._pending_forward_done
         if event is not None:
             torch.cuda.current_stream(self.device).wait_event(event)
