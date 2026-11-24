@@ -26,17 +26,222 @@ SWA 选取不变：先按操作历史确定因果可见 KV，保留原生位置�
 
 验证基线为 `a9770edb50633cb1ce439121f525064b9070e858`，前后均启用共享页、相同
 模型/TP/chunk/graph 设置。旧独立池性能记录仅为历史参考，不能作为受控 A/B。
-当前提交先完成代码与本地验证；Linux/GPU、28 个冻结事件、10 道 BCP 及配对性能结果
-在本节后续补充，未完成前不宣布数值或性能门禁通过。
+生产修改为 `8a698bf1ae2713b735b5039ce7347a7415811905`，测试修正为
+`0289e58f058dec93929236bae6bcc039974f601a`。后者没有额外生产代码变化。
+10 道 BCP 已完成，匹配边界检查见下；28 个冻结事件的数值验收单独报告，不能用
+单元测试或匹配地址正确替代 logits 检查。
 
 保留问题：原生 Triton 与 Context 的 127/128 边界差异未在本轮调整；Insert 的 PD
 `full_chunk` 对非单调 execution raw indices 使用 `searchsorted` 的传输问题仍待修复。
 Qwen Linear Insert 仍不支持。关闭独立池不能消除整页 eviction 或这些独立问题。
 
-实现入口：`context_system/capabilities.py::validate_context_config`、
-`context_system/recovery.py::plan_recovery`、
-`layers/attention/context_backend.py::ContextModelBinding.bind`、
-`mem_cache/unified_radix_cache.py::_free_context_kv_row`（均相对 `python/sglang/srt/`）。
+PD 的最小结构反例：logical 顺序对应的 execution raw indices 为
+`[0,9,6,7,8,10]`。直接执行现有 `ContextTransferPlan.full_chunk`，先完成 raw
+`[0,9)`（`terminal_rows[9:] = -1`，其余页已就绪且为稳定 cache owner）、再完成
+末块 `[9,11)`（全部 terminal rows 就绪），分别返回切片 `(0,1)` 和 `(5,6)`，只发送 raw
+`[0,10]`，漏掉 `[9,6,7,8]`。根因是 `searchsorted` 要求输入有序，而 Insert 的
+logical KV 顺序不保证 execution raw index 单调。这是当前函数的确定性反例，
+并非本轮完成了完整双服务 PD 实验；后续修复还需联动发送游标/分块协议，不能只
+更改页存储方式（`disaggregation/context_transfer.py:57-86`，`full_chunk`）。
+
+实现入口：`context_system/capabilities.py:10-127`（`validate_context_config`）、
+`context_system/recovery.py:282-384`（`plan_recovery`）、
+`layers/attention/context_backend.py:510-542`（`ContextModelBinding.bind`）、
+`mem_cache/unified_radix_cache.py:1384-1404`（`_free_context_kv_row`）（均相对 `python/sglang/srt/`）。
+
+### 共享页清理前后性能
+
+Tengxuan-BUS-2，物理 GPU 4,5（0–3 已被其他作业占用），GPT-OSS-120B / MXFP4、
+TP2、BF16 KV、page=1、chunk=8192、max-total-tokens=131072、context-length=65536。
+decode graph 的 batch sizes 为 1/2/4，prefill graph 为 16/32/64。前后都启用
+`--disable-hybrid-swa-memory`；采样时不启用 cache audit、logits probe 或 invariant hook。
+按 baseline/current 交替完成三轮，每版共 36 次普通与 36 次 Drop+R 热请求，
+每次生成 128 token；各 9 次冷请求，3 次冻结 summary 插入请求。预热不计入统计。
+
+| 指标，中位数 | 清理前 | 清理后 | 变化 |
+| --- | ---: | ---: | ---: |
+| 普通热请求 TTFT，ms | 120.658 | 122.124 | +1.215% |
+| 普通 decode，ms/token | 8.624681 | 8.622175 | −0.029% |
+| Drop+R 热请求 TTFT，ms | 172.871 | 171.885 | −0.570% |
+| Drop+R decode，ms/token | 8.676365 | 8.674098 | −0.026% |
+| 普通冷 TTFT，ms | 10347.773 | 10350.779 | +0.029% |
+| Drop+R 冷 TTFT，ms | 12161.330 | 12160.398 | −0.008% |
+| summary 插入请求，s | 7.479203 | 7.481222 | +0.027% |
+
+decode 指标是每条 SSE 请求首 token 之后的平均单 token 时间，再在请求间统计，
+不是所有逐 token 间隔的分位数。summary 项是预热源历史后的 1-token HTTP 请求，
+不是纯 kernel 时间；三轮后值为 7.4812、7.4655、7.5298 秒，不能把 3 个样本视作
+稳定的尾延迟估计。三轮热请求 Drop+R TTFT P95 为 184.006 → 202.314 ms，
+少量慢样本使尾部上升，因此另做每版、每类 100 个热样本复查（各排除 3 次预热，
+每次 128 token），结果如下。这一补充轮先 baseline 后 current，不与三轮样本混算。
+
+| 补充轮 TTFT | 清理前，ms | 清理后，ms | 变化 |
+| --- | ---: | ---: | ---: |
+| 普通 P50 | 120.842 | 119.373 | −1.215% |
+| 普通 P95 | 122.964 | 122.433 | −0.431% |
+| Drop+R P50 | 171.448 | 170.347 | −0.642% |
+| Drop+R P95 | 209.824 | 199.030 | −5.144% |
+
+补充轮普通/Drop+R 的 decode 中位数分别为 8.620444 → 8.619411、
+8.671144 → 8.670069 ms/token；P95 分别变化 −0.016% / +0.005%。两版各记录
+658 条 decode batch，全部 `cuda graph: True`。之前的小样本尾延迟上升没有复现，
+本组实验未显示稳定性能回退；不能把单轮 P95 的下降宣称为确定的 5% 提速，
+也不能声称所有并发/硬件配置零开销。原始 103 个样本及有效服务配置在
+`/home/wangruoxi/shared-swa-20261124/tail-diagnostic-final/{baseline,current}/`，
+线性插值分位数计算结果为其上级的 `timing-summary.json`。
+
+summary 请求的完整 execution input 为 50574 token，前后 usage 均为 cached=29685、
+repositioned=17446、drop-skipped=0，即实际 prefill 为 3443 token。每个 rank 的
+KV 池均为 4.5 GiB（K/V 各 2.25 GiB），没有因清理扩大池或 graph 缓冲。
+这验证的是**共享页设置下的代码清理开销**，不是独立池与共享页的受控性能对比。
+旧独立池在相同 Full 容量、SWA/Full 容量比 0.8 时约占 4.05 GiB/rank；共享页的
+容量成本约多 0.45 GiB（11.1%），这是存储配置差异，不代表总 GPU 显存增加 11.1%。
+固定显存预算下可能容纳更少缓存 token，不能将单请求测速推广为高并发吞吐保证。
+
+三轮原始输入哈希、SSE 样本、有效 server-info 和配置保存在 Tengxuan-BUS-2 的
+`/home/wangruoxi/shared-swa-20261124/{baseline,current}-timing-{1,2,3}/`；
+服务器日志与配置在对应 `{baseline,current}-server[-2|-3]/`。
+
+### 共享页回归检查
+
+- 本地可运行套件：580 passed、415 skipped、2 deselected。
+- InfiniAI-BUS-2 的 Linux/native 套件：816 passed、196 skipped；排除尚未同步的
+  `test_context_attention_plan.py` 和缺少模型 tokenizer 的 `test_minimax_context_frontend.py`。
+- Tengxuan-BUS-2 的 GPU/native 专项：194 passed、55 skipped。
+- GPT-OSS-120B HTTP：5 passed，覆盖热/exact/冷恢复、嵌套 Insert、COW 页守恒及无 R 重叠位置。
+
+`test_context_attention_plan.py` 中不依赖旧独立 SWA 映射的 3 项检查另行通过。
+其中 2 个参数化用例仍引用已删除的 `skip_unmapped`/独立映射语义；该文件不在本次
+批准的精确范围，未修改，等待范围补充，不能计为通过。
+
+Linux 的主要命令（工作目录为对应测试 checkout）：
+
+```bash
+PYTHONPATH=python:benchmark/context_system python -m pytest -q \
+  test/registered/context_system \
+  --ignore=test/registered/context_system/test_context_attention_plan.py \
+  --ignore=test/registered/context_system/test_minimax_context_frontend.py \
+  benchmark/context_system/test_shared_swa.py --disable-warnings --tb=short
+
+RUN_CONTEXT_GPU=1 python -m pytest -q \
+  test/registered/context_system/test_context_frontend.py \
+  test/registered/context_system/test_drop_eviction.py \
+  test/registered/context_system/test_insert_frontend.py \
+  test/registered/context_system/test_insert_attention.py \
+  test/registered/context_system/test_reposition_kernel.py \
+  test/registered/context_system/test_occurrence_ownership.py \
+  test/registered/context_system/test_cache_policy_runtime.py --disable-warnings --tb=short
+
+CONTEXT_SERVER_MODEL=/share/public/public_models/gpt-oss-120b \
+CONTEXT_EXISTING_SERVER=http://127.0.0.1:29524 \
+CONTEXT_TRACE_DIR=/share/futianyu/guest/wangruoxi/shared-swa-20261124-tengxuan/http \
+python -m pytest -q -s \
+  test/registered/context_system/test_insert_cache.py::test_insert_http_summary_lifecycle \
+  test/registered/context_system/test_insert_cache.py::test_insert_retrigger_decode_slot_conservation \
+  test/registered/context_system/test_insert_cache.py::test_insert_long_overlap_decode --tb=short
+```
+
+跳过不计通过。两个原生 SWA 文件逐字节比对 native base 通过，修改范围检查、Python
+AST 检查、Ruff 未定义名称检查及 `git diff --check` 通过。专用验证日志与性能日志分开，
+带审计、logits 落盘或全 token 返回的请求耗时不纳入上面的性能统计。
+
+### 10 道 BCP 的连续 turn 检查
+
+使用 GPT-OSS-120B、48K 阈值（49152 token）、保留最近 20K、summary 上限 4096，
+沿用原轨迹每个 turn 的输出预算；没有使用短 probe 代替完整 agent 生成。反馈工具
+结果来自固定轨迹，agent 和 summary 文本由当前模型重新生成，因此这里验证系统
+运行与复用，不是重新执行联网检索后的 BCP 准确率。
+
+| case | 完成 turn | summary 次数 |
+| --- | ---: | ---: |
+| 238 | 45 | 3 |
+| 241 | 40 | 3 |
+| 775 | 44 | 3 |
+| 786 | 40 | 3 |
+| 787 | 44 | 3 |
+| 822 | 39 | 3 |
+| 844，补跑 | 41 | 3 |
+| 864 | 31 | 3 |
+| 870 | 35 | 2 |
+| 875 | 34 | 2 |
+| 合计 | 393 | 28 |
+
+844 首次在第 19 个 turn 的首个 summary 耗尽 4096 token，重复输出文档 ID，
+被原有完整性校验拒绝。保留该失败，另起完整轨迹，只补充“1500 token 内完成全部
+标题、文档 ID/URL 去重、不重复句子”的 summary 提示后完成；没有扩大 token 预算、
+修改模型或绕过校验。不能把这轮结果表述为十题首次全部成功。
+
+对最终选定的 393 份 turn 请求，离线按其实际 Harmony 日期 2026-11-24 重建输入，
+逐份核对与服务器返回的 execution token 完全一致，再比较相邻 turn 的 token LCP、
+exact key LCP 和 retrigger key LCP。383 次衔接的 `operation_extra_loss=0`；
+28 次 retrigger 延长 exact match；12 次已存在的历史 token 前缀变化单独记录。
+这组轨迹没有出现由操作编码累积造成的额外前缀截断。它不等于未来所有操作组合的
+形式证明，也不替代运行时 resident-tree 与数值检查。
+
+28 个首次带入新 Insert 的 turn，按 `prompt_tokens - cached_tokens - repos_tokens -
+drop_skipped_tokens` 计算实际 prefill，最小 2790、中位数 3658、最大 52611 token。
+这个数同时包含 summary、新增消息与必要恢复，不能都记为 summary 的计算成本；
+最大值对应 864 的超长 pending 输入。逐请求计数在 `queue/bcp-prefill-accounting.json`。
+
+所有输入、冻结事件 manifest 和十题原轨迹哈希位于
+`/share/futianyu/guest/wangruoxi/shared-swa-20261124-inputs/`。
+输出根目录以 `/share/futianyu/guest/wangruoxi/shared-swa-20261124-` 为前缀：
+238/241 使用 `bus1-retry5/bcp48k`，775/786 使用 `bus1-extra1-noproxy/bcp48k`，
+787 使用 `bus1-extra2-noproxy/bcp48k`，822 使用 `bus2-retry4/bcp48k`，
+864/870 使用 `bus2-extra1/bcp48k`，875 使用 `bus2-extra2/bcp48k`，
+844 使用 `bus2-844-retry/bcp48k`。844 原失败仍在 `bus2-retry4/bcp48k`。
+完整匹配报告为 `queue/match-frontier-all.json`，包含每个 turn 的来源与三个边界。
+
+两台 InfiniAI 主机的环境启动问题已分别记录并恢复依赖；BUS-2 的 custom all-reduce
+JIT 链接失败后使用原生 NCCL fallback。本节使用这些机器做正确性检查，性能 A/B
+仅使用前述 Tengxuan 的同机同配置结果，不混入跨主机时延。
+
+### 冻结事件数值验收与运行时审计
+
+28 个原始 summary 事件全部执行完成，每个事件生成 8 步完整词表 logits；固定
+execution input，并以 cold 的 token 做 warm/exact teacher forcing，避免不同续写
+混入比较。cold 保留相同的 Drop/Insert/R 操作历史，warm 从前一请求的 cache 恢复，
+exact 从已完成的目标分支复用。普通原生 active-text 请求的 cold/warm/exact 差异
+只用于原有数值误差参考门槛，不能代替有操作历史的语义基准。未调整门槛。
+
+| 验收口径 | 通过 | 总数 |
+| --- | ---: | ---: |
+| 8 步聚合的 warm/exact 模式比较 | 49 | 56 |
+| 逐步骤、逐 warm/exact 模式比较 | 348 | 448 |
+| 同一步 warm 和 exact 都通过 | 168 | 224 |
+| 聚合及全部步骤都通过的事件 | 5 | 28 |
+
+完全通过的事件为 241-3、775-3、786-2、844-3、870-2。聚合失败包括
+775-2/warm、787-3/exact、822-1/warm，以及 875-1、875-2 的 warm 和 exact。
+例如 875-2 的聚合 max-abs 门槛为 2.0625，warm 为 2.9140625、exact 为 2.8984375；
+其 p99 也超限。不能用均值较小或聚合通过，掩盖其他指标或单个步骤失败。
+
+这批运行在两张 TP 卡上合计记录了 606 条 match 审计、606 条 publication 审计
+（每个 rank 各 303 条）。返回的最大 retrigger 边界、operation identity、物理槽、
+source positions、residency bitmap、exact 边界和 retry 标志均通过独立逐 record
+检查。publication 的 key 边界均覆盖目标输入；这包括合法 Drop proof 的空洞，
+不表示已 Drop 的全部物理页仍然常驻。最终 key/地址审计正确不能证明各层算出的
+KV 数值完全相同，也不能解释上述 logits 失败。
+
+冻结结果的完整索引为 `queue/frozen-summary.json`。其中 12 份报告保留在原来
+`bus1-retry5`、`bus2-retry4`、`tengxuan` 的 `frozen-<case>-<event>` 目录，
+另 16 份在 `queue/jobs/<case>-<event>/result/`；`queue/manifest.json` 记录唯一映射。
+运行时审计汇总为 `queue/runtime-audit-summary.json`，所有路径沿用上述 Lustre 前缀。
+
+因此，本轮共享页实现和匹配/所有权回归已经落地，**长上下文数值验收仍未通过**。
+不能把剩余差异全部归因于浮点舍入，也不能将尚未逐事件对照的失败都认定为本轮回归。
+
+对失败事件 864-1 在 Tengxuan 的相同 GPU、相同共享页配置下单独运行 baseline
+`a9770edb` 与 current `0289e58f`：cold、warm、exact 及三个 native 校准模式的
+6 组 `8 × 201088` FP32 logits 全部逐项相同（跨版本 max-abs=0），输入、强制续写
+token、误差门槛和逐步结果也相同。两版都在零起始 step=5 的 exact mean-abs
+失败：0.25237727 > 0.24696362。由此可将**该事件**归为本轮修改前已存在的问题，
+不能推广为其余 22 个失败事件均已完成归因。对照原始数据与 `comparison.json`
+位于 `/share/futianyu/guest/wangruoxi/shared-swa-20261124-paired-864-1/`。
+
+本轮用到的两台 InfiniAI 验证机及 Tengxuan GPU 4/5 在任务结束后停止本次服务器并
+释放 GPU；既有其他用户作业未操作。原始失败、补跑、各版本 Git HEAD、参数、
+服务日志、请求/响应及 logits 均保留，没有用通过结果覆盖失败记录。
 
 
 实现计划：`PLAN-CS-20261103-R1`、`PLAN-CS-20261103-R2`，以及 `PLAN-CS-20261103-R3` 的已批准非 Linear 部分。本实现保留 `drop_message`，允许重复 Drop；
@@ -128,16 +333,17 @@ R3 张量 wire 的 Insert 版本为 7，JSON wire 为 8；无 Insert 保持原�
 未命中需要计算的 query 仍按 execution 顺序排列，段之间的 KV 索引可指向保留后缀。
 
 恢复规划计算真实读集合，并对缺页做反向依赖闭包。SWA 的窗口条件仍是原生位置距离，
-只对因果可见的 logical KV 选择窗口。Insert 分支的 Radix 匹配不再要求 SWA 必须形成
-execution 尾部连续区间；实际 Full/SWA residency 由恢复规划和 lease 再验证。
+只对因果可见的 logical KV 选择窗口。Insert 分支的 Radix 匹配不要求 SWA 形成
+execution 尾部连续区间；共享页的实际 residency 由恢复规划和 Full lease 再验证，
+没有独立 SWA 缺页状态。
 完成后的 terminal rows 按 execution 顺序发布回原生 Radix，保留所有已完成事件。
 原有 Drop proof、source lease、共享页所有权和回收规则继续适用。
 
-SWA 缺页不等于所有已旋转的 Full KV 都必须重算。恢复规划按 query 真正需要的 occurrence
-位置判断旧版本需求：query 位于最后一次 R 之后、且缓存 Full KV 已在对应位置时，仍可直接
+整页缺失不等于所有已旋转的 KV 都必须重算。恢复规划按 query 真正需要的 occurrence
+位置判断旧版本需求：query 位于最后一次 R 之后、且缓存 KV 已在对应位置时，仍可直接
 复用。只有被选中的历史 query 需要其他位置版本，才进入原有的 rewind 恢复规则。
 `Req.prepare_context_recovery` 传入匹配得到的源位置；不能只用“曾经 R 过”作为全局失效条件
-（`python/sglang/srt/managers/schedule_batch.py:1578-1668`）。
+（`python/sglang/srt/managers/schedule_batch.py:1576-1637`）。
 匹配点之后的新 query 可以通过后续 R/COW 获得目标位置版本；不能因为未来旋转，
 反过来把正在修复的历史 query 所使用的正确源 KV 标为失效。
 
@@ -151,8 +357,8 @@ Decode 的 SWA 条件为 `q_pos-k_pos <= window`，先在因果可见的 logical
 当前未入选的旧 KV 不能一律永久释放。例：logical prefix 位置为 `[20, 1, 1]`，
 下一个 query 位置为 3、W=3，位置 20 被后面的候选挤出；到 query 位置 4 时，
 两个位置 1 同时过期，位置 20 又可入选。`window.py` 的 run maximum 索引每次重新选取合法
-候选；terminal 恢复需求覆盖前 W−1 个未来 query 的并集。之后新 query 已填满窗口，
-不再需要 prompt KV。R 后严格单调的位置只需一次二分和尾部截取。
+候选。共享页模式下，未入选 SWA 窗口不会触发单独释放，因而不需要提前计算
+未来 query 的 SWA 恢复并集。R 后严格单调的位置只需一次二分和尾部截取。
 
 容量入口为 `python/sglang/srt/layers/attention/triton_backend.py:1107-1118`、
 `flashinfer_backend.py:1038-1045`、`flashattention_backend.py:2230-2238` 的
@@ -161,29 +367,29 @@ Decode 的 SWA 条件为 `q_pos-k_pos <= window`，先在因果可见的 logical
 FlashInfer 将 window 和完整 logical 长度传入 gather，避免把非单调窗口当作连续尾部
 （`python/sglang/srt/layers/attention/flashinfer_backend.py:1751-1871`，`call_begin_forward`）。
 
-实现入口：`python/sglang/srt/context_system/occurrence.py:159-321`
-（`compile_occurrence_window`）；`python/sglang/srt/context_system/recovery.py:305-400`
+实现入口：`python/sglang/srt/context_system/occurrence.py:158-328`
+（`compile_occurrence_window`）；`python/sglang/srt/context_system/recovery.py:190-279`
 （`_plan_insert_recovery`）；
-`python/sglang/srt/mem_cache/unified_cache/unified_tree_core.py:1059-1178`
-（`_match_context_retry`）；`python/sglang/srt/layers/attention/context_backend.py:713-905`
+`python/sglang/srt/mem_cache/unified_cache/unified_tree_core.py:1038-1138`
+（`_match_context_retry`）；`python/sglang/srt/layers/attention/context_backend.py:680-872`
 （`ContextDecodeRegistry`）。
 
-旋转后私有 SWA 页的释放不能从 source match 的 `cache_protected_len` 开始。
+旋转后私有页的释放不能仅由 source match 的 `cache_protected_len` 决定。
 该边界保护的是被借用的源分支，边界之前也可能存在本请求的 COW 目标页。
-`OccurrenceState.first_private_terminal` 在不可变状态上缓存最早私有 raw 行，
-回收起点同时服从已经回收的位置和存活依赖下界；`live_swa_ranges(..., owned_only=True)`
-排除共享源页和已缺失的 SWA。decode 和完成后的 publication 都使用相同规则，
-超过原生历史表容量时从扩展 raw row 读取地址。
-实现为 `python/sglang/srt/context_system/occurrence.py:936-973`、
-`python/sglang/srt/managers/schedule_batch.py:4211-4241` 和
-`python/sglang/srt/mem_cache/unified_cache/components/swa.py:1076-1103`。
+共享页模式用 `OccurrenceState.owned` 区分借用源页和私有目标页；所有层一起复制、
+回填或释放，不再单独回收 SWA peer。历史 R3 的 `first_private_terminal`、
+`live_swa_ranges` 和独立 SWA eviction floor 已删除。
+`_free_context_kv_row` 只释放实际 resident 且 owned 的行；不在 terminal row 中的
+私有历史版本由 `nonterminal_private_slots` 和完成事件处理。
+实现为 `python/sglang/srt/context_system/occurrence.py:892-954`、
+`python/sglang/srt/mem_cache/unified_radix_cache.py:1037-1070,1384-1404`。
 
 ## 性能边界
 
 - 无 Context 请求继续原生路径；没有 Insert 的 Context 请求继续原有编译器。
 - logical/execution 逆映射线性构建。匹配使用预计算 `has_insert`，不复制扫描完整 key。
-- decode 的位置单调性、排序位置和 raw 后缀最小值只计算一次。
-  CPU 窗口计数/安全回收边界用二分查找，不在每轮 decode 扫描整个历史。
+- decode 的位置单调性和排序位置只计算一次。CPU 窗口计数用二分查找，
+  不在每轮 decode 扫描整个历史；独立 SWA 的安全回收边界不再进入生产路径。
 - 已绑定批次缓存 Full 总读数和最大行宽。所有 SWA 请求的 W 上界均可 O(1) 判断
   graph 容量，不进行 GPU→CPU 同步，不统一扩大 graph 缓冲。
 - Reposition 后的位置单调路径继续原生快速窗口 gather。未 Reposition 的非单调路径
@@ -198,7 +404,7 @@ FlashInfer 将 window 和完整 logical 长度传入 gather，避免把非单调
 ## 验证与 48K 实验
 
 测试包括独立逐 token 状态机、60 组连续 turn 操作、负编号链、重叠 Drop 的 Delta 等价、
-wire、partial prefix、原生树分叉、Full/SWA 缺页闭包、native segment attention 和 decode graph。
+wire、partial prefix、原生树分叉、共享页缺页闭包、native segment attention 和 decode graph。
 CPU/GPU 用例分离，skip 不计通过。GPT-OSS HTTP 测试比较热 retrigger、exact、冷恢复
 以及后续在旧 Insert 前再次 Insert 的全词表 logits。
 
