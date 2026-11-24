@@ -151,6 +151,24 @@ def make_allocator(pool):
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_decode_capacity_failure_leaves_prefix_and_recent_state_intact(self):
+        pool = FakePool()
+        allocator = make_allocator(pool)
+        allocator.free_pages = allocator.free_pages[:0]
+        allocator.request_state = {
+            1: {"recent": 0, "prefix_tail": torch.empty(0)},
+            2: {"recent": 263, "prefix_tail": torch.empty(0)},
+        }
+        batch = types.SimpleNamespace(
+            token_to_kv_pool_allocator=allocator, req_pool_indices_cpu=torch.tensor([1, 2]),
+            req_pool_indices=torch.tensor([1, 2]), seq_lens_cpu=torch.tensor([8, 327]))
+        before = allocator.available_size()
+        with self.assertRaisesRegex(RuntimeError, "quant pool exhausted"):
+            alloc.alloc_for_decode(batch, 1)
+        self.assertEqual(allocator.available_size(), before)
+        self.assertEqual(allocator.request_state[2]["recent"], 263)
+        self.assertEqual(pool._next_slab_offset.sum().item(), 0)
+
     def test_ragged_prefill_flush_ring_free_reuse(self):
         pool = FakePool()
         allocator = make_allocator(pool)

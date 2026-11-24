@@ -814,3 +814,6 @@ User approved implementation and validation of the plan above. Start with fused 
 
 ### Candidate 22/26 — fused activation and paired measurement
 Candidate21 65b83d840 passed local compilation and remote CPU cache-lifecycle tests, and started a separate TP2 service. Retain its timing and binary identity. Candidate22 adds only the optimized decode activation in the model. Extend the timing client for arbitrary planned cells, native profiling, a fixed greedy/logprob probe, and BF16 capacity readback. Each revision is benchmarked separately.
+
+### Candidate 23/26 — batched HP allocation
+Keep the original event ordering. Use existing device request IDs and reserve tier capacity for the complete batch before changing any cursor or ledger. Cover mixed prefix/recent lengths, ring wrap, failure rollback, empty rows, and pool reuse. Measure on the same A10 pair after the fused activation.

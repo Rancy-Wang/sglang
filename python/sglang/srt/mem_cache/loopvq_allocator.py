@@ -494,39 +494,62 @@ def alloc_for_decode(batch, token_per_req):
     pool.wait_pending_forward()
     req_ids = batch.req_pool_indices_cpu.tolist()
     lengths = batch.seq_lens_cpu.tolist()
-    locations = []
-    flush_src, flush_dst, flush_updates = [], [], []
-    for rid, n in zip(req_ids, lengths):
-        state = allocator.request_state[int(rid)]
-        one_req = torch.tensor([rid], device=batch.device, dtype=torch.int64)
-        if n < pool.hp_prefix_tokens:
-            if not state["prefix_tail"].numel():
-                state["prefix_tail"] = allocator.alloc_hp_prefix(one_req, [8])
-            loc = state["prefix_tail"][:1]
-            state["prefix_tail"] = state["prefix_tail"][1:]
-        else:
-            loc = allocator.alloc_hp_recent(one_req, [1])
-            state["recent"] += 1
-            if state["recent"] >= pool.hp_recent_tokens + 8:
-                start = n + 1 - state["recent"]
-                src = batch.req_to_token_pool.req_to_token[rid, start:start + 8].to(torch.int64)
-                dst = allocator.alloc_quant(8)
-                if dst is None:
-                    raise RuntimeError("LoopVQ quant pool exhausted at decode flush")
-                flush_src.append(src - pool.hp_global_offset)
-                flush_dst.append(dst)
-                flush_updates.append((rid, start, dst))
-                state["recent"] -= 8
-        locations.append(loc)
+    indices = batch.req_pool_indices
+    if not req_ids:
+        return indices.new_empty(0, dtype=torch.int64)
+    states = [allocator.request_state[rid] for rid in req_ids]
+    recent_rows = [i for i, n in enumerate(lengths) if n >= pool.hp_prefix_tokens]
+    page = allocator.N_Q
+    prefix_pages = sum(n < pool.hp_prefix_tokens and not state["prefix_tail"].numel()
+                       for n, state in zip(lengths, states))
+    flush_rows = [i for i in recent_rows if states[i]["recent"] + 1 >= pool.hp_recent_tokens + page]
+    if prefix_pages * page > allocator._hp_prefix_free_slots():
+        raise RuntimeError("LoopVQ HP prefix pool exhausted at decode")
+    if len(flush_rows) * page > allocator.quant_available_size():
+        raise RuntimeError("LoopVQ quant pool exhausted at decode flush")
+
+    # All row indices already exist on the device. In the ordinary long-context
+    # batch the allocator consumes that array directly and produces the final out.
+    if len(recent_rows) == len(req_ids):
+        out = allocator.alloc_hp_recent(indices, [1] * len(req_ids))
+    else:
+        recent_ids = (torch.cat([indices[i:i+1] for i in recent_rows]) if recent_rows
+                      else indices[:0])
+        recent_locs = allocator.alloc_hp_recent(recent_ids, [1] * len(recent_rows))
+        prefix_locs = allocator.alloc_hp_prefix(indices, [page] * prefix_pages)
+        locations = []
+        ri = pi = 0
+        for n, state in zip(lengths, states):
+            if n >= pool.hp_prefix_tokens:
+                locations.append(recent_locs[ri:ri+1])
+                ri += 1
+            else:
+                if not state["prefix_tail"].numel():
+                    state["prefix_tail"] = prefix_locs[pi:pi+page]
+                    pi += page
+                locations.append(state["prefix_tail"][:1])
+                state["prefix_tail"] = state["prefix_tail"][1:]
+        out = torch.cat(locations)
+    for i in recent_rows:
+        states[i]["recent"] += 1
+    flush_src, flush_updates = [], []
+    if flush_rows:
+        dst = allocator.alloc_quant(len(flush_rows) * page)
+        for j, i in enumerate(flush_rows):
+            rid = req_ids[i]
+            start = lengths[i] + 1 - states[i]["recent"]
+            src = batch.req_to_token_pool.req_to_token[rid, start:start+page]
+            flush_src.append(src.to(torch.int64) - pool.hp_global_offset)
+            flush_updates.append((rid, start, dst[j*page:(j+1)*page]))
+            states[i]["recent"] -= page
     if flush_src:
-        src, dst = torch.cat(flush_src), torch.cat(flush_dst)
+        src = torch.cat(flush_src)
         plan = SimpleNamespace(src_hp_slot=src, dst_quant_slots=dst,
                                valid_mask=torch.ones_like(src, dtype=torch.bool))
         pool.vq_flush_k(plan)
         pool.vq_flush_v(plan)
         for rid, start, target in flush_updates:
             batch.req_to_token_pool.write((rid, slice(start, start + 8)), target.to(torch.int32))
-    out = torch.cat(locations)
     batch.req_to_token_pool.write((batch.req_pool_indices, batch.seq_lens), out.to(torch.int32))
     batch.req_to_token_pool.alloc_aux_to_lengths(req_pool_indices_cpu=batch.req_pool_indices_cpu,
                                                 target_seq_lens_cpu=batch.seq_lens_cpu + 1)
