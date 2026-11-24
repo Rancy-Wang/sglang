@@ -761,3 +761,8 @@ VQ存在约4.3–5.0ms的图间间隔，BF16约0.07–0.08ms。短位置attentio
 ### Candidate15 正式 decode 矩阵已启动，未完成
 
 A10 GPU5，2026-11-24 04:17:24 UTC启动，tmux `loopvq-20261123:decode-timing-r14-queue`（窗口名保留历史，实际helper为candidate15 SHA54e15c203aae6d37d5b9c48336f125b95e628e9a181494581c088b11a585fc71）。运行推理仍feba。结果根 `/homes/ruoxi07/experiments/loopvq/2026-11-23-reproduction/results/decode-20261124-r12`，进度 `timing-status.json`，逐格 `timing/<method>/<output>/bs<batch>/decode-summary.json`，总表 `decode-throughput.json`，完成后发布W&B并写入wandb.json。日志 `logs/decode-timing-r14.log` 与退出码 `logs/decode-timing-r14.exit`。未生成的格子为pending，不把启动成功写成验证通过。
+
+
+Candidate15 首个真实计时格子通过：BF16/1024输出/bs1，三次纯decode吞吐28.431540、28.431314、28.432323 tokens/s，中位数28.431540。实际batch比例1.0，prefill_in_primary_metric=false。逐次measure原始证据均有1023条decode记录，1023条cuda graph=True，backend=full，padding=0；服务readback decode buckets=[1,2,4,8,16]。这是BF16单臂结果，VQ配对未完成，不能给加速比。
+
+5–7小时是整个矩阵的粗略总工期，绝不表示关闭CUDA graph：按当前池容量，有14个BF16、20个VQ可运行格子，每格3轮，共102轮长生成，合计377754个串行batch decode步骤。若平均每步50ms，单纯decode约5.25小时；不同batch/历史的步时不同，实际剩余时间须随完成格子更新。模型每步完整R4，CUDA graph减少提交开销，并不取消模型计算。
