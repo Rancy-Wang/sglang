@@ -66,7 +66,7 @@ def gpu_pids():
     return {int(x) for x in raw.splitlines()}
 
 
-def start(method, profile, *, launch_script=None, server_protocol="paper-long"):
+def start(method, profile, *, launch_script=None, server_protocol="paper-long", graph_trace="node"):
     assert not gpu_pids(), "GPU5 must be empty"
     with socket.socket() as sock:
         assert sock.connect_ex(("127.0.0.1", PORT)) != 0
@@ -75,13 +75,14 @@ def start(method, profile, *, launch_script=None, server_protocol="paper-long"):
     command = ["bash", str(script), method, server_protocol, GPU, str(PORT), label]
     trace = ROOT / f"{method}-nodes"
     if profile:
+        assert graph_trace in ("node", "graph")
         assert not list(ROOT.glob(f"{method}-nodes*")), "Preserve previous traces"
         nsys_tmp = Path(f"/tmp/loopvq-nsys-{os.getuid()}")
         nsys_tmp.mkdir(mode=0o700, exist_ok=True)
         assert nsys_tmp.stat().st_uid == os.getuid(), "Nsight temp directory is not owned by this account"
         command = ["env", f"NSYS_TMPDIR={nsys_tmp}", f"TMPDIR={nsys_tmp}",
                    "nsys", "profile", "--trace=cuda,nvtx,osrt", "--sample=none", "--cpuctxsw=none",
-                   "--cuda-graph-trace=node", "--capture-range=cudaProfilerApi",
+                   f"--cuda-graph-trace={graph_trace}", "--capture-range=cudaProfilerApi",
                    "--capture-range-end=repeat:8:async", "--wait=primary", "--kill=none",
                    f"--output={trace}", *command]
     launcher = ROOT / f"{label}.launcher.log"

@@ -8,7 +8,7 @@
 - 官方参考及用户 LoopVQ fork main：d5d58c83fe5bc9a4ce470ae96c69b55f085e2977。
 - 本地 SGLang：loopspec-test，915e79f4ce7dc08e7e980987e0c8729f523eb74b；包含 v0.5.22 基线 baa9befa381511cd4d56f83980951e5a45fffc6d。
 - 用户新约定：LoopVQ 的 origin 使用 git@github.com:Rancy-Wang/LoopVQ.git，test 用于开发/提交/push/pull；main 只作正式版本，晋升需明确批准。保留 mscheong01/LoopVQ 为 upstream。SGLang 仍仅通过 Rancy-Wang/sglang 的 loopspec-test 开发和远端同步，正式 loopspec 分支不变。
-- 统一候选轮次 **13/20（用户于2026-11-24明确追加10轮；推理数学保持候选6）**。本任务的训练/评测脚本及推理代码候选修改加验证累计计数；跨阶段不重置，固定候选多项测试不重复计数。只读调查、写计划、纯环境准备不伪计代码轮次。
+- 统一候选轮次 **14/20（用户于2026-11-24明确追加10轮；推理数学保持候选6）**。本任务的训练/评测脚本及推理代码候选修改加验证累计计数；跨阶段不重置，固定候选多项测试不重复计数。只读调查、写计划、纯环境准备不伪计代码轮次。
 - 主范围：Ouro-2.6B-Thinking、完整 R4，BF16 对照和纯 LoopVQ **0.5 bit（G16/c4）**。原计划0.25 bit移至后续，不在首期训练或评测。不运行 TaSQ 统计、TaSQ/TaSQ+LoopVQ。CQ可作后续附加对照，未列为必需工作。保留微调前码本用于诊断。
 - 用户验收口径：不要求跨机器答案或论文分数完全一致；必须记录真实准确率、差异和运行条件。吞吐是必需交付：bs=1/2/4/8/16分别与同机无LoopVQ的BF16普通AR比较。工程正确性测试不因容许采样差异而放宽。
 - 首期运行：TP/PP/DP=1，普通多请求 AR server，验证 eager 和 decode CUDA graph；按参考评测关闭 radix cache、chunked prefill 和 piecewise graph。显式禁止与 LoopSpec、DFLASH、recurrent-CDB 混用；关闭 LoopVQ 时现有功能必须回归通过。
@@ -685,3 +685,10 @@ Candidate12 current GPU evidence (not completion): Nsight now launches successfu
 Candidate12 inference/profile request succeeded: BF16 bs1 output8192,8191 decode logs, full batch/graph fraction1.0; four nonempty Nsight reports. Script failed only at its redundant final /stop_profile call: HTTP500, server traceback RuntimeError: Profiling is not in progress. Call /start_profile first. Since num_steps=8 already auto-stops, explicit final stop is incorrect. Failure and raw request retained; this is a measurement-helper failure, not a model failure.
 
 Six-part plan: (1) remove redundant stop and continue completed work safely; (2) validate prior failure, full request, four report hashes, owned idle BF16 server, then run remaining bs4 and VQ profiles; (3) decode_sweep.py only plus record; (4) all16 captures exported/accounted, original failure preserved, no duplicate completed bs1 run; (5) inherited report labels use recorded candidate12 threshold definitions, not fabricated callback timestamps; (6) static checks, exact failed-state/ownership/idle validation, remaining full 8K requests and automatic eight-step captures. New recovery status file; original profile-status.json remains failed evidence. Inference unchanged, primary throughput still queued until complete profiles.
+
+
+### Candidate14/20: low-overhead graph timeline cross-check
+
+New evidence justifies this additional diagnostic: BF16 out8192/bs4 node trace reports cudaGraphLaunch CPU mean10.268ms, much larger than an ordinary graph submission. Node trace gaps therefore cannot be equated with unprofiled scheduling loss. BF16 first bs1 capture also shows per-graph kernel sums43.5ms for four graphs, falling to37.6ms; retain this transient, do not silently discard it or attribute it to model changes.
+
+Six-part plan: (1) distinguish graph-execution time and scheduling gaps with lower instrumentation overhead; (2) separate graph-only Nsight runs, fixed2K input/8192 output, bs4, four automatic eight-step ranges near1K/2K/4K/8K output; then unprofiled matrix; (3) optional graph_trace argument in context launcher and new light_decode_timeline.py, no inference changes; (4) four runtime-correlated graph ranges per method,8–9 complete graph records/range, same GPU/input/config, explicitly separate from node kernel breakdown and primary throughput; (5) graph tracing still perturbs timing, CPU waits overlap GPU, never add them; (6) schema checked against prior successful light SQLite, validate parser on its511 captured graphs, static checks, tmux execution and source/ownership verification. Keep ongoing candidate13 node run and its source provenance intact; queue lightweight pass after it and before primary timing. No completed node profiles are rerun.
