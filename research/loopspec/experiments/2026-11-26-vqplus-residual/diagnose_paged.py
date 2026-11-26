@@ -200,7 +200,7 @@ def main():
     ap.add_argument('--inner',type=int,default=16)
     ap.add_argument('--correctness-only',action='store_true')
     names=['current','old_r1','plain_reader','paged','scalar_int4','materialized',
-           'page_only','coop_only','compact','compact_plain']
+           'page_only','coop_only','compact','compact_plain','staged','staged_scalar']
     ap.add_argument('--variants',nargs='+',choices=names,default=names)
     ap.add_argument('--profile-one',choices=names)
     args=ap.parse_args()
@@ -250,6 +250,8 @@ def main():
                 'coop_only':lambda:PagedResidualAttention(pool,max_batch=batch,layout=False),
                 'compact':lambda:PagedResidualAttention(pp,max_batch=batch,compact=True),
                 'compact_plain':lambda:PagedResidualAttention(pool,max_batch=batch,compact=True,layout=False,cooperative=False),
+                'staged':lambda:PagedResidualAttention(pp,max_batch=batch,threads=256,compact=True,cooperative=False,staged=True),
+                'staged_scalar':lambda:PagedResidualAttention(spp,max_batch=batch,threads=256,compact=True,cooperative=False,staged=True,scalar=True),
             }
             readers={name:factory() for name,factory in factories.items() if name in args.variants}
             for loop in args.loops:
@@ -268,7 +270,7 @@ def main():
                 if 'materialized' in args.variants:calls['materialized']=native
                 correctness={}
                 for name,fn in calls.items():
-                    got=fn();expected=scalar_ref if name=='scalar_int4' else ref
+                    got=fn();expected=scalar_ref if name in ('scalar_int4','staged_scalar') else ref
                     torch.testing.assert_close(got,expected,atol=.002,rtol=.01)
                     correctness[name]=metrics(got,expected)
                 row=dict(layer=layer,loop=loop,batch=batch,length=n,correctness=correctness,

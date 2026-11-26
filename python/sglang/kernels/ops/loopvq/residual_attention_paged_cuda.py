@@ -127,8 +127,8 @@ _COMPACT = _replace_once(_COMPACT,
 _EXT = {}
 
 
-def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False, compact=False):
-    key = (threads, bool(layout), bool(cooperative), bool(scalar), bool(compact))
+def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False, compact=False, staged=False):
+    key = (threads, bool(layout), bool(cooperative), bool(scalar), bool(compact), bool(staged))
     with torch.cuda.device(device):
         if torch.cuda.is_current_stream_capturing():
             raise RuntimeError('Prepare page VQ+ before graph capture')
@@ -138,12 +138,18 @@ def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False,
             raise ValueError('Unsupported CTA size')
         if key not in _EXT:
             from torch.utils.cpp_extension import load_inline
+            source = _COMPACT if compact else _SRC
+            if staged:
+                if not compact or not layout or cooperative:
+                    raise ValueError('Staging requires compact page layout without scale shuffle')
+                from .residual_attention_staged_source import staged_source
+                source = staged_source(source, _replace_once)
             ext = load_inline(
-                name=(f'loopvq_page_r{2 if compact else 1}_t{threads}_l{int(layout)}'
+                name=(f'loopvq_page_r{3 if staged else 2 if compact else 1}_t{threads}_l{int(layout)}'
                       f'_c{int(cooperative)}_s{int(scalar)}'),
                 cpp_sources='#include <torch/extension.h>\nvoid residual_init();\n'
                 'void residual_cuda(' + ','.join(['torch::Tensor'] * 16) + ',int64_t,double,int64_t);',
-                cuda_sources=_COMPACT if compact else _SRC, functions=['residual_init', 'residual_cuda'],
+                cuda_sources=source, functions=['residual_init', 'residual_cuda'],
                 extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', '-Xptxas=-v',
                     f'-DVQPLUS_THREADS={threads}', '-DVQPLUS_UNROLL=1',
                     '-DVQPLUS_GLOBAL=1', '-DVQPLUS_ASYNC=0',
@@ -156,12 +162,12 @@ def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False,
 
 
 class PagedResidualAttention:
-    def __init__(self, pool, *, max_batch, threads=512, layout=True, cooperative=True, scalar=False, compact=False):
+    def __init__(self, pool, *, max_batch, threads=512, layout=True, cooperative=True, scalar=False, compact=False, staged=False):
         self.pool = pool
         self.splits = 32
         self.compact = compact
         self.extension = prepare(pool.hp_k.device, threads=threads, layout=layout,
-                                 cooperative=cooperative, scalar=scalar, compact=compact)
+                                 cooperative=cooperative, scalar=scalar, compact=compact, staged=staged)
         self.sm_count = torch.cuda.get_device_properties(pool.hp_k.device).multi_processor_count
         self.partial = torch.empty((max_batch, pool.head_num, 32, 128), device=pool.hp_k.device)
         self.lse = torch.empty((max_batch, pool.head_num, 32), device=pool.hp_k.device)
