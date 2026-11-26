@@ -69,7 +69,7 @@ def _stage1(Q, KI, VI, KC, VC, KR, VR, KS, VS, HK, HV, PTR, LOC, ROPE, OUT, LSE,
 
 
 class ResidualAttention:
-    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda", threads=512, dynamic_splits=True, unroll=1):
+    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda", threads=512, dynamic_splits=True, unroll=1, group_size=1):
         if implementation not in ("cuda", "triton"):
             raise ValueError("Unknown residual attention implementation")
         if splits is None:
@@ -84,6 +84,14 @@ class ResidualAttention:
         self.sm_count = torch.cuda.get_device_properties(pool.hp_k.device).multi_processor_count
         if pool.head_dim != 128 or not pool.residual_bits == 4:
             raise ValueError("VQ+ requires D128 and INT4 group32")
+        if group_size not in (1, 2) or (group_size == 2 and implementation != 'cuda'):
+            raise ValueError('Grouped VQ+ requires the CUDA implementation')
+        self.grouped = None
+        if group_size == 2:
+            from .residual_attention_grouped_cuda import prepare_grouped
+            self.grouped = prepare_grouped(pool.hp_k.device)
+            self.group_partial = torch.empty((max_batch, pool.head_num, 64, 128), dtype=torch.float32, device=pool.hp_k.device)
+            self.group_lse = torch.empty((max_batch, pool.head_num, 64), dtype=torch.float32, device=pool.hp_k.device)
         self.pool, self.splits, self.block = pool, splits, block
         self.max_batch, self.max_context_len = max_batch, max_context_len
         self.partial = torch.empty((max_batch, pool.head_num, splits, 128), dtype=torch.float32, device=pool.hp_k.device)
@@ -95,17 +103,21 @@ class ResidualAttention:
             raise ValueError("VQ+ requires BF16 [batch,local_heads,128] within capacity")
         out = torch.empty_like(q)
         if self.extension is not None:
-            self.extension.residual_cuda(
+            grouped = self.grouped is not None and b > 1
+            launch = self.grouped.grouped_cuda if grouped else self.extension.residual_cuda
+            partial, lse = (self.group_partial, self.group_lse) if grouped else (self.partial, self.lse)
+            groups = (b + 1) // 2 if grouped else b
+            launch(
                 q, pool.get_key_buffer(layer_id), pool.get_value_buffer(layer_id),
                 pool.k_book.cb16[layer_id], pool.v_book.cb16[layer_id],
                 pool.k_residual[layer_id], pool.v_residual[layer_id],
                 pool.k_residual_scale[layer_id], pool.v_residual_scale[layer_id],
                 pool.get_hp_key_buffer(layer_id), pool.get_hp_value_buffer(layer_id),
-                kv_indptr, kv_indices, cos_sin_cache, self.partial, self.lse,
+                kv_indptr, kv_indices, cos_sin_cache, partial, lse,
                 pool.hp_global_offset, float(sm_scale),
-                max(1, (2 * self.sm_count + b * pool.head_num - 1) // (b * pool.head_num)) if self.dynamic_splits else 0,
+                max(1, (2 * self.sm_count + groups * pool.head_num - 1) // (groups * pool.head_num)) if self.dynamic_splits else (64 if grouped else 0),
             )
-            return official_reduce(self.partial[:b], self.lse[:b], out)
+            return official_reduce(partial[:b], lse[:b], out)
         _stage1[(b, pool.head_num, self.splits)](
             q, pool.get_key_buffer(layer_id), pool.get_value_buffer(layer_id),
             pool.k_book.cb16[layer_id], pool.v_book.cb16[layer_id],

@@ -165,3 +165,9 @@ R3真实TP2 trace：r3-native-bs1，2K输入、1088输出，约输出928处采10
 R4资源安排：A10空闲卡对4/5正运行R3同卡BF16/原VQ/VQ+完整服务对照；其余六卡为他人任务。A11八卡均有2.1–2.4GiB任务，跳过。A12八卡现场空闲，使用GPU0做R3/R4 kernel配对；通过同一X5持久会话PTY82582访问。为不改变A10正在运行的R3源码，另建sglang-vqplus-kernel clone，仍仅从用户fork的loopspec-test拉取。新测试提供显式--kernel-root，可用同一计时脚本读取旧R3 checkout；不混用跨机加速比。
 
 R4验证前补充计时控制：R1–R3的合成微基准不同request会随机复用相同physical KV，不能当作真实独立请求的带宽结论。R4计时为每request分配独立quant区域及HP区域，支持page8和随机token两种布局；每B重新分配足够的单层arena，直接生成合法INT4码避免测试初始化物化大量FP32数据。数值oracle仍使用旧随机fixture以保持回归可比。R3与R4一律用这份新计时脚本在同卡重测，不能把测试口径变化算成实现加速。
+
+R4结果：323079e01d2b3200a929708a2a5205e7f9ea3543（首个实现eac9c1ce7，GPU验证前补齐独立请求计时）。A12首次编译因/usr/bin/g++不存在失败，日志保留a12-r4/512-1.log；改用机器已有gcc-13/g++-13及独立torch-extension缓存，不修改源码或系统依赖，属于环境修复。gcc13目录的R3基线及512U1/U2/U4、256U2/U4均exit0，codec/output/LSE/graph通过。8K的B1/2/4/8/16，R3为0.0548/0.1509/0.2534/0.3960/0.7410ms；R4-512U1为0.0615/0.1469/0.2476/0.3854/0.7189ms。U2/U4未带来稳定收益，256明显更慢。小B需更充分重复估计时钟波动，不宣称所有shape改善。每次graph含16个完整attention，KV按page8且请求区域独立，不能与旧共享随机fixture直接算加速。
+
+### 候选5/10
+
+目的：针对大batch residual attention瓶颈，评估两个request共用码本/RoPE的R2分组。源码分析表明R1每request重复加载同位置FP32cos/sin；R2可复用系数与64KiB表，但不会共享不同请求的真实KV或softmax。范围新增residual_attention_grouped_cuda.py，ResidualAttention分派及GPU测试。每CTA256线程、每请求CAP512、64split，两个request的长度/位置/概率/输出独立；batch1保留已有R1。风险为寄存器增加、group中长度不一致、末尾奇数request和empty split；必须完整覆写LSE且不越界。预期在B>=2减少重复加载，成功标准仍为原oracle容差、奇数B和动态graph通过，并与同A12GPU0的R4按统一page8/disjoint协议比较。配置保留R1作基线；只有实测改善才选用R2。真实服务继续TP2全R4，无准确率重启。计划通过后还需极值codec/训练编码差异、长上下文与完整性能验收，当前未宣称完成。

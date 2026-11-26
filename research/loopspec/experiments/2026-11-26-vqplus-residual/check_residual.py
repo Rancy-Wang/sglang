@@ -174,6 +174,7 @@ def main():
     ap.add_argument('--threads', type=int, choices=[128, 256, 512], default=512)
     ap.add_argument('--fixed-splits', action='store_true')
     ap.add_argument('--unroll', type=int, choices=[1,2,4], default=1)
+    ap.add_argument('--group-size', type=int, choices=[1,2], default=1)
     ap.add_argument('--graph-inner', type=int, choices=[1,16], default=16)
     ap.add_argument('--layout', choices=['random-token','page8'], default='page8')
     args = ap.parse_args()
@@ -191,16 +192,22 @@ def main():
         options['unroll'] = args.unroll
     else:
         assert args.unroll == 1, 'Baseline does not implement token unroll'
+    if 'group_size' in inspect.signature(ResidualAttention).parameters:
+        options['group_size'] = args.group_size
+    else:
+        assert args.group_size == 1
     attn = ResidualAttention(pool, max_batch=16, max_context_len=32768, **options)
     for length in (0, 8, 64, 72, 79, 80, 127, 128, 1024, 2048, 4096, 8192, 16384, 32768):
         q = torch.randn(2, 24, 128, device='cuda').bfloat16()[:, :8]
         ptr, loc = locations([length, length // 2], pool.hp_global_offset)
         # Stale scratch must not leak even for fully empty rows.
         attn.partial.fill_(float('nan')); attn.lse.fill_(float('nan'))
+        if getattr(attn, 'grouped', None) is not None:
+            attn.group_partial.fill_(float('nan')); attn.group_lse.fill_(float('nan'))
         expected, expected_lse = oracle(q, pool, ptr, loc, rope, return_lse=True)
         actual = attn.forward(q, 0, ptr, loc, rope, 128**-.5)
         torch.testing.assert_close(actual, expected, atol=.002, rtol=.01)
-        torch.testing.assert_close(attn.lse[:2].logsumexp(-1), expected_lse, atol=2e-5, rtol=2e-5)
+        torch.testing.assert_close((attn.group_lse if getattr(attn, 'grouped', None) is not None else attn.lse)[:2].logsumexp(-1), expected_lse, atol=2e-5, rtol=2e-5)
         result['attention'].append({'length': length, 'max_abs': (actual.float()-expected.float()).abs().max().item()})
     # Capture once, then change physical addresses and request lengths in place.
     q = torch.randn(2, 8, 128, device='cuda').bfloat16()
@@ -213,6 +220,8 @@ def main():
         p2, l2 = locations([length, length], pool.hp_global_offset)
         ptr.copy_(p2); loc[:l2.numel()].copy_(l2)
         attn.partial.fill_(float('nan')); attn.lse.fill_(float('nan'))
+        if getattr(attn, 'grouped', None) is not None:
+            attn.group_partial.fill_(float('nan')); attn.group_lse.fill_(float('nan'))
         graph.replay()
         torch.testing.assert_close(captured, oracle(q, pool, ptr, loc, rope), atol=.002, rtol=.01)
     # Nonzero descriptor length with all-zero locations is graph padding.
@@ -220,6 +229,12 @@ def main():
     assert not captured.any()
     graph.reset()
     result['graph_dynamic_and_padding'] = True
+    for odd in (1, 3, 5, 15, 16):
+        q = torch.randn(odd, 8, 128, device='cuda').bfloat16()
+        ptr, loc = locations([128 if i % 2 == 0 else 8 for i in range(odd)], pool.hp_global_offset)
+        actual = attn.forward(q, 0, ptr, loc, rope, 128**-.5)
+        torch.testing.assert_close(actual, oracle(q, pool, ptr, loc, rope), atol=.002, rtol=.01)
+    result['unequal_and_odd_batches'] = True
     for b in (1, 2, 4, 8, 16):
         pool = make_pool(cap=b * 32768 + 8, direct=True, hp_size=b * 80)
         attn = ResidualAttention(pool, max_batch=16, max_context_len=32768, **options)
@@ -227,7 +242,7 @@ def main():
         for length in (1024, 2048, 4096, 8192, 16384, 32768):
             ptr, loc = locations([length] * b, pool.hp_global_offset, args.layout, disjoint=True)
             ms = bench(lambda: attn.forward(q, 0, ptr, loc, rope, 128**-.5), args.graph_inner)
-            result['timings'].append({'batch': b, 'length': length, 'splits': attn.splits, 'threads': args.threads, 'dynamic_splits': not args.fixed_splits, 'unroll': args.unroll, 'layout': args.layout, 'graph_inner': args.graph_inner, 'disjoint_request_addresses': True, 'graph_ms': ms})
+            result['timings'].append({'batch': b, 'length': length, 'splits': attn.splits, 'threads': args.threads, 'dynamic_splits': not args.fixed_splits, 'unroll': args.unroll, 'layout': args.layout, 'graph_inner': args.graph_inner, 'disjoint_request_addresses': True, 'group_size': args.group_size, 'graph_ms': ms})
     result['passed'] = True
     Path(args.output).write_text(json.dumps(result, indent=2))
     print(json.dumps(result), flush=True)
