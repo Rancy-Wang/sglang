@@ -34,11 +34,11 @@ __device__ __forceinline__ void stage_payload(char* buffer,
 def staged_source(source, replace):
     source=replace(source,'constexpr int CAP = 1024,','constexpr int CAP = 128,')
     source=replace(source,'float* x, bool qk=false)', 'float* x, bool qk=false, int token=0)')
-    before='''        const long row = (long)loc * heads + head;
+    before='''        const long row = VQPAGE_LAYOUT == 2 ? ((long)(loc >> 3) * heads + head) * 8 + (loc & 7) : (long)loc * heads + head;
         const long pg = (((long)(loc >> 3) * heads + head) * 4 + group / 8) * 8 + (loc & 7);
-        const long io = VQPAGE_LAYOUT ? pg * 8 + group % 8 : row * 32 + group;
-        const long ro = VQPAGE_LAYOUT ? pg * 16 + (group % 8) * 2 : row * 64 + group * 2;
-        const long so = VQPAGE_LAYOUT ? pg : row * 4 + group / 8;'''
+        const long io = VQPAGE_LAYOUT == 1 ? pg * 8 + group % 8 : row * 32 + group;
+        const long ro = VQPAGE_LAYOUT == 1 ? pg * 16 + (group % 8) * 2 : row * 64 + group * 2;
+        const long so = VQPAGE_LAYOUT == 1 ? pg : row * 4 + group / 8;'''
     source=replace(source,before,'''        const long io = token * 32 + group;
         const long ro = token * 64 + group * 2;
         const long so = token * 4 + group / 8;''')

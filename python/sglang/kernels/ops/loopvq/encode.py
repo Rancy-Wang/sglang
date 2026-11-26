@@ -74,8 +74,10 @@ def _encode(K0, K1, K2, K3, CB, OUT, LOC, SRC, VALID,
     norm = tl.sum(table.to(tl.float32) * table.to(tl.float32), 0) * 0.5
     score = tl.dot(x, table) - norm[None, :]
     code = tl.argmax(score, 1, tie_break_left=True)
-    if PAGED:
+    if PAGED == 1:
         where = layer * OUTSIZE * H * ng + (((dest // 8 * H + h) * 4 + group // 8) * 8 + dest % 8) * 8 + group % 8
+    elif PAGED == 2:
+        where = layer * OUTSIZE * H * ng + ((dest // 8 * H + h) * 8 + dest % 8) * ng + group
     else:
         where = ((layer * OUTSIZE + dest) * H + h) * ng + group
     tl.store(OUT + where, code, valid)

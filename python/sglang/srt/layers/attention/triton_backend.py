@@ -222,6 +222,7 @@ class TritonAttnBackend(AttentionBackend):
             residual_options = {}
             if self.token_to_kv_pool.residual_bits:
                 if self.token_to_kv_pool.paged_residual:
+                    residual_options["layout"] = self.token_to_kv_pool.paged_residual
                     if get_model().loopvq_residual_page_kernel == "triton":
                         from sglang.kernels.ops.loopvq.residual_attention_paged_triton import PagedTritonAttention as Attention
                     else:

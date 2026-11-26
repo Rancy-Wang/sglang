@@ -233,7 +233,7 @@ class Model(msgspec.Struct):
     ] = "shared"
     loopvq_residual_layout: A[
         str,
-        Arg(help="VQ+ packed storage layout; page is experimental page8/group32 storage.", choices=["token", "page"]),
+        Arg(help="Experimental VQ+ layouts: token, page/group32, or page/head/token.", choices=["token", "page", "page-head"]),
     ] = "token"
     loopvq_residual_page_kernel: A[
         str,

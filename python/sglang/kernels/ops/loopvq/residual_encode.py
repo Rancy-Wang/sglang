@@ -37,9 +37,12 @@ def _encode_residual(X0, X1, X2, X3, IDX, CB, OUT, SCALE, DST, SRC, VALID,
         x = tl.load(X2 + src * S2 + offset, ok, 0).to(tl.float32)
     else:
         x = tl.load(X3 + src * S3 + offset, ok, 0).to(tl.float32)
-    if PAGED:
+    if PAGED == 1:
         pg = (((dst // 8) * H + head) * 4 + group) * 8 + dst % 8
         io = base * QSIZE * H * 32 + pg * 8 + (c // 4) % 8
+    elif PAGED == 2:
+        page_row = ((dst // 8 * H + head) * 8 + dst % 8)
+        io = base * QSIZE * H * 32 + page_row * 32 + c // 4
     else:
         io = ((base * QSIZE + dst) * H + head) * 32 + c // 4
     code = tl.load(IDX + io, ok, 0).to(tl.int32)
@@ -57,9 +60,12 @@ def _encode_residual(X0, X1, X2, X3, IDX, CB, OUT, SCALE, DST, SRC, VALID,
     z = tl.minimum(7., tl.maximum(-7., libdevice.rint(tl.div_rn(error, scale.to(tl.float32))))).to(tl.int32)
     pairs = tl.reshape(z & 15, (16, 2))
     packed = tl.sum(pairs << (tl.arange(0, 2)[None, :] * 4), 1).to(tl.uint8)
-    if PAGED:
+    if PAGED == 1:
         ro = slot * QSIZE * H * 64 + pg * 16 + tl.arange(0, 16)
         so = slot * QSIZE * H * 4 + pg
+    elif PAGED == 2:
+        ro = slot * QSIZE * H * 64 + page_row * 64 + group * 16 + tl.arange(0, 16)
+        so = slot * QSIZE * H * 4 + page_row * 4 + group
     else:
         ro = ((slot * QSIZE + dst) * H + head) * 64 + group * 16 + tl.arange(0, 16)
         so = ((slot * QSIZE + dst) * H + head) * 4 + group

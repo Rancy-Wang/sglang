@@ -54,11 +54,11 @@ def handle_loopvq_compatibility(server_args: Any) -> None:
     residual_codebook = getattr(cfg, "loopvq_residual_codebook", "shared")
     residual_layout = getattr(cfg, "loopvq_residual_layout", "token")
     page_kernel = getattr(cfg, "loopvq_residual_page_kernel", "cuda")
-    if residual_layout not in ("token", "page") or page_kernel not in ("cuda", "triton"):
+    if residual_layout not in ("token", "page", "page-head") or page_kernel not in ("cuda", "triton"):
         raise ValueError("Unknown VQ+ page layout or reader.")
-    if residual_layout == "page" and (residual_bits != 4 or residual_codebook != "global"):
+    if residual_layout != "token" and (residual_bits != 4 or residual_codebook != "global"):
         raise ValueError("Page VQ+ requires INT4 residuals and global centroid lookup.")
-    if page_kernel != "cuda" and residual_layout != "page":
+    if page_kernel != "cuda" and residual_layout == "token":
         raise ValueError("The page reader option requires VQ+ page layout.")
     if residual_codebook not in ("shared", "global") or (residual_codebook == "global" and residual_bits != 4):
         raise ValueError("Global residual codebook lookup requires VQ+ INT4.")

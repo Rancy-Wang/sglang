@@ -11,17 +11,25 @@ from .residual_attention_cuda import _SRC as _BASE
 from .official_reduce import official_reduce
 
 
-def page_pack(tensor):
+def page_pack(tensor, layout=1):
     """[slots,H,4*payload] -> flat [page,H,4,token8,payload]."""
     n, h, width = tensor.shape
     if n % 8 or width % 4:
         raise ValueError("Page layout requires page8 and four channel groups")
+    if layout == 2:
+        return tensor.reshape(n // 8, 8, h, width).permute(0, 2, 1, 3).contiguous().reshape_as(tensor)
+    if layout != 1:
+        raise ValueError('Unknown page layout')
     return tensor.reshape(n // 8, 8, h, 4, width // 4).permute(
         0, 2, 3, 1, 4).contiguous().reshape_as(tensor)
 
 
-def page_unpack(tensor):
+def page_unpack(tensor, layout=1):
     n, h, width = tensor.shape
+    if layout == 2:
+        return tensor.reshape(n // 8, h, 8, width).permute(0, 2, 1, 3).contiguous().reshape_as(tensor)
+    if layout != 1:
+        raise ValueError('Unknown page layout')
     return tensor.reshape(n // 8, h, 4, 8, width // 4).permute(
         0, 3, 1, 2, 4).contiguous().reshape_as(tensor)
 
@@ -31,11 +39,11 @@ __device__ __forceinline__ void row4(const uint8_t* idx, const __nv_bfloat16* ta
     const uint8_t* residual, const __half* scales, const __nv_bfloat16* hp,
     int loc, int offset, int heads, int head, int group, float* x, bool qk=false) {
     if (loc < offset) {
-        const long row = (long)loc * heads + head;
+        const long row = VQPAGE_LAYOUT == 2 ? ((long)(loc >> 3) * heads + head) * 8 + (loc & 7) : (long)loc * heads + head;
         const long pg = (((long)(loc >> 3) * heads + head) * 4 + group / 8) * 8 + (loc & 7);
-        const long io = VQPAGE_LAYOUT ? pg * 8 + group % 8 : row * 32 + group;
-        const long ro = VQPAGE_LAYOUT ? pg * 16 + (group % 8) * 2 : row * 64 + group * 2;
-        const long so = VQPAGE_LAYOUT ? pg : row * 4 + group / 8;
+        const long io = VQPAGE_LAYOUT == 1 ? pg * 8 + group % 8 : row * 32 + group;
+        const long ro = VQPAGE_LAYOUT == 1 ? pg * 16 + (group % 8) * 2 : row * 64 + group * 2;
+        const long so = VQPAGE_LAYOUT == 1 ? pg : row * 4 + group / 8;
         uint2 center = {};
 #if !VQPAGE_SCALAR
         int code = __ldg(idx + io);
@@ -143,7 +151,9 @@ _EXT = {}
 
 
 def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False, compact=False, staged=False, remapped=False, cache_mode=0):
-    key = (threads, bool(layout), bool(cooperative), bool(scalar), bool(compact), bool(staged), bool(remapped), cache_mode)
+    key = (threads, int(layout), bool(cooperative), bool(scalar), bool(compact), bool(staged), bool(remapped), cache_mode)
+    if int(layout) not in (0, 1, 2):
+        raise ValueError('Unknown packed reader layout')
     with torch.cuda.device(device):
         if torch.cuda.is_current_stream_capturing():
             raise RuntimeError('Prepare page VQ+ before graph capture')
@@ -159,7 +169,7 @@ def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False,
                     raise ValueError('Remapped PV requires compact, unshuffled direct loads')
                 source = _REMAPPED
             if staged:
-                if not compact or not layout or cooperative:
+                if not compact or int(layout) != 1 or cooperative:
                     raise ValueError('Staging requires compact page layout without scale shuffle')
                 from .residual_attention_staged_source import staged_source
                 source = staged_source(source, _replace_once)

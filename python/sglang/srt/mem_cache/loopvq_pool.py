@@ -49,10 +49,10 @@ class LoopVQKVPool(KVCache):
         if residual_bits not in (0, 4):
             raise ValueError("VQ+ supports only INT4 group32 residuals")
         self.residual_bits = residual_bits
-        if residual_layout not in ("token", "page") or (residual_layout == "page" and residual_bits != 4):
+        if residual_layout not in ("token", "page", "page-head") or (residual_layout != "token" and residual_bits != 4):
             raise ValueError("Page layout requires VQ+ INT4 residuals")
         self.residual_layout = residual_layout
-        self.paged_residual = residual_layout == "page"
+        self.paged_residual = {"token": 0, "page": 1, "page-head": 2}[residual_layout]
         self.hp_dtype = dtype
         self.N_Q = self.flush_interval = 8
         self.N_H = 1

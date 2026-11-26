@@ -34,7 +34,7 @@ def main():
     p.add_argument('--batches', type=int, nargs='+', default=[1, 2, 4, 8, 16])
     p.add_argument('--repeats', type=int, default=3)
     p.add_argument('--reference', type=Path)
-    p.add_argument('--expected-layout', choices=['token','page'])
+    p.add_argument('--expected-layout', choices=['token','page','page-head'])
     p.add_argument('--expected-page-kernel', choices=['cuda','triton'])
     a = p.parse_args()
     a.out.mkdir(parents=True, exist_ok=False)

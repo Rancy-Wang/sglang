@@ -11,14 +11,14 @@ from sglang.kernels.ops.loopvq.residual_attention_paged_cuda import PagedResidua
 from sglang.kernels.ops.loopvq.residual_attention_paged_triton import PagedTritonAttention
 
 
-def packed_pool(original):
+def packed_pool(original,layout=1):
     p=copy.copy(original)
     for kind in ('k','v'):
-        setattr(p,kind+'_indices',page_pack(getattr(original,kind+'_indices')))
+        setattr(p,kind+'_indices',page_pack(getattr(original,kind+'_indices'),layout))
         for suffix in ('residual','residual_scale'):
             x=getattr(original,kind+'_'+suffix)
-            y=torch.stack([page_pack(t) for t in x])
-            torch.testing.assert_close(torch.stack([page_unpack(t) for t in y]),x,atol=0,rtol=0)
+            y=torch.stack([page_pack(t,layout) for t in x])
+            torch.testing.assert_close(torch.stack([page_unpack(t,layout) for t in y]),x,atol=0,rtol=0)
             setattr(p,kind+'_'+suffix,y)
     p.get_key_buffer=lambda layer:p.k_indices
     p.get_value_buffer=lambda layer:p.v_indices
@@ -36,11 +36,12 @@ def main():
     ap.add_argument('--remapped',action='store_true')
     ap.add_argument('--cache-mode',type=int,choices=[0,1,2],default=0)
     ap.add_argument('--triton',action='store_true')
+    ap.add_argument('--layout',type=int,choices=[1,2],default=1)
     args=ap.parse_args()
     torch.manual_seed(20261126)
     torch.backends.cuda.matmul.allow_tf32=False
     original=reference.make_pool(direct=True)
-    pool=packed_pool(original)
+    pool=packed_pool(original,args.layout)
     opts=dict(threads=256,staged=True,cooperative=False) if args.staged else {}
     if args.remapped:
         assert not args.staged
@@ -51,13 +52,13 @@ def main():
         opts=dict(cooperative=False,cache_mode=args.cache_mode)
     if args.triton:
         assert not opts and args.compact
-        attn=PagedTritonAttention(pool,max_batch=16)
+        attn=PagedTritonAttention(pool,max_batch=16,layout=args.layout)
     else:
-        attn=PagedResidualAttention(pool,max_batch=16,compact=args.compact,**opts)
+        attn=PagedResidualAttention(pool,max_batch=16,compact=args.compact,layout=args.layout,**opts)
     theta=torch.arange(32768,device='cuda').float()[:,None]/(10000**(torch.arange(64,device='cuda').float()[None]/64))
     rope=torch.cat((theta.cos(),theta.sin()),-1).contiguous()
     result={'source_sha':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
-            'compact':args.compact,'staged':args.staged,'remapped':args.remapped,'cache_mode':args.cache_mode,'triton':args.triton,'cases':[]}
+            'layout':args.layout,'compact':args.compact,'staged':args.staged,'remapped':args.remapped,'cache_mode':args.cache_mode,'triton':args.triton,'cases':[]}
     for b in (1,2,3,8,16):
         for n in (0,1,7,8,63,64,71,72,79,80,127,128,1023,1024,1025,2048,4096,8192,16384,32768):
             q=torch.randn(b,24,128,device='cuda').bfloat16()[:,:8]
