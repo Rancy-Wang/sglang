@@ -1,6 +1,6 @@
 # VQ+ INT4 残差 attention 与 SGLang 接入计划
 
-状态：仅设计，未修改推理源码、未启动新算子实验。用户要求停止并删除上一轮准确率评测，然后制定本计划。历史残差训练/独立评测研究已用10/10轮，保持原计数；本计划不借改名继续旧任务的第11轮。后续实施预算在实施授权时明确。
+状态（最终）：批准后的实现与验证已完成10/10轮，测试源码4f9f8398d0955824e7c64dfcf63a826bbb70dc05。准确率保持取消；GPU已释放，结果已同步本地。完整吞吐、profile、数值与限制见[results.md](results.md)，机器可读数据见[results.json](results.json)。大batch仍慢于BF16，不宣称最优性能。以下保留原计划及逐轮记录。
 
 更新：用户已批准本计划并要求每轮验证后重新审视性能瓶颈。开始新的SGLang VQ+算子实现，按项目默认最多10轮执行；旧的独立准确率任务仍为已取消10/10，不重启。本实现的完整交付范围为上文批准的缓存、编码、融合attention、生命周期及真实serve配对验证，不以局部kernel通过代替完成。
 
@@ -203,3 +203,10 @@ R9初步结果：a427732609d57dc766d19f28be611b0ad500ca1b，A12 GPU1，CPU合同
 ### 候选10/10（最后一轮）
 
 目的：检验大batch stage1是否受每CTA完整shared码本搬运/占用限制。步骤：新增可选global码本lookup，省掉64KiB shared表及K/V复制，以只读全局缓存加载中心；保留QK/softmax/PV数学及现有分派。默认仍shared，提供显式--loopvq-residual-codebook=global用于验证/选择，不自动覆盖现有有效路径。范围R1/R2 CUDA与分派、模型参数/兼容hook/backend接线；GPU测试新增--global-table和--correctness-only（sanitizer不重复计时）；同进程pair支持global/shared。风险为非合并global gather和L1/L2压力反而更慢。成功标准原oracle/LSE/图全部不变、同卡交错收益及真实TP2生命周期/纯decode可复现；失败则保留shared，不放宽标准。此轮后不再改源码/测试，若有剩余问题如实交付并等待新预算，不以新任务名规避。
+
+
+R10最终结果：4f9f8398d0955824e7c64dfcf63a826bbb70dc05。A12 CPU20项、shared/global完整codec/oracle/LSE/graph/odd batch均exit0，最大output绝对差1.5259e-5；global R1/R2 memcheck 0errors。R8异步两路径memcheck/racecheck均0errors/0hazards。A10 global生命周期/timing/profile及server退出均0；输出逐ID匹配R9 shared，R9与R7 eager/fullgraph亦逐ID匹配。A12 final shared/global的1K/4K/8K全部client/server退出0。228计时批次均通过实际batch/fullgraph/no-retraction检查；同卡逐行配对，2K A10卡4/5，其余A12卡2/3、4/5、6/7。global B1在2K/4K/8K分别为BF16的1.034/1.109/1.203x；B16在1K/2K/4K为0.675/0.659/0.572x，不能宣称普遍加速。8KB16 BF16容量超80GiB/rank，明确缺失不外推。
+
+性能复查：global相对shared在真实提示多数shape略好，但2KB16 attention stage1仍38.580ms，对照BF16 19.940ms；完整graph57.620vs38.482ms。正常图间隔约0.081ms，flush尖峰2.755ms，当前主要问题是GPU主attention而非CPU提交；内部QK/PV/softmax未独立计时，NCU计数器无权限，不假造stall/bandwidth证据。后续候选应优先group32协作scale/packed加载和global下R1/R2/split重新匹配，再优化flush；均未执行第11轮。
+
+收尾：本地reports/vqplus-20261126保留原始tar、trace与summary，Git只保存本目录结果摘要。A10GPU4/5和A12GPU0–7均已释放，无本任务serve/client/kernel进程，tmux仅监控窗口保留，X5/A系列持久连接保留。shutdown临时目录NFS清理异常保留原始stderr，不影响已完成请求与exit0。正式分支未更新，用户未跟踪snapshots保留。此后仅文档归档提交，不计新的修改+验证候选。

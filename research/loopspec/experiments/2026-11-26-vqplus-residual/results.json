@@ -1,0 +1,2258 @@
+{
+  "tested_source_sha": "4f9f8398d0955824e7c64dfcf63a826bbb70dc05",
+  "protocol": {
+    "model": "Ouro-2.6B-Thinking",
+    "ut_steps": 4,
+    "tp": 2,
+    "dp": 1,
+    "gpu": "A100-SXM4-80GB",
+    "precision": "BF16 weights, original VQ 0.5bit; VQ+ 0.5bit indices + INT4 group32 FP16 scales",
+    "high_precision_window": [
+      8,
+      64
+    ],
+    "page_size": 8,
+    "cuda_graph": true,
+    "temperature": 0,
+    "ignore_eos": true,
+    "warmup_output_tokens": 32,
+    "repeats": 3,
+    "measurement": "common completion-count barrier 2..128, excludes prefill/first decode; aggregate batch tokens/s; graph and active batch independently verified from server logs",
+    "source_notes": "BF16/original A10 R3; A12 R7. Shared A10 R9 and A12 R10; global R10. Baseline math unchanged across these commits. Same physical GPU pair per row; no cross-host speedup. Sequential method runs, not randomized/interleaved serving; same-process interleaved kernel ablations separate."
+  },
+  "rows": [
+    {
+      "input_tokens": 1024,
+      "output_tokens": 128,
+      "batch": 1,
+      "host": "A12",
+      "gpu_pair": [
+        2,
+        3
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 52.03545230658587,
+          "repeats_tokens_s": [
+            52.03545230658587,
+            52.03878617881649,
+            52.0271595542873
+          ],
+          "summary": "a12-r7-context1024/bf16-timing/summary.json",
+          "sha256": "91ae186da2bdd8b5968d356c2138498b05f6d8bb0b226778a74785f4adc20242",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 47.30188964707054,
+          "repeats_tokens_s": [
+            47.30221818356393,
+            47.30188964707054,
+            47.271682025078995
+          ],
+          "summary": "a12-r7-context1024/loopvq-timing/summary.json",
+          "sha256": "755afdeb5675c9da109b86cb1ffaf153c7271f6245cea2a381a54da7fcd36f0d",
+          "relative_to_bf16": 0.9090319685966057
+        },
+        "shared": {
+          "median_tokens_s": 50.30833642140048,
+          "repeats_tokens_s": [
+            50.31521604345442,
+            50.29888240419387,
+            50.30833642140048
+          ],
+          "summary": "a12-r10-context1024/vqplus-timing/summary.json",
+          "sha256": "a5327e8f225c7146f9de0c85395935e64a367eb8f7fa9381639ffb4139a2fceb",
+          "relative_to_bf16": 0.9668088618696067
+        },
+        "global": {
+          "median_tokens_s": 51.30732562161668,
+          "repeats_tokens_s": [
+            51.30732562161668,
+            51.306628243019674,
+            51.31549936072839
+          ],
+          "summary": "a12-r10-global-context1024/vqplus-timing/summary.json",
+          "sha256": "08699be3b0453157c216ff12ba10efcac313ef3c5f66fb8896da1703d4b9b04c",
+          "relative_to_bf16": 0.9860071037591993
+        }
+      }
+    },
+    {
+      "input_tokens": 1024,
+      "output_tokens": 128,
+      "batch": 2,
+      "host": "A12",
+      "gpu_pair": [
+        2,
+        3
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 100.24541717932046,
+          "repeats_tokens_s": [
+            100.24541717932046,
+            100.33139060575654,
+            100.24235032698611
+          ],
+          "summary": "a12-r7-context1024/bf16-timing/summary.json",
+          "sha256": "91ae186da2bdd8b5968d356c2138498b05f6d8bb0b226778a74785f4adc20242",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 85.72461329105096,
+          "repeats_tokens_s": [
+            85.70150741818541,
+            85.72461329105096,
+            85.72875994182309
+          ],
+          "summary": "a12-r7-context1024/loopvq-timing/summary.json",
+          "sha256": "755afdeb5675c9da109b86cb1ffaf153c7271f6245cea2a381a54da7fcd36f0d",
+          "relative_to_bf16": 0.8551474541495052
+        },
+        "shared": {
+          "median_tokens_s": 88.04597412432115,
+          "repeats_tokens_s": [
+            88.03510078741755,
+            88.04597412432115,
+            88.06301289704695
+          ],
+          "summary": "a12-r10-context1024/vqplus-timing/summary.json",
+          "sha256": "a5327e8f225c7146f9de0c85395935e64a367eb8f7fa9381639ffb4139a2fceb",
+          "relative_to_bf16": 0.8783042317717451
+        },
+        "global": {
+          "median_tokens_s": 91.23941276572988,
+          "repeats_tokens_s": [
+            91.24822480605259,
+            91.23779775725836,
+            91.23941276572988
+          ],
+          "summary": "a12-r10-global-context1024/vqplus-timing/summary.json",
+          "sha256": "08699be3b0453157c216ff12ba10efcac313ef3c5f66fb8896da1703d4b9b04c",
+          "relative_to_bf16": 0.9101604375840893
+        }
+      }
+    },
+    {
+      "input_tokens": 1024,
+      "output_tokens": 128,
+      "batch": 4,
+      "host": "A12",
+      "gpu_pair": [
+        2,
+        3
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 194.3037247777802,
+          "repeats_tokens_s": [
+            194.57488745257533,
+            194.3037247777802,
+            194.11650459768384
+          ],
+          "summary": "a12-r7-context1024/bf16-timing/summary.json",
+          "sha256": "91ae186da2bdd8b5968d356c2138498b05f6d8bb0b226778a74785f4adc20242",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 171.5391629567554,
+          "repeats_tokens_s": [
+            171.55924589248556,
+            171.5125627674814,
+            171.5391629567554
+          ],
+          "summary": "a12-r7-context1024/loopvq-timing/summary.json",
+          "sha256": "755afdeb5675c9da109b86cb1ffaf153c7271f6245cea2a381a54da7fcd36f0d",
+          "relative_to_bf16": 0.8828403220418961
+        },
+        "shared": {
+          "median_tokens_s": 154.42000639039236,
+          "repeats_tokens_s": [
+            154.40283673310196,
+            154.43985406861162,
+            154.42000639039236
+          ],
+          "summary": "a12-r10-context1024/vqplus-timing/summary.json",
+          "sha256": "a5327e8f225c7146f9de0c85395935e64a367eb8f7fa9381639ffb4139a2fceb",
+          "relative_to_bf16": 0.7947351836255238
+        },
+        "global": {
+          "median_tokens_s": 156.66707128329574,
+          "repeats_tokens_s": [
+            156.66707128329574,
+            156.6657978616866,
+            156.6832245963877
+          ],
+          "summary": "a12-r10-global-context1024/vqplus-timing/summary.json",
+          "sha256": "08699be3b0453157c216ff12ba10efcac313ef3c5f66fb8896da1703d4b9b04c",
+          "relative_to_bf16": 0.8062998867493227
+        }
+      }
+    },
+    {
+      "input_tokens": 1024,
+      "output_tokens": 128,
+      "batch": 8,
+      "host": "A12",
+      "gpu_pair": [
+        2,
+        3
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 328.1646903039329,
+          "repeats_tokens_s": [
+            327.4227929964047,
+            328.3931946042229,
+            328.1646903039329
+          ],
+          "summary": "a12-r7-context1024/bf16-timing/summary.json",
+          "sha256": "91ae186da2bdd8b5968d356c2138498b05f6d8bb0b226778a74785f4adc20242",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 278.88175744461984,
+          "repeats_tokens_s": [
+            278.98108413812525,
+            278.85778296311616,
+            278.88175744461984
+          ],
+          "summary": "a12-r7-context1024/loopvq-timing/summary.json",
+          "sha256": "755afdeb5675c9da109b86cb1ffaf153c7271f6245cea2a381a54da7fcd36f0d",
+          "relative_to_bf16": 0.84982256069759
+        },
+        "shared": {
+          "median_tokens_s": 242.36053034084213,
+          "repeats_tokens_s": [
+            242.40510051413412,
+            242.32593857531853,
+            242.36053034084213
+          ],
+          "summary": "a12-r10-context1024/vqplus-timing/summary.json",
+          "sha256": "a5327e8f225c7146f9de0c85395935e64a367eb8f7fa9381639ffb4139a2fceb",
+          "relative_to_bf16": 0.7385332349936173
+        },
+        "global": {
+          "median_tokens_s": 244.6701321064808,
+          "repeats_tokens_s": [
+            244.6701321064808,
+            244.698798555178,
+            244.6648353745721
+          ],
+          "summary": "a12-r10-global-context1024/vqplus-timing/summary.json",
+          "sha256": "08699be3b0453157c216ff12ba10efcac313ef3c5f66fb8896da1703d4b9b04c",
+          "relative_to_bf16": 0.7455711700118535
+        }
+      }
+    },
+    {
+      "input_tokens": 1024,
+      "output_tokens": 128,
+      "batch": 16,
+      "host": "A12",
+      "gpu_pair": [
+        2,
+        3
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 525.6178980629577,
+          "repeats_tokens_s": [
+            524.0439986893668,
+            525.6178980629577,
+            526.0792832946204
+          ],
+          "summary": "a12-r7-context1024/bf16-timing/summary.json",
+          "sha256": "91ae186da2bdd8b5968d356c2138498b05f6d8bb0b226778a74785f4adc20242",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 500.811015749816,
+          "repeats_tokens_s": [
+            500.745696762162,
+            500.811015749816,
+            501.0114776956048
+          ],
+          "summary": "a12-r7-context1024/loopvq-timing/summary.json",
+          "sha256": "755afdeb5675c9da109b86cb1ffaf153c7271f6245cea2a381a54da7fcd36f0d",
+          "relative_to_bf16": 0.9528043424613932
+        },
+        "shared": {
+          "median_tokens_s": 354.635145515921,
+          "repeats_tokens_s": [
+            354.58039361494866,
+            354.635145515921,
+            354.66062545944146
+          ],
+          "summary": "a12-r10-context1024/vqplus-timing/summary.json",
+          "sha256": "a5327e8f225c7146f9de0c85395935e64a367eb8f7fa9381639ffb4139a2fceb",
+          "relative_to_bf16": 0.6747014263076775
+        },
+        "global": {
+          "median_tokens_s": 354.59506409613164,
+          "repeats_tokens_s": [
+            354.58745069189774,
+            354.6124934637077,
+            354.59506409613164
+          ],
+          "summary": "a12-r10-global-context1024/vqplus-timing/summary.json",
+          "sha256": "08699be3b0453157c216ff12ba10efcac313ef3c5f66fb8896da1703d4b9b04c",
+          "relative_to_bf16": 0.6746251704953525
+        }
+      }
+    },
+    {
+      "input_tokens": 2048,
+      "output_tokens": 128,
+      "batch": 1,
+      "host": "A10",
+      "gpu_pair": [
+        4,
+        5
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 47.466435517238544,
+          "repeats_tokens_s": [
+            47.47191716605443,
+            47.45033942437494,
+            47.466435517238544
+          ],
+          "summary": "r3-bf16-timing/summary.json",
+          "sha256": "e623573462bc41d7667903da2b9a3bd71dd8c5a26f7e1095a146a0800d8e0f69",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 46.832153283749,
+          "repeats_tokens_s": [
+            46.832153283749,
+            46.8366815781261,
+            46.82633163002779
+          ],
+          "summary": "r3-loopvq-timing/summary.json",
+          "sha256": "e768df04dd4050999699f1599427df6a0eed6e99fdc84684a1fa1d6763d071f0",
+          "relative_to_bf16": 0.986637247423831
+        },
+        "shared": {
+          "median_tokens_s": 47.56404971620736,
+          "repeats_tokens_s": [
+            47.56404971620736,
+            47.570465569294875,
+            47.556746684666585
+          ],
+          "summary": "r9-vqplus-timing/summary.json",
+          "sha256": "e362b30f4583eff19d240ed2b565f405bff9fd4956311228d66b78d687e3109e",
+          "relative_to_bf16": 1.0020564889253873
+        },
+        "global": {
+          "median_tokens_s": 49.06197542853883,
+          "repeats_tokens_s": [
+            49.074215621366136,
+            49.059224838568056,
+            49.06197542853883
+          ],
+          "summary": "r10-global-timing/summary.json",
+          "sha256": "ce751b6f406e8257fe5110a2c81429c52b9c50740991aa04f3dbb2a3385ac510",
+          "relative_to_bf16": 1.0336140663168363
+        }
+      }
+    },
+    {
+      "input_tokens": 2048,
+      "output_tokens": 128,
+      "batch": 2,
+      "host": "A10",
+      "gpu_pair": [
+        4,
+        5
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 90.39090875728499,
+          "repeats_tokens_s": [
+            90.32758388818239,
+            90.39090875728499,
+            90.45818468577583
+          ],
+          "summary": "r3-bf16-timing/summary.json",
+          "sha256": "e623573462bc41d7667903da2b9a3bd71dd8c5a26f7e1095a146a0800d8e0f69",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 84.70744073841958,
+          "repeats_tokens_s": [
+            84.70744073841958,
+            84.72502425622395,
+            84.7026223919022
+          ],
+          "summary": "r3-loopvq-timing/summary.json",
+          "sha256": "e768df04dd4050999699f1599427df6a0eed6e99fdc84684a1fa1d6763d071f0",
+          "relative_to_bf16": 0.9371234552566952
+        },
+        "shared": {
+          "median_tokens_s": 83.20977910604074,
+          "repeats_tokens_s": [
+            83.20977910604074,
+            83.21033497321835,
+            83.20557636053928
+          ],
+          "summary": "r9-vqplus-timing/summary.json",
+          "sha256": "e362b30f4583eff19d240ed2b565f405bff9fd4956311228d66b78d687e3109e",
+          "relative_to_bf16": 0.9205547355373226
+        },
+        "global": {
+          "median_tokens_s": 85.30658488218367,
+          "repeats_tokens_s": [
+            85.30583782464218,
+            85.30658488218367,
+            85.31916362205892
+          ],
+          "summary": "r10-global-timing/summary.json",
+          "sha256": "ce751b6f406e8257fe5110a2c81429c52b9c50740991aa04f3dbb2a3385ac510",
+          "relative_to_bf16": 0.9437518225560316
+        }
+      }
+    },
+    {
+      "input_tokens": 2048,
+      "output_tokens": 128,
+      "batch": 4,
+      "host": "A10",
+      "gpu_pair": [
+        4,
+        5
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 170.30830477953097,
+          "repeats_tokens_s": [
+            170.10456745033892,
+            170.46519387609732,
+            170.30830477953097
+          ],
+          "summary": "r3-bf16-timing/summary.json",
+          "sha256": "e623573462bc41d7667903da2b9a3bd71dd8c5a26f7e1095a146a0800d8e0f69",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 143.33110665182036,
+          "repeats_tokens_s": [
+            143.3186607873813,
+            143.33652849354883,
+            143.33110665182036
+          ],
+          "summary": "r3-loopvq-timing/summary.json",
+          "sha256": "e768df04dd4050999699f1599427df6a0eed6e99fdc84684a1fa1d6763d071f0",
+          "relative_to_bf16": 0.8415978706227311
+        },
+        "shared": {
+          "median_tokens_s": 123.73813750787811,
+          "repeats_tokens_s": [
+            123.73813750787811,
+            123.7426049550439,
+            123.73166736975546
+          ],
+          "summary": "r9-vqplus-timing/summary.json",
+          "sha256": "e362b30f4583eff19d240ed2b565f405bff9fd4956311228d66b78d687e3109e",
+          "relative_to_bf16": 0.7265537500831842
+        },
+        "global": {
+          "median_tokens_s": 127.58327918616627,
+          "repeats_tokens_s": [
+            127.55033897113051,
+            127.59861836120334,
+            127.58327918616627
+          ],
+          "summary": "r10-global-timing/summary.json",
+          "sha256": "ce751b6f406e8257fe5110a2c81429c52b9c50740991aa04f3dbb2a3385ac510",
+          "relative_to_bf16": 0.7491312848855287
+        }
+      }
+    },
+    {
+      "input_tokens": 2048,
+      "output_tokens": 128,
+      "batch": 8,
+      "host": "A10",
+      "gpu_pair": [
+        4,
+        5
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 262.8819727777796,
+          "repeats_tokens_s": [
+            263.215386633214,
+            262.30953300090465,
+            262.8819727777796
+          ],
+          "summary": "r3-bf16-timing/summary.json",
+          "sha256": "e623573462bc41d7667903da2b9a3bd71dd8c5a26f7e1095a146a0800d8e0f69",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 257.6285393944919,
+          "repeats_tokens_s": [
+            257.66887955081677,
+            257.62278724794254,
+            257.6285393944919
+          ],
+          "summary": "r3-loopvq-timing/summary.json",
+          "sha256": "e768df04dd4050999699f1599427df6a0eed6e99fdc84684a1fa1d6763d071f0",
+          "relative_to_bf16": 0.9800159998505164
+        },
+        "shared": {
+          "median_tokens_s": 178.7119077524391,
+          "repeats_tokens_s": [
+            178.71785036419152,
+            178.70932931069066,
+            178.7119077524391
+          ],
+          "summary": "r9-vqplus-timing/summary.json",
+          "sha256": "e362b30f4583eff19d240ed2b565f405bff9fd4956311228d66b78d687e3109e",
+          "relative_to_bf16": 0.6798180410168655
+        },
+        "global": {
+          "median_tokens_s": 185.81959723147796,
+          "repeats_tokens_s": [
+            185.8391262792714,
+            185.81959723147796,
+            185.80559556513924
+          ],
+          "summary": "r10-global-timing/summary.json",
+          "sha256": "ce751b6f406e8257fe5110a2c81429c52b9c50740991aa04f3dbb2a3385ac510",
+          "relative_to_bf16": 0.7068556100214437
+        }
+      }
+    },
+    {
+      "input_tokens": 2048,
+      "output_tokens": 128,
+      "batch": 16,
+      "host": "A10",
+      "gpu_pair": [
+        4,
+        5
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 418.6165408027149,
+          "repeats_tokens_s": [
+            419.3348671230319,
+            418.6165408027149,
+            417.7382158985148
+          ],
+          "summary": "r3-bf16-timing/summary.json",
+          "sha256": "e623573462bc41d7667903da2b9a3bd71dd8c5a26f7e1095a146a0800d8e0f69",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 413.4586676757683,
+          "repeats_tokens_s": [
+            413.4586676757683,
+            413.4651562455395,
+            413.4068203725819
+          ],
+          "summary": "r3-loopvq-timing/summary.json",
+          "sha256": "e768df04dd4050999699f1599427df6a0eed6e99fdc84684a1fa1d6763d071f0",
+          "relative_to_bf16": 0.987678764157154
+        },
+        "shared": {
+          "median_tokens_s": 272.39016816079356,
+          "repeats_tokens_s": [
+            272.40534764891476,
+            272.39016816079356,
+            272.381853338146
+          ],
+          "summary": "r9-vqplus-timing/summary.json",
+          "sha256": "e362b30f4583eff19d240ed2b565f405bff9fd4956311228d66b78d687e3109e",
+          "relative_to_bf16": 0.6506913645563883
+        },
+        "global": {
+          "median_tokens_s": 275.7155631404352,
+          "repeats_tokens_s": [
+            275.7235284050421,
+            275.7155631404352,
+            275.69352914823406
+          ],
+          "summary": "r10-global-timing/summary.json",
+          "sha256": "ce751b6f406e8257fe5110a2c81429c52b9c50740991aa04f3dbb2a3385ac510",
+          "relative_to_bf16": 0.6586351380471946
+        }
+      }
+    },
+    {
+      "input_tokens": 4096,
+      "output_tokens": 128,
+      "batch": 1,
+      "host": "A12",
+      "gpu_pair": [
+        4,
+        5
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 41.06783229639118,
+          "repeats_tokens_s": [
+            41.06987301055995,
+            41.06783229639118,
+            41.06292099665454
+          ],
+          "summary": "a12-r7-context4096/bf16-timing/summary.json",
+          "sha256": "3a6fbfc1f165639e2afc182c4a81269c8150bea34b9a07bcbd1e2ff38f7e70b0",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 41.848501506045174,
+          "repeats_tokens_s": [
+            41.84791731688994,
+            41.848501506045174,
+            41.85085517476188
+          ],
+          "summary": "a12-r7-context4096/loopvq-timing/summary.json",
+          "sha256": "d604f95307b39cb04ccce8f41eb51b5706ca25de1cfd19485805241f513c7a06",
+          "relative_to_bf16": 1.019009262627251
+        },
+        "shared": {
+          "median_tokens_s": 43.798469593628965,
+          "repeats_tokens_s": [
+            43.80496596695679,
+            43.798469593628965,
+            43.789188827449195
+          ],
+          "summary": "a12-r10-context4096/vqplus-timing/summary.json",
+          "sha256": "b7d0b4896412752e37c493d46c064a860f04f3579171ccc479d95d52cd1d0b88",
+          "relative_to_bf16": 1.0664909040616137
+        },
+        "global": {
+          "median_tokens_s": 45.55625401353479,
+          "repeats_tokens_s": [
+            45.54529379518155,
+            45.56737606365467,
+            45.55625401353479
+          ],
+          "summary": "a12-r10-global-context4096/vqplus-timing/summary.json",
+          "sha256": "0e5e56aab94b3a188080be6d4238c1a7b064e2f8548e411a6fcf937ebabe20a6",
+          "relative_to_bf16": 1.1092928812202738
+        }
+      }
+    },
+    {
+      "input_tokens": 4096,
+      "output_tokens": 128,
+      "batch": 2,
+      "host": "A12",
+      "gpu_pair": [
+        4,
+        5
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 77.5649001697713,
+          "repeats_tokens_s": [
+            77.6000190982648,
+            77.5649001697713,
+            77.56393396449138
+          ],
+          "summary": "a12-r7-context4096/bf16-timing/summary.json",
+          "sha256": "3a6fbfc1f165639e2afc182c4a81269c8150bea34b9a07bcbd1e2ff38f7e70b0",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 71.50269834488832,
+          "repeats_tokens_s": [
+            71.41249477272808,
+            71.50269834488832,
+            71.52089166042205
+          ],
+          "summary": "a12-r7-context4096/loopvq-timing/summary.json",
+          "sha256": "d604f95307b39cb04ccce8f41eb51b5706ca25de1cfd19485805241f513c7a06",
+          "relative_to_bf16": 0.9218434909138765
+        },
+        "shared": {
+          "median_tokens_s": 72.84504721101457,
+          "repeats_tokens_s": [
+            72.84213996749777,
+            72.86519364661964,
+            72.84504721101457
+          ],
+          "summary": "a12-r10-context4096/vqplus-timing/summary.json",
+          "sha256": "b7d0b4896412752e37c493d46c064a860f04f3579171ccc479d95d52cd1d0b88",
+          "relative_to_bf16": 0.9391496289117103
+        },
+        "global": {
+          "median_tokens_s": 75.83190395220149,
+          "repeats_tokens_s": [
+            75.83190395220149,
+            75.8414540945039,
+            75.82127280656806
+          ],
+          "summary": "a12-r10-global-context4096/vqplus-timing/summary.json",
+          "sha256": "0e5e56aab94b3a188080be6d4238c1a7b064e2f8548e411a6fcf937ebabe20a6",
+          "relative_to_bf16": 0.9776574686001439
+        }
+      }
+    },
+    {
+      "input_tokens": 4096,
+      "output_tokens": 128,
+      "batch": 4,
+      "host": "A12",
+      "gpu_pair": [
+        4,
+        5
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 142.3442643249476,
+          "repeats_tokens_s": [
+            142.22815705263758,
+            142.3442643249476,
+            142.44004630630957
+          ],
+          "summary": "a12-r7-context4096/bf16-timing/summary.json",
+          "sha256": "3a6fbfc1f165639e2afc182c4a81269c8150bea34b9a07bcbd1e2ff38f7e70b0",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 136.5272939489522,
+          "repeats_tokens_s": [
+            136.5229067672828,
+            136.54355857926453,
+            136.5272939489522
+          ],
+          "summary": "a12-r7-context4096/loopvq-timing/summary.json",
+          "sha256": "d604f95307b39cb04ccce8f41eb51b5706ca25de1cfd19485805241f513c7a06",
+          "relative_to_bf16": 0.959134494083188
+        },
+        "shared": {
+          "median_tokens_s": 87.81376774098075,
+          "repeats_tokens_s": [
+            87.85413434100359,
+            87.81376774098075,
+            87.80387018774452
+          ],
+          "summary": "a12-r10-context4096/vqplus-timing/summary.json",
+          "sha256": "b7d0b4896412752e37c493d46c064a860f04f3579171ccc479d95d52cd1d0b88",
+          "relative_to_bf16": 0.616911177681996
+        },
+        "global": {
+          "median_tokens_s": 91.29726702733163,
+          "repeats_tokens_s": [
+            91.2847600680034,
+            91.30033957464279,
+            91.29726702733163
+          ],
+          "summary": "a12-r10-global-context4096/vqplus-timing/summary.json",
+          "sha256": "0e5e56aab94b3a188080be6d4238c1a7b064e2f8548e411a6fcf937ebabe20a6",
+          "relative_to_bf16": 0.6413835321029556
+        }
+      }
+    },
+    {
+      "input_tokens": 4096,
+      "output_tokens": 128,
+      "batch": 8,
+      "host": "A12",
+      "gpu_pair": [
+        4,
+        5
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 200.86883859473522,
+          "repeats_tokens_s": [
+            200.30505513712131,
+            200.98385263973734,
+            200.86883859473522
+          ],
+          "summary": "a12-r7-context4096/bf16-timing/summary.json",
+          "sha256": "3a6fbfc1f165639e2afc182c4a81269c8150bea34b9a07bcbd1e2ff38f7e70b0",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 211.11354283345852,
+          "repeats_tokens_s": [
+            211.10648061728588,
+            211.11354283345852,
+            211.14216435099806
+          ],
+          "summary": "a12-r7-context4096/loopvq-timing/summary.json",
+          "sha256": "d604f95307b39cb04ccce8f41eb51b5706ca25de1cfd19485805241f513c7a06",
+          "relative_to_bf16": 1.0510019588423698
+        },
+        "shared": {
+          "median_tokens_s": 136.21373377733767,
+          "repeats_tokens_s": [
+            136.21373377733767,
+            136.16986250499264,
+            136.2511526290083
+          ],
+          "summary": "a12-r10-context4096/vqplus-timing/summary.json",
+          "sha256": "b7d0b4896412752e37c493d46c064a860f04f3579171ccc479d95d52cd1d0b88",
+          "relative_to_bf16": 0.6781227727022255
+        },
+        "global": {
+          "median_tokens_s": 140.62305799504028,
+          "repeats_tokens_s": [
+            140.62305799504028,
+            140.60015594540027,
+            140.63583310087967
+          ],
+          "summary": "a12-r10-global-context4096/vqplus-timing/summary.json",
+          "sha256": "0e5e56aab94b3a188080be6d4238c1a7b064e2f8548e411a6fcf937ebabe20a6",
+          "relative_to_bf16": 0.7000740332787787
+        }
+      }
+    },
+    {
+      "input_tokens": 4096,
+      "output_tokens": 128,
+      "batch": 16,
+      "host": "A12",
+      "gpu_pair": [
+        4,
+        5
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 309.26006871030694,
+          "repeats_tokens_s": [
+            307.7213698465373,
+            309.26006871030694,
+            309.44232632555094
+          ],
+          "summary": "a12-r7-context4096/bf16-timing/summary.json",
+          "sha256": "3a6fbfc1f165639e2afc182c4a81269c8150bea34b9a07bcbd1e2ff38f7e70b0",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 297.50710214996616,
+          "repeats_tokens_s": [
+            297.46697741095346,
+            297.51811227348793,
+            297.50710214996616
+          ],
+          "summary": "a12-r7-context4096/loopvq-timing/summary.json",
+          "sha256": "d604f95307b39cb04ccce8f41eb51b5706ca25de1cfd19485805241f513c7a06",
+          "relative_to_bf16": 0.9619964950232546
+        },
+        "shared": {
+          "median_tokens_s": 170.59598470164428,
+          "repeats_tokens_s": [
+            170.57404808377805,
+            170.59841490780667,
+            170.59598470164428
+          ],
+          "summary": "a12-r10-context4096/vqplus-timing/summary.json",
+          "sha256": "b7d0b4896412752e37c493d46c064a860f04f3579171ccc479d95d52cd1d0b88",
+          "relative_to_bf16": 0.5516262911441263
+        },
+        "global": {
+          "median_tokens_s": 177.01731850908857,
+          "repeats_tokens_s": [
+            177.01731850908857,
+            177.0026774505071,
+            177.01850182644432
+          ],
+          "summary": "a12-r10-global-context4096/vqplus-timing/summary.json",
+          "sha256": "0e5e56aab94b3a188080be6d4238c1a7b064e2f8548e411a6fcf937ebabe20a6",
+          "relative_to_bf16": 0.5723898311453391
+        }
+      }
+    },
+    {
+      "input_tokens": 8192,
+      "output_tokens": 128,
+      "batch": 1,
+      "host": "A12",
+      "gpu_pair": [
+        6,
+        7
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 31.970387618441794,
+          "repeats_tokens_s": [
+            31.970387618441794,
+            31.968553139865964,
+            31.979761078405097
+          ],
+          "summary": "a12-r7-context8192/bf16-timing/summary.json",
+          "sha256": "858616483e375eb827e90977ed1fd6f65e4f7683297edcc9ba00d2751233ea07",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 40.08565262888494,
+          "repeats_tokens_s": [
+            40.08565262888494,
+            40.0889038260403,
+            40.05204095114819
+          ],
+          "summary": "a12-r7-context8192/loopvq-timing/summary.json",
+          "sha256": "9990ffbf13ca63cab20e550bdae8920ee3feed013da86144bddb97e8a7c1d23d",
+          "relative_to_bf16": 1.2538369289511502
+        },
+        "shared": {
+          "median_tokens_s": 37.090592201089144,
+          "repeats_tokens_s": [
+            37.093919843000144,
+            37.086116893034934,
+            37.090592201089144
+          ],
+          "summary": "a12-r10-context8192/vqplus-timing/summary.json",
+          "sha256": "990a2755fedeaea58265b41ff58934aa69cb91dff8053c2db62df19933547ea9",
+          "relative_to_bf16": 1.1601545981786536
+        },
+        "global": {
+          "median_tokens_s": 38.46964555180823,
+          "repeats_tokens_s": [
+            38.47290456414352,
+            38.46964555180823,
+            38.460263005152385
+          ],
+          "summary": "a12-r10-global-context8192/vqplus-timing/summary.json",
+          "sha256": "7c81204f0c8d34a651f8b319ee44dc3cb4712355469faa2776352e9a02b0e908",
+          "relative_to_bf16": 1.2032899322627355
+        }
+      }
+    },
+    {
+      "input_tokens": 8192,
+      "output_tokens": 128,
+      "batch": 2,
+      "host": "A12",
+      "gpu_pair": [
+        6,
+        7
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 59.67165649806066,
+          "repeats_tokens_s": [
+            59.67165649806066,
+            59.67802571424636,
+            59.6239803054133
+          ],
+          "summary": "a12-r7-context8192/bf16-timing/summary.json",
+          "sha256": "858616483e375eb827e90977ed1fd6f65e4f7683297edcc9ba00d2751233ea07",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 67.69074786744085,
+          "repeats_tokens_s": [
+            67.6658634467957,
+            67.69074786744085,
+            67.70797112691652
+          ],
+          "summary": "a12-r7-context8192/loopvq-timing/summary.json",
+          "sha256": "9990ffbf13ca63cab20e550bdae8920ee3feed013da86144bddb97e8a7c1d23d",
+          "relative_to_bf16": 1.1343869408023022
+        },
+        "shared": {
+          "median_tokens_s": 56.81587611724545,
+          "repeats_tokens_s": [
+            56.82989421859837,
+            56.81587611724545,
+            56.81255823110114
+          ],
+          "summary": "a12-r10-context8192/vqplus-timing/summary.json",
+          "sha256": "990a2755fedeaea58265b41ff58934aa69cb91dff8053c2db62df19933547ea9",
+          "relative_to_bf16": 0.9521417612915098
+        },
+        "global": {
+          "median_tokens_s": 59.90919625662796,
+          "repeats_tokens_s": [
+            59.887230348523254,
+            59.91168194985683,
+            59.90919625662796
+          ],
+          "summary": "a12-r10-global-context8192/vqplus-timing/summary.json",
+          "sha256": "7c81204f0c8d34a651f8b319ee44dc3cb4712355469faa2776352e9a02b0e908",
+          "relative_to_bf16": 1.0039807803655496
+        }
+      }
+    },
+    {
+      "input_tokens": 8192,
+      "output_tokens": 128,
+      "batch": 4,
+      "host": "A12",
+      "gpu_pair": [
+        6,
+        7
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 106.58332336073299,
+          "repeats_tokens_s": [
+            106.59184537005986,
+            106.58332336073299,
+            106.41422377289085
+          ],
+          "summary": "a12-r7-context8192/bf16-timing/summary.json",
+          "sha256": "858616483e375eb827e90977ed1fd6f65e4f7683297edcc9ba00d2751233ea07",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 111.86169936359906,
+          "repeats_tokens_s": [
+            111.87389065733412,
+            111.86169936359906,
+            111.76913625321026
+          ],
+          "summary": "a12-r7-context8192/loopvq-timing/summary.json",
+          "sha256": "9990ffbf13ca63cab20e550bdae8920ee3feed013da86144bddb97e8a7c1d23d",
+          "relative_to_bf16": 1.0495234698678078
+        },
+        "shared": {
+          "median_tokens_s": 65.49676344358268,
+          "repeats_tokens_s": [
+            65.49625335056349,
+            65.49676344358268,
+            65.50225750296863
+          ],
+          "summary": "a12-r10-context8192/vqplus-timing/summary.json",
+          "sha256": "990a2755fedeaea58265b41ff58934aa69cb91dff8053c2db62df19933547ea9",
+          "relative_to_bf16": 0.6145123024725718
+        },
+        "global": {
+          "median_tokens_s": 69.0633324875143,
+          "repeats_tokens_s": [
+            69.06358659997308,
+            69.06054469317407,
+            69.0633324875143
+          ],
+          "summary": "a12-r10-global-context8192/vqplus-timing/summary.json",
+          "sha256": "7c81204f0c8d34a651f8b319ee44dc3cb4712355469faa2776352e9a02b0e908",
+          "relative_to_bf16": 0.647975033146305
+        }
+      }
+    },
+    {
+      "input_tokens": 8192,
+      "output_tokens": 128,
+      "batch": 8,
+      "host": "A12",
+      "gpu_pair": [
+        6,
+        7
+      ],
+      "methods": {
+        "bf16": {
+          "median_tokens_s": 134.48222155129523,
+          "repeats_tokens_s": [
+            134.70932045626918,
+            134.48222155129523,
+            134.3178749720121
+          ],
+          "summary": "a12-r7-context8192/bf16-timing/summary.json",
+          "sha256": "858616483e375eb827e90977ed1fd6f65e4f7683297edcc9ba00d2751233ea07",
+          "relative_to_bf16": 1.0
+        },
+        "loopvq": {
+          "median_tokens_s": 148.8445631164681,
+          "repeats_tokens_s": [
+            148.8445631164681,
+            148.78944757225577,
+            148.89050454126436
+          ],
+          "summary": "a12-r7-context8192/loopvq-timing/summary.json",
+          "sha256": "9990ffbf13ca63cab20e550bdae8920ee3feed013da86144bddb97e8a7c1d23d",
+          "relative_to_bf16": 1.1067973253229957
+        },
+        "shared": {
+          "median_tokens_s": 83.82242043541851,
+          "repeats_tokens_s": [
+            83.8107194688446,
+            83.82242043541851,
+            83.82697346937739
+          ],
+          "summary": "a12-r10-context8192/vqplus-timing/summary.json",
+          "sha256": "990a2755fedeaea58265b41ff58934aa69cb91dff8053c2db62df19933547ea9",
+          "relative_to_bf16": 0.6232974103825786
+        },
+        "global": {
+          "median_tokens_s": 89.92776455844351,
+          "repeats_tokens_s": [
+            89.92776455844351,
+            89.91161959964248,
+            89.93710124387648
+          ],
+          "summary": "a12-r10-global-context8192/vqplus-timing/summary.json",
+          "sha256": "7c81204f0c8d34a651f8b319ee44dc3cb4712355469faa2776352e9a02b0e908",
+          "relative_to_bf16": 0.6686963043969539
+        }
+      }
+    }
+  ],
+  "omitted": [
+    {
+      "input_tokens": 8192,
+      "batch": 16,
+      "reason": "BF16 KV capacity exceeds 80GiB/rank; no unpaired ratio"
+    }
+  ],
+  "profile": [
+    {
+      "method": "r3-bf16-profile",
+      "batch": 1,
+      "rank": 0,
+      "trace": "r3-bf16-profile/b1-r0/1795689385.9833832-TP-0.trace.json.gz",
+      "steps": 10,
+      "graph_ms": 21.55862529296875,
+      "intra_graph_uncovered_ms": 0.18365068359375,
+      "kernel_components_ms": {
+        "other": 0.0244223,
+        "tp_communication": 1.2115497000000006,
+        "norm": 2.867397900000029,
+        "linear_gemm_gemv": 9.923588000000077,
+        "fused_rope": 0.46376890000000015,
+        "kv_write": 0.3538735000000045,
+        "attention_bf16": 4.764849700000008,
+        "attention_reduce": 0.729163300000013,
+        "residual_connection_add": 0.6611950999999898,
+        "mlp_activation": 0.3788107000000094
+      },
+      "kernel_counts_per_step": {
+        "other": 2.0,
+        "tp_communication": 386.0,
+        "norm": 772.0,
+        "linear_gemm_gemv": 769.0,
+        "fused_rope": 192.0,
+        "kv_write": 192.0,
+        "attention_bf16": 192.0,
+        "attention_reduce": 192.0,
+        "residual_connection_add": 384.0,
+        "mlp_activation": 192.0
+      },
+      "between_graph_ms": [
+        0.0842880859375,
+        0.082048828125,
+        0.0826875,
+        0.0833271484375,
+        0.0829765625,
+        0.0823681640625,
+        0.083775390625,
+        0.082912109375,
+        0.0831357421875
+      ],
+      "attention_stage1_by_loop_ms": [
+        1.1914623,
+        1.1911638,
+        1.1914194,
+        1.1908042
+      ],
+      "flush_kernel_total_ms_in_10_step_trace": {}
+    },
+    {
+      "method": "r3-bf16-profile",
+      "batch": 1,
+      "rank": 1,
+      "trace": "r3-bf16-profile/b1-r0/1795689385.9833832-TP-1.trace.json.gz",
+      "steps": 10,
+      "graph_ms": 21.76048232421875,
+      "intra_graph_uncovered_ms": 0.191155078125,
+      "kernel_components_ms": {
+        "other": 0.0239773,
+        "tp_communication": 1.3742930000000038,
+        "norm": 2.88050269999997,
+        "linear_gemm_gemv": 9.975571400000048,
+        "fused_rope": 0.4347790000000017,
+        "kv_write": 0.34617050000000227,
+        "attention_bf16": 4.7771029,
+        "attention_reduce": 0.720817400000015,
+        "residual_connection_add": 0.6693059999999923,
+        "mlp_activation": 0.37160570000000487
+      },
+      "kernel_counts_per_step": {
+        "other": 2.0,
+        "tp_communication": 386.0,
+        "norm": 772.0,
+        "linear_gemm_gemv": 769.0,
+        "fused_rope": 192.0,
+        "kv_write": 192.0,
+        "attention_bf16": 192.0,
+        "attention_reduce": 192.0,
+        "residual_connection_add": 384.0,
+        "mlp_activation": 192.0
+      },
+      "between_graph_ms": [
+        0.08281640625,
+        0.0813759765625,
+        0.0814716796875,
+        0.0810869140625,
+        0.0832646484375,
+        0.0817587890625,
+        0.0815361328125,
+        0.0809912109375,
+        0.0825595703125
+      ],
+      "attention_stage1_by_loop_ms": [
+        1.194946,
+        1.1946314,
+        1.192692,
+        1.1948335
+      ],
+      "flush_kernel_total_ms_in_10_step_trace": {}
+    },
+    {
+      "method": "r3-bf16-profile",
+      "batch": 16,
+      "rank": 0,
+      "trace": "r3-bf16-profile/b16-r0/1795689403.2992942-TP-0.trace.json.gz",
+      "steps": 10,
+      "graph_ms": 38.48225302734375,
+      "intra_graph_uncovered_ms": 0.18055166015625002,
+      "kernel_components_ms": {
+        "other": 0.013328000000000001,
+        "tp_communication": 1.6287808000000024,
+        "norm": 2.7014265000000632,
+        "linear_gemm_gemv": 11.135789700000073,
+        "fused_rope": 0.44203380000000003,
+        "kv_write": 0.3738979000000055,
+        "attention_bf16": 19.940479000000003,
+        "attention_reduce": 0.9544245999999912,
+        "residual_connection_add": 0.7760669000000432,
+        "mlp_activation": 0.38949340000000104
+      },
+      "kernel_counts_per_step": {
+        "other": 3.0,
+        "tp_communication": 386.0,
+        "norm": 772.0,
+        "linear_gemm_gemv": 1153.0,
+        "fused_rope": 192.0,
+        "kv_write": 192.0,
+        "attention_bf16": 192.0,
+        "attention_reduce": 192.0,
+        "residual_connection_add": 384.0,
+        "mlp_activation": 192.0
+      },
+      "between_graph_ms": [
+        0.0838076171875,
+        0.084095703125,
+        0.083712890625,
+        0.084609375,
+        0.08483203125,
+        0.0840322265625,
+        0.0835205078125,
+        0.0844794921875,
+        0.0843193359375
+      ],
+      "attention_stage1_by_loop_ms": [
+        4.9905503,
+        4.9940276,
+        4.9812771,
+        4.974624
+      ],
+      "flush_kernel_total_ms_in_10_step_trace": {}
+    },
+    {
+      "method": "r3-bf16-profile",
+      "batch": 16,
+      "rank": 1,
+      "trace": "r3-bf16-profile/b16-r0/1795689403.2992942-TP-1.trace.json.gz",
+      "steps": 10,
+      "graph_ms": 38.48356201171875,
+      "intra_graph_uncovered_ms": 0.189730859375,
+      "kernel_components_ms": {
+        "other": 0.012793700000000002,
+        "tp_communication": 1.4612299999999978,
+        "norm": 2.7287139000000793,
+        "linear_gemm_gemv": 11.138540399999963,
+        "fused_rope": 0.4458323999999997,
+        "kv_write": 0.366665000000005,
+        "attention_bf16": 20.06899599999997,
+        "attention_reduce": 0.9576493999999925,
+        "residual_connection_add": 0.784888400000043,
+        "mlp_activation": 0.38373140000000716
+      },
+      "kernel_counts_per_step": {
+        "other": 3.0,
+        "tp_communication": 386.0,
+        "norm": 772.0,
+        "linear_gemm_gemv": 1153.0,
+        "fused_rope": 192.0,
+        "kv_write": 192.0,
+        "attention_bf16": 192.0,
+        "attention_reduce": 192.0,
+        "residual_connection_add": 384.0,
+        "mlp_activation": 192.0
+      },
+      "between_graph_ms": [
+        0.08383984375,
+        0.0836162109375,
+        0.0817919921875,
+        0.0823681640625,
+        0.0822705078125,
+        0.0823671875,
+        0.082431640625,
+        0.083552734375,
+        0.08252734375
+      ],
+      "attention_stage1_by_loop_ms": [
+        5.0112551,
+        5.0178419000000005,
+        5.031151299999999,
+        5.0087477
+      ],
+      "flush_kernel_total_ms_in_10_step_trace": {}
+    },
+    {
+      "method": "r3-loopvq-profile",
+      "batch": 1,
+      "rank": 0,
+      "trace": "r3-loopvq-profile/b1-r0/1795690075.8125908-TP-0.trace.json.gz",
+      "steps": 10,
+      "graph_ms": 21.87434501953125,
+      "intra_graph_uncovered_ms": 0.19673203125,
+      "kernel_components_ms": {
+        "other": 0.0076095,
+        "tp_communication": 1.254759499999998,
+        "norm": 2.8588375000000172,
+        "linear_gemm_gemv": 9.953420200000021,
+        "fused_rope": 0.46155639999999776,
+        "kv_write": 0.38099130000000814,
+        "tier_metadata": 0.0064608,
+        "lse_fill": 0.28710790000000386,
+        "attention_vq": 3.4432200999999916,
+        "attention_hp": 1.3791135999999975,
+        "attention_reduce": 0.6218405999999865,
+        "residual_connection_add": 0.6490266999999827,
+        "mlp_activation": 0.37649840000000906
+      },
+      "kernel_counts_per_step": {
+        "other": 2.0,
+        "tp_communication": 386.0,
+        "norm": 772.0,
+        "linear_gemm_gemv": 769.0,
+        "fused_rope": 192.0,
+        "kv_write": 192.0,
+        "tier_metadata": 2.0,
+        "lse_fill": 192.0,
+        "attention_vq": 192.0,
+        "attention_hp": 192.0,
+        "attention_reduce": 192.0,
+        "residual_connection_add": 384.0,
+        "mlp_activation": 192.0
+      },
+      "between_graph_ms": [
+        0.081408203125,
+        0.0819521484375,
+        0.081087890625,
+        0.0795517578125,
+        0.079328125,
+        0.262048828125,
+        0.0810859375,
+        0.079744140625,
+        0.0806708984375
+      ],
+      "attention_stage1_by_loop_ms": [
+        0.8621366,
+        0.8605825,
+        0.8600182000000001,
+        0.8604828
+      ],
+      "flush_kernel_total_ms_in_10_step_trace": {
+        "_encode": 0.17270400000000002
+      }
+    },
+    {
+      "method": "r3-loopvq-profile",
+      "batch": 1,
+      "rank": 1,
+      "trace": "r3-loopvq-profile/b1-r0/1795690075.8125908-TP-1.trace.json.gz",
+      "steps": 10,
+      "graph_ms": 21.8391126953125,
+      "intra_graph_uncovered_ms": 0.20562109375,
+      "kernel_components_ms": {
+        "other": 0.0069217,
+        "tp_communication": 1.2875854000000104,
+        "norm": 2.8323472999999764,
+        "linear_gemm_gemv": 10.005243600000004,
+        "fused_rope": 0.43292169999999996,
+        "kv_write": 0.3798069000000088,
+        "tier_metadata": 0.0062302,
+        "lse_fill": 0.26157060000000215,
+        "attention_vq": 3.426308300000001,
+        "attention_hp": 1.3831544999999983,
+        "attention_reduce": 0.6189797999999869,
+        "residual_connection_add": 0.638915499999978,
+        "mlp_activation": 0.35870990000000563
+      },
+      "kernel_counts_per_step": {
+        "other": 2.0,
+        "tp_communication": 386.0,
+        "norm": 772.0,
+        "linear_gemm_gemv": 769.0,
+        "fused_rope": 192.0,
+        "kv_write": 192.0,
+        "tier_metadata": 2.0,
+        "lse_fill": 192.0,
+        "attention_vq": 192.0,
+        "attention_hp": 192.0,
+        "attention_reduce": 192.0,
+        "residual_connection_add": 384.0,
+        "mlp_activation": 192.0
+      },
+      "between_graph_ms": [
+        0.0846083984375,
+        0.08323046875,
+        0.0848642578125,
+        0.0824951171875,
+        0.082431640625,
+        0.2682216796875,
+        0.083935546875,
+        0.0827197265625,
+        0.083583984375
+      ],
+      "attention_stage1_by_loop_ms": [
+        0.8577994,
+        0.8565301000000001,
+        0.8561622000000001,
+        0.8558166
+      ],
+      "flush_kernel_total_ms_in_10_step_trace": {
+        "_encode": 0.172896
+      }
+    },
+    {
+      "method": "r3-loopvq-profile",
+      "batch": 16,
+      "rank": 0,
+      "trace": "r3-loopvq-profile/b16-r0/1795690093.6748607-TP-0.trace.json.gz",
+      "steps": 10,
+      "graph_ms": 38.89256015625,
+      "intra_graph_uncovered_ms": 0.208772265625,
+      "kernel_components_ms": {
+        "other": 0.013366300000000001,
+        "tp_communication": 1.5358055000000008,
+        "norm": 2.733889000000066,
+        "linear_gemm_gemv": 11.554745199999699,
+        "fused_rope": 0.44157089999999977,
+        "kv_write": 0.40870049999999225,
+        "tier_metadata": 0.008924600000000001,
+        "lse_fill": 0.27555050000000864,
+        "attention_vq": 17.75431409999998,
+        "attention_hp": 2.0243024000000127,
+        "attention_reduce": 0.790318399999984,
+        "residual_connection_add": 0.7888315000000407,
+        "mlp_activation": 0.3872572000000044
+      },
+      "kernel_counts_per_step": {
+        "other": 3.0,
+        "tp_communication": 386.0,
+        "norm": 772.0,
+        "linear_gemm_gemv": 1153.0,
+        "fused_rope": 192.0,
+        "kv_write": 192.0,
+        "tier_metadata": 2.0,
+        "lse_fill": 192.0,
+        "attention_vq": 192.0,
+        "attention_hp": 192.0,
+        "attention_reduce": 192.0,
+        "residual_connection_add": 384.0,
+        "mlp_activation": 192.0
+      },
+      "between_graph_ms": [
+        0.0800009765625,
+        0.080671875,
+        0.080927734375,
+        0.07983984375,
+        0.081919921875,
+        1.510400390625,
+        0.0809921875,
+        0.0809287109375,
+        0.0818564453125
+      ],
+      "attention_stage1_by_loop_ms": [
+        4.4477945000000005,
+        4.4357252,
+        4.4353514,
+        4.435443
+      ],
+      "flush_kernel_total_ms_in_10_step_trace": {
+        "_encode": 1.333409
+      }
+    },
+    {
+      "method": "r3-loopvq-profile",
+      "batch": 16,
+      "rank": 1,
+      "trace": "r3-loopvq-profile/b16-r0/1795690093.6748607-TP-1.trace.json.gz",
+      "steps": 10,
+      "graph_ms": 38.8883681640625,
+      "intra_graph_uncovered_ms": 0.2182236328125,
+      "kernel_components_ms": {
+        "other": 0.0130429,
+        "tp_communication": 1.4570123999999995,
+        "norm": 2.741735200000065,
+        "linear_gemm_gemv": 11.607634199999815,
+        "fused_rope": 0.4429493999999994,
+        "kv_write": 0.406281299999992,
+        "tier_metadata": 0.0088444,
+        "lse_fill": 0.26852900000000596,
+        "attention_vq": 17.76564830000001,
+        "attention_hp": 2.0275090000000113,
+        "attention_reduce": 0.7888305999999844,
+        "residual_connection_add": 0.7934842000000407,
+        "mlp_activation": 0.3839987000000068
+      },
+      "kernel_counts_per_step": {
+        "other": 3.0,
+        "tp_communication": 386.0,
+        "norm": 772.0,
+        "linear_gemm_gemv": 1153.0,
+        "fused_rope": 192.0,
+        "kv_write": 192.0,
+        "tier_metadata": 2.0,
+        "lse_fill": 192.0,
+        "attention_vq": 192.0,
+        "attention_hp": 192.0,
+        "attention_reduce": 192.0,
+        "residual_connection_add": 384.0,
+        "mlp_activation": 192.0
+      },
+      "between_graph_ms": [
+        0.0849912109375,
+        0.0849287109375,
+        0.0830400390625,
+        0.0844150390625,
+        0.0834873046875,
+        1.524634765625,
+        0.084671875,
+        0.083646484375,
+        0.0836796875
+      ],
+      "attention_stage1_by_loop_ms": [
+        4.4512212,
+        4.4393392,
+        4.4380504,
+        4.4370375
+      ],
+      "flush_kernel_total_ms_in_10_step_trace": {
+        "_encode": 1.336795
+      }
+    },
+    {
+      "method": "r9-vqplus-profile",
+      "batch": 1,
+      "rank": 0,
+      "trace": "r9-vqplus-profile/b1-r0/1795692439.468482-TP-0.trace.json.gz",
+      "steps": 10,
+      "graph_ms": 21.4807837890625,
+      "intra_graph_uncovered_ms": 0.178694921875,
+      "kernel_components_ms": {
+        "other": 0.007420800000000003,
+        "tp_communication": 1.3167337000000052,
+        "norm": 2.818722800000036,
+        "linear_gemm_gemv": 9.994976700000025,
+        "fused_rope": 0.44167399999999957,
+        "kv_write": 0.3764535000000079,
+        "attention_vqplus_hp": 4.841828500000003,
+        "attention_reduce": 0.4835786999999879,
+        "residual_connection_add": 0.6565458999999854,
+        "mlp_activation": 0.3695335000000042
+      },
+      "kernel_counts_per_step": {
+        "other": 2.0,
+        "tp_communication": 386.0,
+        "norm": 772.0,
+        "linear_gemm_gemv": 769.0,
+        "fused_rope": 192.0,
+        "kv_write": 192.0,
+        "attention_vqplus_hp": 192.0,
+        "attention_reduce": 192.0,
+        "residual_connection_add": 384.0,
+        "mlp_activation": 192.0
+      },
+      "between_graph_ms": [
+        0.0789755859375,
+        0.0785595703125,
+        0.080255859375,
+        0.0782724609375,
+        0.077439453125,
+        0.3503369140625,
+        0.0793916015625,
+        0.0789755859375,
+        0.079359375
+      ],
+      "attention_stage1_by_loop_ms": [
+        1.2111662,
+        1.2092434,
+        1.2106068,
+        1.2108121
+      ],
+      "flush_kernel_total_ms_in_10_step_trace": {
+        "_encode": 0.172545,
+        "_encode_residual": 0.083232
+      }
+    },
+    {
+      "method": "r9-vqplus-profile",
+      "batch": 1,
+      "rank": 1,
+      "trace": "r9-vqplus-profile/b1-r0/1795692439.468482-TP-1.trace.json.gz",
+      "steps": 10,
+      "graph_ms": 21.84314130859375,
+      "intra_graph_uncovered_ms": 0.18739736328125,
+      "kernel_components_ms": {
+        "other": 0.006985699999999999,
+        "tp_communication": 1.5504272999999993,
+        "norm": 2.8788873999999938,
+        "linear_gemm_gemv": 10.050083499999994,
+        "fused_rope": 0.4394535999999983,
+        "kv_write": 0.37516310000000874,
+        "attention_vqplus_hp": 4.848599800000008,
+        "attention_reduce": 0.47462749999998916,
+        "residual_connection_add": 0.6666882999999894,
+        "mlp_activation": 0.3703046000000034
+      },
+      "kernel_counts_per_step": {
+        "other": 2.0,
+        "tp_communication": 386.0,
+        "norm": 772.0,
+        "linear_gemm_gemv": 769.0,
+        "fused_rope": 192.0,
+        "kv_write": 192.0,
+        "attention_vqplus_hp": 192.0,
+        "attention_reduce": 192.0,
+        "residual_connection_add": 384.0,
+        "mlp_activation": 192.0
+      },
+      "between_graph_ms": [
+        0.0844794921875,
+        0.086240234375,
+        0.0839033203125,
+        0.0840625,
+        0.0844794921875,
+        0.356703125,
+        0.0839365234375,
+        0.0843193359375,
+        0.08383984375
+      ],
+      "attention_stage1_by_loop_ms": [
+        1.212502,
+        1.2101576,
+        1.2126984,
+        1.2132418
+      ],
+      "flush_kernel_total_ms_in_10_step_trace": {
+        "_encode": 0.17376,
+        "_encode_residual": 0.082944
+      }
+    },
+    {
+      "method": "r9-vqplus-profile",
+      "batch": 16,
+      "rank": 0,
+      "trace": "r9-vqplus-profile/b16-r0/1795692491.392524-TP-0.trace.json.gz",
+      "steps": 10,
+      "graph_ms": 58.72882001953125,
+      "intra_graph_uncovered_ms": 0.1785841796875,
+      "kernel_components_ms": {
+        "other": 0.0131582,
+        "tp_communication": 1.6701637999999968,
+        "norm": 2.725897100000048,
+        "linear_gemm_gemv": 11.640770299999756,
+        "fused_rope": 0.449608599999999,
+        "kv_write": 0.40204869999999104,
+        "attention_vqplus_hp": 39.70428540000008,
+        "attention_reduce": 0.8236977999999843,
+        "residual_connection_add": 0.7925967000000385,
+        "mlp_activation": 0.38371070000000757
+      },
+      "kernel_counts_per_step": {
+        "other": 3.0,
+        "tp_communication": 386.0,
+        "norm": 772.0,
+        "linear_gemm_gemv": 1153.0,
+        "fused_rope": 192.0,
+        "kv_write": 192.0,
+        "attention_vqplus_hp": 192.0,
+        "attention_reduce": 192.0,
+        "residual_connection_add": 384.0,
+        "mlp_activation": 192.0
+      },
+      "between_graph_ms": [
+        0.0811201171875,
+        0.0818876953125,
+        0.0809599609375,
+        0.081248046875,
+        0.082751953125,
+        2.757896484375,
+        0.0809599609375,
+        0.0801279296875,
+        0.0826884765625
+      ],
+      "attention_stage1_by_loop_ms": [
+        9.9327311,
+        9.9219514,
+        9.9231376,
+        9.9264653
+      ],
+      "flush_kernel_total_ms_in_10_step_trace": {
+        "_encode": 1.333443,
+        "_encode_residual": 1.2439399999999998
+      }
+    },
+    {
+      "method": "r9-vqplus-profile",
+      "batch": 16,
+      "rank": 1,
+      "trace": "r9-vqplus-profile/b16-r0/1795692491.392524-TP-1.trace.json.gz",
+      "steps": 10,
+      "graph_ms": 58.72392646484375,
+      "intra_graph_uncovered_ms": 0.18714111328125,
+      "kernel_components_ms": {
+        "other": 0.012777500000000002,
+        "tp_communication": 1.429956699999994,
+        "norm": 2.7422323000000635,
+        "linear_gemm_gemv": 11.687697199999933,
+        "fused_rope": 0.4474243999999997,
+        "kv_write": 0.4022229999999907,
+        "attention_vqplus_hp": 39.871146599999996,
+        "attention_reduce": 0.8238638999999847,
+        "residual_connection_add": 0.7928065000000403,
+        "mlp_activation": 0.38350370000000733
+      },
+      "kernel_counts_per_step": {
+        "other": 3.0,
+        "tp_communication": 386.0,
+        "norm": 772.0,
+        "linear_gemm_gemv": 1153.0,
+        "fused_rope": 192.0,
+        "kv_write": 192.0,
+        "attention_vqplus_hp": 192.0,
+        "attention_reduce": 192.0,
+        "residual_connection_add": 384.0,
+        "mlp_activation": 192.0
+      },
+      "between_graph_ms": [
+        0.0850234375,
+        0.0844482421875,
+        0.0855361328125,
+        0.0854404296875,
+        0.0848955078125,
+        2.774490234375,
+        0.083966796875,
+        0.0839990234375,
+        0.0856630859375
+      ],
+      "attention_stage1_by_loop_ms": [
+        9.9765235,
+        9.963692499999999,
+        9.9636913,
+        9.9672393
+      ],
+      "flush_kernel_total_ms_in_10_step_trace": {
+        "_encode": 1.334973,
+        "_encode_residual": 1.248126
+      }
+    },
+    {
+      "method": "r10-global-profile",
+      "batch": 1,
+      "rank": 0,
+      "trace": "r10-global-profile/b1-r0/1795693075.8854995-TP-0.trace.json.gz",
+      "steps": 10,
+      "graph_ms": 20.59669931640625,
+      "intra_graph_uncovered_ms": 0.1771171875,
+      "kernel_components_ms": {
+        "other": 0.007484900000000001,
+        "tp_communication": 1.3062183000000052,
+        "norm": 2.8184941000000387,
+        "linear_gemm_gemv": 9.979910199999987,
+        "fused_rope": 0.4414076999999989,
+        "kv_write": 0.37616920000000686,
+        "attention_vqplus_hp": 3.985471099999997,
+        "attention_reduce": 0.48428079999998774,
+        "residual_connection_add": 0.6558497999999844,
+        "mlp_activation": 0.3695787000000042
+      },
+      "kernel_counts_per_step": {
+        "other": 2.0,
+        "tp_communication": 386.0,
+        "norm": 772.0,
+        "linear_gemm_gemv": 769.0,
+        "fused_rope": 192.0,
+        "kv_write": 192.0,
+        "attention_vqplus_hp": 192.0,
+        "attention_reduce": 192.0,
+        "residual_connection_add": 384.0,
+        "mlp_activation": 192.0
+      },
+      "between_graph_ms": [
+        0.079103515625,
+        0.0782724609375,
+        0.08083203125,
+        0.078015625,
+        0.079072265625,
+        0.3501123046875,
+        0.0797119140625,
+        0.0796494140625,
+        0.0790087890625
+      ],
+      "attention_stage1_by_loop_ms": [
+        0.9970709,
+        0.9977044,
+        0.9956067000000001,
+        0.9950891000000001
+      ],
+      "flush_kernel_total_ms_in_10_step_trace": {
+        "_encode": 0.173632,
+        "_encode_residual": 0.082433
+      }
+    },
+    {
+      "method": "r10-global-profile",
+      "batch": 1,
+      "rank": 1,
+      "trace": "r10-global-profile/b1-r0/1795693075.8854995-TP-1.trace.json.gz",
+      "steps": 10,
+      "graph_ms": 20.59710986328125,
+      "intra_graph_uncovered_ms": 0.18525078125,
+      "kernel_components_ms": {
+        "other": 0.006969500000000001,
+        "tp_communication": 1.1910457999999957,
+        "norm": 2.878049999999998,
+        "linear_gemm_gemv": 10.03579050000001,
+        "fused_rope": 0.4401138999999989,
+        "kv_write": 0.37492930000000946,
+        "attention_vqplus_hp": 3.981208399999992,
+        "attention_reduce": 0.47405839999998917,
+        "residual_connection_add": 0.665614599999989,
+        "mlp_activation": 0.36970780000000386
+      },
+      "kernel_counts_per_step": {
+        "other": 2.0,
+        "tp_communication": 386.0,
+        "norm": 772.0,
+        "linear_gemm_gemv": 769.0,
+        "fused_rope": 192.0,
+        "kv_write": 192.0,
+        "attention_vqplus_hp": 192.0,
+        "attention_reduce": 192.0,
+        "residual_connection_add": 384.0,
+        "mlp_activation": 192.0
+      },
+      "between_graph_ms": [
+        0.08451171875,
+        0.083263671875,
+        0.0856953125,
+        0.084703125,
+        0.0839677734375,
+        0.357150390625,
+        0.08287890625,
+        0.0829443359375,
+        0.08319921875
+      ],
+      "attention_stage1_by_loop_ms": [
+        0.9976801,
+        0.9949005,
+        0.9940293,
+        0.9945985
+      ],
+      "flush_kernel_total_ms_in_10_step_trace": {
+        "_encode": 0.17331000000000002,
+        "_encode_residual": 0.08291100000000001
+      }
+    },
+    {
+      "method": "r10-global-profile",
+      "batch": 16,
+      "rank": 0,
+      "trace": "r10-global-profile/b16-r0/1795693095.326216-TP-0.trace.json.gz",
+      "steps": 10,
+      "graph_ms": 57.62015263671875,
+      "intra_graph_uncovered_ms": 0.17748359375,
+      "kernel_components_ms": {
+        "other": 0.013145600000000002,
+        "tp_communication": 1.7040234999999977,
+        "norm": 2.7313516000000493,
+        "linear_gemm_gemv": 11.607285599999823,
+        "fused_rope": 0.449707599999999,
+        "kv_write": 0.40115169999999056,
+        "attention_vqplus_hp": 38.58026560000009,
+        "attention_reduce": 0.8305907999999886,
+        "residual_connection_add": 0.7944129000000395,
+        "mlp_activation": 0.3832885000000076
+      },
+      "kernel_counts_per_step": {
+        "other": 3.0,
+        "tp_communication": 386.0,
+        "norm": 772.0,
+        "linear_gemm_gemv": 1153.0,
+        "fused_rope": 192.0,
+        "kv_write": 192.0,
+        "attention_vqplus_hp": 192.0,
+        "attention_reduce": 192.0,
+        "residual_connection_add": 384.0,
+        "mlp_activation": 192.0
+      },
+      "between_graph_ms": [
+        0.080705078125,
+        0.082080078125,
+        0.0813759765625,
+        0.083904296875,
+        0.08118359375,
+        2.754951171875,
+        0.0813115234375,
+        0.083904296875,
+        0.0809921875
+      ],
+      "attention_stage1_by_loop_ms": [
+        9.6578324,
+        9.642126,
+        9.6403562,
+        9.639951
+      ],
+      "flush_kernel_total_ms_in_10_step_trace": {
+        "_encode": 1.335172,
+        "_encode_residual": 1.238468
+      }
+    },
+    {
+      "method": "r10-global-profile",
+      "batch": 16,
+      "rank": 1,
+      "trace": "r10-global-profile/b16-r0/1795693095.326216-TP-1.trace.json.gz",
+      "steps": 10,
+      "graph_ms": 57.61631953125,
+      "intra_graph_uncovered_ms": 0.18579111328125,
+      "kernel_components_ms": {
+        "other": 0.0128194,
+        "tp_communication": 1.4306295999999945,
+        "norm": 2.748300700000048,
+        "linear_gemm_gemv": 11.65578510000002,
+        "fused_rope": 0.4477126999999987,
+        "kv_write": 0.4023215999999909,
+        "attention_vqplus_hp": 38.77733109999995,
+        "attention_reduce": 0.830953699999988,
+        "residual_connection_add": 0.79510320000004,
+        "mlp_activation": 0.3840224000000075
+      },
+      "kernel_counts_per_step": {
+        "other": 3.0,
+        "tp_communication": 386.0,
+        "norm": 772.0,
+        "linear_gemm_gemv": 1153.0,
+        "fused_rope": 192.0,
+        "kv_write": 192.0,
+        "attention_vqplus_hp": 192.0,
+        "attention_reduce": 192.0,
+        "residual_connection_add": 384.0,
+        "mlp_activation": 192.0
+      },
+      "between_graph_ms": [
+        0.0856962890625,
+        0.0841591796875,
+        0.0838076171875,
+        0.08614453125,
+        0.08550390625,
+        2.767833984375,
+        0.0862080078125,
+        0.083455078125,
+        0.083775390625
+      ],
+      "attention_stage1_by_loop_ms": [
+        9.7067196,
+        9.6916519,
+        9.6887761,
+        9.6901835
+      ],
+      "flush_kernel_total_ms_in_10_step_trace": {
+        "_encode": 1.335677,
+        "_encode_residual": 1.24147
+      }
+    }
+  ],
+  "lifecycle": {
+    "methods": [
+      "r7-vqplus-lifecycle",
+      "r7-eager-lifecycle",
+      "r9-vqplus-lifecycle",
+      "r10-global-lifecycle"
+    ],
+    "rows": [
+      {
+        "label": "before",
+        "requests": 1,
+        "lengths": [
+          128
+        ],
+        "matched": true
+      },
+      {
+        "label": "after",
+        "requests": 1,
+        "lengths": [
+          128
+        ],
+        "matched": true
+      },
+      {
+        "label": "pad3",
+        "requests": 3,
+        "lengths": [
+          48,
+          48,
+          48
+        ],
+        "matched": true
+      },
+      {
+        "label": "pad5",
+        "requests": 5,
+        "lengths": [
+          48,
+          48,
+          48,
+          48,
+          48
+        ],
+        "matched": true
+      },
+      {
+        "label": "pad15",
+        "requests": 15,
+        "lengths": [
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48
+        ],
+        "matched": true
+      },
+      {
+        "label": "pad16",
+        "requests": 16,
+        "lengths": [
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48,
+          48
+        ],
+        "matched": true
+      }
+    ]
+  },
+  "numerical_audit": {
+    "source_sha": "a427732609d57dc766d19f28be611b0ad500ca1b",
+    "model": "/homes/ruoxi07/experiments/loopspec/tp2-20261106/models/Ouro-2.6B-Thinking",
+    "book": "/homes/ruoxi07/experiments/loopvq/2026-11-26-residual/artifacts/residual-ft",
+    "layers": [
+      0,
+      23,
+      47
+    ],
+    "heads": [
+      0,
+      7,
+      8,
+      15
+    ],
+    "tokens": 256,
+    "full_loops": 4,
+    "torch": "2.8.0+cu128",
+    "gpu": "NVIDIA A100-SXM4-80GB",
+    "training_codec_sha256": "6154b5840de3dd2dfbd66804089ccaae2849138205068a95caf31aad2fd37206",
+    "rows": [
+      {
+        "kind": "k",
+        "layer": 0,
+        "code_count": 32768,
+        "assignment_mismatches_same_input": 0,
+        "input_definition_assignment_mismatches": 270,
+        "deployed_vs_training_assignment_mismatches": 270,
+        "raw_vs_training_input": {
+          "max_abs": 0.03718090057373047,
+          "rmse": 0.003445225302129984,
+          "relative_rms": 0.0019825315102934837
+        },
+        "base_reconstruction_error": {
+          "max_abs": 2.0625,
+          "rmse": 0.2703554034233093,
+          "relative_rms": 0.15557417273521423
+        },
+        "residual_reconstruction_error": {
+          "max_abs": 0.1484375,
+          "rmse": 0.030383195728063583,
+          "relative_rms": 0.017483804374933243
+        },
+        "deployed_vs_training_reconstruction": {
+          "max_abs": 0.2890625,
+          "rmse": 0.015751557424664497,
+          "relative_rms": 0.00906239915639162
+        }
+      },
+      {
+        "kind": "k",
+        "layer": 23,
+        "code_count": 32768,
+        "assignment_mismatches_same_input": 0,
+        "input_definition_assignment_mismatches": 127,
+        "deployed_vs_training_assignment_mismatches": 127,
+        "raw_vs_training_input": {
+          "max_abs": 0.036678314208984375,
+          "rmse": 0.0026617832481861115,
+          "relative_rms": 0.0016260613920167089
+        },
+        "base_reconstruction_error": {
+          "max_abs": 5.623046875,
+          "rmse": 0.5836548805236816,
+          "relative_rms": 0.3565499484539032
+        },
+        "residual_reconstruction_error": {
+          "max_abs": 0.40625,
+          "rmse": 0.06787896156311035,
+          "relative_rms": 0.04146669805049896
+        },
+        "deployed_vs_training_reconstruction": {
+          "max_abs": 0.685546875,
+          "rmse": 0.02040037326514721,
+          "relative_rms": 0.01245239470154047
+        }
+      },
+      {
+        "kind": "k",
+        "layer": 47,
+        "code_count": 32768,
+        "assignment_mismatches_same_input": 0,
+        "input_definition_assignment_mismatches": 152,
+        "deployed_vs_training_assignment_mismatches": 152,
+        "raw_vs_training_input": {
+          "max_abs": 0.024845123291015625,
+          "rmse": 0.002675697673112154,
+          "relative_rms": 0.0016163933323696256
+        },
+        "base_reconstruction_error": {
+          "max_abs": 4.5625,
+          "rmse": 0.554720401763916,
+          "relative_rms": 0.3351075053215027
+        },
+        "residual_reconstruction_error": {
+          "max_abs": 0.3203125,
+          "rmse": 0.06221434101462364,
+          "relative_rms": 0.037583786994218826
+        },
+        "deployed_vs_training_reconstruction": {
+          "max_abs": 0.625,
+          "rmse": 0.01989525929093361,
+          "relative_rms": 0.012009190395474434
+        }
+      },
+      {
+        "kind": "v",
+        "layer": 0,
+        "code_count": 32768,
+        "assignment_mismatches_same_input": 0,
+        "input_definition_assignment_mismatches": 0,
+        "deployed_vs_training_assignment_mismatches": 0,
+        "raw_vs_training_input": {
+          "max_abs": 0.0,
+          "rmse": 0.0,
+          "relative_rms": 0.0
+        },
+        "base_reconstruction_error": {
+          "max_abs": 0.35400390625,
+          "rmse": 0.05625171586871147,
+          "relative_rms": 0.5588605403900146
+        },
+        "residual_reconstruction_error": {
+          "max_abs": 0.024658203125,
+          "rmse": 0.005547007080167532,
+          "relative_rms": 0.05510948970913887
+        },
+        "deployed_vs_training_reconstruction": {
+          "max_abs": 0.0,
+          "rmse": 0.0,
+          "relative_rms": 0.0
+        }
+      },
+      {
+        "kind": "v",
+        "layer": 23,
+        "code_count": 32768,
+        "assignment_mismatches_same_input": 0,
+        "input_definition_assignment_mismatches": 0,
+        "deployed_vs_training_assignment_mismatches": 0,
+        "raw_vs_training_input": {
+          "max_abs": 0.0,
+          "rmse": 0.0,
+          "relative_rms": 0.0
+        },
+        "base_reconstruction_error": {
+          "max_abs": 1.484375,
+          "rmse": 0.24536530673503876,
+          "relative_rms": 0.6051837205886841
+        },
+        "residual_reconstruction_error": {
+          "max_abs": 0.10546875,
+          "rmse": 0.02358388341963291,
+          "relative_rms": 0.05816870555281639
+        },
+        "deployed_vs_training_reconstruction": {
+          "max_abs": 0.0,
+          "rmse": 0.0,
+          "relative_rms": 0.0
+        }
+      },
+      {
+        "kind": "v",
+        "layer": 47,
+        "code_count": 32768,
+        "assignment_mismatches_same_input": 0,
+        "input_definition_assignment_mismatches": 0,
+        "deployed_vs_training_assignment_mismatches": 0,
+        "raw_vs_training_input": {
+          "max_abs": 0.0,
+          "rmse": 0.0,
+          "relative_rms": 0.0
+        },
+        "base_reconstruction_error": {
+          "max_abs": 0.94140625,
+          "rmse": 0.13650846481323242,
+          "relative_rms": 0.4892233908176422
+        },
+        "residual_reconstruction_error": {
+          "max_abs": 0.06640625,
+          "rmse": 0.013450007885694504,
+          "relative_rms": 0.04820256680250168
+        },
+        "deployed_vs_training_reconstruction": {
+          "max_abs": 0.0,
+          "rmse": 0.0,
+          "relative_rms": 0.0
+        }
+      }
+    ]
+  },
+  "evidence_local": "/Users/x.puppet/Desktop/Undergraduate/Project/LoopSpec/reports/vqplus-20261126",
+  "evidence_remote": "A10/A12 shared /homes/ruoxi07/experiments/loopvq/2026-11-26-vqplus",
+  "rounds_used": 10,
+  "round_budget": 10
+}
