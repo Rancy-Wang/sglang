@@ -32,17 +32,21 @@ def main():
     ap.add_argument('--output',type=Path,required=True)
     ap.add_argument('--compact',action=argparse.BooleanOptionalAction,default=True)
     ap.add_argument('--staged',action='store_true')
+    ap.add_argument('--remapped',action='store_true')
     args=ap.parse_args()
     torch.manual_seed(20261126)
     torch.backends.cuda.matmul.allow_tf32=False
     original=reference.make_pool(direct=True)
     pool=packed_pool(original)
     opts=dict(threads=256,staged=True,cooperative=False) if args.staged else {}
+    if args.remapped:
+        assert not args.staged
+        opts=dict(threads=256,remapped=True,cooperative=False,waves=4)
     attn=PagedResidualAttention(pool,max_batch=16,compact=args.compact,**opts)
     theta=torch.arange(32768,device='cuda').float()[:,None]/(10000**(torch.arange(64,device='cuda').float()[None]/64))
     rope=torch.cat((theta.cos(),theta.sin()),-1).contiguous()
     result={'source_sha':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
-            'compact':args.compact,'staged':args.staged,'cases':[]}
+            'compact':args.compact,'staged':args.staged,'remapped':args.remapped,'cases':[]}
     for b in (1,2,3,8,16):
         for n in (0,1,7,8,63,64,71,72,79,80,127,128,1023,1024,1025,2048,4096,8192,16384,32768):
             q=torch.randn(b,24,128,device='cuda').bfloat16()[:,:8]
@@ -51,7 +55,7 @@ def main():
             attn.partial.fill_(float('nan'));attn.lse.fill_(float('nan'))
             expected,lse=reference.oracle(q,original,ptr,loc,rope,return_lse=True)
             got=attn.forward(q,0,ptr,loc,rope,128**-.5)
-            active=min(32,max(1,(2*attn.sm_count+b*8-1)//(b*8))) if args.compact else 32
+            active=min(32,max(1,(attn.waves*attn.sm_count+b*8-1)//(b*8))) if args.compact else 32
             torch.testing.assert_close(got,expected,atol=.002,rtol=.01)
             torch.testing.assert_close(attn.lse[:b,:,:active].logsumexp(-1),lse,atol=2e-5,rtol=2e-5)
             result['cases'].append({'batch':b,'length':n,'max_abs':(got.float()-expected.float()).abs().max().item()})

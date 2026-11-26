@@ -200,7 +200,8 @@ def main():
     ap.add_argument('--inner',type=int,default=16)
     ap.add_argument('--correctness-only',action='store_true')
     names=['current','old_r1','plain_reader','paged','scalar_int4','materialized',
-           'page_only','coop_only','compact','compact_plain','staged','staged_scalar']
+           'page_only','coop_only','compact','compact_plain','staged','staged_scalar',
+           'direct256','remapped','remapped_plain']
     ap.add_argument('--variants',nargs='+',choices=names,default=names)
     ap.add_argument('--profile-one',choices=names)
     args=ap.parse_args()
@@ -252,6 +253,9 @@ def main():
                 'compact_plain':lambda:PagedResidualAttention(pool,max_batch=batch,compact=True,layout=False,cooperative=False),
                 'staged':lambda:PagedResidualAttention(pp,max_batch=batch,threads=256,compact=True,cooperative=False,staged=True),
                 'staged_scalar':lambda:PagedResidualAttention(spp,max_batch=batch,threads=256,compact=True,cooperative=False,staged=True,scalar=True),
+                'direct256':lambda:PagedResidualAttention(pp,max_batch=batch,threads=256,compact=True,cooperative=False,waves=4),
+                'remapped':lambda:PagedResidualAttention(pp,max_batch=batch,threads=256,compact=True,cooperative=False,waves=4,remapped=True),
+                'remapped_plain':lambda:PagedResidualAttention(pool,max_batch=batch,threads=256,compact=True,cooperative=False,waves=4,remapped=True,layout=False),
             }
             readers={name:factory() for name,factory in factories.items() if name in args.variants}
             for loop in args.loops:

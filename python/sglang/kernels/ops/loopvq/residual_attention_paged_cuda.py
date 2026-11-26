@@ -124,11 +124,26 @@ void residual_init()''')
 _COMPACT = _replace_once(_COMPACT,
     'dim3 grid(q.size(0), q.size(1), SPLITS);',
     'dim3 grid(q.size(0), q.size(1), std::min<int64_t>(SPLITS, target));')
+_pv_start = _COMPACT.index('    // Four tokens per warp,')
+_pv_end = _COMPACT.index('    __syncthreads();\n    if (tid < 128)', _pv_start)
+_REMAPPED = _COMPACT[:_pv_start] + r'''
+    // One token per warp; each lane owns four channels throughout PV.
+    float acc[4] = {};
+    for (int n = warp; n < count; n += WARPS) {
+        float v[4];
+        row4(VI, table, VR, VS, HV, (int)LOC[begin + start + n], offset, H, h, lane, v);
+        const float p = prob[n];
+#pragma unroll
+        for (int j = 0; j < 4; ++j) acc[j] = fmaf(p, bf(v[j]), acc[j]);
+    }
+#pragma unroll
+    for (int j = 0; j < 4; ++j) values[warp * 128 + lane * 4 + j] = acc[j];
+''' + _COMPACT[_pv_end:]
 _EXT = {}
 
 
-def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False, compact=False, staged=False):
-    key = (threads, bool(layout), bool(cooperative), bool(scalar), bool(compact), bool(staged))
+def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False, compact=False, staged=False, remapped=False):
+    key = (threads, bool(layout), bool(cooperative), bool(scalar), bool(compact), bool(staged), bool(remapped))
     with torch.cuda.device(device):
         if torch.cuda.is_current_stream_capturing():
             raise RuntimeError('Prepare page VQ+ before graph capture')
@@ -139,13 +154,17 @@ def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False,
         if key not in _EXT:
             from torch.utils.cpp_extension import load_inline
             source = _COMPACT if compact else _SRC
+            if remapped:
+                if not compact or cooperative or staged:
+                    raise ValueError('Remapped PV requires compact, unshuffled direct loads')
+                source = _REMAPPED
             if staged:
                 if not compact or not layout or cooperative:
                     raise ValueError('Staging requires compact page layout without scale shuffle')
                 from .residual_attention_staged_source import staged_source
                 source = staged_source(source, _replace_once)
             ext = load_inline(
-                name=(f'loopvq_page_r{3 if staged else 2 if compact else 1}_t{threads}_l{int(layout)}'
+                name=(f'loopvq_page_r{4 if remapped else 3 if staged else 2 if compact else 1}_t{threads}_l{int(layout)}'
                       f'_c{int(cooperative)}_s{int(scalar)}'),
                 cpp_sources='#include <torch/extension.h>\nvoid residual_init();\n'
                 'void residual_cuda(' + ','.join(['torch::Tensor'] * 16) + ',int64_t,double,int64_t);',
@@ -162,12 +181,15 @@ def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False,
 
 
 class PagedResidualAttention:
-    def __init__(self, pool, *, max_batch, threads=512, layout=True, cooperative=True, scalar=False, compact=False, staged=False):
+    def __init__(self, pool, *, max_batch, threads=512, layout=True, cooperative=True, scalar=False, compact=False, staged=False, remapped=False, waves=2):
         self.pool = pool
         self.splits = 32
         self.compact = compact
+        if waves not in (2, 4):
+            raise ValueError('Supported active CTA targets are two or four per SM')
+        self.waves = waves
         self.extension = prepare(pool.hp_k.device, threads=threads, layout=layout,
-                                 cooperative=cooperative, scalar=scalar, compact=compact, staged=staged)
+                                 cooperative=cooperative, scalar=scalar, compact=compact, staged=staged, remapped=remapped)
         self.sm_count = torch.cuda.get_device_properties(pool.hp_k.device).multi_processor_count
         self.partial = torch.empty((max_batch, pool.head_num, 32, 128), device=pool.hp_k.device)
         self.lse = torch.empty((max_batch, pool.head_num, 32), device=pool.hp_k.device)
@@ -177,7 +199,7 @@ class PagedResidualAttention:
         if q.dtype != torch.bfloat16 or q.shape[1:] != (p.head_num, 128) or b > self.partial.shape[0]:
             raise ValueError('Page VQ+ requires BF16 [B,H,128] within capacity')
         out = torch.empty_like(q)
-        active = min(32, max(1, (2 * self.sm_count + b * p.head_num - 1) // (b * p.head_num)))
+        active = min(32, max(1, (self.waves * self.sm_count + b * p.head_num - 1) // (b * p.head_num)))
         self.extension.residual_cuda(q, p.get_key_buffer(layer_id), p.get_value_buffer(layer_id),
             p.k_book.cb16[layer_id], p.v_book.cb16[layer_id],
             p.k_residual[layer_id], p.v_residual[layer_id],
