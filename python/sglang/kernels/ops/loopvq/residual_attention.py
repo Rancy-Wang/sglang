@@ -69,7 +69,17 @@ def _stage1(Q, KI, VI, KC, VC, KR, VR, KS, VS, HK, HV, PTR, LOC, ROPE, OUT, LSE,
 
 
 class ResidualAttention:
-    def __init__(self, pool, *, max_batch, max_context_len, splits=16, block=32):
+    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda"):
+        if implementation not in ("cuda", "triton"):
+            raise ValueError("Unknown residual attention implementation")
+        if splits is None:
+            splits = 32 if implementation == "cuda" else 16
+        self.extension = None
+        if implementation == "cuda":
+            if splits != 32 or not 0 < max_context_len <= 32768:
+                raise ValueError("VQ+ shared CUDA requires 32 splits and context <= 32768")
+            from .residual_attention_cuda import prepare
+            self.extension = prepare(pool.hp_k.device)
         if pool.head_dim != 128 or not pool.residual_bits == 4:
             raise ValueError("VQ+ requires D128 and INT4 group32")
         self.pool, self.splits, self.block = pool, splits, block
@@ -82,6 +92,17 @@ class ResidualAttention:
         if q.shape != (b, pool.head_num, 128) or q.dtype != torch.bfloat16 or b > self.max_batch:
             raise ValueError("VQ+ requires BF16 [batch,local_heads,128] within capacity")
         out = torch.empty_like(q)
+        if self.extension is not None:
+            self.extension.residual_cuda(
+                q, pool.get_key_buffer(layer_id), pool.get_value_buffer(layer_id),
+                pool.k_book.cb16[layer_id], pool.v_book.cb16[layer_id],
+                pool.k_residual[layer_id], pool.v_residual[layer_id],
+                pool.k_residual_scale[layer_id], pool.v_residual_scale[layer_id],
+                pool.get_hp_key_buffer(layer_id), pool.get_hp_value_buffer(layer_id),
+                kv_indptr, kv_indices, cos_sin_cache, self.partial, self.lse,
+                pool.hp_global_offset, float(sm_scale),
+            )
+            return official_reduce(self.partial[:b], self.lse[:b], out)
         _stage1[(b, pool.head_num, self.splits)](
             q, pool.get_key_buffer(layer_id), pool.get_value_buffer(layer_id),
             pool.k_book.cb16[layer_id], pool.v_book.cb16[layer_id],

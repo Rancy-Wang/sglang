@@ -6,6 +6,12 @@
 
 ### 候选1/10
 
+结果：c6ba757f63953cede2ca254ba8bd79c74c47bc60，A10 GPU4，loopvq-build Torch2.8.0+cu128/Triton3.4.0，check_residual.py退出0；远端r1.json/r1.log/r1.exit在/homes/ruoxi07/experiments/loopvq/2026-11-26-vqplus。codec逐bit通过，attention至32K最大绝对差0.000244140625。图内单层8K耗时batch1=1.221871ms，batch16=9.294439ms，性能不通过。只读profiler：主stage1=1.217ms/次，占99.66%；reduce=4.181us/次；Triton metadata n_regs255、n_spills0、shared16896B。不能声称发生spill；优先消除重复K重建和全局码本gather。完整serve/生命周期尚未验证。服务环境加载既有compat库后Torch2.14.1+cu130可正常初始化CUDA，未修改驱动。
+
+### 候选2/10
+
+目的：降低已测得的主stage1开销。步骤：新增shared-codebook CUDA stage1，K中心+残差+RoPE+BF16舍入后QK；FP32softmax；V中心+残差+BF16舍入后PV；HP使用同一数值契约，全部split覆盖LSE；保留Triton实现用于诊断。范围为residual_attention_cuda.py、residual_attention.py及同目录check_residual.py。预期shared表代替重复global gather、每lane只保存4/16维数值以降低寄存器；成功标准为原容差不变并显著低于R1图内耗时。风险为shared占用、softmax归约、非连续query/HP索引。验证同A10GPU4，同一独立oracle含32K及空行、graphpadding，图内不同B/长度与R1比较；JIT在capture前。CUDA延迟收益不替代完整模型验收。
+
 目的：建立可测的packed残差存储、group32编码和直接融合split-KV路径。范围：新增residual_encode.py/residual_attention.py，修改pool、pool_configurator、KV构造、参数hook和attention分派，增加独立GPU oracle/计时脚本。采用Triton融合HP/quant的stage1加FP32 LSE reducer作为首个可审计实现，不预先宣称其快于原CUDA VQ。风险为舍入、掩码、四loop地址、编码额外launch及寄存器压力。成功标准为pack/scale与独立oracle逐bit一致，attention在预先固定atol=0.002/rtol=0.01下匹配显式FP32 softmax重建参考，空序列和污染scratch也正确；量化新增开销并以证据规划下一轮。测试包括prefill/flush编解码、mixed HP/quant随机物理页、CUDA graph重放和基本延迟。A10 GPU4/5首选，持久PTY10517经X5；/repo/sglang为其他任务ddtree，另建隔离/repo/sglang-vqplus，经loopspec-test同步。首轮通过后继续真实模型及生命周期验证，不宣布整个目标完成。
 
 代码基点：Rancy-Wang/sglang，loopspec-test，80549ace9271dd55ef20baab5072f735625bd33b。LoopVQ训练参考为test分支dc3af341ba4593f580272470da803a5db839a423。工作区原有未跟踪snapshots目录保留。正式分支不变。

@@ -148,6 +148,7 @@ def bench(fn):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--output', required=True)
+    ap.add_argument('--implementation', choices=['cuda', 'triton'], default='cuda')
     args = ap.parse_args()
     torch.manual_seed(20261126)
     torch.backends.cuda.matmul.allow_tf32 = False
@@ -155,7 +156,7 @@ def main():
     pool = make_pool()
     theta = torch.arange(32768, device='cuda').float()[:, None] / (10000 ** (torch.arange(64, device='cuda').float()[None] / 64))
     rope = torch.cat((theta.cos(), theta.sin()), -1).contiguous()
-    attn = ResidualAttention(pool, max_batch=16, max_context_len=32768)
+    attn = ResidualAttention(pool, max_batch=16, max_context_len=32768, implementation=args.implementation)
     for length in (0, 8, 64, 72, 79, 80, 127, 128, 1024, 2048, 4096, 8192, 16384, 32768):
         q = torch.randn(2, 24, 128, device='cuda').bfloat16()[:, :8]
         ptr, loc = locations([length, length // 2], pool.hp_global_offset)
@@ -165,12 +166,30 @@ def main():
         actual = attn.forward(q, 0, ptr, loc, rope, 128**-.5)
         torch.testing.assert_close(actual, expected, atol=.002, rtol=.01)
         result['attention'].append({'length': length, 'max_abs': (actual.float()-expected.float()).abs().max().item()})
+    # Capture once, then change physical addresses and request lengths in place.
+    q = torch.randn(2, 8, 128, device='cuda').bfloat16()
+    ptr, loc = locations([128, 128], pool.hp_global_offset)
+    for _ in range(3): attn.forward(q, 0, ptr, loc, rope, 128**-.5)
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        captured = attn.forward(q, 0, ptr, loc, rope, 128**-.5)
+    for length in (80, 8, 128):
+        p2, l2 = locations([length, length], pool.hp_global_offset)
+        ptr.copy_(p2); loc[:l2.numel()].copy_(l2)
+        attn.partial.fill_(float('nan')); attn.lse.fill_(float('nan'))
+        graph.replay()
+        torch.testing.assert_close(captured, oracle(q, pool, ptr, loc, rope), atol=.002, rtol=.01)
+    # Nonzero descriptor length with all-zero locations is graph padding.
+    loc.zero_(); graph.replay()
+    assert not captured.any()
+    graph.reset()
+    result['graph_dynamic_and_padding'] = True
     for b in (1, 2, 4, 8, 16):
         q = torch.randn(b, 24, 128, device='cuda').bfloat16()[:, :8]
-        for length in (1024, 8192):
+        for length in (1024, 2048, 4096, 8192, 16384, 32768):
             ptr, loc = locations([length] * b, pool.hp_global_offset)
             ms = bench(lambda: attn.forward(q, 0, ptr, loc, rope, 128**-.5))
-            result['timings'].append({'batch': b, 'length': length, 'splits': 16, 'block': 32, 'graph_ms': ms})
+            result['timings'].append({'batch': b, 'length': length, 'splits': attn.splits, 'block': 32, 'graph_ms': ms})
     result['passed'] = True
     Path(args.output).write_text(json.dumps(result, indent=2))
     print(json.dumps(result), flush=True)
