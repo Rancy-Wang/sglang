@@ -1,14 +1,49 @@
-# Executable plan
+# Executable plan and acceptance record
 
-Status: rounds1–10 measured, round11 bank-aware shared-codebook candidate running. Best retained global-reader R8 reaches123.82us atB16N2k vs222.09us baseline; R9 scheduling reaches422.65us at8k vs627.69us. Production integration and serving acceptance remain pending. Counters unavailable under container capabilities; matched CUDA controls and CTA clock instrumentation collected instead. Full serving environment under investigation. Every source/test/behavior candidate needs a six-part record before editing and a validation record afterward. Existing earlier round budgets are immutable. Formal branch promotion is excluded.
+Status: **complete for the retained R13 implementation**, after 13 of the newly authorized maximum20 rounds. Runtime source `4743e9430`; original-production control `56fbb58de`. Earlier budgets and rejected candidates remain in `../record.md`. The best measured candidate passes the agreed kernel and full-serving gates; it is not a global-optimum claim and B16 throughput remains below native BF16.
 
-1. **Purpose:** identify why same-stage VQ+ attention is slower, then improve measured efficiency without codec/numerical/API changes.
-2. **Steps:** establish an isolated compatible BUS2 environment; synchronize source through Git; copy only immutable real input/book data with hashes. Reuse diagnose_paged.py to collect matched B16/N2048 page_head_auto, current, materialized_serving and diagnostic scalar controls. Collect NCU full and SourceCounters reports using supported SM80/NCU2023 sections. Inspect actual available metrics; PM sampling is unavailable if this version lacks it. Parse via ncu_report. Rank candidates only after source attribution. Optimize one attributable bottleneck per round, retaining rejected results. Broaden accepted candidates to B1/2/4/8/16 and N1024/2048/4096/8192, variable lengths and graph replay. Validate full serving last.
-3. **Scope:** python/sglang/kernels/ops/loopvq/{residual_attention,residual_attention_cuda,residual_attention_paged_cuda,residual_attention_grouped_cuda}.py and task-local harnesses. Dispatch only after candidate gates. Cache encoding changes need bitwise roundtrip and lifecycle checks. Official ResidualQuant checkout stays read-only.
-4. **Success:** unchanged correctness gates; paired warmed graph latency reduction >=10% at B16/N2048, no >5% median regression on supported smaller batches without an explicit dispatch guard; then same-host full-serving throughput improvement >=5% with matched generated tokens. Report remaining gap to BF16 even if gates pass. Thresholds are candidate promotion criteria, not promised speedups. Reject candidates failing correctness before performance claims.
-5. **Risks:** BF16 operation reassociation, pre-RoPE semantics, register spills, shared-memory bank conflicts, sparse centroid access, split overhead, clocks and hot-cache bias. NCU replay timing is diagnostic, never the primary acceptance timing. Existing cross-layer/full-serving measurements are needed to test cache residency assumptions.
-6. **Validation:** original CPU contracts; check_paged.py boundary/LSE/dynamic graph tests; real trained-codebook diagnose_paged.py paired comparisons; compute-sanitizer on changed mappings; encoder parity if altered; existing check_serving.py lifecycle and greedy IDs. Record SHA/environment/input hashes/commands/exit codes/GPU UUID, clocks, process occupancy, repeated medians and spread. Source code synchronized only by authorized local commit/push and remote fetch/pull.
+## Contract
 
-First experiment: on an idle BUS2 A800, existing harness --batches 16 --layers 23 --loops 0 --variants page_head_auto materialized_serving --profile-one page_head_auto, then native matched control, with --profile-from-start off. Full and source reports get distinct profile/<run>/{harness,reports,analysis} directories. If real harness environment is blocked, prepare a faithful standalone kernel replay in a counted round; synthetic input alone cannot establish real-codebook locality.
+Ouro-2.6B-Thinking, TP2, 48 layers ×4 loops, local H8/D128, SM80 A800108SM. Preserve trained pre-RoPE codebooks, UINT8 joint indices, INT4/group32 FP16 residuals, BF16 rounding points, FP32 accumulation, HP prefix8/recent64, page8, API/Graph behavior. No training-format change, precision relaxation or broad quality evaluation.
 
-Resolved: root NCU denied on all3hosts; isolatedTorch2.5cu121/Triton3.4 works; all4context layer23 snapshots and books transferred; currentpage B16N2k222us vsnative98us; QK~63%,PV~36% of instrumented CTA cycles. Scheduling alone reaches178us. Unknowns: best CTA/payload mapping, cross-layer/cold-cache behavior, complete serving dependency/runtime compatibility. Task-local cuda-compat13 library already passesTorch2.13cu130 device/compute probe ondriver535 without system changes.
+## Concrete changes
+
+1. `python/sglang/kernels/ops/loopvq/residual_attention_payload_cuda.py`: `pair8` shares the low/high RoPE-pair page address and metadata ownership; `pv16` reads one packed index/residual unit and one scale per16 output channels. Exact finite FP16×INT4 reconstruction FMA reduces live registers while preserving the original RoPE and dot summation. Use512 threads, minimum3 resident blocks, original register-resident decode/consume path. Do not stage complete codebooks in shared memory: measured bank-aware asynchronous staging regressed.
+2. `_split_policy` and constant `PAYLOAD_SPLITS[13][33]`: precompute occupancy-based partition policy once; GPU lengths select a429-byte table, with original CAP/short-length clamps. No host length synchronization. Exhaustive425997 policy cases match R12 exactly.
+3. `residual_attention.py::ResidualAttention`: prepare once and query actual occupancy capacity; select payload only for measured layout2/default group/dynamic splits/H8/108SM/capacity324/B4..16. Preserve original small-batch and unsupported configurations. `payload=False` is the actual production control, not the older microbench's R1-only label.
+4. Task-only integration/stage/payload/shared probes retain independent oracles and raw samples. `analyze_serving.py` reads existing evidence; it does not change the evaluator.
+
+## Correctness and measurement gates
+
+- Output atol .002/rtol .01; LSE atol/rtol2e-5; encoder unchanged. Exact reconstruction property check:131858432 finite cases.
+- Original `check_paged.py`:100 boundary/uneven-length/LSE cases plus dynamic Graph and padding, passed. Compute Sanitizer memcheck passed with0 errors for R12 and R13.
+- `integration_probe.py`: original/candidate/native paired warmed Graph timing,30 samples×32 inner calls, B1/2/3/4/5/8/15/16 and N1K/2K/4K/8K; all4loops at2K. Actual B2 grouped dispatch included. R13 B16/N2K125.121μs vs221.404μs original; B1/2/3 within1%. CUDA12/13 candidate resources both40 registers and0 stack/local for both LOC widths.
+- Full serving on the same BUS2 GPU2/3 and CUDA13 environment: unchanged `../2026-11-26-vqplus-residual/check_serving.py`, input2048/output128, B1/2/4/8/16,3 repeats after warmup. All lifecycle/greedy-ID/abort/reuse checks passed. Each sample verifies full target batch and CUDA Graph from scheduler logs. Candidate B16 throughput371.748 vs293.573 token/s (+26.63%); BF16 reference419.645 token/s. All acceptance thresholds met: ≥10% kernel gain, no>5% small-batch regression, ≥5% full-serving gain.
+- Serving traces are CUPTI activities, not NCU counters. Both ranks show1920 historical-reader calls for10steps×192layers. Profile throughput is excluded from acceptance. Full traces use growing lengths>2048, int64 LOC and CUDA13; do not mix their absolute times with fixedN2048 CUDA12 microbenchmarks.
+
+## Reproduction and evidence
+
+Task workspace is this experiment directory. BUS2 temporary RUN `/dev/shm/wangruoxi-vqrq-20261127`; micro Python `RUN/env/bin/python`, serving Python `RUN/serve-env/bin/python`. Remote candidate worktree `/share/wangruoxi/repo/sglang-vqplus-r13`, baseline `/share/wangruoxi/repo/sglang-vqplus-baseline`. Exact server arguments are in each archived server log/identity; source code is synchronized only through Git. Model revision/hash and book hashes are in evidence/compat and input manifests. Reproduce the summary from repository root:
+
+```sh
+python3 research/loopspec/experiments/2026-11-27-residualquant-profile/analyze_serving.py \
+  research/loopspec/experiments/2026-11-27-residualquant-profile/evidence \
+  --output research/loopspec/experiments/2026-11-27-residualquant-profile/evidence/serving-analysis.json
+```
+
+Raw artifacts: `evidence/r1`–`r13`, `evidence/serving-{baseline,candidate,bf16}`, `evidence/compat`; acceptance hashes in `evidence/acceptance-manifest.json`. Large evidence is deliberately not committed. All task test servers stopped and GPUs released; persistent SSH masters retained. Formal `loopspec` branch unchanged.
+
+## Recommended first follow-up and unresolved evidence
+
+First obtain a host/container with working GPU performance counters. Root probes on all three named BUS hosts failed ERR_NVGPUCTRPERM because container capabilities lack SYS_ADMIN; there are no NCU reports to interpret. Do not change host driver settings as an incidental task. Re-run the exact existing counter probe documented in `profile/20261127-bus2-counter-probe/harness/README.md`, check installed sections, then collect matched original/payload source counters with the same input and partition controls. A diagnostic capture command after counter access is available (RUN and TASK denote the absolute paths above):
+
+```sh
+CUDA_VISIBLE_DEVICES=0 ncu --kernel-name-base function \
+  --kernel-name 'regex:payload_stage1' --launch-count 1 --set full \
+  --export "$RUN/payload-full" \
+  "$RUN/env/bin/python" "$TASK/run_isolated.py" integration_probe.py \
+  --snapshot "$RUN/2k" --book "$RUN/books" \
+  --output "$RUN/payload-ncu-harness.json" --batches 16 --loops 0 --repeats 1
+```
+
+This captures a diagnostic launch, not acceptance timing. Verify the selected kernel and collect original-reader/control reports separately; use unprofiled warmed timing for promotion. Prioritize QK centroid-load sectors versus RoPE/conversion instruction dependencies and eligible warps; inspect PV metadata and any local-memory traffic. A further mapping/worklist candidate must target the measured dominant cost, be recorded as a new round, preserve independent tests, and exceed the same promotion gates. Reject superficial codebook/shared-memory changes without a measured benefit. Post-RoPE retraining or changed accumulation is a different algorithmic contract, not a free optimization of the current representation.
