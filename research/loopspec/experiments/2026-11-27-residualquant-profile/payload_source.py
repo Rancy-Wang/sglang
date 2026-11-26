@@ -81,7 +81,7 @@ def replace_once(source, old, new):
     return source.replace(old, new)
 
 
-def source_for(mode, min_blocks=0, fused=False, dot_chain=False):
+def source_for(mode, min_blocks=0, fused=False, dot_chain=False, shared_table=False):
     assert mode in ('qk', 'pv', 'both')
     source = replace_once(_SRC, '__device__ __forceinline__ void copy_table',
                           HELPERS + '\n__device__ __forceinline__ void copy_table')
@@ -106,6 +106,10 @@ def source_for(mode, min_blocks=0, fused=False, dot_chain=False):
             ("const float value = __bfloat162float(cv[j]) + scale * r;", "const float value = fmaf(scale, (float)r, __bfloat162float(cv[j]));"),
         ):
             source = replace_once(source, old, new)
+    if shared_table:
+        assert mode == "both" and min_blocks == 3 and fused and not dot_chain
+        from shared_source import shared_source
+        source = shared_source(source, replace_once)
     if dot_chain:
         source = replace_once(source, "dot += fmaf(kl, qlo[j], kh * qhi[j]);",
                               "dot = fmaf(kl, qlo[j], dot); dot = fmaf(kh, qhi[j], dot);")
@@ -115,19 +119,20 @@ def source_for(mode, min_blocks=0, fused=False, dot_chain=False):
     return source
 
 
-def prepare(mode, threads=512, min_blocks=0, fused=False, dot_chain=False):
+def prepare(mode, threads=512, min_blocks=0, fused=False, dot_chain=False, shared_table=False):
     from torch.utils.cpp_extension import load_inline
     assert not min_blocks or threads == 512
     suffix = f"_r7_b{min_blocks}" if min_blocks else ""
     suffix += "_r8_fma" if fused else ""
     suffix += "_r10_chain" if dot_chain else ""
+    suffix += "_r11_shared" if shared_table else ""
     ext = load_inline(name=f'vqrq_payload_r6_{mode}_t{threads}{suffix}',
         cpp_sources='#include <torch/extension.h>\nvoid residual_init();\nvoid residual_cuda(' +
                     ','.join(['torch::Tensor'] * 16) + ',int64_t,double,int64_t);',
-        cuda_sources=source_for(mode, min_blocks, fused, dot_chain), functions=['residual_init', 'residual_cuda'],
+        cuda_sources=source_for(mode, min_blocks, fused, dot_chain, shared_table), functions=['residual_init', 'residual_cuda'],
         extra_cuda_cflags=['-O3','-lineinfo','--fmad=false','-Xptxas=-v',
-            f'-DVQPLUS_THREADS={threads}','-DVQPLUS_UNROLL=1','-DVQPLUS_GLOBAL=1',
-            '-DVQPLUS_ASYNC=0','-DVQPAGE_LAYOUT=2','-DVQPAGE_COOP=0',
+            f'-DVQPLUS_THREADS={threads}','-DVQPLUS_UNROLL=1',f'-DVQPLUS_GLOBAL={int(not shared_table)}',
+            f'-DVQPLUS_ASYNC={int(shared_table)}','-DVQPAGE_LAYOUT=2','-DVQPAGE_COOP=0',
             '-DVQPAGE_SCALAR=0','-gencode=arch=compute_80,code=sm_80'])
     ext.residual_init()
     return ext

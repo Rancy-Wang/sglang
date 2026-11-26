@@ -136,3 +136,18 @@ Round8 extensions all10cases exit0: loops1/2/3 target5=123.80/123.69/123.58us; B
 4. Success: existing .002/.01 output and2e-5LSE tolerance; lower paired latency and zero spills. Reject failed numerics or immaterial improvement before promotion. No precision reduction or tensor-core approximation.
 5. Risks: FP32 reduction association affects softmax and final greedy ties; fullserving greedy comparison remains required. Compiler may increase live values despite fewer instructions.
 6. Validation: Python source/anchor checks, exact Git synchronization after R9 jobsfinish; idle GPUs;30pairedgraphsamples/32inner, compiled resources, all4loops/multiplecontexts/boundary tests ifpromising. R8 reference remains unchanged andcache-distinct.
+
+
+Round9 all8cases passed. R8 B16N8k target10=422.652us vsauto627.690/native388.224; target8 previous449.9us. B1N2k target24=16.233 vs18.458/native16.982; B4 target10=32.370 vs52.132/native33.898; B8best remainsR8target5. B2target12=21.771 vsR1auto33.409; still not actualproductionR2 comparison. Source63c8fe7, results evidence/r9. No universal fixedtarget promotion.
+
+## Round11/20 — bank-aware shared codebooks on R8 payload (before edits)
+
+1. Purpose: directly test codebook reuse cost on the new vectorized40-register reader. Previous shared-table candidates used different payload/mapping, and did not use separate bank-aware K/V layouts.
+2. Steps: retain R8 exact reconstruction/originalFP32dot; stage64KiB table perhead/CTA with Ampere cp.async.ca8-byte copies. Shared K layout[code,group,4] gives consecutiveQKgroups distinctbanks; V group permutation(g&3)*8+(g>>2) spreads PVstride4groups. Copy8groups×4codes perwarp tobalance globalcoalescing/sharedstores. OverlapVcopy withexistingsoftmax;existingwait/barriersretained. CompareglobalR8 andshared targets2/3/4/5/8/10 atB16N2k/8k,thenextensionsonlyifuseful.
+3. Scope: task-local shared_source.py transform andpayload_source/probe optionalflag/cachekey; no cacheformat/productionchange. Restrictshared tobothmode/minblocks3/FMA/originaldot. Keepglobalreferences identicalR8.
+4. Success: unchangedoutput/LSEtolerances, zero spills, materialpairedlatency improvement overR8; validateboundaries/memcheck beforeanypromotion. No claim of measured bank conflicts withoutNCU.
+5. Risks: ~78KiBsharedallocationlimitsresidencyto2CTAs/SM vs3global, perCTA64KiBcopycost, banklayout/addressbugs, cp.async ordering; typedsharedloads mustnotuse__ldg. Priorunalteredsharedexperimentwasrejected; thisnewtesthasdifferentexplicitlayout/payloadrationale.
+6. Validation: sourceanchor/syntaxreview, Gitpush/pullafterR10jobsfinish, idleGPUpreflight,30samples/32innerpairedgraphs, FP32oracle/LSE,cuobjdumpresources/SASS. Rejectifmemorytrafficcost outweighsreuse. No guessedtraffic/stallmetrics.
+
+
+Round10 source7d72a4a2a bothcases exit0, alloutput/LSEpass,40regs0stack/local. N2kR8target5=123.718us vschain123.250;N8kR8target10=422.599 vschain420.762us (~0.4%each). Retain diagnostic, rejectpromotion as immaterial benefit forchangedFP32association; R11 startsfromR8originaldot. R11localgeneratedsourceanchors/braces/syntaxpass, alltableloads explicitsharedtypedloads.
