@@ -177,3 +177,11 @@ R5结果：4432365729f7eca9277cb7b738da944bfc53e8c7，A12 GPU0，a12-r5/r4.exit�
 ### 候选6/10
 
 目的：减少R2同时存活的PV累加器并提高延迟隐藏。步骤：PV按request顺序处理、复用WARPS×128 shared partial，512线程、launch_bounds(512,2)约束；保留数值合同和R1默认。范围residual_attention_grouped_cuda.py。预期比R5大B降低延迟；风险是更多barrier或编译器spill抵消收益。验证同A12 GPU0，完整codec/oracle/LSE/奇数batch/graph套件和page8独立请求图内计时，对比同卡R4/R5，检查编译资源。只有改善才采用，不因测试通过宣称全局最优。
+
+R6结果：ade7985e8a7fc83d00409adc3e3aa3996bbcf596，A12 GPU0，a12-r6/r6.exit=0，codec/output/LSE/graph/奇数及不同长度batch通过。8K B2/4/8/16为0.0943/0.2299/0.3586/0.6743ms，相对R4分别1.559/1.076/1.075/1.066x；1K与2K的B4/8仍约慢3.5–7%。cuobjdump在A10读取同一so：64registers，STACK/LOCAL0；动态shared78992B（约77.14KiB），容许每SM两CTA。B1未改路径，计时波动不能算代码退化。
+
+### 候选7/10
+
+目的：采用有证据的batch分派并补齐codec边界安全。范围ResidualAttention、residual_encode.py、check_residual.py。步骤：默认按capture batch选B2及B>=16的R2，其余R1；保留强制R1/R2诊断选项。FP16 scale溢出或非有限输入在GPU编码时assert，避免悄悄写坏页，不引入CPU读回；增加round-to-even ties、tiny scale与独立子进程非法输入测试。风险是图padding后选路不同产生归约微差、device assert额外成本及poisoned CUDA context，所以非法测试隔离。验证同卡kernel套件、codec拒绝、TP2生命周期/eager对照和真实decode/profile；按性能复查新增检查是否只在prefill/flush而非每层decode执行。数值容差不变。
+
+R7本地语法和git diff --check通过；本地系统Python缺torch，CPU contract尚未在本地执行，转已部署远端环境验证，不计为通过。

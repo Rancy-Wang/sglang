@@ -43,6 +43,12 @@ def _encode_residual(X0, X1, X2, X3, IDX, CB, OUT, SCALE, DST, SRC, VALID,
     error = x - center
     scale = (tl.max(tl.abs(error), 0) / 7.0).to(tl.float16)
     scale = tl.maximum(scale.to(tl.float32), 0.00006103515625).to(tl.float16)
+    # Match training's finite-scale rejection; this executes only when encoding
+    # a page, without a host synchronization or extra decode-time kernel.
+    tl.device_assert((~ok) | (tl.sum((tl.abs(error) < float('inf')).to(tl.int32), 0) == 32),
+                     "VQ+ residual input must be finite")
+    tl.device_assert((~ok) | (scale.to(tl.float32) < float('inf')),
+                     "VQ+ residual scale exceeds FP16")
     z = tl.minimum(7., tl.maximum(-7., libdevice.rint(tl.div_rn(error, scale.to(tl.float32))))).to(tl.int32)
     pairs = tl.reshape(z & 15, (16, 2))
     packed = tl.sum(pairs << (tl.arange(0, 2)[None, :] * 4), 1).to(tl.uint8)
@@ -61,7 +67,7 @@ def encode_residual_steps(steps, indices, table, packed, scales, loc, base):
             *steps, indices, table, packed, scales, loc, loc, loc,
             n, h, table.shape[0] // 4, base, packed.shape[1],
             *(x.stride(0) for x in steps), 0, False,
-            num_warps=1, enable_fp_fusion=False,
+            num_warps=1, enable_fp_fusion=False, debug=True,
         )
 
 
@@ -73,5 +79,5 @@ def encode_residual_from_hp(hp, indices, table, packed, scales, src, dst, valid)
             packed, scales, dst, src, valid,
             src.numel(), hp.shape[2], lb, 0, packed.shape[1],
             hp.stride(1), hp.stride(1), hp.stride(1), hp.stride(1), hp.stride(0), True,
-            num_warps=1, enable_fp_fusion=False,
+            num_warps=1, enable_fp_fusion=False, debug=True,
         )

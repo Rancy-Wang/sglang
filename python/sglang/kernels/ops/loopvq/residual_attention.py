@@ -69,7 +69,7 @@ def _stage1(Q, KI, VI, KC, VC, KR, VR, KS, VS, HK, HV, PTR, LOC, ROPE, OUT, LSE,
 
 
 class ResidualAttention:
-    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda", threads=512, dynamic_splits=True, unroll=1, group_size=1):
+    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda", threads=512, dynamic_splits=True, unroll=1, group_size=0):
         if implementation not in ("cuda", "triton"):
             raise ValueError("Unknown residual attention implementation")
         if splits is None:
@@ -84,10 +84,11 @@ class ResidualAttention:
         self.sm_count = torch.cuda.get_device_properties(pool.hp_k.device).multi_processor_count
         if pool.head_dim != 128 or not pool.residual_bits == 4:
             raise ValueError("VQ+ requires D128 and INT4 group32")
-        if group_size not in (1, 2) or (group_size == 2 and implementation != 'cuda'):
+        if group_size not in (0, 1, 2) or (group_size == 2 and implementation != 'cuda'):
             raise ValueError('Grouped VQ+ requires the CUDA implementation')
+        self.group_size = group_size
         self.grouped = None
-        if group_size == 2:
+        if implementation == 'cuda' and group_size != 1 and max_batch >= 2:
             from .residual_attention_grouped_cuda import prepare_grouped
             self.grouped = prepare_grouped(pool.hp_k.device)
             self.group_partial = torch.empty((max_batch, pool.head_num, 64, 128), dtype=torch.float32, device=pool.hp_k.device)
@@ -97,13 +98,18 @@ class ResidualAttention:
         self.partial = torch.empty((max_batch, pool.head_num, splits, 128), dtype=torch.float32, device=pool.hp_k.device)
         self.lse = torch.empty((max_batch, pool.head_num, splits), dtype=torch.float32, device=pool.hp_k.device)
 
+    def use_grouped(self, batch):
+        # Capture-static dispatch, no GPU lengths copied to the host.
+        # R2 regresses short B4/B8; those shapes retain the R1 kernel.
+        return self.grouped is not None and (batch > 1 if self.group_size == 2 else batch == 2 or batch >= 16)
+
     def forward(self, q, layer_id, kv_indptr, kv_indices, cos_sin_cache, sm_scale):
         pool, b = self.pool, q.shape[0]
         if q.shape != (b, pool.head_num, 128) or q.dtype != torch.bfloat16 or b > self.max_batch:
             raise ValueError("VQ+ requires BF16 [batch,local_heads,128] within capacity")
         out = torch.empty_like(q)
         if self.extension is not None:
-            grouped = self.grouped is not None and b > 1
+            grouped = self.use_grouped(b)
             launch = self.grouped.grouped_cuda if grouped else self.extension.residual_cuda
             partial, lse = (self.group_partial, self.group_lse) if grouped else (self.partial, self.lse)
             groups = (b + 1) // 2 if grouped else b

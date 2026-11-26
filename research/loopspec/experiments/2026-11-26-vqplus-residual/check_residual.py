@@ -76,7 +76,37 @@ def codec_test():
     encode_residual_steps(steps, idx[1], cb, packed, scales, dst, 1)
     assert not packed[1::lb, dst].any()
     assert (scales[1::lb, dst] == torch.finfo(torch.float16).tiny).all()
-    return {'passed': True, 'cases': ['flush', 'valid_mask', 'prefill_strided', 'loop_layout', 'zero_residual']}
+    # Exact half-integer ties with scale=1, signed codes, and tiny-scale floor.
+    cb.zero_()
+    values = torch.tensor([7., -7., .5, -.5, 1.5, -1.5, 2.5, -2.5] * 16,
+                          device='cuda', dtype=torch.bfloat16)
+    for factor in (1., 2.**-20):
+        steps = [(values * factor).expand(n, h, 128).contiguous() for _ in range(4)]
+        encode_residual_steps(steps, idx[1], cb, packed, scales, dst, 1)
+        expected, scale = reference_pack(steps[0], torch.zeros_like(steps[0]))
+        for u in range(4):
+            torch.testing.assert_close(packed[u * lb + 1, dst], expected, rtol=0, atol=0)
+            torch.testing.assert_close(scales[u * lb + 1, dst], scale, rtol=0, atol=0)
+    return {'passed': True, 'cases': ['flush', 'valid_mask', 'prefill_strided', 'loop_layout', 'zero_residual', 'round_even_ties', 'tiny_scale']}
+
+
+def invalid_codec(case, output):
+    # Run in a separate process: a device assertion intentionally poisons CUDA.
+    value = {'nan': float('nan'), 'inf': float('inf'), 'overflow': 1.e10}[case]
+    steps = [torch.full((1, 1, 128), value, dtype=torch.bfloat16, device='cuda') for _ in range(4)]
+    idx = torch.zeros((1, 1, 32), dtype=torch.uint8, device='cuda')
+    cb = torch.zeros((4, 1, 32, 256, 4), dtype=torch.bfloat16, device='cuda')
+    packed = torch.empty((4, 1, 1, 64), dtype=torch.uint8, device='cuda')
+    scales = torch.empty((4, 1, 1, 4), dtype=torch.float16, device='cuda')
+    loc = torch.zeros(1, dtype=torch.int32, device='cuda')
+    try:
+        encode_residual_steps(steps, idx, cb, packed, scales, loc, 0)
+        torch.cuda.synchronize()
+    except RuntimeError as error:
+        if 'device-side assert' not in str(error): raise
+        Path(output).write_text(json.dumps({'invalid_case': case, 'rejected': True}))
+        return
+    raise AssertionError('Invalid residual input was silently accepted')
 
 
 def make_pool(cap=32776, heads=8, direct=False, hp_size=80):
@@ -174,10 +204,14 @@ def main():
     ap.add_argument('--threads', type=int, choices=[128, 256, 512], default=512)
     ap.add_argument('--fixed-splits', action='store_true')
     ap.add_argument('--unroll', type=int, choices=[1,2,4], default=1)
-    ap.add_argument('--group-size', type=int, choices=[1,2], default=1)
+    ap.add_argument('--group-size', type=int, choices=[0,1,2], default=0)
     ap.add_argument('--graph-inner', type=int, choices=[1,16], default=16)
     ap.add_argument('--layout', choices=['random-token','page8'], default='page8')
+    ap.add_argument('--invalid-codec', choices=['nan', 'inf', 'overflow'])
     args = ap.parse_args()
+    if args.invalid_codec:
+        invalid_codec(args.invalid_codec, args.output)
+        return
     torch.manual_seed(20261126)
     torch.backends.cuda.matmul.allow_tf32 = False
     result = {'codec': codec_test(), 'attention': [], 'timings': [], 'tolerance': {'atol': .002, 'rtol': .01}}
@@ -195,7 +229,7 @@ def main():
     if 'group_size' in inspect.signature(ResidualAttention).parameters:
         options['group_size'] = args.group_size
     else:
-        assert args.group_size == 1
+        assert args.group_size in (0, 1)
     attn = ResidualAttention(pool, max_batch=16, max_context_len=32768, **options)
     for length in (0, 8, 64, 72, 79, 80, 127, 128, 1024, 2048, 4096, 8192, 16384, 32768):
         q = torch.randn(2, 24, 128, device='cuda').bfloat16()[:, :8]
@@ -242,7 +276,7 @@ def main():
         for length in (1024, 2048, 4096, 8192, 16384, 32768):
             ptr, loc = locations([length] * b, pool.hp_global_offset, args.layout, disjoint=True)
             ms = bench(lambda: attn.forward(q, 0, ptr, loc, rope, 128**-.5), args.graph_inner)
-            result['timings'].append({'batch': b, 'length': length, 'splits': attn.splits, 'threads': args.threads, 'dynamic_splits': not args.fixed_splits, 'unroll': args.unroll, 'layout': args.layout, 'graph_inner': args.graph_inner, 'disjoint_request_addresses': True, 'group_size': args.group_size, 'graph_ms': ms})
+            result['timings'].append({'batch': b, 'length': length, 'splits': attn.splits, 'threads': args.threads, 'dynamic_splits': not args.fixed_splits, 'unroll': args.unroll, 'layout': args.layout, 'graph_inner': args.graph_inner, 'disjoint_request_addresses': True, 'group_size': args.group_size, 'selected_group': 2 if getattr(attn, 'use_grouped', lambda b: args.group_size == 2 and b > 1)(b) else 1, 'graph_ms': ms})
     result['passed'] = True
     Path(args.output).write_text(json.dumps(result, indent=2))
     print(json.dumps(result), flush=True)
