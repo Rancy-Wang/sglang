@@ -60,9 +60,8 @@ __global__ __launch_bounds__(THREADS, 2) void residual_grouped_stage1(
         int r = i / 128, c = i % 128, b = first_b + r;
         query[i] = b < B ? __bfloat162float(Q[b * qs + h * qh + c]) : 0.f;
     }
-    for (int i = tid; i < TABLE / 8; i += THREADS)
-        reinterpret_cast<int4*>(table)[i] = __ldg(reinterpret_cast<const int4*>(KC + h * TABLE) + i);
-    __syncthreads();
+    copy_table(table, KC + h * TABLE);
+    wait_table();
     const int g = lane & 15;
     float qlo[R][4], qhi[R][4];
 #pragma unroll
@@ -102,6 +101,9 @@ __global__ __launch_bounds__(THREADS, 2) void residual_grouped_stage1(
         }
     }
     __syncthreads();
+#if VQPLUS_ASYNC
+    copy_table(table, VC + h * TABLE);
+#endif
 #pragma unroll
     for (int r = 0; r < R; ++r) {
         float mx = -INFINITY;
@@ -142,9 +144,10 @@ __global__ __launch_bounds__(THREADS, 2) void residual_grouped_stage1(
             }
         }
     }
-    for (int i = tid; i < TABLE / 8; i += THREADS)
-        reinterpret_cast<int4*>(table)[i] = __ldg(reinterpret_cast<const int4*>(VC + h * TABLE) + i);
-    __syncthreads();
+#if !VQPLUS_ASYNC
+    copy_table(table, VC + h * TABLE);
+#endif
+    wait_table();
     const int vg = lane & 7;
     // Only one request's PV accumulators and shared reduction are live.
     // QK still reuses position coefficients across the two requests.
@@ -204,27 +207,26 @@ void grouped_cuda(torch::Tensor q, torch::Tensor ki, torch::Tensor vi,
 #undef RUN
 }
 '''
-_EXT = None
+_EXT = {}
 _READY = set()
 
 
-def prepare_grouped(device):
-    global _EXT
+def prepare_grouped(device, async_table=False):
     device = torch.device(device)
     with torch.cuda.device(device):
         if torch.cuda.is_current_stream_capturing():
             raise RuntimeError('Prepare grouped VQ+ before capture')
         if torch.cuda.get_device_capability(device) != (8, 0):
             raise ValueError('Grouped VQ+ is validated for sm_80 only')
-        if _EXT is None:
+        if async_table not in _EXT:
             from torch.utils.cpp_extension import load_inline
-            _EXT = load_inline(
-                name='loopvq_residual_int4_grouped_r2_t512_v2',
+            _EXT[async_table] = load_inline(
+                name=f'loopvq_residual_int4_grouped_r2_t512_a{int(async_table)}_v3',
                 cpp_sources='#include <torch/extension.h>\nvoid grouped_init();\n'
                 'void grouped_cuda(' + ','.join(['torch::Tensor'] * 16) + ',int64_t,double,int64_t);',
                 cuda_sources=_SRC, functions=['grouped_init', 'grouped_cuda'],
-                extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', '-DVQPLUS_THREADS=512', '-gencode=arch=compute_80,code=sm_80'],
+                extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', '-DVQPLUS_THREADS=512', f'-DVQPLUS_ASYNC={int(async_table)}', '-gencode=arch=compute_80,code=sm_80'],
             )
-        if device.index not in _READY:
-            _EXT.grouped_init(); _READY.add(device.index)
-    return _EXT
+        if (device.index, async_table) not in _READY:
+            _EXT[async_table].grouped_init(); _READY.add((device.index, async_table))
+    return _EXT[async_table]

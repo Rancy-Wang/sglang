@@ -9,6 +9,9 @@ _SRC = r'''
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
 #include <math.h>
+#ifndef VQPLUS_ASYNC
+#define VQPLUS_ASYNC 0
+#endif
 
 constexpr int THREADS = VQPLUS_THREADS, WARPS = THREADS / 32, TABLE = 32 * 256 * 4;
 constexpr int CAP = 1024, SPLITS = 32, UNROLL = VQPLUS_UNROLL;
@@ -49,6 +52,26 @@ __device__ __forceinline__ void row4(const uint8_t* idx, const __nv_bfloat16* ta
     }
 }
 
+__device__ __forceinline__ void copy_table(__nv_bfloat16* dst, const __nv_bfloat16* src) {
+    for (int i = threadIdx.x; i < TABLE / 8; i += THREADS) {
+#if VQPLUS_ASYNC
+        unsigned smem = static_cast<unsigned>(__cvta_generic_to_shared(dst + i * 8));
+        asm volatile("cp.async.cg.shared.global [%0], [%1], 16;" :: "r"(smem), "l"(src + i * 8) : "memory");
+#else
+        reinterpret_cast<int4*>(dst)[i] = __ldg(reinterpret_cast<const int4*>(src) + i);
+#endif
+    }
+#if VQPLUS_ASYNC
+    asm volatile("cp.async.commit_group;" ::: "memory");
+#endif
+}
+__device__ __forceinline__ void wait_table() {
+#if VQPLUS_ASYNC
+    asm volatile("cp.async.wait_group 0;" ::: "memory");
+#endif
+    __syncthreads();
+}
+
 template<typename IT>
 __global__ __launch_bounds__(THREADS) void stage1(
     const __nv_bfloat16* Q, const uint8_t* KI, const uint8_t* VI,
@@ -81,9 +104,8 @@ __global__ __launch_bounds__(THREADS) void stage1(
     float* reduce = values + WARPS * 128;
     float* stats = reduce + WARPS;
     if (tid < 128) query[tid] = __bfloat162float(Q[b * qs + h * qh + tid]);
-    for (int i = tid; i < TABLE / 8; i += THREADS)
-        reinterpret_cast<int4*>(table)[i] = __ldg(reinterpret_cast<const int4*>(KC + h * TABLE) + i);
-    __syncthreads();
+    copy_table(table, KC + h * TABLE);
+    wait_table();
     // Two tokens per warp, one lane owns four low/high RoPE channel pairs.
     const int g = lane & 15;
     float qlo[4], qhi[4];
@@ -113,6 +135,10 @@ __global__ __launch_bounds__(THREADS) void stage1(
         if (g == 0 && n < count) prob[n] = dot * scale;
     }
     __syncthreads();
+#if VQPLUS_ASYNC
+    // No QK thread still reads the K table; softmax uses separate smem.
+    copy_table(table, VC + h * TABLE);
+#endif
     float mx = -INFINITY;
     for (int n = tid; n < count; n += THREADS) mx = fmaxf(mx, prob[n]);
     mx = warp_max(mx);
@@ -135,9 +161,10 @@ __global__ __launch_bounds__(THREADS) void stage1(
         if (!lane) { stats[1] = sum; LSE[dst] = stats[0] + logf(sum); }
     }
     // Replace the K table after every QK consumer has finished.
-    for (int i = tid; i < TABLE / 8; i += THREADS)
-        reinterpret_cast<int4*>(table)[i] = __ldg(reinterpret_cast<const int4*>(VC + h * TABLE) + i);
-    __syncthreads();
+#if !VQPLUS_ASYNC
+    copy_table(table, VC + h * TABLE);
+#endif
+    wait_table();
     // Four tokens per warp, eight lanes per token; 16 output channels per lane.
     const int vgroup = lane & 7;
     float acc[16] = {};
@@ -197,10 +224,10 @@ _EXT = {}
 _READY = set()
 
 
-def prepare(device, threads=512, unroll=1):
+def prepare(device, threads=512, unroll=1, async_table=False):
     if unroll not in (1, 2, 4):
         raise ValueError("Supported VQ+ token unroll: 1/2/4")
-    variant = (threads, unroll)
+    variant = (threads, unroll, bool(async_table))
     if threads not in (128, 256, 512):
         raise ValueError("Supported VQ+ CTA sizes: 128/256/512")
     device = torch.device(device)
@@ -212,11 +239,11 @@ def prepare(device, threads=512, unroll=1):
         if variant not in _EXT:
             from torch.utils.cpp_extension import load_inline
             _EXT[variant] = load_inline(
-                name=f'loopvq_residual_int4_shared_t{threads}_u{unroll}_v3',
+                name=f'loopvq_residual_int4_shared_t{threads}_u{unroll}_a{int(async_table)}_v4',
                 cpp_sources='#include <torch/extension.h>\nvoid residual_init();\n'
                 'void residual_cuda(' + ','.join(['torch::Tensor'] * 16) + ',int64_t,double,int64_t);',
                 cuda_sources=_SRC, functions=['residual_init', 'residual_cuda'],
-                extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', f'-DVQPLUS_THREADS={threads}', f'-DVQPLUS_UNROLL={unroll}', '-gencode=arch=compute_80,code=sm_80'],
+                extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', f'-DVQPLUS_THREADS={threads}', f'-DVQPLUS_UNROLL={unroll}', f'-DVQPLUS_ASYNC={int(async_table)}', '-gencode=arch=compute_80,code=sm_80'],
             )
         if (device.index, variant) not in _READY:
             _EXT[variant].residual_init()

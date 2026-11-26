@@ -185,3 +185,9 @@ R6结果：ade7985e8a7fc83d00409adc3e3aa3996bbcf596，A12 GPU0，a12-r6/r6.exit=
 目的：采用有证据的batch分派并补齐codec边界安全。范围ResidualAttention、residual_encode.py、check_residual.py。步骤：默认按capture batch选B2及B>=16的R2，其余R1；保留强制R1/R2诊断选项。FP16 scale溢出或非有限输入在GPU编码时assert，避免悄悄写坏页，不引入CPU读回；增加round-to-even ties、tiny scale与独立子进程非法输入测试。风险是图padding后选路不同产生归约微差、device assert额外成本及poisoned CUDA context，所以非法测试隔离。验证同卡kernel套件、codec拒绝、TP2生命周期/eager对照和真实decode/profile；按性能复查新增检查是否只在prefill/flush而非每层decode执行。数值容差不变。
 
 R7本地语法和git diff --check通过；本地系统Python缺torch，CPU contract尚未在本地执行，转已部署远端环境验证，不计为通过。
+
+R7 kernel/codec结果：f36a4c29ea790800181a4ad0155e2c1e6674fb88，A12 GPU0完整套件exit0，新增ties/tiny逐bit匹配；nan/inf/overflow各独立进程exit0且rejected=true；18项CPU检查通过。真实TP2服务验证仍在执行，A10 GPU4/5做2K与生命周期/profile；A12 GPU2/3、4/5、6/7分别做1K、4K、8K，三方法在各自同一卡对顺序配对。A11忙跳过。每组capacity81920、128新token、3repeats、full graph，8K B16在BF16单rank所需KV超过80GiB，不运行也不外推。
+
+### 候选8/10
+
+目的：隐藏码本shared加载等待，继续针对已定位GPU attention瓶颈。步骤：增加可选cp.async表搬运，K加载等待后QK；QK完成全CTA同步后预取V，与独立prob/reduce区域内softmax重叠，PV前wait_group及全CTA同步。范围R1/R2 CUDA源码及其prepare配置、ResidualAttention和GPU验证参数。风险为shared重用竞态、copy提交/完成顺序、资源变化；数值合同完全不变。成功标准同oracle/LSE/graph全部通过且同A12GPU0比同步R7更快；保存强制同步对照，不预设收益。验证另建冻结worktree，不修改正在服务的R7目录；sanitizer检查async边界。

@@ -207,6 +207,7 @@ def main():
     ap.add_argument('--group-size', type=int, choices=[0,1,2], default=0)
     ap.add_argument('--graph-inner', type=int, choices=[1,16], default=16)
     ap.add_argument('--layout', choices=['random-token','page8'], default='page8')
+    ap.add_argument('--async-table', action='store_true')
     ap.add_argument('--invalid-codec', choices=['nan', 'inf', 'overflow'])
     args = ap.parse_args()
     if args.invalid_codec:
@@ -230,6 +231,10 @@ def main():
         options['group_size'] = args.group_size
     else:
         assert args.group_size in (0, 1)
+    if 'async_table' in inspect.signature(ResidualAttention).parameters:
+        options['async_table'] = args.async_table
+    else:
+        assert not args.async_table
     attn = ResidualAttention(pool, max_batch=16, max_context_len=32768, **options)
     for length in (0, 8, 64, 72, 79, 80, 127, 128, 1024, 2048, 4096, 8192, 16384, 32768):
         q = torch.randn(2, 24, 128, device='cuda').bfloat16()[:, :8]
@@ -276,7 +281,7 @@ def main():
         for length in (1024, 2048, 4096, 8192, 16384, 32768):
             ptr, loc = locations([length] * b, pool.hp_global_offset, args.layout, disjoint=True)
             ms = bench(lambda: attn.forward(q, 0, ptr, loc, rope, 128**-.5), args.graph_inner)
-            result['timings'].append({'batch': b, 'length': length, 'splits': attn.splits, 'threads': args.threads, 'dynamic_splits': not args.fixed_splits, 'unroll': args.unroll, 'layout': args.layout, 'graph_inner': args.graph_inner, 'disjoint_request_addresses': True, 'group_size': args.group_size, 'selected_group': 2 if getattr(attn, 'use_grouped', lambda b: args.group_size == 2 and b > 1)(b) else 1, 'graph_ms': ms})
+            result['timings'].append({'batch': b, 'length': length, 'splits': attn.splits, 'threads': args.threads, 'dynamic_splits': not args.fixed_splits, 'unroll': args.unroll, 'layout': args.layout, 'graph_inner': args.graph_inner, 'disjoint_request_addresses': True, 'group_size': args.group_size, 'async_table': args.async_table, 'selected_group': 2 if getattr(attn, 'use_grouped', lambda b: args.group_size == 2 and b > 1)(b) else 1, 'graph_ms': ms})
     result['passed'] = True
     Path(args.output).write_text(json.dumps(result, indent=2))
     print(json.dumps(result), flush=True)
