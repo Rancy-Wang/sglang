@@ -33,6 +33,7 @@ def main():
     ap.add_argument('--compact',action=argparse.BooleanOptionalAction,default=True)
     ap.add_argument('--staged',action='store_true')
     ap.add_argument('--remapped',action='store_true')
+    ap.add_argument('--cache-mode',type=int,choices=[0,1,2],default=0)
     args=ap.parse_args()
     torch.manual_seed(20261126)
     torch.backends.cuda.matmul.allow_tf32=False
@@ -42,11 +43,15 @@ def main():
     if args.remapped:
         assert not args.staged
         opts=dict(threads=256,remapped=True,cooperative=False,waves=4)
+    if args.cache_mode:
+        assert not args.staged and not args.remapped
+        args.compact=False
+        opts=dict(cooperative=False,cache_mode=args.cache_mode)
     attn=PagedResidualAttention(pool,max_batch=16,compact=args.compact,**opts)
     theta=torch.arange(32768,device='cuda').float()[:,None]/(10000**(torch.arange(64,device='cuda').float()[None]/64))
     rope=torch.cat((theta.cos(),theta.sin()),-1).contiguous()
     result={'source_sha':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
-            'compact':args.compact,'staged':args.staged,'remapped':args.remapped,'cases':[]}
+            'compact':args.compact,'staged':args.staged,'remapped':args.remapped,'cache_mode':args.cache_mode,'cases':[]}
     for b in (1,2,3,8,16):
         for n in (0,1,7,8,63,64,71,72,79,80,127,128,1023,1024,1025,2048,4096,8192,16384,32768):
             q=torch.randn(b,24,128,device='cuda').bfloat16()[:,:8]
