@@ -1,6 +1,6 @@
 # VQ+ attention：面向大 batch 的重新设计
 
-日期：2026-11-26。以下保留初始设计方案。**后续用户已授权保持训练/pre-RoPE格式不变的新10轮实施；当前进度与实测以 [paged-record.md](../paged-record.md) 和 [context.md](context.md) 为准。路线B等改格式建议仍在本轮范围之外。**
+日期：2026-11-26。以下保留最初设计审查的历史计划。**后续用户授权的固定训练/pre-RoPE格式实施已完成，新预算10/10用完；性能门槛未达成。最终实现、实测与下一实验见 [paged-results.md](../paged-results.md)，连续性见 [context.md](context.md)。路线B等改格式建议未执行。**
 
 ## 1. 目标、范围与结论
 
