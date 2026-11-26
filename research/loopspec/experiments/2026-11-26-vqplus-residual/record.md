@@ -163,3 +163,5 @@ R3真实TP2 trace：r3-native-bs1，2K输入、1088输出，约输出928处采10
 目的：针对主attention的访存等待与指令数优化，补真实服务配对测试工具。步骤：CUDA QK/PV增加可选unroll(1/2/4)，仅在已经完成BF16舍入后的dot/PV累积使用显式FMA，RoPE和残差重建舍入不变；以128/256/512线程资源和延迟选择，而非假定展开越大越好。微基准使用一个graph内多次算子以消除Python连续replay供给不足，单独保留原计时口径；增加真实page8布局计时，与逐token随机最坏布局区分。范围residual_attention_cuda.py、residual_attention.py、check_residual.py和独立服务验证工具。风险为register增加导致occupancy下降/spill、FP32归约微差、短上下文退化。成功标准为原pack逐bit和output/LSE容差全部不变、graph/lifecycle通过，并有同卡配对改善；失败候选留证据，不自动选用。真实serve全R4 TP2+full graph，BF16/原VQ/VQ+同卡对，时间与profile分开，不恢复准确率评测。
 
 R4资源安排：A10空闲卡对4/5正运行R3同卡BF16/原VQ/VQ+完整服务对照；其余六卡为他人任务。A11八卡均有2.1–2.4GiB任务，跳过。A12八卡现场空闲，使用GPU0做R3/R4 kernel配对；通过同一X5持久会话PTY82582访问。为不改变A10正在运行的R3源码，另建sglang-vqplus-kernel clone，仍仅从用户fork的loopspec-test拉取。新测试提供显式--kernel-root，可用同一计时脚本读取旧R3 checkout；不混用跨机加速比。
+
+R4验证前补充计时控制：R1–R3的合成微基准不同request会随机复用相同physical KV，不能当作真实独立请求的带宽结论。R4计时为每request分配独立quant区域及HP区域，支持page8和随机token两种布局；每B重新分配足够的单层arena，直接生成合法INT4码避免测试初始化物化大量FP32数据。数值oracle仍使用旧随机fixture以保持回归可比。R3与R4一律用这份新计时脚本在同卡重测，不能把测试口径变化算成实现加速。

@@ -79,19 +79,25 @@ def codec_test():
     return {'passed': True, 'cases': ['flush', 'valid_mask', 'prefill_strided', 'loop_layout', 'zero_residual']}
 
 
-def make_pool(cap=32776, heads=8):
+def make_pool(cap=32776, heads=8, direct=False, hp_size=80):
     pool = types.SimpleNamespace(head_num=heads, head_dim=128, residual_bits=4, hp_global_offset=cap)
     for kind in ('k', 'v'):
         cb = torch.randn(1, heads, 32, 256, 4, device='cuda').bfloat16()
         idx = torch.randint(256, (cap, heads, 32), device='cuda', dtype=torch.uint8)
-        base = centers(idx, cb[0])
-        raw = base + torch.randn_like(base) * 0.15
-        packed, scale = reference_pack(raw, base)
+        if direct:
+            lo = torch.randint(0, 15, (cap, heads, 64), device='cuda', dtype=torch.uint8)
+            hi = torch.randint(0, 15, lo.shape, device='cuda', dtype=torch.uint8)
+            packed = (lo + (lo >= 8).byte()) | ((hi + (hi >= 8).byte()) << 4)
+            scale = torch.full((cap, heads, 4), .02, device='cuda', dtype=torch.float16)
+        else:
+            base = centers(idx, cb[0])
+            raw = base + torch.randn_like(base) * 0.15
+            packed, scale = reference_pack(raw, base)
         setattr(pool, kind + '_book', types.SimpleNamespace(cb16=cb))
         setattr(pool, kind + '_indices', idx)
         setattr(pool, kind + '_residual', packed.unsqueeze(0))
         setattr(pool, kind + '_residual_scale', scale.unsqueeze(0))
-        setattr(pool, 'hp_' + kind, torch.randn(1, 80, heads, 128, device='cuda').bfloat16())
+        setattr(pool, 'hp_' + kind, torch.randn(1, hp_size, heads, 128, device='cuda').bfloat16())
     pool.get_key_buffer = lambda layer: pool.k_indices
     pool.get_value_buffer = lambda layer: pool.v_indices
     pool.get_hp_key_buffer = lambda layer: pool.hp_k[layer]
@@ -99,20 +105,23 @@ def make_pool(cap=32776, heads=8):
     return pool
 
 
-def locations(lengths, cap, layout="random-token"):
+def locations(lengths, cap, layout="random-token", disjoint=False):
     ptr, rows = [0], []
-    for length in lengths:
+    region = ((cap - 8) // len(lengths) // 8) * 8 if disjoint else cap - 8
+    for request, length in enumerate(lengths):
         pre = min(8, length)
         recent = min(64, length - pre)
         quant = length - pre - recent
         if layout == "page8":
-            pages = torch.randperm((cap - 8) // 8, device='cuda')[:math.ceil(quant / 8)] + 1
+            pages = torch.randperm(region // 8, device='cuda')[:math.ceil(quant / 8)] + 1
             quant_locs = (pages[:, None] * 8 + torch.arange(8, device='cuda')[None]).flatten()[:quant]
         else:
-            quant_locs = torch.randperm(cap - 8, device='cuda')[:quant] + 8
-        rows.append(torch.cat((torch.arange(pre, device='cuda') + cap,
+            quant_locs = torch.randperm(region, device='cuda')[:quant] + 8
+        quant_locs = quant_locs + (request * region if disjoint else 0)
+        hp_base = cap + (request * 80 if disjoint else 0)
+        rows.append(torch.cat((torch.arange(pre, device='cuda') + hp_base,
                                quant_locs,
-                               torch.arange(recent, device='cuda') + cap + 8)))
+                               torch.arange(recent, device='cuda') + hp_base + 8)))
         ptr.append(ptr[-1] + length)
     return torch.tensor(ptr, dtype=torch.int32, device='cuda'), torch.cat(rows).int()
 
@@ -212,11 +221,13 @@ def main():
     graph.reset()
     result['graph_dynamic_and_padding'] = True
     for b in (1, 2, 4, 8, 16):
+        pool = make_pool(cap=b * 32768 + 8, direct=True, hp_size=b * 80)
+        attn = ResidualAttention(pool, max_batch=16, max_context_len=32768, **options)
         q = torch.randn(b, 24, 128, device='cuda').bfloat16()[:, :8]
         for length in (1024, 2048, 4096, 8192, 16384, 32768):
-            ptr, loc = locations([length] * b, pool.hp_global_offset, args.layout)
+            ptr, loc = locations([length] * b, pool.hp_global_offset, args.layout, disjoint=True)
             ms = bench(lambda: attn.forward(q, 0, ptr, loc, rope, 128**-.5), args.graph_inner)
-            result['timings'].append({'batch': b, 'length': length, 'splits': attn.splits, 'threads': args.threads, 'dynamic_splits': not args.fixed_splits, 'unroll': args.unroll, 'layout': args.layout, 'graph_inner': args.graph_inner, 'graph_ms': ms})
+            result['timings'].append({'batch': b, 'length': length, 'splits': attn.splits, 'threads': args.threads, 'dynamic_splits': not args.fixed_splits, 'unroll': args.unroll, 'layout': args.layout, 'graph_inner': args.graph_inner, 'disjoint_request_addresses': True, 'graph_ms': ms})
     result['passed'] = True
     Path(args.output).write_text(json.dumps(result, indent=2))
     print(json.dumps(result), flush=True)
