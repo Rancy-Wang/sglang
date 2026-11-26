@@ -18,7 +18,7 @@ def _rows(IDX, CB, RES, SCALE, HP, slots, channels, head, valid,
     else:
         code=tl.load(IDX+pg*8+(c//4)%8,mask,0).to(tl.int32)
         cp=((head*32+c//4)*256+code)*4+c%4
-        center=tl.load(CB+tl.max_contiguous(cp,4),mask,0).to(tl.float32)
+        center=tl.load(CB+tl.max_contiguous(cp,[1,4]),mask,0).to(tl.float32)
     packed=tl.load(RES+pg*16+(c%32)//2,mask,0).to(tl.int32)
     z=(packed>>((c%2)*4))&15
     z=tl.where(z>=8,z-16,z).to(tl.float32)
