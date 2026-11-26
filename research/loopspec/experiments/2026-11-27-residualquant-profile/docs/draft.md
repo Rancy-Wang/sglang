@@ -29,6 +29,12 @@ Our residual_attention_cuda.py stage1 reconstructs FP32 centers+INT4 residual, a
 
 Do not transplant BF16 accumulation or move RoPE/rounding across sums under the existing contract. Position-independent Q·codebook LUT is not algebraically valid for position-dependent pre-RoPE K. A V code-index histogram also changes rounding unless correction is included; assess its synchronization and temporary storage rather than assuming free codebook reuse across requests.
 
+### A useful byte-accounting correction (derived, not measured traffic)
+
+At D128/group32 and schedule[2,2,2,4], official cache.cuh allocates74B per K or V anchor (64B codes+8B FP8 scale/offset+2B alpha) and42B per residual (32+8+2). async_copy.cuh omits the anchor's constant2B alpha when staging: nonanchor loops read72+42=114B per K/V, final anchor loop72B. Combined K+V staged payload averages (3*228+144)/4=207B per token/head/loop. Current VQ+ reads2*(32B index+64B residual+8B scale)=208B, before centroid fetches, RoPE, HP regions, cache-sector inflation and reuse. Thus these two specific formats have nearly equal average sequential payload reads despite different persistent storage. RQ's capacity advantage alone cannot explain a same-shape kernel gap; sparse centroid traffic and decode/arithmetic schedules must be measured. RQ persistent K+V storage averages100B per loop versus VQ+160B (shared index amortized across four loops), excluding side data/codebooks. Different loop schedules/group sizes change these figures.
+
+Source detail: RQ anchor softmax maintains independent strided token streams per8-lane group, and only merges streams after scanning pages. This avoids a block-wide softmax reduction for every page. Its PV stream is BF16-pair arithmetic, whereas our FP32 accumulation is part of the current contract. An FP32 stream implementation could borrow the ownership/barrier design while retaining precision, but register pressure and per-token rescaling are unmeasured tradeoffs.
+
 ## Hardware
 
 User-named BUS hosts are A800-SXM4-80GB, driver535.161.08. InfiniAI-BUS-2 currently has all eight GPUs idle; sudo authenticated and root identity verified. CUDA12.2/NCU2023.2.2 installed. GPU counter access is not yet proven. Use a compatible task environment and remeasure every baseline on this host. Do not alter system driver settings or touch other jobs.
