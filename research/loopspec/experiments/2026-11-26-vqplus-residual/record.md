@@ -171,3 +171,9 @@ R4结果：323079e01d2b3200a929708a2a5205e7f9ea3543（首个实现eac9c1ce7，GP
 ### 候选5/10
 
 目的：针对大batch residual attention瓶颈，评估两个request共用码本/RoPE的R2分组。源码分析表明R1每request重复加载同位置FP32cos/sin；R2可复用系数与64KiB表，但不会共享不同请求的真实KV或softmax。范围新增residual_attention_grouped_cuda.py，ResidualAttention分派及GPU测试。每CTA256线程、每请求CAP512、64split，两个request的长度/位置/概率/输出独立；batch1保留已有R1。风险为寄存器增加、group中长度不一致、末尾奇数request和empty split；必须完整覆写LSE且不越界。预期在B>=2减少重复加载，成功标准仍为原oracle容差、奇数B和动态graph通过，并与同A12GPU0的R4按统一page8/disjoint协议比较。配置保留R1作基线；只有实测改善才选用R2。真实服务继续TP2全R4，无准确率重启。计划通过后还需极值codec/训练编码差异、长上下文与完整性能验收，当前未宣称完成。
+
+R5结果：4432365729f7eca9277cb7b738da944bfc53e8c7，A12 GPU0，a12-r5/r4.exit与r5.exit均0，codec/oracle/奇数及不同长度batch/graph通过。8K B1/2/4/8/16，R4=0.0512/0.1470/0.2474/0.3856/0.7190ms；R5=0.0512/0.1195/0.3364/0.5175/0.9232ms。R2在B2获益、大B退化，不设默认；256线程和两个PV accumulator同时存活使并行度/资源成为下一候选。
+
+### 候选6/10
+
+目的：减少R2同时存活的PV累加器并提高延迟隐藏。步骤：PV按request顺序处理、复用WARPS×128 shared partial，512线程、launch_bounds(512,2)约束；保留数值合同和R1默认。范围residual_attention_grouped_cuda.py。预期比R5大B降低延迟；风险是更多barrier或编译器spill抵消收益。验证同A12 GPU0，完整codec/oracle/LSE/奇数batch/graph套件和page8独立请求图内计时，对比同卡R4/R5，检查编译资源。只有改善才采用，不因测试通过宣称全局最优。

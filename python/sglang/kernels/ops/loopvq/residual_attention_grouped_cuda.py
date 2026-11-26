@@ -8,10 +8,10 @@ _HEADER = _R1.split('template<typename IT>')[0].replace(
     'constexpr int CAP = 1024, SPLITS = 32, UNROLL = VQPLUS_UNROLL;',
     'constexpr int CAP = 512, SPLITS = 64, R = 2;').replace(
     'TABLE * 2 + 128 * 4 + CAP * 4 + WARPS * 128 * 4 + WARPS * 4 + 8',
-    'TABLE * 2 + R * (128 * 4 + CAP * 4 + WARPS * 128 * 4 + WARPS * 4 + 8)')
+    'TABLE * 2 + R * (128 * 4 + CAP * 4 + WARPS * 4 + 8) + WARPS * 128 * 4')
 _SRC = _HEADER + r'''
 template<typename IT>
-__global__ __launch_bounds__(THREADS) void residual_grouped_stage1(
+__global__ __launch_bounds__(THREADS, 2) void residual_grouped_stage1(
     const __nv_bfloat16* Q, const uint8_t* KI, const uint8_t* VI,
     const __nv_bfloat16* KC, const __nv_bfloat16* VC,
     const uint8_t* KR, const uint8_t* VR, const __half* KS, const __half* VS,
@@ -54,7 +54,7 @@ __global__ __launch_bounds__(THREADS) void residual_grouped_stage1(
     float* query = reinterpret_cast<float*>(table + TABLE);
     float* prob = query + R * 128;
     float* values = prob + R * CAP;
-    float* reduce = values + R * WARPS * 128;
+    float* reduce = values + WARPS * 128;
     float* stats = reduce + R * WARPS;
     for (int i = tid; i < R * 128; i += THREADS) {
         int r = i / 128, c = i % 128, b = first_b + r;
@@ -146,40 +146,40 @@ __global__ __launch_bounds__(THREADS) void residual_grouped_stage1(
         reinterpret_cast<int4*>(table)[i] = __ldg(reinterpret_cast<const int4*>(VC + h * TABLE) + i);
     __syncthreads();
     const int vg = lane & 7;
-    float acc[R][16] = {};
-    for (int n0 = warp * 4; n0 < nmax; n0 += WARPS * 4) {
-        int n = n0 + lane / 8;
+    // Only one request's PV accumulators and shared reduction are live.
+    // QK still reuses position coefficients across the two requests.
 #pragma unroll
-        for (int r = 0; r < R; ++r) if (n < count[r]) {
-            float p = prob[r * CAP + n];
-            int loc = (int)LOC[begin[r] + start + n];
+    for (int r = 0; r < R; ++r) {
+        float acc[16] = {};
+        for (int n0 = warp * 4; n0 < count[r]; n0 += WARPS * 4) {
+            int n = n0 + lane / 8;
+            if (n < count[r]) {
+                float p = prob[r * CAP + n];
+                int loc = (int)LOC[begin[r] + start + n];
 #pragma unroll
-            for (int group = 0; group < 4; ++group) {
-                float v[4];
-                row4(VI, table, VR, VS, HV, loc, offset, H, h, vg * 4 + group, v);
+                for (int group = 0; group < 4; ++group) {
+                    float v[4];
+                    row4(VI, table, VR, VS, HV, loc, offset, H, h, vg * 4 + group, v);
 #pragma unroll
-                for (int j = 0; j < 4; ++j) acc[r][group * 4 + j] = fmaf(p, bf(v[j]), acc[r][group * 4 + j]);
+                    for (int j = 0; j < 4; ++j) acc[group * 4 + j] = fmaf(p, bf(v[j]), acc[group * 4 + j]);
+                }
             }
         }
-    }
-#pragma unroll
-    for (int r = 0; r < R; ++r)
 #pragma unroll
         for (int j = 0; j < 16; ++j) {
-            acc[r][j] += __shfl_down_sync(0xffffffff, acc[r][j], 16);
-            acc[r][j] += __shfl_down_sync(0xffffffff, acc[r][j], 8);
-            if (lane < 8) values[(r * WARPS + warp) * 128 + vg * 16 + j] = acc[r][j];
+            acc[j] += __shfl_down_sync(0xffffffff, acc[j], 16);
+            acc[j] += __shfl_down_sync(0xffffffff, acc[j], 8);
+            if (lane < 8) values[warp * 128 + vg * 16 + j] = acc[j];
         }
-    __syncthreads();
-    if (tid < 128) {
-#pragma unroll
-        for (int r = 0; r < R; ++r) if (first_b + r < B) {
+        __syncthreads();
+        if (tid < 128 && first_b + r < B) {
             float total = 0;
 #pragma unroll
-            for (int w = 0; w < WARPS; ++w) total += values[(r * WARPS + w) * 128 + tid];
+            for (int w = 0; w < WARPS; ++w) total += values[w * 128 + tid];
             long dst = ((long)(first_b + r) * H + h) * SPLITS + split;
             OUT[dst * 128 + tid] = total / stats[r * 2 + 1];
         }
+        __syncthreads();
     }
 }
 void grouped_init() {
@@ -219,11 +219,11 @@ def prepare_grouped(device):
         if _EXT is None:
             from torch.utils.cpp_extension import load_inline
             _EXT = load_inline(
-                name='loopvq_residual_int4_grouped_r2_t256_v1',
+                name='loopvq_residual_int4_grouped_r2_t512_v2',
                 cpp_sources='#include <torch/extension.h>\nvoid grouped_init();\n'
                 'void grouped_cuda(' + ','.join(['torch::Tensor'] * 16) + ',int64_t,double,int64_t);',
                 cuda_sources=_SRC, functions=['grouped_init', 'grouped_cuda'],
-                extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', '-DVQPLUS_THREADS=256', '-gencode=arch=compute_80,code=sm_80'],
+                extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', '-DVQPLUS_THREADS=512', '-gencode=arch=compute_80,code=sm_80'],
             )
         if device.index not in _READY:
             _EXT.grouped_init(); _READY.add(device.index)
