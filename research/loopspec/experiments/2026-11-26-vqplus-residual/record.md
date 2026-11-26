@@ -145,3 +145,9 @@ dummy page的残差为0，scale为合法有限值，valid长度为0；padding不
 6. 不恢复已取消的五benchmark完整评测。先交付：可复核kernel正确性报告、真实显存账单、各bs/长度的decode收益与退化区间、完整step分解和剩余瓶颈。只有用户随后要求时，另行重启准确率评测。
 
 建议实施顺序：协议与oracle→packed pool与flush→直接融合VQ+ attention→图与split/HP调优→真实serve配对验收。每个候选修改+验证按项目规则记录轮次；不能在同一次改动里同时更换训练方法、算子数值协议和调度策略而失去归因。
+
+候选2结果：f7dbe9c4a，A10 GPU4，服务环境Torch2.14.1+cu130/Triton3.8.0，r2.exit=0，独立oracle至32K最大差1.90735e-6，dynamic graph/padding通过。8K单层B1=0.125713ms、B16=1.02656ms；1KB1=0.034475ms、B16=0.242722ms。cuobjdump显示62寄存器、STACK/LOCAL=0，显著低于首轮255；仍有固定32split冗余码本装载和低occupancy疑点。R1不同环境的加速比仅暂估，同服务环境复测另记。r2-wiring.exit=1：旧mock配置未含residual_bits；8项其余测试通过。NCU拒绝GPU计数器(ERR_NVGPUCTRPERM)，不修改系统权限；NCU下产生的延迟不能用作性能数据。
+
+### 候选3/10
+
+目的：改善split调度及memory-latency隐藏，修复默认关闭残差时的兼容回归。范围：CUDA stage1删除shared loc缓存、直接读取只读页表，提供128/256/512线程编译变体；按B/H/长度在设备端选择有效split(上限32、每split<=1024)，空split仍覆盖；ResidualAttention初始化配置，容量配置getattr默认0及显式32K入口校验；测试增加可选线程与原固定split对照、CPU容量测试。预期大B短上下文显著减少重复码本加载，512线程可借减少shared loc存储保持两CTA/SM；成功标准仍为同oracle容差，并比较各线程/动态split的配对延迟而非凭occupancy推断。风险为低B并行度下降、寄存器/共享内存变化。验证A10GPU4逐一运行完整kernel/graph套件，各候选GPU计时不重叠，CPU回归；随后用选定参数做真实TP2服务验证。数值合同和训练不变。

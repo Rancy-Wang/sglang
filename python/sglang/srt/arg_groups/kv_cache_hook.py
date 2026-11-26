@@ -55,6 +55,10 @@ def handle_loopvq_compatibility(server_args: Any) -> None:
         raise ValueError("VQ+ supports only INT4 group32 residuals.")
     if residual_bits and (not cfg.loopvq_codebook_dir or profile != "optimized"):
         raise ValueError("VQ+ requires a LoopVQ codebook and optimized Ouro decode.")
+    if residual_bits:
+        context = cfg.context_length or getattr(model_config_of(cfg).hf_config, "max_position_embeddings", None)
+        if context is None or not 1 <= context <= 32768:
+            raise ValueError("VQ+ residual decode requires context_length <= 32768.")
     if not cfg.loopvq_codebook_dir:
         return
     if not cfg.device.startswith("cuda"):

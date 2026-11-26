@@ -69,7 +69,7 @@ def _stage1(Q, KI, VI, KC, VC, KR, VR, KS, VS, HK, HV, PTR, LOC, ROPE, OUT, LSE,
 
 
 class ResidualAttention:
-    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda"):
+    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda", threads=512, dynamic_splits=True):
         if implementation not in ("cuda", "triton"):
             raise ValueError("Unknown residual attention implementation")
         if splits is None:
@@ -79,7 +79,9 @@ class ResidualAttention:
             if splits != 32 or not 0 < max_context_len <= 32768:
                 raise ValueError("VQ+ shared CUDA requires 32 splits and context <= 32768")
             from .residual_attention_cuda import prepare
-            self.extension = prepare(pool.hp_k.device)
+            self.extension = prepare(pool.hp_k.device, threads)
+        self.dynamic_splits = dynamic_splits
+        self.sm_count = torch.cuda.get_device_properties(pool.hp_k.device).multi_processor_count
         if pool.head_dim != 128 or not pool.residual_bits == 4:
             raise ValueError("VQ+ requires D128 and INT4 group32")
         self.pool, self.splits, self.block = pool, splits, block
@@ -101,6 +103,7 @@ class ResidualAttention:
                 pool.get_hp_key_buffer(layer_id), pool.get_hp_value_buffer(layer_id),
                 kv_indptr, kv_indices, cos_sin_cache, self.partial, self.lse,
                 pool.hp_global_offset, float(sm_scale),
+                max(1, (2 * self.sm_count + b * pool.head_num - 1) // (b * pool.head_num)) if self.dynamic_splits else 0,
             )
             return official_reduce(self.partial[:b], self.lse[:b], out)
         _stage1[(b, pool.head_num, self.splits)](

@@ -10,9 +10,9 @@ _SRC = r'''
 #include <cuda_bf16.h>
 #include <math.h>
 
-constexpr int THREADS = 256, WARPS = THREADS / 32, TABLE = 32 * 256 * 4;
+constexpr int THREADS = VQPLUS_THREADS, WARPS = THREADS / 32, TABLE = 32 * 256 * 4;
 constexpr int CAP = 1024, SPLITS = 32;
-constexpr int SMEM = TABLE * 2 + 128 * 4 + CAP * 8 + WARPS * 128 * 4 + WARPS * 4 + 8;
+constexpr int SMEM = TABLE * 2 + 128 * 4 + CAP * 4 + WARPS * 128 * 4 + WARPS * 4 + 8;
 
 __device__ __forceinline__ float bf(float x) { return __bfloat162float(__float2bfloat16_rn(x)); }
 __device__ __forceinline__ float warp_sum(float x) {
@@ -56,13 +56,15 @@ __global__ __launch_bounds__(THREADS) void stage1(
     const uint8_t* KR, const uint8_t* VR, const __half* KS, const __half* VS,
     const __nv_bfloat16* HK, const __nv_bfloat16* HV,
     const int* PTR, const IT* LOC, const float* ROPE, float* OUT, float* LSE,
-    int H, int offset, long qs, long qh, float scale) {
+    int H, int offset, long qs, long qh, float scale, int active_target) {
     const int b = blockIdx.x, h = blockIdx.y, split = blockIdx.z;
     const int tid = threadIdx.x, lane = tid & 31, warp = tid >> 5;
     const int begin = PTR[b];
     int length = PTR[b + 1] - begin;
     if (length && LOC[begin] == 0) length = 0; // graph dummy request
-    const int per = (length + SPLITS - 1) / SPLITS;
+    const int active = active_target ? min(SPLITS, max((length + CAP - 1) / CAP,
+        min(active_target, max(1, (length + 63) / 64)))) : SPLITS;
+    const int per = (length + active - 1) / active;
     const int start = split * per, count = max(0, min(per, length - start));
     const long dst = ((long)b * H + h) * SPLITS + split;
     CUDA_KERNEL_ASSERT(per <= CAP);
@@ -74,13 +76,11 @@ __global__ __launch_bounds__(THREADS) void stage1(
     extern __shared__ __align__(16) char raw[];
     auto* table = reinterpret_cast<__nv_bfloat16*>(raw);
     float* query = reinterpret_cast<float*>(table + TABLE);
-    int* locs = reinterpret_cast<int*>(query + 128);
-    float* prob = reinterpret_cast<float*>(locs + CAP);
+    float* prob = query + 128;
     float* values = prob + CAP;
     float* reduce = values + WARPS * 128;
     float* stats = reduce + WARPS;
     if (tid < 128) query[tid] = __bfloat162float(Q[b * qs + h * qh + tid]);
-    for (int n = tid; n < count; n += THREADS) locs[n] = (int)LOC[begin + start + n];
     for (int i = tid; i < TABLE / 8; i += THREADS)
         reinterpret_cast<int4*>(table)[i] = __ldg(reinterpret_cast<const int4*>(KC + h * TABLE) + i);
     __syncthreads();
@@ -94,8 +94,8 @@ __global__ __launch_bounds__(THREADS) void stage1(
         float dot = 0;
         if (n < count) {
             float low[4], high[4];
-            row4(KI, table, KR, KS, HK, locs[n], offset, H, h, g, low);
-            row4(KI, table, KR, KS, HK, locs[n], offset, H, h, g + 16, high);
+            row4(KI, table, KR, KS, HK, (int)LOC[begin + start + n], offset, H, h, g, low);
+            row4(KI, table, KR, KS, HK, (int)LOC[begin + start + n], offset, H, h, g + 16, high);
             const float* rope = ROPE + (long)(start + n) * 128 + g * 4;
             float4 co = __ldg(reinterpret_cast<const float4*>(rope));
             float4 si = __ldg(reinterpret_cast<const float4*>(rope + 64));
@@ -147,7 +147,7 @@ __global__ __launch_bounds__(THREADS) void stage1(
 #pragma unroll
             for (int group = 0; group < 4; ++group) {
                 float v[4];
-                row4(VI, table, VR, VS, HV, locs[n], offset, H, h, vgroup * 4 + group, v);
+                row4(VI, table, VR, VS, HV, (int)LOC[begin + start + n], offset, H, h, vgroup * 4 + group, v);
 #pragma unroll
                 for (int j = 0; j < 4; ++j) acc[group * 4 + j] += p * bf(v[j]);
             }
@@ -176,7 +176,7 @@ void residual_cuda(torch::Tensor q, torch::Tensor ki, torch::Tensor vi,
     torch::Tensor kc, torch::Tensor vc, torch::Tensor kr, torch::Tensor vr,
     torch::Tensor ks, torch::Tensor vs, torch::Tensor hk, torch::Tensor hv,
     torch::Tensor ptr, torch::Tensor loc, torch::Tensor rope, torch::Tensor out,
-    torch::Tensor lse, int64_t offset, double scale) {
+    torch::Tensor lse, int64_t offset, double scale, int64_t target) {
     dim3 grid(q.size(0), q.size(1), SPLITS);
 #define RUN(IT) stage1<IT><<<grid, THREADS, SMEM, c10::cuda::getCurrentCUDAStream()>>>( \
     reinterpret_cast<const __nv_bfloat16*>(q.data_ptr()), ki.data_ptr<uint8_t>(), vi.data_ptr<uint8_t>(), \
@@ -184,35 +184,36 @@ void residual_cuda(torch::Tensor q, torch::Tensor ki, torch::Tensor vi,
     kr.data_ptr<uint8_t>(), vr.data_ptr<uint8_t>(), reinterpret_cast<const __half*>(ks.data_ptr()), \
     reinterpret_cast<const __half*>(vs.data_ptr()), reinterpret_cast<const __nv_bfloat16*>(hk.data_ptr()), \
     reinterpret_cast<const __nv_bfloat16*>(hv.data_ptr()), ptr.data_ptr<int>(), loc.data_ptr<IT>(), \
-    rope.data_ptr<float>(), out.data_ptr<float>(), lse.data_ptr<float>(), q.size(1), offset, q.stride(0), q.stride(1), scale)
+    rope.data_ptr<float>(), out.data_ptr<float>(), lse.data_ptr<float>(), q.size(1), offset, q.stride(0), q.stride(1), scale, target)
     if (loc.scalar_type() == at::kLong) { RUN(int64_t); } else { RUN(int); }
     C10_CUDA_KERNEL_LAUNCH_CHECK();
 #undef RUN
 }
 '''
 
-_EXT = None
+_EXT = {}
 _READY = set()
 
 
-def prepare(device):
-    global _EXT
+def prepare(device, threads=512):
+    if threads not in (128, 256, 512):
+        raise ValueError("Supported VQ+ CTA sizes: 128/256/512")
     device = torch.device(device)
     with torch.cuda.device(device):
         if torch.cuda.is_current_stream_capturing():
             raise RuntimeError('VQ+ CUDA must be prepared before capture')
         if torch.cuda.get_device_capability(device) != (8, 0):
             raise ValueError('VQ+ CUDA currently validated for sm_80')
-        if _EXT is None:
+        if threads not in _EXT:
             from torch.utils.cpp_extension import load_inline
-            _EXT = load_inline(
-                name='loopvq_residual_int4_shared_v1',
+            _EXT[threads] = load_inline(
+                name=f'loopvq_residual_int4_shared_t{threads}_v2',
                 cpp_sources='#include <torch/extension.h>\nvoid residual_init();\n'
-                'void residual_cuda(' + ','.join(['torch::Tensor'] * 16) + ',int64_t,double);',
+                'void residual_cuda(' + ','.join(['torch::Tensor'] * 16) + ',int64_t,double,int64_t);',
                 cuda_sources=_SRC, functions=['residual_init', 'residual_cuda'],
-                extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', '-gencode=arch=compute_80,code=sm_80'],
+                extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', f'-DVQPLUS_THREADS={threads}', '-gencode=arch=compute_80,code=sm_80'],
             )
-        if device.index not in _READY:
-            _EXT.residual_init()
-            _READY.add(device.index)
-    return _EXT
+        if (device.index, threads) not in _READY:
+            _EXT[threads].residual_init()
+            _READY.add((device.index, threads))
+    return _EXT[threads]

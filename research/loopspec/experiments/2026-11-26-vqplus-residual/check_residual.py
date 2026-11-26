@@ -107,12 +107,12 @@ def locations(lengths, cap):
     return torch.tensor(ptr, dtype=torch.int32, device='cuda'), torch.cat(rows).int()
 
 
-def oracle(q, pool, ptr, loc, rope):
-    outputs = []
+def oracle(q, pool, ptr, loc, rope, return_lse=False):
+    outputs, lses = [], []
     for b in range(q.shape[0]):
         slots = loc[int(ptr[b]):int(ptr[b+1])].long()
         if not slots.numel():
-            outputs.append(torch.zeros_like(q[b])); continue
+            outputs.append(torch.zeros_like(q[b])); lses.append(torch.full((pool.head_num,), -float('inf'), device='cuda')); continue
         quant = slots < pool.hp_global_offset
         values = []
         for kind in ('k', 'v'):
@@ -127,8 +127,9 @@ def oracle(q, pool, ptr, loc, rope):
         c, s = c.repeat(1, 2)[:, None], s.repeat(1, 2)[:, None]
         k = (k * c + torch.cat((-k[..., 64:], k[..., :64]), -1) * s).bfloat16().float()
         scores = torch.einsum('hd,nhd->hn', q[b].float(), k) / math.sqrt(128)
+        lses.append(scores.logsumexp(-1))
         outputs.append(torch.einsum('hn,nhd->hd', scores.softmax(-1), v.bfloat16().float()).bfloat16())
-    return torch.stack(outputs)
+    return (torch.stack(outputs), torch.stack(lses)) if return_lse else torch.stack(outputs)
 
 
 def bench(fn):
@@ -149,6 +150,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--output', required=True)
     ap.add_argument('--implementation', choices=['cuda', 'triton'], default='cuda')
+    ap.add_argument('--threads', type=int, choices=[128, 256, 512], default=512)
+    ap.add_argument('--fixed-splits', action='store_true')
     args = ap.parse_args()
     torch.manual_seed(20261126)
     torch.backends.cuda.matmul.allow_tf32 = False
@@ -156,15 +159,16 @@ def main():
     pool = make_pool()
     theta = torch.arange(32768, device='cuda').float()[:, None] / (10000 ** (torch.arange(64, device='cuda').float()[None] / 64))
     rope = torch.cat((theta.cos(), theta.sin()), -1).contiguous()
-    attn = ResidualAttention(pool, max_batch=16, max_context_len=32768, implementation=args.implementation)
+    attn = ResidualAttention(pool, max_batch=16, max_context_len=32768, implementation=args.implementation, threads=args.threads, dynamic_splits=not args.fixed_splits)
     for length in (0, 8, 64, 72, 79, 80, 127, 128, 1024, 2048, 4096, 8192, 16384, 32768):
         q = torch.randn(2, 24, 128, device='cuda').bfloat16()[:, :8]
         ptr, loc = locations([length, length // 2], pool.hp_global_offset)
         # Stale scratch must not leak even for fully empty rows.
         attn.partial.fill_(float('nan')); attn.lse.fill_(float('nan'))
-        expected = oracle(q, pool, ptr, loc, rope)
+        expected, expected_lse = oracle(q, pool, ptr, loc, rope, return_lse=True)
         actual = attn.forward(q, 0, ptr, loc, rope, 128**-.5)
         torch.testing.assert_close(actual, expected, atol=.002, rtol=.01)
+        torch.testing.assert_close(attn.lse[:2].logsumexp(-1), expected_lse, atol=2e-5, rtol=2e-5)
         result['attention'].append({'length': length, 'max_abs': (actual.float()-expected.float()).abs().max().item()})
     # Capture once, then change physical addresses and request lengths in place.
     q = torch.randn(2, 8, 128, device='cuda').bfloat16()
@@ -189,7 +193,7 @@ def main():
         for length in (1024, 2048, 4096, 8192, 16384, 32768):
             ptr, loc = locations([length] * b, pool.hp_global_offset)
             ms = bench(lambda: attn.forward(q, 0, ptr, loc, rope, 128**-.5))
-            result['timings'].append({'batch': b, 'length': length, 'splits': attn.splits, 'block': 32, 'graph_ms': ms})
+            result['timings'].append({'batch': b, 'length': length, 'splits': attn.splits, 'threads': args.threads, 'dynamic_splits': not args.fixed_splits, 'graph_ms': ms})
     result['passed'] = True
     Path(args.output).write_text(json.dumps(result, indent=2))
     print(json.dumps(result), flush=True)
