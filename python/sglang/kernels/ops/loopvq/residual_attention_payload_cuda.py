@@ -114,21 +114,28 @@ def _payload_source():
         source = _replace_once(source, "__launch_bounds__(THREADS)", "__launch_bounds__(THREADS, 3)")
     return source
 
-_SOURCE = _replace_once(_payload_source(),
+def _split_policy(batch, chunks):
+    """Exact integer policy, evaluated once while generating CUDA source."""
+    capacity, tasks = 324, batch * 8
+    waves = max(1, (chunks * tasks + capacity - 1) // capacity)
+    requested = max(chunks, waves * capacity // tasks)
+    if chunks > 1 and requested * tasks * 10 < waves * capacity * 9:
+        waves += 1
+        requested = max(chunks, waves * capacity // tasks)
+    return min(32, requested)
+
+
+_POLICY = "__device__ __constant__ unsigned char PAYLOAD_SPLITS[13][33] = {\n" + ",\n".join(
+    "{" + ",".join(str(_split_policy(batch, chunks)) for chunks in range(33)) + "}"
+    for batch in range(4, 17)
+) + "\n};\n"
+_SOURCE = _replace_once(_payload_source(), "template<typename IT>", _POLICY + "template<typename IT>")
+_SOURCE = _replace_once(_SOURCE,
     """    const int active = active_target ? min(SPLITS, max((length + CAP - 1) / CAP,
         min(active_target, max(1, (length + 63) / 64)))) : SPLITS;""",
-    """    int requested = active_target;
-    if (active_target < 0) {
-        const int capacity = -active_target;
-        const int tasks = gridDim.x * H;
-        const int minimum = (length + CAP - 1) / CAP;
-        int waves = max(1, (minimum * tasks + capacity - 1) / capacity);
-        requested = max(minimum, waves * capacity / tasks);
-        // Long partitions justify an extra wave when integer rounding leaves
-        // a large fraction of the resident CTA capacity unused.
-        if (length > CAP && requested * tasks * 10 < waves * capacity * 9)
-            requested = max(minimum, ++waves * capacity / tasks);
-    }
+    """    const int requested = active_target < 0
+        ? PAYLOAD_SPLITS[gridDim.x - 4][min(SPLITS, (length + CAP - 1) / CAP)]
+        : active_target;
     const int active = requested ? min(SPLITS, max((length + CAP - 1) / CAP,
         min(requested, max(1, (length + 63) / 64)))) : SPLITS;""")
 _SOURCE += r'''
@@ -144,6 +151,8 @@ int64_t residual_capacity() {
     return std::min(blocks32, blocks64) * props.multiProcessorCount;
 }
 '''
+_SOURCE = _replace_once(_SOURCE, 'void stage1(', 'void payload_stage1(')
+_SOURCE = _SOURCE.replace('stage1<', 'payload_stage1<')
 _EXT = None
 _READY = {}
 
@@ -158,7 +167,7 @@ def prepare(device):
         if _EXT is None:
             from torch.utils.cpp_extension import load_inline
             _EXT = load_inline(
-                name="loopvq_payload_r1_t512_l2",
+                name="loopvq_payload_r2_t512_l2",
                 cpp_sources="#include <torch/extension.h>\nvoid residual_init();\n"
                     "int64_t residual_capacity();\nvoid residual_cuda(" +
                     ",".join(["torch::Tensor"] * 16) + ",int64_t,double,int64_t);",

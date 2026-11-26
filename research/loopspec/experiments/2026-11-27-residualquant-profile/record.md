@@ -166,3 +166,20 @@ Round11 source56fbb58de bothcases exit0/outputLSEpass. SharedbestN2k181.939us(ta
 
 
 R12localpreflight: firstexactsource-stringassertfoundoneextra blanklineonly; unifieddiffretainedinchat. NonblanklinecomparisonconfirmsentirefrozenR8CUDApayloadidentical; nofunctionalfixneeded. Syntax/anchors/bracespass; exhaustive425997 B4..16×length0..32768 capacitychecksmaintain1..32splits/CAP1024. Remoteoriginalproductionworktreecreated/share/wangruoxi/repo/sglang-vqplus-baseline@56fbb58de. InstalledComputeSanitizer2023.2.2uses --kernel-regex kns=stage1 (notnewer --kernel-name syntax); useactualCLI.
+
+
+R12initialvalidation2bc7b260a:all100boundaries/LSE/dynamicgraph/paddingexit0,GPU4. ActualCUDAoccupancycapacity324;bothindexwidth40regs0stack/local;SASS0STL/LDL. Real2kall4loops/8batchespass;B16~133.56us vsold222.60/native97.83,slowerthanR8fixedtarget123.82. N1kB16~75.67vs115.73;N4k222.43vs342.93;N8kstillrunning. SmallB1/2/3unchangeddispatchpairedwithin1%. R12memcheckGPU5stillrunning. Hypothesis: repeatedintegerdivisionsinnegativecapacitypolicy(includingemptyCTAs) addcost; notprovenbyregistercountalone.
+
+Environmentonlyrecovery: originaluvPyPIinstall2627961made~2.5GBunpackedprogressin~30min; verifiedsameTorchwheelhashviaAliyunindexand1MiBrange206download3.48MB/s. Terminatedonlyverifiedownuvprocess,preservedoriginalexit/log/cache;newwrapper2629228/uv2629230 installsidenticaltorch2.14.1/sglang-kernel0.4.9/transformers5.19.0 fromhttps://mirrors.aliyun.com/pypi/simple,compat/install-core-mirror.log/exit. At~4min3GBunpacked,progressing. No optimizationroundcharged,existingakv/microenvuntouched.
+
+## Round13/20 — eliminate repeated schedule division and measure matched stages (before edits)
+
+1. Purpose: testwhyR12integrationlost~8%versusR8fixedtarget despiteunchangedpayload/40regs/no-spills; separatelymeasureQK/PVbenefitatidenticalpartitions.
+2. Steps: precomputeexactR12policyforB4..16/H8/capacity324/minimumceilN1024=0..32 into429-byteCUDAconstanttable. GPUlengthlookupthenexistingceilN64/CAPclamps; no hostlengthread. Tightencapacitydispatchto==324tomatchtable. Exhaustivelycompareallsupportedlengths/batchesagainstR12formula. Stageharnessoptionalpayloadsourceandfixedtarget5 forfull/dense/scalar/payload clocks; recordinstrumentationoverhead andactiveCTAcounts. Noarithmetic/cache/encoderchanges.
+3. Scope: productionresidual_attention_payload_cuda.py scheduleonly,residual_attention.pycapacityguard; taskstage_profile.pyoptionalflags/reference,taskdocs. Integrationprobeandindependentoraclesunchanged. Uniqueproductionextensioncachekeyr2.
+4. Success:exactpolicyidentityforall425997cases,unchangedboundary/LSE/graphs/memcheck;lowerpairedlatencythanR12andnearR8fixedtarget; fullservingacceptanceremainsrequired. Stagecyclesarenotwalltime/NCUstalls; onlycomparesame640activeCTAsatN2ktarget5. No numericrelaxation.
+5. Risks:wrongtableindex/zero-lengthbucket,constantmemorylookupoverhead,compiledresources/toolchaindifferences. Restrictautomaticdispatchtoactualcapacity324andprevioushardware/head/batchguard;fallbackelsewhere.
+6. Validation:localpolicyexhaustive/source/syntaxchecks,GitafterR12jobsfinish;R12unchangedintegrationharness100boundaries/memcheck/realmatrix,allloops. Stage30pairedgraphsamples32innerandCTAclockoverhead. PreserveR12resultsandbaselinecheckout56fbb58de. No claimdivisionisthebottleneckuntilcandidatecomparison.
+
+
+R13prevalidationaddendum: name the new CUDA entry payload_stage1 (declaration/launch/occupancy references only) so profiling and sanitizer can select changedkernelunambiguously. No arithmetic/controlflowchange; use --kernel-regex kns=payload_stage1 forR13memcheckwhilekeepingall100oracle/graphcases. R12fullstage1-filteredmemcheckcontinuesunchanged.

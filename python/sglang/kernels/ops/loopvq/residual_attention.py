@@ -115,7 +115,7 @@ class ResidualAttention:
                 and max_batch >= 4 and pool.head_num == 8 and self.sm_count == 108):
             from .residual_attention_payload_cuda import prepare
             extension, capacity = prepare(pool.hp_k.device)
-            if capacity >= 3 * self.sm_count:
+            if capacity == 324:
                 self.payload_extension, self.payload_capacity = extension, capacity
 
     def use_grouped(self, batch):

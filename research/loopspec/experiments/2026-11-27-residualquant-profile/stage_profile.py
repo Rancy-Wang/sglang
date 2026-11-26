@@ -25,6 +25,9 @@ def replace_once(source, before, after):
 
 def compile_control(kind, instrument, threads=512):
     source = _SRC
+    if kind == "payload":
+        from sglang.kernels.ops.loopvq.residual_attention_payload_cuda import _SOURCE
+        source = _SOURCE
     if kind == "dense":
         start = source.index("__device__ __forceinline__ void row4(")
         stop = source.index("__device__ __forceinline__ void copy_table", start)
@@ -63,7 +66,7 @@ def compile_control(kind, instrument, threads=512):
     return extension
 
 
-def make_reader(pool, batch, kind, instrument, k, v):
+def make_reader(pool, batch, kind, instrument, k, v, target=0):
     selected = copy.copy(pool)
     if kind == "dense":
         selected.get_hp_key_buffer = lambda loop: k
@@ -71,12 +74,13 @@ def make_reader(pool, batch, kind, instrument, k, v):
     reader = PagedResidualAttention(selected, max_batch=batch, layout=2, cooperative=False)
     extension = compile_control(kind, instrument)
     clocks = torch.zeros(batch, 8, 32, 4, device="cuda", dtype=torch.int64)
-    if instrument:
-        def launch(*args):
+    def launch(*args):
+        if target:
+            args = (*args[:-1], target)
+        if instrument:
             return extension.residual_cuda(*args[:16], clocks, *args[16:])
-        reader.extension = SimpleNamespace(residual_cuda=launch)
-    else:
-        reader.extension = extension
+        return extension.residual_cuda(*args)
+    reader.extension = SimpleNamespace(residual_cuda=launch)
     return reader, clocks
 
 
@@ -90,7 +94,10 @@ def main():
     parser.add_argument("--layer", type=int, default=23)
     parser.add_argument("--loop", type=int, default=0)
     parser.add_argument("--repeats", type=int, default=30)
+    parser.add_argument("--payload", action="store_true")
+    parser.add_argument("--target", type=int, default=0)
     args = parser.parse_args()
+    assert 0 <= args.target <= 32
     torch.backends.cuda.matmul.allow_tf32 = False
     manifest = json.loads((args.snapshot / "manifest.json").read_text())
     n = manifest["length"]
@@ -124,9 +131,9 @@ def main():
     calls = {"production_page": lambda: baseline.forward(q, args.loop, ptr, loc, rope, 128**-.5), "native_serving": native}
     instruments = {}
     correctness = {}
-    for kind in ("full", "dense", "scalar"):
+    for kind in (("full", "dense", "scalar", "payload") if args.payload else ("full", "dense", "scalar")):
         for instrument in (False, True):
-            reader, clocks = make_reader(page, args.batch, kind, instrument, k, v)
+            reader, clocks = make_reader(page, args.batch, kind, instrument, k, v, args.target)
             name = kind + ("_clock" if instrument else "")
             fn = lambda reader=reader: reader.forward(q, args.loop, ptr, loc, rope, 128**-.5)
             got = fn()
@@ -152,7 +159,7 @@ def main():
                             "median_cycles": values.median(0).values.tolist(), "max_cycles": values.max(0).values.tolist()})
         cycle_samples[kind] = samples
     result = dict(source_sha=subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-        manifest=manifest, batch=args.batch, layer=args.layer, loop=args.loop, torch=torch.__version__,
+        manifest=manifest, target=args.target, payload=args.payload, batch=args.batch, layer=args.layer, loop=args.loop, torch=torch.__version__,
         gpu=torch.cuda.get_device_name(), correctness=correctness, timing=timing, stage_order=["QK", "softmax", "PV_and_partial_store"],
         cta_cycle_samples=cycle_samples, notes=["CTA residence cycles are not additive device latency.",
             "Clock instrumentation can change registers and scheduling; quantify overhead.",
