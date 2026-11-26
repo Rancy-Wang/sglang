@@ -81,7 +81,7 @@ def replace_once(source, old, new):
     return source.replace(old, new)
 
 
-def source_for(mode, min_blocks=0):
+def source_for(mode, min_blocks=0, fused=False):
     assert mode in ('qk', 'pv', 'both')
     source = replace_once(_SRC, '__device__ __forceinline__ void copy_table',
                           HELPERS + '\n__device__ __forceinline__ void copy_table')
@@ -98,20 +98,29 @@ def source_for(mode, min_blocks=0):
 #pragma unroll
                 for (int j = 0; j < 4; ++j) acc[group * 4 + j] = fmaf(p, bf(v[j]), acc[group * 4 + j]);
             }''', '            pv16(VI, table, VR, VS, HV, (int)LOC[begin + start + n], offset, H, h, vgroup, p, acc);')
+    if fused:
+        for old, new in (
+            ("x[j] = __bfloat162float(cv[j]) + scale * v;", "x[j] = fmaf(scale, (float)v, __bfloat162float(cv[j]));"),
+            ("low[j] = __bfloat162float(v0[j]) + scale0 * r0;", "low[j] = fmaf(scale0, (float)r0, __bfloat162float(v0[j]));"),
+            ("high[j] = __bfloat162float(v1[j]) + scale1 * r1;", "high[j] = fmaf(scale1, (float)r1, __bfloat162float(v1[j]));"),
+            ("const float value = __bfloat162float(cv[j]) + scale * r;", "const float value = fmaf(scale, (float)r, __bfloat162float(cv[j]));"),
+        ):
+            source = replace_once(source, old, new)
     if min_blocks:
         assert min_blocks == 3
         source = replace_once(source, "__launch_bounds__(THREADS)", "__launch_bounds__(THREADS, 3)")
     return source
 
 
-def prepare(mode, threads=512, min_blocks=0):
+def prepare(mode, threads=512, min_blocks=0, fused=False):
     from torch.utils.cpp_extension import load_inline
     assert not min_blocks or threads == 512
     suffix = f"_r7_b{min_blocks}" if min_blocks else ""
+    suffix += "_r8_fma" if fused else ""
     ext = load_inline(name=f'vqrq_payload_r6_{mode}_t{threads}{suffix}',
         cpp_sources='#include <torch/extension.h>\nvoid residual_init();\nvoid residual_cuda(' +
                     ','.join(['torch::Tensor'] * 16) + ',int64_t,double,int64_t);',
-        cuda_sources=source_for(mode, min_blocks), functions=['residual_init', 'residual_cuda'],
+        cuda_sources=source_for(mode, min_blocks, fused), functions=['residual_init', 'residual_cuda'],
         extra_cuda_cflags=['-O3','-lineinfo','--fmad=false','-Xptxas=-v',
             f'-DVQPLUS_THREADS={threads}','-DVQPLUS_UNROLL=1','-DVQPLUS_GLOBAL=1',
             '-DVQPLUS_ASYNC=0','-DVQPAGE_LAYOUT=2','-DVQPAGE_COOP=0',
