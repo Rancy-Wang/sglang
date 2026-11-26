@@ -41,3 +41,15 @@ Round2 result: source01228fe42, BUS2GPU0, exit0. Thirty paired warmed graph samp
 4. Success: output .002/.01 and logsumexp2e-5/2e-5 for every tested point; >=10% lower B16/N2048 median before considering production policy. Lower batch regressions must be handled by explicit dispatch, not omitted.
 5. Risks: changing split changes reduction order; excess partitions incur launch/reduction overhead. Resource-derived occupancy is a hypothesis, not a measured hardware stall diagnosis. Short sequences clamp target, document effective splits.
 6. Validation: local syntax/review, Git push/pull, GPU/process/memory preflight, paired CUDA graphs30samples/32inner, sameGPU baseline, retained samples and sourceSHA. LSE checked against independent dense FP32 scores. No full-serving claim from microbenchmarks.
+
+
+Round3 first result:42d3effc8, BUS2GPU0, B16N2048layer23loop0 exit0. All output/LSE checks passed. Mediansus: auto222.103,native97.853; targets1/2/3/4/5/6/8/12/16/24/32 =222.041/222.104/179.324/185.046/178.368/190.630/184.294/206.078/203.133/238.675/248.252. Target5 lowers latency19.69%, target3~19.26%. This establishes a scheduling effect, not its exact stall mechanism. Source unchanged, broader loop/shape sweeps running wrappers2626278GPU0 and2626280GPU1; actual effective splits retained. Baseline CPU/GPU environment unchanged, allGPU idle before launches.
+
+## Round4/20 — CTA size and split co-design (before edits)
+
+1. Purpose: test whether reducing the existing512-thread CTA improves work distribution for the63-register full reader, after R3 demonstrated a19.7% scheduling gain.
+2. Steps: expose existing prepare(threads=128/256/512) in the task sweep; fixed preplanned128 and256thread candidates across targets2,3,4,5,6,8,12,16,24,32; keep512threadauto/native controls. Same noncompact page-head source and arithmetic, unlike prior rejected compact/layout1 experiment.
+3. Scope: schedule_probe.py argument and explicit candidate thread selection; existing CUDA compile specialization only, no production dispatch change. Do not change R3 baseline or old evidence.
+4. Success: output .002/.01 and LSE2e-5; beat both current512auto and best R3 schedule atB16N2048, then useful across1K–8K/loops/batches. Record compiled registers/spills per specialization.
+5. Risks: fewer warps perCTA can reduce latency hiding, increase per-thread serial work, and alter FP32 reduction order. Split sweep must be considered jointly; parameter search is bounded and does not establish a global optimum.
+6. Validation: local syntax/diff, Git sync only after existingGPU jobs finish, idleGPU preflight, same30sample/32inner paired graphs and independent oracle per point; resource extraction. Subsequent production policy requires separately counted implementation and boundary/serving validation.
