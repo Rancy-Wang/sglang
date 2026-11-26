@@ -4,13 +4,18 @@ import importlib.util
 import json
 import math
 import sys
+import subprocess
+import inspect
 import types
 from pathlib import Path
 
 import torch
 
 ROOT = Path(__file__).resolve().parents[4]
-SRC = ROOT / 'python/sglang/kernels/ops/loopvq'
+bootstrap = argparse.ArgumentParser(add_help=False)
+bootstrap.add_argument('--kernel-root', type=Path, default=ROOT)
+KERNEL_ROOT = bootstrap.parse_known_args()[0].kernel_root
+SRC = KERNEL_ROOT / 'python/sglang/kernels/ops/loopvq'
 for name in ('sglang', 'sglang.kernels', 'sglang.kernels.ops', 'sglang.kernels.ops.loopvq'):
     module = types.ModuleType(name)
     module.__path__ = [str(SRC)] if name.endswith('loopvq') else []
@@ -94,14 +99,19 @@ def make_pool(cap=32776, heads=8):
     return pool
 
 
-def locations(lengths, cap):
+def locations(lengths, cap, layout="random-token"):
     ptr, rows = [0], []
     for length in lengths:
         pre = min(8, length)
         recent = min(64, length - pre)
         quant = length - pre - recent
+        if layout == "page8":
+            pages = torch.randperm((cap - 8) // 8, device='cuda')[:math.ceil(quant / 8)] + 1
+            quant_locs = (pages[:, None] * 8 + torch.arange(8, device='cuda')[None]).flatten()[:quant]
+        else:
+            quant_locs = torch.randperm(cap - 8, device='cuda')[:quant] + 8
         rows.append(torch.cat((torch.arange(pre, device='cuda') + cap,
-                               torch.randperm(cap - 8, device='cuda')[:quant] + 8,
+                               quant_locs,
                                torch.arange(recent, device='cuda') + cap + 8)))
         ptr.append(ptr[-1] + length)
     return torch.tensor(ptr, dtype=torch.int32, device='cuda'), torch.cat(rows).int()
@@ -132,16 +142,17 @@ def oracle(q, pool, ptr, loc, rope, return_lse=False):
     return (torch.stack(outputs), torch.stack(lses)) if return_lse else torch.stack(outputs)
 
 
-def bench(fn):
+def bench(fn, inner=1):
     for _ in range(3): fn()
     torch.cuda.synchronize()
     graph = torch.cuda.CUDAGraph()
-    with torch.cuda.graph(graph): result = fn()
+    with torch.cuda.graph(graph):
+        for _ in range(inner): result = fn()
     start, end = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
     start.record()
     for _ in range(30): graph.replay()
     end.record(); end.synchronize()
-    ms = start.elapsed_time(end) / 30
+    ms = start.elapsed_time(end) / (30 * inner)
     graph.reset()
     return ms
 
@@ -149,17 +160,29 @@ def bench(fn):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--output', required=True)
+    ap.add_argument('--kernel-root', type=Path, default=ROOT)
     ap.add_argument('--implementation', choices=['cuda', 'triton'], default='cuda')
     ap.add_argument('--threads', type=int, choices=[128, 256, 512], default=512)
     ap.add_argument('--fixed-splits', action='store_true')
+    ap.add_argument('--unroll', type=int, choices=[1,2,4], default=1)
+    ap.add_argument('--graph-inner', type=int, choices=[1,16], default=16)
+    ap.add_argument('--layout', choices=['random-token','page8'], default='page8')
     args = ap.parse_args()
     torch.manual_seed(20261126)
     torch.backends.cuda.matmul.allow_tf32 = False
     result = {'codec': codec_test(), 'attention': [], 'timings': [], 'tolerance': {'atol': .002, 'rtol': .01}}
+    result['environment'] = {'torch': torch.__version__, 'kernel_root': str(KERNEL_ROOT),
+        'source_sha': subprocess.check_output(['git','rev-parse','HEAD'],cwd=KERNEL_ROOT,text=True).strip(),
+        'gpu': torch.cuda.get_device_name()}
     pool = make_pool()
     theta = torch.arange(32768, device='cuda').float()[:, None] / (10000 ** (torch.arange(64, device='cuda').float()[None] / 64))
     rope = torch.cat((theta.cos(), theta.sin()), -1).contiguous()
-    attn = ResidualAttention(pool, max_batch=16, max_context_len=32768, implementation=args.implementation, threads=args.threads, dynamic_splits=not args.fixed_splits)
+    options = dict(implementation=args.implementation, threads=args.threads, dynamic_splits=not args.fixed_splits)
+    if 'unroll' in inspect.signature(ResidualAttention).parameters:
+        options['unroll'] = args.unroll
+    else:
+        assert args.unroll == 1, 'Baseline does not implement token unroll'
+    attn = ResidualAttention(pool, max_batch=16, max_context_len=32768, **options)
     for length in (0, 8, 64, 72, 79, 80, 127, 128, 1024, 2048, 4096, 8192, 16384, 32768):
         q = torch.randn(2, 24, 128, device='cuda').bfloat16()[:, :8]
         ptr, loc = locations([length, length // 2], pool.hp_global_offset)
@@ -191,9 +214,9 @@ def main():
     for b in (1, 2, 4, 8, 16):
         q = torch.randn(b, 24, 128, device='cuda').bfloat16()[:, :8]
         for length in (1024, 2048, 4096, 8192, 16384, 32768):
-            ptr, loc = locations([length] * b, pool.hp_global_offset)
-            ms = bench(lambda: attn.forward(q, 0, ptr, loc, rope, 128**-.5))
-            result['timings'].append({'batch': b, 'length': length, 'splits': attn.splits, 'threads': args.threads, 'dynamic_splits': not args.fixed_splits, 'graph_ms': ms})
+            ptr, loc = locations([length] * b, pool.hp_global_offset, args.layout)
+            ms = bench(lambda: attn.forward(q, 0, ptr, loc, rope, 128**-.5), args.graph_inner)
+            result['timings'].append({'batch': b, 'length': length, 'splits': attn.splits, 'threads': args.threads, 'dynamic_splits': not args.fixed_splits, 'unroll': args.unroll, 'layout': args.layout, 'graph_inner': args.graph_inner, 'graph_ms': ms})
     result['passed'] = True
     Path(args.output).write_text(json.dumps(result, indent=2))
     print(json.dumps(result), flush=True)

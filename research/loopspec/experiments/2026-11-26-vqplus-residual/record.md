@@ -151,3 +151,15 @@ dummy page的残差为0，scale为合法有限值，valid长度为0；padding不
 ### 候选3/10
 
 目的：改善split调度及memory-latency隐藏，修复默认关闭残差时的兼容回归。范围：CUDA stage1删除shared loc缓存、直接读取只读页表，提供128/256/512线程编译变体；按B/H/长度在设备端选择有效split(上限32、每split<=1024)，空split仍覆盖；ResidualAttention初始化配置，容量配置getattr默认0及显式32K入口校验；测试增加可选线程与原固定split对照、CPU容量测试。预期大B短上下文显著减少重复码本加载，512线程可借减少shared loc存储保持两CTA/SM；成功标准仍为同oracle容差，并比较各线程/动态split的配对延迟而非凭occupancy推断。风险为低B并行度下降、寄存器/共享内存变化。验证A10GPU4逐一运行完整kernel/graph套件，各候选GPU计时不重叠，CPU回归；随后用选定参数做真实TP2服务验证。数值合同和训练不变。
+
+候选3结果：2a430fda8，A10 GPU4，128/256/512线程和512固定32split全部通过codec/output/LSE/动态graph检查（各exit0），512动态在8KB1=0.0712ms、B16=0.7742ms，128/256显著更慢；固定32split在B2的8K略快，但大B短长度显著落后，尚未证明动态策略全局最优。旧wiring九测试通过；残差CPU contract入口和TP2容量账单通过。真实TP2在GPU4/5、端口30664，训练residual-ft，HP8+64，context32768，capacity65536，max-prefill16384，full graph bs1/2/4/8/16启动成功。128token连续decode、pad3、bs16、中止及页复用后相同batch1的128token逐ID一致。每rank固定1.478GiB+245760B/quant token；65536容量K/V各8.24GiB（日志显示GB）。r3-serve.log、r3-client.log/exit、r3-lifecycle.json均保留远端新任务根。
+
+R1同服务环境复测r1-serving-env.exit=0，8KB1=0.262724ms、B16=2.140877ms；与R2代码配对收益约2.1x，不能使用跨Triton版本的9.7x宣传代码收益。
+
+R3真实TP2 trace：r3-native-bs1，2K输入、1088输出，约输出928处采10个decode step。CPU/GPU profiling会扰动时间，不用该请求43.78tokens/s作最终吞吐。TP0图span均值22.6493ms，attention+reduce6.1873ms；TP1图span22.3031ms，attention6.1963ms；正常图间隔约0.08ms、包含flush的一次约0.35ms。10step内残差编码2次合计0.0813ms，原joint-index编码2次合计0.174ms。cudaEventSynchronize的CPU等待与GPU执行重叠，不能相加成额外149ms。未观测到大幅CPU提交空洞，后续优先GPU attention。原始trace和校正后按cudaGraphLaunch correlation配对的摘要已同步到本地reports/vqplus-20261126/r3-native-bs1。
+
+### 候选4/10（计划，待R3无profile基线结束后验证）
+
+目的：针对主attention的访存等待与指令数优化，补真实服务配对测试工具。步骤：CUDA QK/PV增加可选unroll(1/2/4)，仅在已经完成BF16舍入后的dot/PV累积使用显式FMA，RoPE和残差重建舍入不变；以128/256/512线程资源和延迟选择，而非假定展开越大越好。微基准使用一个graph内多次算子以消除Python连续replay供给不足，单独保留原计时口径；增加真实page8布局计时，与逐token随机最坏布局区分。范围residual_attention_cuda.py、residual_attention.py、check_residual.py和独立服务验证工具。风险为register增加导致occupancy下降/spill、FP32归约微差、短上下文退化。成功标准为原pack逐bit和output/LSE容差全部不变、graph/lifecycle通过，并有同卡配对改善；失败候选留证据，不自动选用。真实serve全R4 TP2+full graph，BF16/原VQ/VQ+同卡对，时间与profile分开，不恢复准确率评测。
+
+R4资源安排：A10空闲卡对4/5正运行R3同卡BF16/原VQ/VQ+完整服务对照；其余六卡为他人任务。A11八卡均有2.1–2.4GiB任务，跳过。A12八卡现场空闲，使用GPU0做R3/R4 kernel配对；通过同一X5持久会话PTY82582访问。为不改变A10正在运行的R3源码，另建sglang-vqplus-kernel clone，仍仅从用户fork的loopspec-test拉取。新测试提供显式--kernel-root，可用同一计时脚本读取旧R3 checkout；不混用跨机加速比。

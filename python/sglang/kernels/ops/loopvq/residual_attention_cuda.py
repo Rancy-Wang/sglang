@@ -11,7 +11,7 @@ _SRC = r'''
 #include <math.h>
 
 constexpr int THREADS = VQPLUS_THREADS, WARPS = THREADS / 32, TABLE = 32 * 256 * 4;
-constexpr int CAP = 1024, SPLITS = 32;
+constexpr int CAP = 1024, SPLITS = 32, UNROLL = VQPLUS_UNROLL;
 constexpr int SMEM = TABLE * 2 + 128 * 4 + CAP * 4 + WARPS * 128 * 4 + WARPS * 4 + 8;
 
 __device__ __forceinline__ float bf(float x) { return __bfloat162float(__float2bfloat16_rn(x)); }
@@ -89,6 +89,7 @@ __global__ __launch_bounds__(THREADS) void stage1(
     float qlo[4], qhi[4];
 #pragma unroll
     for (int j = 0; j < 4; ++j) { qlo[j] = query[g * 4 + j]; qhi[j] = query[64 + g * 4 + j]; }
+    #pragma unroll (UNROLL)
     for (int n0 = warp * 2; n0 < count; n0 += WARPS * 2) {
         const int n = n0 + lane / 16;
         float dot = 0;
@@ -105,7 +106,7 @@ __global__ __launch_bounds__(THREADS) void stage1(
             for (int j = 0; j < 4; ++j) {
                 float kl = bf(low[j] * c[j] - high[j] * s[j]);
                 float kh = bf(high[j] * c[j] + low[j] * s[j]);
-                dot += kl * qlo[j] + kh * qhi[j];
+                dot += fmaf(kl, qlo[j], kh * qhi[j]);
             }
         }
         for (int d = 8; d; d >>= 1) dot += __shfl_down_sync(0xffffffff, dot, d, 16);
@@ -140,6 +141,7 @@ __global__ __launch_bounds__(THREADS) void stage1(
     // Four tokens per warp, eight lanes per token; 16 output channels per lane.
     const int vgroup = lane & 7;
     float acc[16] = {};
+    #pragma unroll (UNROLL)
     for (int n0 = warp * 4; n0 < count; n0 += WARPS * 4) {
         const int n = n0 + lane / 8;
         if (n < count) {
@@ -149,7 +151,7 @@ __global__ __launch_bounds__(THREADS) void stage1(
                 float v[4];
                 row4(VI, table, VR, VS, HV, (int)LOC[begin + start + n], offset, H, h, vgroup * 4 + group, v);
 #pragma unroll
-                for (int j = 0; j < 4; ++j) acc[group * 4 + j] += p * bf(v[j]);
+                for (int j = 0; j < 4; ++j) acc[group * 4 + j] = fmaf(p, bf(v[j]), acc[group * 4 + j]);
             }
         }
     }
@@ -195,7 +197,10 @@ _EXT = {}
 _READY = set()
 
 
-def prepare(device, threads=512):
+def prepare(device, threads=512, unroll=1):
+    if unroll not in (1, 2, 4):
+        raise ValueError("Supported VQ+ token unroll: 1/2/4")
+    variant = (threads, unroll)
     if threads not in (128, 256, 512):
         raise ValueError("Supported VQ+ CTA sizes: 128/256/512")
     device = torch.device(device)
@@ -204,16 +209,16 @@ def prepare(device, threads=512):
             raise RuntimeError('VQ+ CUDA must be prepared before capture')
         if torch.cuda.get_device_capability(device) != (8, 0):
             raise ValueError('VQ+ CUDA currently validated for sm_80')
-        if threads not in _EXT:
+        if variant not in _EXT:
             from torch.utils.cpp_extension import load_inline
-            _EXT[threads] = load_inline(
-                name=f'loopvq_residual_int4_shared_t{threads}_v2',
+            _EXT[variant] = load_inline(
+                name=f'loopvq_residual_int4_shared_t{threads}_u{unroll}_v3',
                 cpp_sources='#include <torch/extension.h>\nvoid residual_init();\n'
                 'void residual_cuda(' + ','.join(['torch::Tensor'] * 16) + ',int64_t,double,int64_t);',
                 cuda_sources=_SRC, functions=['residual_init', 'residual_cuda'],
-                extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', f'-DVQPLUS_THREADS={threads}', '-gencode=arch=compute_80,code=sm_80'],
+                extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', f'-DVQPLUS_THREADS={threads}', f'-DVQPLUS_UNROLL={unroll}', '-gencode=arch=compute_80,code=sm_80'],
             )
-        if (device.index, threads) not in _READY:
-            _EXT[threads].residual_init()
-            _READY.add((device.index, threads))
-    return _EXT[threads]
+        if (device.index, variant) not in _READY:
+            _EXT[variant].residual_init()
+            _READY.add((device.index, variant))
+    return _EXT[variant]

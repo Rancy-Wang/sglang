@@ -69,7 +69,7 @@ def _stage1(Q, KI, VI, KC, VC, KR, VR, KS, VS, HK, HV, PTR, LOC, ROPE, OUT, LSE,
 
 
 class ResidualAttention:
-    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda", threads=512, dynamic_splits=True):
+    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda", threads=512, dynamic_splits=True, unroll=1):
         if implementation not in ("cuda", "triton"):
             raise ValueError("Unknown residual attention implementation")
         if splits is None:
@@ -79,7 +79,7 @@ class ResidualAttention:
             if splits != 32 or not 0 < max_context_len <= 32768:
                 raise ValueError("VQ+ shared CUDA requires 32 splits and context <= 32768")
             from .residual_attention_cuda import prepare
-            self.extension = prepare(pool.hp_k.device, threads)
+            self.extension = prepare(pool.hp_k.device, threads, unroll)
         self.dynamic_splits = dynamic_splits
         self.sm_count = torch.cuda.get_device_properties(pool.hp_k.device).multi_processor_count
         if pool.head_dim != 128 or not pool.residual_bits == 4:
