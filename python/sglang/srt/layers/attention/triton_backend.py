@@ -225,6 +225,9 @@ class TritonAttnBackend(AttentionBackend):
                     residual_options["layout"] = self.token_to_kv_pool.paged_residual
                     if get_model().loopvq_residual_page_kernel == "triton":
                         from sglang.kernels.ops.loopvq.residual_attention_paged_triton import PagedTritonAttention as Attention
+                    elif self.token_to_kv_pool.paged_residual == 2:
+                        from sglang.kernels.ops.loopvq.residual_attention import ResidualAttention as Attention
+                        residual_options["global_table"] = True
                     else:
                         from sglang.kernels.ops.loopvq.residual_attention_paged_cuda import PagedResidualAttention as Attention
                         residual_options["cooperative"] = False

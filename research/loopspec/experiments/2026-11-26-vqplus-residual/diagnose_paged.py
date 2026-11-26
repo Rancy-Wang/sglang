@@ -209,7 +209,7 @@ def main():
     names=['current','old_r1','plain_reader','paged','scalar_int4','materialized',
            'page_only','coop_only','compact','compact_plain','staged','staged_scalar',
            'direct256','remapped','remapped_plain','rope_cg','stream_cg',
-           'triton_page','triton_scalar','materialized_serving','page_head','triton_head']
+           'triton_page','triton_scalar','materialized_serving','page_head','triton_head','page_head_auto']
     ap.add_argument('--variants',nargs='+',choices=names,default=names)
     ap.add_argument('--profile-one',choices=names)
     args=ap.parse_args()
@@ -251,7 +251,7 @@ def main():
                     for got,expected in zip(getattr(pp,kind+'_'+suffix),getattr(pool,kind+'_'+suffix)):
                         torch.testing.assert_close(page_unpack(got),expected,atol=0,rtol=0)
             ph=None; head_setup_ms=None
-            if any(name in args.variants for name in ('page_head','triton_head')):
+            if any(name in args.variants for name in ('page_head','triton_head','page_head_auto')):
                 start=time.perf_counter()
                 ph,hr,hq,hptr,hloc=make_pool(rows[:batch],{k:t[layer] for k,t in tables.items()},paged=2)
                 torch.cuda.synchronize();head_setup_ms=(time.perf_counter()-start)*1000
@@ -285,6 +285,7 @@ def main():
                 'remapped_plain':lambda:PagedResidualAttention(pool,max_batch=batch,threads=256,compact=True,cooperative=False,waves=4,remapped=True,layout=False),
                 'rope_cg':lambda:PagedResidualAttention(pp,max_batch=batch,cooperative=False,cache_mode=1),
                 'stream_cg':lambda:PagedResidualAttention(pp,max_batch=batch,cooperative=False,cache_mode=2),
+                'page_head_auto':lambda:ResidualAttention(ph,max_batch=batch,max_context_len=n,global_table=True,layout=2),
                 'page_head':lambda:PagedResidualAttention(ph,max_batch=batch,layout=2,cooperative=False),
                 'triton_head':lambda:PagedTritonAttention(ph,max_batch=batch,layout=2),
                 'triton_page':lambda:PagedTritonAttention(pp,max_batch=batch),

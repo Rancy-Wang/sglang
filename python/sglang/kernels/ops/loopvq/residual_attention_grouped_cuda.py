@@ -217,8 +217,10 @@ _EXT = {}
 _READY = set()
 
 
-def prepare_grouped(device, async_table=False, global_table=False):
-    variant = (bool(async_table), bool(global_table))
+def prepare_grouped(device, async_table=False, global_table=False, *, layout=0):
+    if layout not in (0, 2) or (layout and (async_table or not global_table)):
+        raise ValueError('Head pages require global, non-staged centroids')
+    variant = (bool(async_table), bool(global_table), layout)
     device = torch.device(device)
     with torch.cuda.device(device):
         if torch.cuda.is_current_stream_capturing():
@@ -227,12 +229,22 @@ def prepare_grouped(device, async_table=False, global_table=False):
             raise ValueError('Grouped VQ+ is validated for sm_80 only')
         if variant not in _EXT:
             from torch.utils.cpp_extension import load_inline
+            source = _SRC
+            suffix = ''
+            page_flags = []
+            if layout:
+                from .residual_attention_paged_cuda import _ROW
+                start = source.index('__device__ __forceinline__ void row4(')
+                end = source.index('__device__ __forceinline__ void copy_table', start)
+                source = source[:start] + _ROW + '\n' + source[end:]
+                suffix = f'_l{layout}'
+                page_flags = [f'-DVQPAGE_LAYOUT={layout}', '-DVQPAGE_COOP=0', '-DVQPAGE_SCALAR=0']
             _EXT[variant] = load_inline(
-                name=f'loopvq_residual_int4_grouped_r2_t512_a{int(async_table)}_g{int(global_table)}_v4',
+                name=f'loopvq_residual_int4_grouped_r2_t512_a{int(async_table)}_g{int(global_table)}_v4{suffix}',
                 cpp_sources='#include <torch/extension.h>\nvoid grouped_init();\n'
                 'void grouped_cuda(' + ','.join(['torch::Tensor'] * 16) + ',int64_t,double,int64_t);',
-                cuda_sources=_SRC, functions=['grouped_init', 'grouped_cuda'],
-                extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', '-DVQPLUS_THREADS=512', f'-DVQPLUS_ASYNC={int(async_table)}', f'-DVQPLUS_GLOBAL={int(global_table)}', '-gencode=arch=compute_80,code=sm_80'],
+                cuda_sources=source, functions=['grouped_init', 'grouped_cuda'],
+                extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', '-DVQPLUS_THREADS=512', f'-DVQPLUS_ASYNC={int(async_table)}', f'-DVQPLUS_GLOBAL={int(global_table)}', '-gencode=arch=compute_80,code=sm_80'] + page_flags,
             )
         if (device.index, variant) not in _READY:
             _EXT[variant].grouped_init(); _READY.add((device.index, variant))
