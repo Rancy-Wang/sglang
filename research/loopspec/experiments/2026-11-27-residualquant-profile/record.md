@@ -81,3 +81,15 @@ Accounting correction before payload edits: the just-launched8K sweep on unchang
 
 
 Round5 result:a2549f84f,BUS2GPU0,B16N8192layer23loop0 exit0,alloutput/LSEpass. Auto627.562us,native388.321us,targets8/9/10/12/16/24/32=627.541/635.864/617.417/647.888/628.686/666.546/671.515us. Target10 gain1.6% fails10%optimizationgate; do not justify an8Kspecialcase from this tiny single-cellgain. Preserveevidence under r3/b16-n8192-l0.* (see accountingnote). Round6 sourcegeneration anchors/braces andPythoncompile passed forqk/pv/both beforeGPUtest. Helpers use read-only loads, so changes include cache/load scheduling as well as vector packing; no isolatedvector-only attribution claimed.
+
+
+Round6 result:0d76bfbfd,BUS2GPU0,B16N2048layer23loop0 exit0, allunchangedoutput/LSEchecks pass. Mediansus:auto222.095,native97.971;originaltarget3/5=179.259/178.163;qktarget3/5=163.856/164.789;pvtarget3/5=190.538/143.999;bothtarget3/5=152.673/154.337. PVtarget5 reducesbaseline35.16% andbestprevious19.18%. Resourcesqk63,pv40,both53regs/thread,all0spills. These arepairedmicrobenchmarks, notfullserving. KeepPVcandidate;combinedmorearithmetic-localitybenefit doesnotoutweighitsresource/schedulecost atthese settings.
+
+## Round7/20 — constrain combined registers and retune new payload scheduling (before edits)
+
+1. Purpose: test whether combinedQK/PV canretainitsinstruction/branchbenefit whilematchingPV-only's40register allocation andthreeCTAresourcecapacity.
+2. Steps: add optional __launch_bounds__(512,3) forpayloadcompilation; no arithmetic change. Preplanned unboundedPV/both/original andboundedboth at targets2,3,4,5,6,8,10,12,16 onB16N2048. This is a separatelycountednewcompiler/configcandidate. Thenunchangedwinning settings across1K/4K/8K,loops0..3,B1/2/4/8/16.
+3. Scope: payload_source.py optionalmin_blocks transform/cachekey, payload_probe.py flag/metadata. Productionstillunchanged. Default0 usesexistingR6source/cacheidentity.
+4. Success: output .002/.01,LSE2e-5 andlowerpairedlatency thanPV-onlybest144us; zero spills preferred, rejectspillingoranyperformance regression. Verify actualcompiledresources ratherthanassumingcompilerhonorsdesiredresidency.
+5. Risks: compiler spills/rematerialization, reducedILP, scheduling overhead, cross-GPUclockdifferences; eachcandidate hasownsameGPUbaseline andrawsamples.
+6. Validation: syntax/generated-sourceanchors, Gitprovenance, idleGPUpreflight, B16N2kpaired30samples/32inner,resourceusage/SASS. Preserveallvariantsandfailedruns; broadenonlypromisingcandidate, thenindependentboundary/memcheck/fullservingintegration.

@@ -81,7 +81,7 @@ def replace_once(source, old, new):
     return source.replace(old, new)
 
 
-def source_for(mode):
+def source_for(mode, min_blocks=0):
     assert mode in ('qk', 'pv', 'both')
     source = replace_once(_SRC, '__device__ __forceinline__ void copy_table',
                           HELPERS + '\n__device__ __forceinline__ void copy_table')
@@ -98,15 +98,20 @@ def source_for(mode):
 #pragma unroll
                 for (int j = 0; j < 4; ++j) acc[group * 4 + j] = fmaf(p, bf(v[j]), acc[group * 4 + j]);
             }''', '            pv16(VI, table, VR, VS, HV, (int)LOC[begin + start + n], offset, H, h, vgroup, p, acc);')
+    if min_blocks:
+        assert min_blocks == 3
+        source = replace_once(source, "__launch_bounds__(THREADS)", "__launch_bounds__(THREADS, 3)")
     return source
 
 
-def prepare(mode, threads=512):
+def prepare(mode, threads=512, min_blocks=0):
     from torch.utils.cpp_extension import load_inline
-    ext = load_inline(name=f'vqrq_payload_r6_{mode}_t{threads}',
+    assert not min_blocks or threads == 512
+    suffix = f"_r7_b{min_blocks}" if min_blocks else ""
+    ext = load_inline(name=f'vqrq_payload_r6_{mode}_t{threads}{suffix}',
         cpp_sources='#include <torch/extension.h>\nvoid residual_init();\nvoid residual_cuda(' +
                     ','.join(['torch::Tensor'] * 16) + ',int64_t,double,int64_t);',
-        cuda_sources=source_for(mode), functions=['residual_init', 'residual_cuda'],
+        cuda_sources=source_for(mode, min_blocks), functions=['residual_init', 'residual_cuda'],
         extra_cuda_cflags=['-O3','-lineinfo','--fmad=false','-Xptxas=-v',
             f'-DVQPLUS_THREADS={threads}','-DVQPLUS_UNROLL=1','-DVQPLUS_GLOBAL=1',
             '-DVQPLUS_ASYNC=0','-DVQPAGE_LAYOUT=2','-DVQPAGE_COOP=0',
