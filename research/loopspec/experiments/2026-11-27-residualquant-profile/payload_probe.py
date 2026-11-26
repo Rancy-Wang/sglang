@@ -30,9 +30,10 @@ def main():
     parser.add_argument("--repeats", type=int, default=30)
     parser.add_argument("--targets", type=int, nargs="+", default=[3,5])
     parser.add_argument("--threads", type=int, choices=[128,256,512], default=512)
-    parser.add_argument("--modes", nargs="+", choices=["original","qk","pv","both","pv_base","both_ref"], default=["original","qk","pv","both"])
+    parser.add_argument("--modes", nargs="+", choices=["original","qk","pv","both","pv_base","both_ref","both_r8"], default=["original","qk","pv","both"])
     parser.add_argument("--min-blocks", type=int, choices=[0,3], default=0)
     parser.add_argument("--fma", action="store_true")
+    parser.add_argument("--dot-chain", action="store_true")
     args = parser.parse_args()
     torch.backends.cuda.matmul.allow_tf32 = False
     manifest = json.loads((args.snapshot / "manifest.json").read_text())
@@ -68,7 +69,7 @@ def main():
     calls = {"page_auto": lambda: baseline.forward(q,args.loop,ptr,loc,rope,128**-.5), "native": native}
     correctness = {}
     effective = {}
-    extensions = {mode:prepare_payload(mode.removesuffix("_base").removesuffix("_ref"),args.threads,0 if mode.endswith("_base") else args.min_blocks,args.fma and not mode.endswith(("_base","_ref"))) for mode in args.modes if mode != "original"}
+    extensions = {mode:prepare_payload(mode.removesuffix("_base").removesuffix("_ref").removesuffix("_r8"),args.threads,0 if mode.endswith("_base") else args.min_blocks,args.fma and not mode.endswith(("_base","_ref")),args.dot_chain and not mode.endswith(("_base","_ref","_r8"))) for mode in args.modes if mode != "original"}
     for mode, target in itertools.product(args.modes,args.targets):
         assert 1 <= target <= 32
         reader = PagedResidualAttention(page,max_batch=args.batch,layout=2,cooperative=False,threads=args.threads)
@@ -89,7 +90,7 @@ def main():
         torch.testing.assert_close(calls[name](),expected,atol=.002,rtol=.01)
     timing = reference.paired(calls,args.repeats,32)
     result = dict(source_sha=subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip(),
-        manifest=manifest,batch=args.batch,layer=args.layer,loop=args.loop,threads=args.threads,modes=args.modes,min_blocks=args.min_blocks,fma=args.fma,torch=torch.__version__,
+        manifest=manifest,batch=args.batch,layer=args.layer,loop=args.loop,threads=args.threads,modes=args.modes,min_blocks=args.min_blocks,fma=args.fma,dot_chain=args.dot_chain,torch=torch.__version__,
         gpu=torch.cuda.get_device_name(),correctness=correctness,effective_splits=effective,timing=timing,passed=True)
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(result,indent=2)+"\n")

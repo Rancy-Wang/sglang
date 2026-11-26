@@ -81,7 +81,7 @@ def replace_once(source, old, new):
     return source.replace(old, new)
 
 
-def source_for(mode, min_blocks=0, fused=False):
+def source_for(mode, min_blocks=0, fused=False, dot_chain=False):
     assert mode in ('qk', 'pv', 'both')
     source = replace_once(_SRC, '__device__ __forceinline__ void copy_table',
                           HELPERS + '\n__device__ __forceinline__ void copy_table')
@@ -106,21 +106,25 @@ def source_for(mode, min_blocks=0, fused=False):
             ("const float value = __bfloat162float(cv[j]) + scale * r;", "const float value = fmaf(scale, (float)r, __bfloat162float(cv[j]));"),
         ):
             source = replace_once(source, old, new)
+    if dot_chain:
+        source = replace_once(source, "dot += fmaf(kl, qlo[j], kh * qhi[j]);",
+                              "dot = fmaf(kl, qlo[j], dot); dot = fmaf(kh, qhi[j], dot);")
     if min_blocks:
         assert min_blocks == 3
         source = replace_once(source, "__launch_bounds__(THREADS)", "__launch_bounds__(THREADS, 3)")
     return source
 
 
-def prepare(mode, threads=512, min_blocks=0, fused=False):
+def prepare(mode, threads=512, min_blocks=0, fused=False, dot_chain=False):
     from torch.utils.cpp_extension import load_inline
     assert not min_blocks or threads == 512
     suffix = f"_r7_b{min_blocks}" if min_blocks else ""
     suffix += "_r8_fma" if fused else ""
+    suffix += "_r10_chain" if dot_chain else ""
     ext = load_inline(name=f'vqrq_payload_r6_{mode}_t{threads}{suffix}',
         cpp_sources='#include <torch/extension.h>\nvoid residual_init();\nvoid residual_cuda(' +
                     ','.join(['torch::Tensor'] * 16) + ',int64_t,double,int64_t);',
-        cuda_sources=source_for(mode, min_blocks, fused), functions=['residual_init', 'residual_cuda'],
+        cuda_sources=source_for(mode, min_blocks, fused, dot_chain), functions=['residual_init', 'residual_cuda'],
         extra_cuda_cflags=['-O3','-lineinfo','--fmad=false','-Xptxas=-v',
             f'-DVQPLUS_THREADS={threads}','-DVQPLUS_UNROLL=1','-DVQPLUS_GLOBAL=1',
             '-DVQPLUS_ASYNC=0','-DVQPAGE_LAYOUT=2','-DVQPAGE_COOP=0',

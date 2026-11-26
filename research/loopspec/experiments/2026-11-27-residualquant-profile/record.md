@@ -108,3 +108,31 @@ Round7 result:e40e0cb0a,bothruns exit0,alloutput/LSEpass. BoundedbothT512minbloc
 4. Success: zero bitwisepropertymismatches, unchangedattentiontolerances, fewerinstructions/noPVspill andlowerlatencythanR7fastdiagnostic124.12us orR6spill-free144us. Ifspillsremain,retainasdiagnosticonlyunderexistinggate; do notrelaxnumericorservicechecks.
 5. Risks: nonfiniteinputsoutsidefinitecodecproof, signedzero/subnormalcompilerbehavior, accidentalRoPEfusion, compilerallocationchanges. Testcodeincludesnegative8althoughencoderuses-7..7; finitehalfscalesofbothsigns tested. No--use_fast_math.
 6. Validation: Python/generated-sourceanchors, CUDApropertytestfirst, realtrainedB16N2klayer23loop0 output/LSE,30pairedgraphsamples/32inner,resources+SASS; winningcandidateextendedtoall4loops/lengths/batches beforeproductionboundary/memcheck/fullserving. Fullserverbaselinebeingpreparedfromunchangedproductionreaderwithverifiedmodelhashes.
+
+
+Round8 propertytest63c8fe7c2 onBUS2GPU0 exit0,131858432finitecases,zero bitwiseFP32mismatches. Cases covereveryfinitehalfscale×16codes×64BF16edgecenters andeveryfiniteBF16center×16codes×64halfedges,includingbothsigns/zeros/subnormals. Attentiontimings nowrunningGPU0boundedcombined andGPU1unboundedPV withsame-processunfusedcontrols; proofdoesnotreplaceattention/servingchecks. Fullserverv2failedrequiredsglang-kernel0.4.9versioncheck;freshserve-envinstallingmatchedTorch2.14.1/sglang-kernel0.4.9/Transformers5.19.0,oldakvuntouched. No version-checkbypass.
+
+
+Round8 attentionresults:63c8fe7c2,bothruns exit0. GPU0fusedcombinedbound3target5=123.821us vsunfusedbound3 124.093us,PVbase144.114us,production222.094us,native97.978us. GPU1fusedPVtarget5=142.188us vsPVbase144.001us. Bothfusedvariants40regs,0stack/LOCAL; theFMAchange removesR7spillbutitsadditional~0.2%combinedtimingdifference isnotclaimedmaterial. Bestspill-freecandidate44.25%lowerlatencythanproduction. Alloutput/LSEpass. Extendedunchangedcandidate startedGPU0loops1/2/3,target5;GPU1N1024/4096/8192,targets2/4/5/8;GPU4B1/2/4/8N2k,targets2/4/5/8. Lowbatchrequiresmoreparallelismoroldpathguardiftheseconfigurationsregress. No productionpromotionyet.
+
+
+Round8 extensions all10cases exit0: loops1/2/3 target5=123.80/123.69/123.58us; B16 N1k besttarget4=71.80 vs114.55us; N4k target5=219.22 vs342.91; N8k effective8=449.87 vs627.13. B8 target5=61.27 vs111.96; B4 target8=35.95 vs52.02. B1 target8=26.45 vs18.44 is a regression; B2 R1 target8=27.06 vs33.34 does not establish improvement over actual productionR2. Fixedtarget5 rejected as universal policy. Correctness allpass, scheduling pending.
+
+## Round9/20 — complete resource-aware schedule measurements (before changes)
+
+1. Purpose: choose dispatch from measured length/batch behavior for the40-register, zero-spill R8 reader; avoid smallbatch underparallelization and test8K wavefill.
+2. Steps: unchanged R8 fusedcombinedminblocks3; additional targets3,10,12,16,20,24,32 across B16N1024/2048/4096/8192 and B1/2/4/8N2048. Preserveauto/native controls and all samples. No mathematical/source changes.
+3. Scope: runtime configuration of existing payload_probe.py only; recordthis as a separate optimizationround. ActualproductionB2R2 willbe compared before integration; page_auto hereis R1 diagnostic.
+4. Success: unchanged .002/.01 output and2e-5LSE checks; improvepairedlatency and deriveboundedpolicy, with no unsupported >5% smallbatch regression. No globaloptimum claim.
+5. Risks: extra splits/merge overhead andchangedreductionorder, data/clock variation; use sameGPUpairedbaselines and retainedrawsamples.
+6. Validation: existinghashed real snapshots/books,30samples/32innerCUDAgraphs,idleGPUpreflight,exitstatus andJSON. Candidate policy is a later countedimplementationround requiringboundary/dynamicgraphs/memcheck/fullserving.
+
+
+## Round10/20 — FP32 QK dot instruction chain (before edits)
+
+1. Purpose: test whether removing one arithmetic instruction per low/high pair reduces QK cost after payload reconstruction and register allocation improvements.
+2. Steps: optional replacement dot += fmaf(kl,qlo,kh*qhi) with dot=fmaf(kl,qlo,dot); dot=fmaf(kh,qhi,dot). BF16 Q and K products are individually exact in FP32; accumulation association changes and is not claimed bitwise equivalent. Keep reconstruction, RoPE arithmetic and BF16 conversions unchanged. Compare R8 combined bounded fused control with new chain at targets3/5/10, B16N2k and8k, then useful shape/loop extensions.
+3. Scope: task-local payload_source.py optional source transform/cache suffix; payload_probe.py flag and explicit both_r8 control. No production edit.
+4. Success: existing .002/.01 output and2e-5LSE tolerance; lower paired latency and zero spills. Reject failed numerics or immaterial improvement before promotion. No precision reduction or tensor-core approximation.
+5. Risks: FP32 reduction association affects softmax and final greedy ties; fullserving greedy comparison remains required. Compiler may increase live values despite fewer instructions.
+6. Validation: Python source/anchor checks, exact Git synchronization after R9 jobsfinish; idle GPUs;30pairedgraphsamples/32inner, compiled resources, all4loops/multiplecontexts/boundary tests ifpromising. R8 reference remains unchanged andcache-distinct.
