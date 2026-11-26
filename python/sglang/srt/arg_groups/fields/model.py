@@ -227,6 +227,10 @@ class Model(msgspec.Struct):
         int,
         Arg(help="VQ+ residual storage: 0 disables; 4 uses signed INT4 group32 with FP16 scales.", choices=[0, 4]),
     ] = 0
+    loopvq_residual_codebook: A[
+        str,
+        Arg(help="VQ+ centroid access: shared table or experimental cached global lookup.", choices=["shared", "global"]),
+    ] = "shared"
     loopvq_recent_tokens: A[
         int,
         "Unquantized recent tokens per LoopVQ request (a positive multiple of 8).",

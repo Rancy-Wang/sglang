@@ -69,19 +69,21 @@ def _stage1(Q, KI, VI, KC, VC, KR, VR, KS, VS, HK, HV, PTR, LOC, ROPE, OUT, LSE,
 
 
 class ResidualAttention:
-    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda", threads=512, dynamic_splits=True, unroll=1, group_size=0, async_table=None):
+    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda", threads=512, dynamic_splits=True, unroll=1, group_size=0, async_table=None, global_table=False):
         if implementation not in ("cuda", "triton"):
             raise ValueError("Unknown residual attention implementation")
         if splits is None:
             splits = 32 if implementation == "cuda" else 16
-        self.r1_async = True if async_table is None else bool(async_table)
+        if global_table and async_table:
+            raise ValueError("Global VQ+ codebook lookup cannot prefetch a shared table")
+        self.r1_async = (not global_table) if async_table is None else bool(async_table)
         self.r2_async = False if async_table is None else bool(async_table)
         self.extension = None
         if implementation == "cuda":
             if splits != 32 or not 0 < max_context_len <= 32768:
                 raise ValueError("VQ+ shared CUDA requires 32 splits and context <= 32768")
             from .residual_attention_cuda import prepare
-            self.extension = prepare(pool.hp_k.device, threads, unroll, self.r1_async)
+            self.extension = prepare(pool.hp_k.device, threads, unroll, self.r1_async, global_table)
         self.dynamic_splits = dynamic_splits
         self.sm_count = torch.cuda.get_device_properties(pool.hp_k.device).multi_processor_count
         if pool.head_dim != 128 or not pool.residual_bits == 4:
@@ -92,7 +94,7 @@ class ResidualAttention:
         self.grouped = None
         if implementation == 'cuda' and group_size != 1 and max_batch >= 2:
             from .residual_attention_grouped_cuda import prepare_grouped
-            self.grouped = prepare_grouped(pool.hp_k.device, self.r2_async)
+            self.grouped = prepare_grouped(pool.hp_k.device, self.r2_async, global_table)
             self.group_partial = torch.empty((max_batch, pool.head_num, 64, 128), dtype=torch.float32, device=pool.hp_k.device)
             self.group_lse = torch.empty((max_batch, pool.head_num, 64), dtype=torch.float32, device=pool.hp_k.device)
         self.pool, self.splits, self.block = pool, splits, block

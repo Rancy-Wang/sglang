@@ -219,8 +219,10 @@ class TritonAttnBackend(AttentionBackend):
             self.enable_lean_attention = False
         self.loopvq_official = None
         if getattr(self.token_to_kv_pool, "loopvq_enabled", False) and self.ouro_decode_profile == "optimized":
+            residual_options = {}
             if self.token_to_kv_pool.residual_bits:
                 from sglang.kernels.ops.loopvq.residual_attention import ResidualAttention as Attention
+                residual_options["global_table"] = getattr(get_model(), "loopvq_residual_codebook", "shared") == "global"
             else:
                 from sglang.kernels.ops.loopvq.official_attention import OfficialAttention as Attention
 
@@ -228,6 +230,7 @@ class TritonAttnBackend(AttentionBackend):
             self.loopvq_official = Attention(
                 self.token_to_kv_pool, max_batch=max_bs,
                 max_context_len=model_runner.model_config.context_len,
+                **residual_options,
             )
         self.req_to_token = model_runner.req_to_token_pool.req_to_token
         self.token_to_kv_pool_allocator = model_runner.token_to_kv_pool_allocator

@@ -197,3 +197,9 @@ R8初测：de17e27a73775fd6a1d88d917ec0fa61c2e21e98，A12 GPU0，a12-r8/r7与r8�
 ### 候选9/10
 
 目的：收敛部署默认值并完成数值来源审计，不再扩大算法变量。范围ResidualAttention默认分派、KV兼容性入口、独立配对/训练协议诊断脚本。步骤：R1默认异步、R2同步，显式配置仍可强制两者；检查bundle声明的残差bits/group/scale/codes；同一进程同一KV交错同步/异步计时排除小B时钟偏差；用Thinking原生模板和真实HF前向采集选定层/heads四loop K/V，比较GPU assignment与训练FP32 cdist，以及raw pre-RoPE和inverse-BF16-RoPE的影响，明确不是benchmark准确率。风险为profile变体归约及HF版本接口、默认预取收益不稳定；保留R7同步路径和失败证据。验证独立CPU/GPU合同、sanitizer、真实TP2 eager/graph生命周期与配对decode；若R1异步无稳定收益，最后一轮回退默认而不夸大优化。
+
+R9初步结果：a427732609d57dc766d19f28be611b0ad500ca1b，A12 GPU1，CPU合同19项、完整GPU oracle/codec/graph及同进程配对均exit0。交错同步/异步：R1 B1 1K约1.05x、2K约1.007x、8K约1.002x；B4 1K约1.038x，B8 1K约1.014x；R2 B16 2K约0.990x。纠正R8单进程分离运行受时钟影响的较大收益估计。真实HF审计服务env TF5因create_causal_mask签名失败，改用已有训练env Torch2.8/cu128、TF4.56.2后exit0；未改checkpoint。抽样3层×4head×256token，K/V每种98304联合索引相同输入GPU vs FP32 cdist均0差异；K输入定义差异引起549/98304(0.558%)索引变化，V为0。该审计encoder在训练环境运行，不能替代服务环境逐bit验证；服务环境的独立oracle另外已通过。原始forward capture未写入当前脚本，后续需要端到端跨环境索引审计时须单独导出输入。
+
+### 候选10/10（最后一轮）
+
+目的：检验大batch stage1是否受每CTA完整shared码本搬运/占用限制。步骤：新增可选global码本lookup，省掉64KiB shared表及K/V复制，以只读全局缓存加载中心；保留QK/softmax/PV数学及现有分派。默认仍shared，提供显式--loopvq-residual-codebook=global用于验证/选择，不自动覆盖现有有效路径。范围R1/R2 CUDA与分派、模型参数/兼容hook/backend接线；GPU测试新增--global-table和--correctness-only（sanitizer不重复计时）；同进程pair支持global/shared。风险为非合并global gather和L1/L2压力反而更慢。成功标准原oracle/LSE/图全部不变、同卡交错收益及真实TP2生命周期/纯decode可复现；失败则保留shared，不放宽标准。此轮后不再改源码/测试，若有剩余问题如实交付并等待新预算，不以新任务名规避。

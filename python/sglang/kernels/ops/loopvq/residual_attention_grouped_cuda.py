@@ -7,8 +7,8 @@ from .residual_attention_cuda import _SRC as _R1
 _HEADER = _R1.split('template<typename IT>')[0].replace(
     'constexpr int CAP = 1024, SPLITS = 32, UNROLL = VQPLUS_UNROLL;',
     'constexpr int CAP = 512, SPLITS = 64, R = 2;').replace(
-    'TABLE * 2 + 128 * 4 + CAP * 4 + WARPS * 128 * 4 + WARPS * 4 + 8',
-    'TABLE * 2 + R * (128 * 4 + CAP * 4 + WARPS * 4 + 8) + WARPS * 128 * 4')
+    'TABLE_SMEM + 128 * 4 + CAP * 4 + WARPS * 128 * 4 + WARPS * 4 + 8',
+    'TABLE_SMEM + R * (128 * 4 + CAP * 4 + WARPS * 4 + 8) + WARPS * 128 * 4')
 _SRC = _HEADER + r'''
 template<typename IT>
 __global__ __launch_bounds__(THREADS, 2) void residual_grouped_stage1(
@@ -51,7 +51,10 @@ __global__ __launch_bounds__(THREADS, 2) void residual_grouped_stage1(
     }
     extern __shared__ __align__(16) char raw[];
     auto* table = reinterpret_cast<__nv_bfloat16*>(raw);
-    float* query = reinterpret_cast<float*>(table + TABLE);
+#if VQPLUS_GLOBAL
+    table = const_cast<__nv_bfloat16*>(KC + h * TABLE);
+#endif
+    float* query = reinterpret_cast<float*>(raw + TABLE_SMEM);
     float* prob = query + R * 128;
     float* values = prob + R * CAP;
     float* reduce = values + WARPS * 128;
@@ -144,6 +147,9 @@ __global__ __launch_bounds__(THREADS, 2) void residual_grouped_stage1(
             }
         }
     }
+#if VQPLUS_GLOBAL
+    table = const_cast<__nv_bfloat16*>(VC + h * TABLE);
+#endif
 #if !VQPLUS_ASYNC
     copy_table(table, VC + h * TABLE);
 #endif
@@ -211,22 +217,23 @@ _EXT = {}
 _READY = set()
 
 
-def prepare_grouped(device, async_table=False):
+def prepare_grouped(device, async_table=False, global_table=False):
+    variant = (bool(async_table), bool(global_table))
     device = torch.device(device)
     with torch.cuda.device(device):
         if torch.cuda.is_current_stream_capturing():
             raise RuntimeError('Prepare grouped VQ+ before capture')
         if torch.cuda.get_device_capability(device) != (8, 0):
             raise ValueError('Grouped VQ+ is validated for sm_80 only')
-        if async_table not in _EXT:
+        if variant not in _EXT:
             from torch.utils.cpp_extension import load_inline
-            _EXT[async_table] = load_inline(
-                name=f'loopvq_residual_int4_grouped_r2_t512_a{int(async_table)}_v3',
+            _EXT[variant] = load_inline(
+                name=f'loopvq_residual_int4_grouped_r2_t512_a{int(async_table)}_g{int(global_table)}_v4',
                 cpp_sources='#include <torch/extension.h>\nvoid grouped_init();\n'
                 'void grouped_cuda(' + ','.join(['torch::Tensor'] * 16) + ',int64_t,double,int64_t);',
                 cuda_sources=_SRC, functions=['grouped_init', 'grouped_cuda'],
-                extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', '-DVQPLUS_THREADS=512', f'-DVQPLUS_ASYNC={int(async_table)}', '-gencode=arch=compute_80,code=sm_80'],
+                extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', '-DVQPLUS_THREADS=512', f'-DVQPLUS_ASYNC={int(async_table)}', f'-DVQPLUS_GLOBAL={int(global_table)}', '-gencode=arch=compute_80,code=sm_80'],
             )
-        if (device.index, async_table) not in _READY:
-            _EXT[async_table].grouped_init(); _READY.add((device.index, async_table))
-    return _EXT[async_table]
+        if (device.index, variant) not in _READY:
+            _EXT[variant].grouped_init(); _READY.add((device.index, variant))
+    return _EXT[variant]

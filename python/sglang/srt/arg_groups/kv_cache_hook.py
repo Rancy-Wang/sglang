@@ -51,6 +51,9 @@ def handle_loopvq_compatibility(server_args: Any) -> None:
         if cfg.triton_attention_num_kv_splits != expected_splits:
             raise ValueError(f"The optimized Ouro decode profile requires {expected_splits} Triton KV splits.")
     residual_bits = getattr(cfg, "loopvq_residual_bits", 0)
+    residual_codebook = getattr(cfg, "loopvq_residual_codebook", "shared")
+    if residual_codebook not in ("shared", "global") or (residual_codebook == "global" and residual_bits != 4):
+        raise ValueError("Global residual codebook lookup requires VQ+ INT4.")
     if residual_bits not in (0, 4):
         raise ValueError("VQ+ supports only INT4 group32 residuals.")
     if residual_bits and (not cfg.loopvq_codebook_dir or profile != "optimized"):

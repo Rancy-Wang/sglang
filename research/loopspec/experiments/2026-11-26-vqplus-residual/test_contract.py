@@ -27,6 +27,11 @@ class ResidualCompatibility(LoopVQCompatibilityTest):
         with self.assertRaisesRegex(ValueError, 'residual schema'):
             kv_cache_hook.handle_loopvq_compatibility(self.config)
 
+    def test_global_requires_residual(self):
+        self.config.loopvq_residual_codebook = 'global'
+        with self.assertRaisesRegex(ValueError, 'requires VQ+'):
+            kv_cache_hook.handle_loopvq_compatibility(self.config)
+
     def test_residual_contract(self):
         self.config.loopvq_residual_bits = 4
         self.config.ouro_decode_profile = 'optimized'
