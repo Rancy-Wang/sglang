@@ -129,6 +129,15 @@ def handle_loopvq_compatibility(server_args: Any) -> None:
     if getattr(hf, "rope_scaling", None):
         raise ValueError("LoopVQ currently requires the checkpoint's unscaled RoPE.")
     bundle = Path(cfg.loopvq_codebook_dir)
+    if residual_bits and (bundle / "build_info.json").is_file():
+        import json
+
+        declared = json.loads((bundle / "build_info.json").read_text()).get("residual")
+        if declared is not None:
+            required = {"bits": 4, "group_size": 32, "scale_dtype": "float16",
+                        "codes": "symmetric_-7_7"}
+            if not isinstance(declared, dict) or any(declared.get(k) != v for k, v in required.items()):
+                raise ValueError("VQ+ bundle residual schema must match INT4 group32 FP16 symmetric_-7_7.")
     for filename in ("codebook.pt", "vq_v_codebook.pt"):
         if not (bundle / filename).is_file():
             raise ValueError(f"LoopVQ bundle is missing {bundle / filename}")

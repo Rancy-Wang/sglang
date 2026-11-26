@@ -207,7 +207,7 @@ def main():
     ap.add_argument('--group-size', type=int, choices=[0,1,2], default=0)
     ap.add_argument('--graph-inner', type=int, choices=[1,16], default=16)
     ap.add_argument('--layout', choices=['random-token','page8'], default='page8')
-    ap.add_argument('--async-table', action='store_true')
+    ap.add_argument('--async-table', action=argparse.BooleanOptionalAction, default=None)
     ap.add_argument('--invalid-codec', choices=['nan', 'inf', 'overflow'])
     args = ap.parse_args()
     if args.invalid_codec:

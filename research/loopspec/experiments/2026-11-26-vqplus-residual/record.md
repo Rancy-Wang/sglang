@@ -191,3 +191,9 @@ R7 kernel/codec结果：f36a4c29ea790800181a4ad0155e2c1e6674fb88，A12 GPU0完�
 ### 候选8/10
 
 目的：隐藏码本shared加载等待，继续针对已定位GPU attention瓶颈。步骤：增加可选cp.async表搬运，K加载等待后QK；QK完成全CTA同步后预取V，与独立prob/reduce区域内softmax重叠，PV前wait_group及全CTA同步。范围R1/R2 CUDA源码及其prepare配置、ResidualAttention和GPU验证参数。风险为shared重用竞态、copy提交/完成顺序、资源变化；数值合同完全不变。成功标准同oracle/LSE/graph全部通过且同A12GPU0比同步R7更快；保存强制同步对照，不预设收益。验证另建冻结worktree，不修改正在服务的R7目录；sanitizer检查async边界。
+
+R8初测：de17e27a73775fd6a1d88d917ec0fa61c2e21e98，A12 GPU0，a12-r8/r7与r8均exit0且原oracle/graph通过。R1 B1 1K/2K/8K分别约1.13/1.087/1.084x，R1 B4/B8短长度约1.02–1.03x；R2各形状约0.99–1.01x，无有效收益。小B时钟波动仍需同进程交错复测；memcheck/racecheck已启动，未完成不标通过。
+
+### 候选9/10
+
+目的：收敛部署默认值并完成数值来源审计，不再扩大算法变量。范围ResidualAttention默认分派、KV兼容性入口、独立配对/训练协议诊断脚本。步骤：R1默认异步、R2同步，显式配置仍可强制两者；检查bundle声明的残差bits/group/scale/codes；同一进程同一KV交错同步/异步计时排除小B时钟偏差；用Thinking原生模板和真实HF前向采集选定层/heads四loop K/V，比较GPU assignment与训练FP32 cdist，以及raw pre-RoPE和inverse-BF16-RoPE的影响，明确不是benchmark准确率。风险为profile变体归约及HF版本接口、默认预取收益不稳定；保留R7同步路径和失败证据。验证独立CPU/GPU合同、sanitizer、真实TP2 eager/graph生命周期与配对decode；若R1异步无稳定收益，最后一轮回退默认而不夸大优化。

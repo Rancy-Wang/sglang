@@ -1,4 +1,5 @@
 """CPU compatibility and exact storage accounting; no GPU or model weights."""
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -12,6 +13,20 @@ from sglang.srt.model_executor import pool_configurator
 
 
 class ResidualCompatibility(LoopVQCompatibilityTest):
+    def test_declared_residual_schema(self):
+        self.config.loopvq_residual_bits = 4
+        self.config.ouro_decode_profile = 'optimized'
+        self.config.triton_attention_num_kv_splits = 48
+        self.config.context_length = 32768
+        path = Path(self.directory.name) / 'build_info.json'
+        contract = dict(bits=4, group_size=32, scale_dtype='float16', codes='symmetric_-7_7')
+        path.write_text(json.dumps({'residual': contract}))
+        kv_cache_hook.handle_loopvq_compatibility(self.config)
+        contract['group_size'] = 64
+        path.write_text(json.dumps({'residual': contract}))
+        with self.assertRaisesRegex(ValueError, 'residual schema'):
+            kv_cache_hook.handle_loopvq_compatibility(self.config)
+
     def test_residual_contract(self):
         self.config.loopvq_residual_bits = 4
         self.config.ouro_decode_profile = 'optimized'
