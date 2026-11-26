@@ -1,0 +1,14 @@
+{
+  "host": "teng",
+  "gpu": 4,
+  "architecture": "A800-SXM4-80GB / SM80",
+  "driver": "535.161.08",
+  "ncu": "2023.2.2",
+  "sudo_identity": "uid0",
+  "root_CapEff": "00000000a80c65fb",
+  "cap_sys_admin": false,
+  "cuda_probe": "no error",
+  "ncu_exit": 1,
+  "ncu_error": "ERR_NVGPUCTRPERM",
+  "log_sha256": "830ee8a55376ac952c3aba501a117a3accf8ed80e752b20f14ca0b6400a85712"
+}

@@ -1,0 +1,14 @@
+{
+  "host": "bus1",
+  "gpu": 0,
+  "architecture": "A800-SXM4-80GB / SM80",
+  "driver": "535.161.08",
+  "ncu": "2023.1.0",
+  "sudo_identity": "uid0",
+  "root_CapEff": "00000000a80c65fb",
+  "cap_sys_admin": false,
+  "cuda_probe": "no error",
+  "ncu_exit": 1,
+  "ncu_error": "ERR_NVGPUCTRPERM",
+  "log_sha256": "088f13a3decc50e566a0f68a208c88537d4a407c12ee5e887f793f9497948609"
+}

@@ -35,6 +35,8 @@ At D128/group32 and schedule[2,2,2,4], official cache.cuh allocates74B per K or 
 
 Source detail: RQ anchor softmax maintains independent strided token streams per8-lane group, and only merges streams after scanning pages. This avoids a block-wide softmax reduction for every page. Its PV stream is BF16-pair arithmetic, whereas our FP32 accumulation is part of the current contract. An FP32 stream implementation could borrow the ownership/barrier design while retaining precision, but register pressure and per-token rescaling are unmeasured tradeoffs.
 
+RQ prepare.cuh::rotate_queries does use Tensor Cores: shared FP16 rotation weights and up to8 BF16 queries are processed with mma.sync m16n8k8 TF32 operands/FP32 accumulation. Both source operand precisions fit the TF32 mantissa. This is separate from the packed-history attention's BF16 SIMT path. It is a useful example of putting shared dense work on MMA; it does not establish that single-query MHA history QK/PV should use padded MMA, nor that VQ's position-dependent RoPE can be replaced by one shared query rotation.
+
 ## Hardware
 
 User-named BUS hosts are A800-SXM4-80GB, driver535.161.08. InfiniAI-BUS-2 currently has all eight GPUs idle; sudo authenticated and root identity verified. CUDA12.2/NCU2023.2.2 installed. GPU counter access is not yet proven. Use a compatible task environment and remeasure every baseline on this host. Do not alter system driver settings or touch other jobs.
