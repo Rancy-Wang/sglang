@@ -69,7 +69,7 @@ def _stage1(Q, KI, VI, KC, VC, KR, VR, KS, VS, HK, HV, PTR, LOC, ROPE, OUT, LSE,
 
 
 class ResidualAttention:
-    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda", threads=512, dynamic_splits=True, unroll=1, group_size=0, async_table=None, global_table=False, layout=0):
+    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda", threads=512, dynamic_splits=True, unroll=1, group_size=0, async_table=None, global_table=False, layout=0, payload=True):
         if layout not in (0, 2) or (layout and (implementation != 'cuda' or not global_table or threads != 512 or unroll != 1)):
             raise ValueError('Head pages require the standard SM80 global CUDA kernels')
         if implementation not in ("cuda", "triton"):
@@ -108,12 +108,24 @@ class ResidualAttention:
         self.max_batch, self.max_context_len = max_batch, max_context_len
         self.partial = torch.empty((max_batch, pool.head_num, splits, 128), dtype=torch.float32, device=pool.hp_k.device)
         self.lse = torch.empty((max_batch, pool.head_num, splits), dtype=torch.float32, device=pool.hp_k.device)
+        self.payload_extension, self.payload_capacity = None, 0
+        # Limit automatic promotion to the measured hardware/head shape. Other
+        # configurations retain the existing reader and grouped dispatch.
+        if (payload and layout == 2 and group_size == 0 and dynamic_splits
+                and max_batch >= 4 and pool.head_num == 8 and self.sm_count == 108):
+            from .residual_attention_payload_cuda import prepare
+            extension, capacity = prepare(pool.hp_k.device)
+            if capacity >= 3 * self.sm_count:
+                self.payload_extension, self.payload_capacity = extension, capacity
 
     def use_grouped(self, batch):
         # Capture-static dispatch, no GPU lengths copied to the host.
         # Token pages retain their existing R2 policy. Head-local pages measured
         # faster with R1 at large B, while B2 still benefits from R2 at long N.
         return self.grouped is not None and (batch > 1 if self.group_size == 2 else batch == 2 or (not self.layout and batch >= 16))
+
+    def use_payload(self, batch):
+        return self.payload_extension is not None and 4 <= batch <= 16
 
     def forward(self, q, layer_id, kv_indptr, kv_indices, cos_sin_cache, sm_scale):
         pool, b = self.pool, q.shape[0]
@@ -125,6 +137,11 @@ class ResidualAttention:
             launch = self.grouped.grouped_cuda if grouped else self.extension.residual_cuda
             partial, lse = (self.group_partial, self.group_lse) if grouped else (self.partial, self.lse)
             groups = (b + 1) // 2 if grouped else b
+            target = max(1, (2 * self.sm_count + groups * pool.head_num - 1) // (groups * pool.head_num)) if self.dynamic_splits else (64 if grouped else 0)
+            if self.use_payload(b):
+                launch = self.payload_extension.residual_cuda
+                # Lengths remain on the device, including during graph replay.
+                target = -self.payload_capacity
             launch(
                 q, pool.get_key_buffer(layer_id), pool.get_value_buffer(layer_id),
                 pool.k_book.cb16[layer_id], pool.v_book.cb16[layer_id],
@@ -133,7 +150,7 @@ class ResidualAttention:
                 pool.get_hp_key_buffer(layer_id), pool.get_hp_value_buffer(layer_id),
                 kv_indptr, kv_indices, cos_sin_cache, partial, lse,
                 pool.hp_global_offset, float(sm_scale),
-                max(1, (2 * self.sm_count + groups * pool.head_num - 1) // (groups * pool.head_num)) if self.dynamic_splits else (64 if grouped else 0),
+                target,
             )
             return official_reduce(partial[:b], lse[:b], out)
         _stage1[(b, pool.head_num, self.splits)](
