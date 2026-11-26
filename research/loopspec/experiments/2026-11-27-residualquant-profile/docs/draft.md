@@ -1,0 +1,34 @@
+# ResidualQuant / VQ+ investigation
+
+Date: 2026-11-27. New user authorization: up to 20 additional implementation/validation rounds. Earlier completed 10-round records remain unchanged. No global-optimum claim is possible from a bounded search.
+
+## Contract
+
+Continue the existing Ouro-2.6B-Thinking, four-loop, TP2/local8-head, D128, page8, SM80 decode path. Preserve trained joint codebook, pre-RoPE K, INT4 residuals/group32 FP16 scales, BF16 composition boundaries, HP prefix8/recent64, API and supported shapes. Output tolerance .002/.01, LSE2e-5, codec bitwise parity, serving greedy-ID and lifecycle parity. No broad quality evaluation or new training format is implied.
+
+## Evidence before new profiling
+
+Target baseline 7833b357a8d4554f90cd4eba309b64282c0b83ce (previous tested implementation 7d1c54b5ab30a98ffda5b4cd5bbd0b797479b064). Prior A100 results and limitations: ../..//2026-11-26-vqplus-residual/paged-results.md. The page reader remained slower than native BF16 at B16. Hardware counters were unavailable there; source-level hypotheses were not measured bottleneck findings.
+
+Official reference: https://arxiv.org/pdf/2610.10381 and https://github.com/heejunkim00/ResidualQuant, local read-only checkout /Users/x.puppet/Desktop/Undergraduate/Project/LoopSpec/ResidualQuant at f4c3cccb76cb6df37eb6233fa92c7aaa054d6695.
+
+ResidualQuant uses a different anchor/residual representation and numerical path. Its attention/compute.cuh assigns eight lanes per token, keeps BF16 vector query/code arithmetic, applies scale/offset to grouped dot products, pipelines packed K/V planes and streams partial softmax/PV. attention/launch.cuh bases work capacity on measured kernel occupancy. These are source observations, not performance measurements on our workload.
+
+Our residual_attention_cuda.py stage1 reconstructs FP32 centers+INT4 residual, applies per-position RoPE and BF16 rounding, then FP32 QK; stores split scores in shared memory, performs block softmax, loads V centroids/residuals, then FP32 PV with 16 scalar output accumulators per lane. Page-head changes addressing only. Important candidates for attribution are dependent centroid loads, scalar conversions/bit extraction, QK RoPE work, PV register pressure, block barriers and split reduction. Logical compressed bytes do not determine actual cache-sector traffic.
+
+## Fair stage correspondence
+
+| Stage | Current VQ+ | ResidualQuant reference | Required evidence |
+|---|---|---|---|
+| Cache write | joint index + per-loop residual; periodic flush | anchor/residual quantization | amortized write time separately |
+| Query/preparation | query staging, RoPE inside K path | prepare query rotation/live score | total launch time, separate preparation |
+| QK | indexed centers + residual + position RoPE + BF16 round + FP32 dot | grouped low-bit dot and affine corrections | source-PC stalls, instruction counts, load sectors |
+| Softmax | split-wide shared scores + block reductions | streaming lane/token statistics | barriers, eligible warps, dependency stalls |
+| PV | indexed centers + residual + BF16 round + FP32 accumulation | packed residual restoration/BF16 pair accumulation | registers, spills, sectors, source attribution |
+| Merge | FP32 split partials/LSE | FP32 partition merge, optional inverse rotation | launch and scratch cost |
+
+Do not transplant BF16 accumulation or move RoPE/rounding across sums under the existing contract. Position-independent Q·codebook LUT is not algebraically valid for position-dependent pre-RoPE K. A V code-index histogram also changes rounding unless correction is included; assess its synchronization and temporary storage rather than assuming free codebook reuse across requests.
+
+## Hardware
+
+User-named BUS hosts are A800-SXM4-80GB, driver535.161.08. InfiniAI-BUS-2 currently has all eight GPUs idle; sudo authenticated and root identity verified. CUDA12.2/NCU2023.2.2 installed. GPU counter access is not yet proven. Use a compatible task environment and remeasure every baseline on this host. Do not alter system driver settings or touch other jobs.
