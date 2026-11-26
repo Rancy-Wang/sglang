@@ -32,6 +32,7 @@ class LoopVQKVPool(KVCache):
     def __init__(self, size, page_size, dtype, head_num, head_dim, layer_num, device,
                  *, tp_rank=0, tp_size=1, codebook_path, v_codebook_path, max_req_slots,
                  hp_prefix_tokens=64, hp_recent_tokens=256, num_hp_prefix_slots=None,
+                 residual_bits=0,
                  enable_memory_saver=False, start_layer=0, end_layer=None,
                  **kwargs):
         if page_size != 8 or dtype != torch.bfloat16 or start_layer != 0:
@@ -45,6 +46,9 @@ class LoopVQKVPool(KVCache):
         super().__init__(size, page_size, dtype, layer_num, device, enable_memory_saver,
                          start_layer=start_layer, end_layer=end_layer)
         self.head_num, self.head_dim, self.v_head_dim = head_num, head_dim, head_dim
+        if residual_bits not in (0, 4):
+            raise ValueError("VQ+ supports only INT4 group32 residuals")
+        self.residual_bits = residual_bits
         self.hp_dtype = dtype
         self.N_Q = self.flush_interval = 8
         self.N_H = 1
@@ -68,6 +72,10 @@ class LoopVQKVPool(KVCache):
                                            head_num=head_num, head_dim=head_dim, device=device,
                                            tp_rank=tp_rank, tp_size=tp_size)
         self._vq, self._vq_v = self.k_book, self.v_book
+        if self.residual_bits:
+            # Match training's BF16 gather without converting on every lookup.
+            self.k_book.cb16 = self.k_book.cb16.to(torch.bfloat16)
+            self.v_book.cb16 = self.v_book.cb16.to(torch.bfloat16)
         self.base_layers = self.k_book.base_layers
         self._next_slab_offset = torch.zeros(max_req_slots, dtype=torch.int32, device=device)
         self._flush_counter = torch.zeros_like(self._next_slab_offset)
@@ -81,6 +89,16 @@ class LoopVQKVPool(KVCache):
             self.hp_v = torch.empty_like(self.hp_k)
             self.hp_k[:, :8].zero_()
             self.hp_v[:, :8].zero_()
+            if self.residual_bits:
+                shape = (layer_num, self.quant_size, head_num)
+                self.k_residual = torch.empty((*shape, head_dim // 2), dtype=torch.uint8, device=device)
+                self.v_residual = torch.empty_like(self.k_residual)
+                self.k_residual_scale = torch.empty((*shape, head_dim // 32), dtype=torch.float16, device=device)
+                self.v_residual_scale = torch.empty_like(self.k_residual_scale)
+                self.k_residual[:, :8].zero_()
+                self.v_residual[:, :8].zero_()
+                self.k_residual_scale[:, :8].fill_(torch.finfo(torch.float16).tiny)
+                self.v_residual_scale[:, :8].fill_(torch.finfo(torch.float16).tiny)
         self.k_buffer = [self.k_indices[c] for c in self.k_book.code_layer]
         self.v_buffer = [self.v_indices[c] for c in self.v_book.code_layer]
         self.hp_k_buffer = list(self.hp_k.unbind(0))
@@ -124,9 +142,13 @@ class LoopVQKVPool(KVCache):
         return self.hp_v_buffer[layer_id]
 
     def get_kv_size_bytes(self):
-        return tuple(sum(t.numel() * t.element_size() for t in tensors) for tensors in (
+        sizes = tuple(sum(t.numel() * t.element_size() for t in tensors) for tensors in (
             (self.k_indices, self.hp_k, self.k_book.cb16, self.k_book.cb16_enc),
             (self.v_indices, self.hp_v, self.v_book.cb16, self.v_book.cb16_enc)))
+        if self.residual_bits:
+            extra = self.k_residual.numel() + self.k_residual_scale.numel() * 2
+            sizes = tuple(n + extra for n in sizes)
+        return sizes
 
     def set_kv_buffer(self, layer, loc, cache_k, cache_v, k_scale=None, v_scale=None,
                       layer_id_override=None, is_decode=False, **kwargs):
@@ -149,15 +171,31 @@ class LoopVQKVPool(KVCache):
         else:
             encode_steps([x[0] for x in held] + [k], self.k_book.cb16_enc[base], self.k_indices[base], loc)
             encode_steps([x[1] for x in held] + [v], self.v_book.cb16_enc[base], self.v_indices[base], loc)
+            if self.residual_bits:
+                from sglang.kernels.ops.loopvq.residual_encode import encode_residual_steps
+                encode_residual_steps([x[0] for x in held] + [k], self.k_indices[base], self.k_book.cb16,
+                                      self.k_residual, self.k_residual_scale, loc, base)
+                encode_residual_steps([x[1] for x in held] + [v], self.v_indices[base], self.v_book.cb16,
+                                      self.v_residual, self.v_residual_scale, loc, base)
             del self._loop_stash[base]
 
     def vq_flush_k(self, plan):
         encode_from_hp(self.hp_k, self.k_book.cb16_enc, self.k_indices,
                        plan.src_hp_slot, plan.dst_quant_slots, plan.valid_mask)
+        if self.residual_bits:
+            from sglang.kernels.ops.loopvq.residual_encode import encode_residual_from_hp
+            encode_residual_from_hp(self.hp_k, self.k_indices, self.k_book.cb16,
+                                   self.k_residual, self.k_residual_scale,
+                                   plan.src_hp_slot, plan.dst_quant_slots, plan.valid_mask)
 
     def vq_flush_v(self, plan):
         encode_from_hp(self.hp_v, self.v_book.cb16_enc, self.v_indices,
                        plan.src_hp_slot, plan.dst_quant_slots, plan.valid_mask)
+        if self.residual_bits:
+            from sglang.kernels.ops.loopvq.residual_encode import encode_residual_from_hp
+            encode_residual_from_hp(self.hp_v, self.v_indices, self.v_book.cb16,
+                                   self.v_residual, self.v_residual_scale,
+                                   plan.src_hp_slot, plan.dst_quant_slots, plan.valid_mask)
 
     def move_kv_cache(self, tgt_loc, src_loc):
         raise NotImplementedError("LoopVQ prefix reuse / cache relocation is not supported")

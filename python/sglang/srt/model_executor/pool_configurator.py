@@ -236,6 +236,9 @@ class LoopVQPoolConfigurator(MemoryPoolConfigurator):
         recent = get_model().loopvq_recent_tokens
         hp_slots = 8 + 2 * request_slots * prefix + request_slots * (recent + 8)
         self._cell_size = (layers // 4) * heads * (dimension // 4) * 2
+        if get_model().loopvq_residual_bits:
+            # K/V, each recurrent slot: packed INT4 plus one FP16 scale per32 channels.
+            self._cell_size += layers * heads * (dimension // 2 + dimension // 32 * 2) * 2
         hp_bytes = hp_slots * layers * heads * dimension * 2 * 2
         # K/V, encode/decode layouts, base-layer/head/group/centroid/G16, FP16.
         codebook_bytes = 4 * (layers // 4) * heads * (dimension // 4) * 256 * 16 * 2

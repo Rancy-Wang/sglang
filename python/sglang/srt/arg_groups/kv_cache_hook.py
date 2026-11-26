@@ -50,6 +50,11 @@ def handle_loopvq_compatibility(server_args: Any) -> None:
         expected_splits = 48 if cfg.loopvq_codebook_dir else 8
         if cfg.triton_attention_num_kv_splits != expected_splits:
             raise ValueError(f"The optimized Ouro decode profile requires {expected_splits} Triton KV splits.")
+    residual_bits = getattr(cfg, "loopvq_residual_bits", 0)
+    if residual_bits not in (0, 4):
+        raise ValueError("VQ+ supports only INT4 group32 residuals.")
+    if residual_bits and (not cfg.loopvq_codebook_dir or profile != "optimized"):
+        raise ValueError("VQ+ requires a LoopVQ codebook and optimized Ouro decode.")
     if not cfg.loopvq_codebook_dir:
         return
     if not cfg.device.startswith("cuda"):

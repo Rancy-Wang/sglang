@@ -1651,6 +1651,7 @@ class KVCacheConfigurator:
                 max_req_slots=req_to_token_pool.req_to_token.shape[0],
                 hp_prefix_tokens=get_model().loopvq_prefix_tokens,
                 hp_recent_tokens=get_model().loopvq_recent_tokens,
+                residual_bits=get_model().loopvq_residual_bits,
                 start_layer=self.layer_info.start_layer,
                 end_layer=self.layer_info.end_layer,
             )

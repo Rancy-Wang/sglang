@@ -223,6 +223,10 @@ class Model(msgspec.Struct):
         int,
         "Unquantized prefix tokens per LoopVQ request (a positive multiple of 8).",
     ] = 64
+    loopvq_residual_bits: A[
+        int,
+        Arg(help="VQ+ residual storage: 0 disables; 4 uses signed INT4 group32 with FP16 scales.", choices=[0, 4]),
+    ] = 0
     loopvq_recent_tokens: A[
         int,
         "Unquantized recent tokens per LoopVQ request (a positive multiple of 8).",

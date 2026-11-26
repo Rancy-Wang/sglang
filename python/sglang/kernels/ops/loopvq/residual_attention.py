@@ -1,0 +1,96 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Split-KV VQ+ attention. Packed correction, RoPE and PV stay in registers.
+
+All splits overwrite their partial/LSE, including empty and graph-padding rows.
+The same stage handles HP and quantized locations using one ordered page list.
+"""
+import torch
+import triton
+import triton.language as tl
+
+from .official_reduce import official_reduce
+
+
+@triton.jit
+def _rows(IDX, CB, RES, SCALE, HP, slots, c, head, valid,
+          H: tl.constexpr, OFFSET: tl.constexpr):
+    quant = (slots < OFFSET) & (slots >= 0)
+    mask = valid[:, None] & quant[:, None]
+    code = tl.load(IDX + (slots[:, None] * H + head) * 32 + c[None, :] // 4, mask, 0).to(tl.int32)
+    base = tl.load(CB + ((head * 32 + c[None, :] // 4) * 256 + code) * 4 + c[None, :] % 4, mask, 0).to(tl.float32)
+    byte = tl.load(RES + (slots[:, None] * H + head) * 64 + c[None, :] // 2, mask, 0).to(tl.int32)
+    z = (byte >> (4 * (c[None, :] % 2))) & 15
+    z = tl.where(z >= 8, z - 16, z).to(tl.float32)
+    scale = tl.load(SCALE + (slots[:, None] * H + head) * 4 + c[None, :] // 32, mask, 0).to(tl.float32)
+    hp = tl.load(HP + ((slots[:, None] - OFFSET) * H + head) * 128 + c[None, :],
+                 valid[:, None] & ~quant[:, None], 0).to(tl.float32)
+    return tl.where(quant[:, None], base + z * scale, hp)
+
+
+@triton.jit
+def _stage1(Q, KI, VI, KC, VC, KR, VR, KS, VS, HK, HV, PTR, LOC, ROPE, OUT, LSE,
+            H: tl.constexpr, OFFSET: tl.constexpr, QS: tl.constexpr, QH: tl.constexpr,
+            SPLITS: tl.constexpr, SCALE: tl.constexpr, N: tl.constexpr):
+    req, head, split = tl.program_id(0), tl.program_id(1), tl.program_id(2)
+    begin, end = tl.load(PTR + req), tl.load(PTR + req + 1)
+    length = end - begin
+    first = tl.load(LOC + begin, length > 0, 0)
+    length = tl.where(first != 0, length, 0)
+    per = tl.cdiv(length, SPLITS)
+    lo, hi = split * per, tl.minimum((split + 1) * per, length)
+    c = tl.arange(0, 128)
+    pair = (c + 64) % 128
+    sign = tl.where(c < 64, -1., 1.)
+    q = tl.load(Q + req * QS + head * QH + c).to(tl.float32)
+    maximum = tl.full((), -float('inf'), tl.float32)
+    denom = tl.full((), 0., tl.float32)
+    acc = tl.full((128,), 0., tl.float32)
+    for start in range(lo, hi, N):
+        pos = start + tl.arange(0, N)
+        valid = pos < hi
+        slots = tl.load(LOC + begin + pos, valid, 0)
+        raw = _rows(KI, KC, KR, KS, HK, slots, c, head, valid, H, OFFSET)
+        paired = _rows(KI, KC, KR, KS, HK, slots, pair, head, valid, H, OFFSET)
+        cos = tl.load(ROPE + pos[:, None] * 128 + c[None, :] % 64, valid[:, None], 0)
+        sin = tl.load(ROPE + pos[:, None] * 128 + 64 + c[None, :] % 64, valid[:, None], 0)
+        k = (raw * cos + paired * sign[None, :] * sin).to(tl.bfloat16).to(tl.float32)
+        logits = tl.sum(k * q[None, :], 1) * SCALE
+        logits = tl.where(valid, logits, -float('inf'))
+        new_max = tl.maximum(maximum, tl.max(logits, 0))
+        alpha = tl.exp(maximum - new_max)
+        prob = tl.exp(logits - new_max)
+        v = _rows(VI, VC, VR, VS, HV, slots, c, head, valid, H, OFFSET).to(tl.bfloat16).to(tl.float32)
+        acc = acc * alpha + tl.sum(prob[:, None] * v, 0)
+        denom = denom * alpha + tl.sum(prob, 0)
+        maximum = new_max
+    where = (req * H + head) * SPLITS + split
+    tl.store(OUT + where * 128 + c, acc / tl.maximum(denom, 1.e-30))
+    tl.store(LSE + where, tl.where(denom > 0, maximum + tl.log(denom), -float('inf')))
+
+
+class ResidualAttention:
+    def __init__(self, pool, *, max_batch, max_context_len, splits=16, block=32):
+        if pool.head_dim != 128 or not pool.residual_bits == 4:
+            raise ValueError("VQ+ requires D128 and INT4 group32")
+        self.pool, self.splits, self.block = pool, splits, block
+        self.max_batch, self.max_context_len = max_batch, max_context_len
+        self.partial = torch.empty((max_batch, pool.head_num, splits, 128), dtype=torch.float32, device=pool.hp_k.device)
+        self.lse = torch.empty((max_batch, pool.head_num, splits), dtype=torch.float32, device=pool.hp_k.device)
+
+    def forward(self, q, layer_id, kv_indptr, kv_indices, cos_sin_cache, sm_scale):
+        pool, b = self.pool, q.shape[0]
+        if q.shape != (b, pool.head_num, 128) or q.dtype != torch.bfloat16 or b > self.max_batch:
+            raise ValueError("VQ+ requires BF16 [batch,local_heads,128] within capacity")
+        out = torch.empty_like(q)
+        _stage1[(b, pool.head_num, self.splits)](
+            q, pool.get_key_buffer(layer_id), pool.get_value_buffer(layer_id),
+            pool.k_book.cb16[layer_id], pool.v_book.cb16[layer_id],
+            pool.k_residual[layer_id], pool.v_residual[layer_id],
+            pool.k_residual_scale[layer_id], pool.v_residual_scale[layer_id],
+            pool.get_hp_key_buffer(layer_id), pool.get_hp_value_buffer(layer_id),
+            kv_indptr, kv_indices, cos_sin_cache, self.partial, self.lse,
+            pool.head_num, pool.hp_global_offset, q.stride(0), q.stride(1),
+            self.splits, float(sm_scale), self.block,
+            enable_fp_fusion=False, num_warps=4,
+        )
+        return official_reduce(self.partial[:b], self.lse[:b], out)

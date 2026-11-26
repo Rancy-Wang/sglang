@@ -219,10 +219,13 @@ class TritonAttnBackend(AttentionBackend):
             self.enable_lean_attention = False
         self.loopvq_official = None
         if getattr(self.token_to_kv_pool, "loopvq_enabled", False) and self.ouro_decode_profile == "optimized":
-            from sglang.kernels.ops.loopvq.official_attention import OfficialAttention
+            if self.token_to_kv_pool.residual_bits:
+                from sglang.kernels.ops.loopvq.residual_attention import ResidualAttention as Attention
+            else:
+                from sglang.kernels.ops.loopvq.official_attention import OfficialAttention as Attention
 
             # Native CUDA extension compilation must precede graph capture.
-            self.loopvq_official = OfficialAttention(
+            self.loopvq_official = Attention(
                 self.token_to_kv_pool, max_batch=max_bs,
                 max_context_len=model_runner.model_config.context_len,
             )
