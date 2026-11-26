@@ -10,5 +10,6 @@
   "cuda_probe": "no error",
   "ncu_exit": 1,
   "ncu_error": "ERR_NVGPUCTRPERM",
-  "log_sha256": "088f13a3decc50e566a0f68a208c88537d4a407c12ee5e887f793f9497948609"
+  "log_sha256": "088f13a3decc50e566a0f68a208c88537d4a407c12ee5e887f793f9497948609",
+  "user_CapBnd": "00000000a80c65fb"
 }
