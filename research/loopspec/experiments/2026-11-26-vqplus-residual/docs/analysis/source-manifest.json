@@ -1,0 +1,62 @@
+{
+  "source_head": "2eb4f0d380effc82cd4008fcf8096276098cdcbe",
+  "tested_head": "4f9f8398d0955824e7c64dfcf63a826bbb70dc05",
+  "files": [
+    {
+      "path": "/Users/x.puppet/Desktop/Undergraduate/Project/LoopSpec/sglang/python/sglang/kernels/ops/loopvq/residual_attention.py",
+      "sha256": "7fc221d043039d2b9fe735472db090edc4007b2aa2d29c83b49dd27ab2af2799"
+    },
+    {
+      "path": "/Users/x.puppet/Desktop/Undergraduate/Project/LoopSpec/sglang/python/sglang/kernels/ops/loopvq/residual_attention_cuda.py",
+      "sha256": "91ca2ca9300c0ce1f362b9f7fe2c23b88e8e56c0882ad6c315905b0149fe0819"
+    },
+    {
+      "path": "/Users/x.puppet/Desktop/Undergraduate/Project/LoopSpec/sglang/python/sglang/kernels/ops/loopvq/residual_attention_grouped_cuda.py",
+      "sha256": "b9ae1f95aa0d09dce5ca40b1e1eb3eebccf56e124f211e31369471a97828dd2d"
+    },
+    {
+      "path": "/Users/x.puppet/Desktop/Undergraduate/Project/LoopSpec/sglang/python/sglang/kernels/ops/loopvq/residual_encode.py",
+      "sha256": "1cc1bff34d9efc2be095dedeca826c862d5de92df77186457576a3b5fb7ca9b0"
+    },
+    {
+      "path": "/Users/x.puppet/Desktop/Undergraduate/Project/LoopSpec/sglang/python/sglang/srt/mem_cache/loopvq_pool.py",
+      "sha256": "5a9f9fd8498319d7608e1d62194c27ee278d98bf7c74628dc1110f574adae351"
+    },
+    {
+      "path": "/Users/x.puppet/Desktop/Undergraduate/Project/LoopSpec/sglang/python/sglang/srt/mem_cache/loopvq_codebook.py",
+      "sha256": "cca818b397697766d62d32ce1d671f50ed30e243e6306b06572648b638340d37"
+    },
+    {
+      "path": "/Users/x.puppet/Desktop/Undergraduate/Project/LoopSpec/sglang/python/sglang/srt/mem_cache/loopvq_allocator.py",
+      "sha256": "1a124ce1716e300bf1ee3d236a375f12352a7586c16d68b1fd9e6649e3d541c2"
+    },
+    {
+      "path": "/Users/x.puppet/Desktop/Undergraduate/Project/LoopSpec/sglang/python/sglang/srt/layers/attention/loopvq_backend.py",
+      "sha256": "8a65e2aeb193d128c6a5012bf4d5b21210be16689b7942edaa4044adec0a9e2e"
+    },
+    {
+      "path": "/Users/x.puppet/Desktop/Undergraduate/Project/LoopSpec/sglang/python/sglang/srt/layers/attention/triton_backend.py",
+      "sha256": "de52c987dc7a2575fb83b004a34f30fe8f6baca7c46f4a5d88db92abc9ce3040"
+    },
+    {
+      "path": "/Users/x.puppet/Desktop/Undergraduate/Project/LoopSpec/sglang/python/sglang/srt/models/ouro.py",
+      "sha256": "09ab6fdbec5a4766221107413f09c99566544179a9a6f7da161ab245f7359c22"
+    },
+    {
+      "path": "/Users/x.puppet/Desktop/Undergraduate/Project/LoopSpec/sglang/research/loopspec/experiments/2026-11-26-vqplus-residual/results.md",
+      "sha256": "cec40f82ab99c8f7527b5185600073b1c554e6349f672cc016c39423e8c46043"
+    },
+    {
+      "path": "/Users/x.puppet/Desktop/Undergraduate/Project/LoopSpec/sglang/research/loopspec/experiments/2026-11-26-vqplus-residual/results.json",
+      "sha256": "0cdf5af04dc5cf6d77f3fdc2084bb960f96fb430cd15c43ffce91d71ac7a8332"
+    },
+    {
+      "path": "/Users/x.puppet/Desktop/Undergraduate/Project/LoopSpec/sglang/research/loopspec/experiments/2026-11-26-vqplus-residual/check_residual.py",
+      "sha256": "9c3ab031b30960b37fec5c7297ac15a560f5240c73b2cb6d24e8e5b4d1d40ae2"
+    },
+    {
+      "path": "/Users/x.puppet/Desktop/Undergraduate/Project/LoopSpec/sglang/research/loopspec/experiments/2026-11-26-vqplus-residual/check_serving.py",
+      "sha256": "59c7100cb0089c6b5cdf4af88294f1ab2028ff4b7e5dd7d45961e118a3c1cbe8"
+    }
+  ]
+}

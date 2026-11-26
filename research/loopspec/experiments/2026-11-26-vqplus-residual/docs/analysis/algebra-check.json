@@ -1,0 +1,25 @@
+{
+  "purpose": "CPU synthetic algebra check only; no GPU performance or real-model quality claim",
+  "numpy": "2.2.1",
+  "seed": 20261126,
+  "shape": {
+    "N": 97,
+    "D": 32,
+    "d": 4,
+    "C": 16
+  },
+  "post_rope_additive_k_lut_max_abs": 6.661338147750939e-16,
+  "additive_v_histogram_max_abs": 2.7755575615628914e-16,
+  "old_bf16_rounding_vs_linear_v_max_abs": 0.0006960885649747242,
+  "naive_position_independent_pre_rope_lut_logit_max_abs": 2.559591641601046,
+  "incorrect_separate_softmax_output_max_abs": 0.17849043588733304,
+  "costs_D128_C256_B16_H8_N2048": {
+    "capacity_bits_per_element": 5,
+    "logical_read_bits_per_element": 6.5,
+    "packed_KV_MiB_per_layer": 52.0,
+    "bf16_KV_MiB_per_layer": 128.0,
+    "fp32_K_LUT_MiB_per_layer": 4.0,
+    "K_LUT_FMA_per_query": 32768,
+    "dense_center_FMA_per_query": 262144
+  }
+}
