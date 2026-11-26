@@ -221,8 +221,15 @@ class TritonAttnBackend(AttentionBackend):
         if getattr(self.token_to_kv_pool, "loopvq_enabled", False) and self.ouro_decode_profile == "optimized":
             residual_options = {}
             if self.token_to_kv_pool.residual_bits:
-                from sglang.kernels.ops.loopvq.residual_attention import ResidualAttention as Attention
-                residual_options["global_table"] = getattr(get_model(), "loopvq_residual_codebook", "shared") == "global"
+                if self.token_to_kv_pool.paged_residual:
+                    if get_model().loopvq_residual_page_kernel == "triton":
+                        from sglang.kernels.ops.loopvq.residual_attention_paged_triton import PagedTritonAttention as Attention
+                    else:
+                        from sglang.kernels.ops.loopvq.residual_attention_paged_cuda import PagedResidualAttention as Attention
+                        residual_options["cooperative"] = False
+                else:
+                    from sglang.kernels.ops.loopvq.residual_attention import ResidualAttention as Attention
+                    residual_options["global_table"] = getattr(get_model(), "loopvq_residual_codebook", "shared") == "global"
             else:
                 from sglang.kernels.ops.loopvq.official_attention import OfficialAttention as Attention
 

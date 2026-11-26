@@ -32,7 +32,7 @@ class LoopVQKVPool(KVCache):
     def __init__(self, size, page_size, dtype, head_num, head_dim, layer_num, device,
                  *, tp_rank=0, tp_size=1, codebook_path, v_codebook_path, max_req_slots,
                  hp_prefix_tokens=64, hp_recent_tokens=256, num_hp_prefix_slots=None,
-                 residual_bits=0,
+                 residual_bits=0, residual_layout="token",
                  enable_memory_saver=False, start_layer=0, end_layer=None,
                  **kwargs):
         if page_size != 8 or dtype != torch.bfloat16 or start_layer != 0:
@@ -49,6 +49,10 @@ class LoopVQKVPool(KVCache):
         if residual_bits not in (0, 4):
             raise ValueError("VQ+ supports only INT4 group32 residuals")
         self.residual_bits = residual_bits
+        if residual_layout not in ("token", "page") or (residual_layout == "page" and residual_bits != 4):
+            raise ValueError("Page layout requires VQ+ INT4 residuals")
+        self.residual_layout = residual_layout
+        self.paged_residual = residual_layout == "page"
         self.hp_dtype = dtype
         self.N_Q = self.flush_interval = 8
         self.N_H = 1
@@ -169,33 +173,33 @@ class LoopVQKVPool(KVCache):
             held.append((k.clone(memory_format=torch.contiguous_format),
                          v.clone(memory_format=torch.contiguous_format)))
         else:
-            encode_steps([x[0] for x in held] + [k], self.k_book.cb16_enc[base], self.k_indices[base], loc)
-            encode_steps([x[1] for x in held] + [v], self.v_book.cb16_enc[base], self.v_indices[base], loc)
+            encode_steps([x[0] for x in held] + [k], self.k_book.cb16_enc[base], self.k_indices[base], loc, paged=self.paged_residual)
+            encode_steps([x[1] for x in held] + [v], self.v_book.cb16_enc[base], self.v_indices[base], loc, paged=self.paged_residual)
             if self.residual_bits:
                 from sglang.kernels.ops.loopvq.residual_encode import encode_residual_steps
                 encode_residual_steps([x[0] for x in held] + [k], self.k_indices[base], self.k_book.cb16,
-                                      self.k_residual, self.k_residual_scale, loc, base)
+                                      self.k_residual, self.k_residual_scale, loc, base, paged=self.paged_residual)
                 encode_residual_steps([x[1] for x in held] + [v], self.v_indices[base], self.v_book.cb16,
-                                      self.v_residual, self.v_residual_scale, loc, base)
+                                      self.v_residual, self.v_residual_scale, loc, base, paged=self.paged_residual)
             del self._loop_stash[base]
 
     def vq_flush_k(self, plan):
         encode_from_hp(self.hp_k, self.k_book.cb16_enc, self.k_indices,
-                       plan.src_hp_slot, plan.dst_quant_slots, plan.valid_mask)
+                       plan.src_hp_slot, plan.dst_quant_slots, plan.valid_mask, paged=self.paged_residual)
         if self.residual_bits:
             from sglang.kernels.ops.loopvq.residual_encode import encode_residual_from_hp
             encode_residual_from_hp(self.hp_k, self.k_indices, self.k_book.cb16,
                                    self.k_residual, self.k_residual_scale,
-                                   plan.src_hp_slot, plan.dst_quant_slots, plan.valid_mask)
+                                   plan.src_hp_slot, plan.dst_quant_slots, plan.valid_mask, paged=self.paged_residual)
 
     def vq_flush_v(self, plan):
         encode_from_hp(self.hp_v, self.v_book.cb16_enc, self.v_indices,
-                       plan.src_hp_slot, plan.dst_quant_slots, plan.valid_mask)
+                       plan.src_hp_slot, plan.dst_quant_slots, plan.valid_mask, paged=self.paged_residual)
         if self.residual_bits:
             from sglang.kernels.ops.loopvq.residual_encode import encode_residual_from_hp
             encode_residual_from_hp(self.hp_v, self.v_indices, self.v_book.cb16,
                                    self.v_residual, self.v_residual_scale,
-                                   plan.src_hp_slot, plan.dst_quant_slots, plan.valid_mask)
+                                   plan.src_hp_slot, plan.dst_quant_slots, plan.valid_mask, paged=self.paged_residual)
 
     def move_kv_cache(self, tgt_loc, src_loc):
         raise NotImplementedError("LoopVQ prefix reuse / cache relocation is not supported")

@@ -42,15 +42,15 @@ def _encode(K0, K1, K2, K3, CB, OUT, LOC, SRC, VALID,
             N: tl.constexpr, H: tl.constexpr, D: tl.constexpr,
             S0: tl.constexpr, S1: tl.constexpr, S2: tl.constexpr, S3: tl.constexpr,
             LSTRIDE: tl.constexpr, OUTSIZE: tl.constexpr,
-            FROM_HP: tl.constexpr, HAS_VALID: tl.constexpr,
+            FROM_HP: tl.constexpr, HAS_VALID: tl.constexpr, PAGED: tl.constexpr,
             M: tl.constexpr = 16):
     rows = tl.program_id(0) * M + tl.arange(0, M)
     hg = tl.program_id(1)
-    layer = tl.program_id(2)
+    layer = tl.program_id(2).to(tl.int64)
     ng = D // 4
     h, group = hg // ng, hg % ng
     cols = tl.arange(0, 16)
-    dest = tl.load(LOC + rows, rows < N, -1)
+    dest = tl.load(LOC + rows, rows < N, -1).to(tl.int64)
     valid = (rows < N) & (dest >= 0) & (dest < OUTSIZE)
     if HAS_VALID:
         valid = valid & (tl.load(VALID + rows, rows < N, 0) != 0)
@@ -74,34 +74,42 @@ def _encode(K0, K1, K2, K3, CB, OUT, LOC, SRC, VALID,
     norm = tl.sum(table.to(tl.float32) * table.to(tl.float32), 0) * 0.5
     score = tl.dot(x, table) - norm[None, :]
     code = tl.argmax(score, 1, tie_break_left=True)
-    tl.store(OUT + ((layer * OUTSIZE + dest) * H + h) * ng + group, code, valid)
+    if PAGED:
+        where = layer * OUTSIZE * H * ng + (((dest // 8 * H + h) * 4 + group // 8) * 8 + dest % 8) * 8 + group % 8
+    else:
+        where = ((layer * OUTSIZE + dest) * H + h) * ng + group
+    tl.store(OUT + where, code, valid)
 
 
-def encode_steps(steps, table, output, loc):
+def encode_steps(steps, table, output, loc, *, paged=False):
     """Four [n,H,D] BF16 inputs -> scatter uint8 indices [slots,H,D/4]."""
     n, h, d = steps[0].shape
     if len(steps) != 4 or any(x.shape != steps[0].shape for x in steps):
         raise ValueError("LoopVQ encode needs four identically shaped steps")
+    if paged and (d != 128 or output.shape[0] % 8):
+        raise ValueError("Page encoding requires D128 and page8 capacity")
     steps = [x if x.stride(-2) == d and x.stride(-1) == 1 else x.contiguous()
              for x in steps]
     if n:
         _encode[(triton.cdiv(n, 16), h * (d // 4), 1)](
             *steps, table, output, loc, loc, loc, n, h, d,
-            *(x.stride(0) for x in steps), 0, output.shape[0], False, False,
+            *(x.stride(0) for x in steps), 0, output.shape[0], False, False, paged,
         )
 
 
-def encode_from_hp(hp, table, output, src, dst, valid):
+def encode_from_hp(hp, table, output, src, dst, valid, *, paged=False):
     """Encode all base layers together when demoting one or more complete pages."""
     lb = table.shape[0]
     _, _, h, d = hp.shape
     n = src.numel()
     if hp.shape[0] != lb * 4:
         raise ValueError("LoopVQ flush requires every R4 slot")
+    if paged and (d != 128 or output.shape[1] % 8):
+        raise ValueError("Page encoding requires D128 and page8 capacity")
     if n:
         _encode[(triton.cdiv(n, 16), h * (d // 4), lb)](
             hp[0], hp[lb], hp[2 * lb], hp[3 * lb], table, output,
             dst, src, valid, n, h, d,
             hp.stride(1), hp.stride(1), hp.stride(1), hp.stride(1),
-            hp.stride(0), output.shape[1], True, True,
+            hp.stride(0), output.shape[1], True, True, paged,
         )

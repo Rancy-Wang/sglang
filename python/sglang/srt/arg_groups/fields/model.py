@@ -231,6 +231,14 @@ class Model(msgspec.Struct):
         str,
         Arg(help="VQ+ centroid access: shared table or experimental cached global lookup.", choices=["shared", "global"]),
     ] = "shared"
+    loopvq_residual_layout: A[
+        str,
+        Arg(help="VQ+ packed storage layout; page is experimental page8/group32 storage.", choices=["token", "page"]),
+    ] = "token"
+    loopvq_residual_page_kernel: A[
+        str,
+        Arg(help="Experimental VQ+ page reader implementation.", choices=["cuda", "triton"]),
+    ] = "cuda"
     loopvq_recent_tokens: A[
         int,
         "Unquantized recent tokens per LoopVQ request (a positive multiple of 8).",

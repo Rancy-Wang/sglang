@@ -52,6 +52,14 @@ def handle_loopvq_compatibility(server_args: Any) -> None:
             raise ValueError(f"The optimized Ouro decode profile requires {expected_splits} Triton KV splits.")
     residual_bits = getattr(cfg, "loopvq_residual_bits", 0)
     residual_codebook = getattr(cfg, "loopvq_residual_codebook", "shared")
+    residual_layout = getattr(cfg, "loopvq_residual_layout", "token")
+    page_kernel = getattr(cfg, "loopvq_residual_page_kernel", "cuda")
+    if residual_layout not in ("token", "page") or page_kernel not in ("cuda", "triton"):
+        raise ValueError("Unknown VQ+ page layout or reader.")
+    if residual_layout == "page" and (residual_bits != 4 or residual_codebook != "global"):
+        raise ValueError("Page VQ+ requires INT4 residuals and global centroid lookup.")
+    if page_kernel != "cuda" and residual_layout != "page":
+        raise ValueError("The page reader option requires VQ+ page layout.")
     if residual_codebook not in ("shared", "global") or (residual_codebook == "global" and residual_bits != 4):
         raise ValueError("Global residual codebook lookup requires VQ+ INT4.")
     if residual_bits not in (0, 4):

@@ -34,6 +34,8 @@ def main():
     p.add_argument('--batches', type=int, nargs='+', default=[1, 2, 4, 8, 16])
     p.add_argument('--repeats', type=int, default=3)
     p.add_argument('--reference', type=Path)
+    p.add_argument('--expected-layout', choices=['token','page'])
+    p.add_argument('--expected-page-kernel', choices=['cuda','triton'])
     a = p.parse_args()
     a.out.mkdir(parents=True, exist_ok=False)
 
@@ -50,6 +52,10 @@ def main():
     assert json.loads((a.model / 'config.json').read_text())['total_ut_steps'] == 4
     assert bool(cfg['loopvq_codebook_dir']) == (a.method != 'bf16')
     assert cfg.get('loopvq_residual_bits', 0) == (4 if a.method == 'vqplus' else 0)
+    if a.expected_layout is not None:
+        assert cfg.get('loopvq_residual_layout','token') == a.expected_layout
+    if a.expected_page_kernel is not None:
+        assert cfg.get('loopvq_residual_page_kernel','cuda') == a.expected_page_kernel
     if a.method != 'bf16':
         assert (cfg['loopvq_prefix_tokens'], cfg['loopvq_recent_tokens']) == (8, 64)
     assert cfg['disable_radix_cache'] and cfg['chunked_prefill_size'] == -1
@@ -62,7 +68,8 @@ def main():
     allowed = ['model_path', 'tp_size', 'dp_size', 'dtype', 'context_length', 'page_size',
                'max_total_tokens', 'max_running_requests', 'cuda_graph_config',
                'loopvq_codebook_dir', 'loopvq_residual_bits', 'ouro_decode_profile',
-               'loopvq_prefix_tokens', 'loopvq_recent_tokens', 'sampling_backend']
+               'loopvq_prefix_tokens', 'loopvq_recent_tokens', 'sampling_backend',
+               'loopvq_residual_layout','loopvq_residual_page_kernel','triton_attention_num_kv_splits']
     identity = {'client_sha': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip(),
                 'config': {k: cfg.get(k) for k in allowed}, 'capture': capture, 'total_ut_steps': 4}
     if a.method != 'bf16':

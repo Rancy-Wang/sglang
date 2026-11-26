@@ -187,7 +187,9 @@ def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False,
 
 
 class PagedResidualAttention:
-    def __init__(self, pool, *, max_batch, threads=512, layout=True, cooperative=True, scalar=False, compact=False, staged=False, remapped=False, waves=2, cache_mode=0):
+    def __init__(self, pool, *, max_batch, max_context_len=32768, threads=512, layout=True, cooperative=True, scalar=False, compact=False, staged=False, remapped=False, waves=2, cache_mode=0):
+        if pool.head_dim != 128 or pool.residual_bits != 4 or not 0 < max_context_len <= 32768:
+            raise ValueError('Page CUDA requires D128/INT4/context<=32768')
         self.pool = pool
         self.splits = 32
         self.compact = compact
@@ -197,8 +199,8 @@ class PagedResidualAttention:
         self.extension = prepare(pool.hp_k.device, threads=threads, layout=layout,
                                  cooperative=cooperative, scalar=scalar, compact=compact, staged=staged, remapped=remapped, cache_mode=cache_mode)
         self.sm_count = torch.cuda.get_device_properties(pool.hp_k.device).multi_processor_count
-        self.partial = torch.empty((max_batch, pool.head_num, 32, 128), device=pool.hp_k.device)
-        self.lse = torch.empty((max_batch, pool.head_num, 32), device=pool.hp_k.device)
+        self.partial = torch.empty((max_batch, pool.head_num, 32, 128), device=pool.hp_k.device, dtype=torch.float32)
+        self.lse = torch.empty((max_batch, pool.head_num, 32), device=pool.hp_k.device, dtype=torch.float32)
 
     def forward(self, q, layer_id, ptr, loc, rope, scale):
         p, b = self.pool, q.shape[0]

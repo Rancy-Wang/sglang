@@ -17,11 +17,13 @@ from types import SimpleNamespace
 
 import torch
 from sglang.kernels.ops.attention.decode_attention import decode_attention_fwd
+from sglang.kernels.ops.attention.metadata import get_num_kv_splits_triton
 from sglang.kernels.ops.loopvq.encode import encode_steps
 from sglang.kernels.ops.loopvq.residual_encode import encode_residual_steps
 from sglang.kernels.ops.loopvq.residual_attention import ResidualAttention
 from sglang.kernels.ops.loopvq.residual_attention_paged_cuda import (
     PagedResidualAttention, page_pack, page_unpack)
+from sglang.kernels.ops.loopvq.residual_attention_paged_triton import PagedTritonAttention
 from sglang.srt.mem_cache.loopvq_pack import build_coupled_codebook
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -77,7 +79,7 @@ def transformed(pool, scalar=False):
     return bind(result)
 
 
-def make_pool(rows, tables):
+def make_pool(rows, tables, paged=False):
     b,n=len(rows),rows[0]['k'].shape[1]
     cap=8+b*n
     assert n%8==0 and n>=80
@@ -90,8 +92,8 @@ def make_pool(rows, tables):
         idx=torch.zeros(cap,8,32,device='cuda',dtype=torch.uint8)
         res=torch.zeros(4,cap,8,64,device='cuda',dtype=torch.uint8)
         scales=torch.full((4,cap,8,4),torch.finfo(torch.float16).tiny,device='cuda',dtype=torch.float16)
-        encode_steps(list(raw[kind].unbind()),enc,idx,dst)
-        encode_residual_steps(list(raw[kind].unbind()),idx,cb,res,scales,dst,0)
+        encode_steps(list(raw[kind].unbind()),enc,idx,dst,paged=paged)
+        encode_residual_steps(list(raw[kind].unbind()),idx,cb,res,scales,dst,0,paged=paged)
         hp=torch.zeros(4,b*80+8,8,128,device='cuda',dtype=torch.bfloat16)
         for r in range(b):
             x=raw[kind][:,r*n:(r+1)*n]
@@ -135,16 +137,21 @@ def materialize(pool, raw, loop, rope, loc, n, *, scalar=False, original=False):
 
 
 class NativeAttention:
-    def __init__(self,k,v,q,ptr,loc):
+    def __init__(self,k,v,q,ptr,loc,max_splits=48,dynamic=False):
         self.k,self.v,self.q,self.ptr,self.loc=k,v,q,ptr,loc
         b,h,d=q.shape
         self.out=torch.empty_like(q)
-        self.partial=torch.empty(b,h,48,d,device='cuda')
-        self.lse=torch.empty(b,h,48,device='cuda')
-        self.splits=torch.full((b,),48,device='cuda',dtype=torch.int32)
+        self.max_splits=max_splits
+        self.partial=torch.empty(b,h,max_splits,d,device='cuda')
+        self.lse=torch.empty(b,h,max_splits,device='cuda')
+        self.splits=torch.full((b,),max_splits,device='cuda',dtype=torch.int32)
+        if dynamic:
+            lengths=ptr[1:]-ptr[:-1]
+            sms=torch.cuda.get_device_properties(q.device).multi_processor_count
+            get_num_kv_splits_triton[(1,)](self.splits,lengths,b,1,h,h,max_splits,sms,MAX_NUM_SEQ=256)
     def __call__(self):
         decode_attention_fwd(self.q,self.k,self.v,self.out,self.ptr,self.loc,
-            self.partial,self.lse,self.splits,48,128**-.5,1.,1.,enable_lean=False)
+            self.partial,self.lse,self.splits,self.max_splits,128**-.5,1.,1.,enable_lean=False)
         return self.out
 
 
@@ -201,7 +208,8 @@ def main():
     ap.add_argument('--correctness-only',action='store_true')
     names=['current','old_r1','plain_reader','paged','scalar_int4','materialized',
            'page_only','coop_only','compact','compact_plain','staged','staged_scalar',
-           'direct256','remapped','remapped_plain','rope_cg','stream_cg']
+           'direct256','remapped','remapped_plain','rope_cg','stream_cg',
+           'triton_page','triton_scalar','materialized_serving']
     ap.add_argument('--variants',nargs='+',choices=names,default=names)
     ap.add_argument('--profile-one',choices=names)
     args=ap.parse_args()
@@ -230,10 +238,18 @@ def main():
             rows.append(torch.load(path,map_location='cpu',weights_only=True))
         for batch in args.batches:
             assert batch<=len(rows)
-            pool,raw,queries,ptr,loc=make_pool(rows[:batch],{k:t[layer] for k,t in tables.items()})
             torch.cuda.synchronize(); start=time.perf_counter()
-            pp=transformed(pool)
-            torch.cuda.synchronize(); layout_ms=(time.perf_counter()-start)*1000
+            pool,raw,queries,ptr,loc=make_pool(rows[:batch],{k:t[layer] for k,t in tables.items()})
+            torch.cuda.synchronize();token_setup_ms=(time.perf_counter()-start)*1000
+            start=time.perf_counter()
+            pp,page_raw,page_queries,page_ptr,page_loc=make_pool(rows[:batch],{k:t[layer] for k,t in tables.items()},paged=True)
+            torch.cuda.synchronize();page_setup_ms=(time.perf_counter()-start)*1000
+            del page_raw,page_queries,page_ptr,page_loc
+            for kind in ('k','v'):
+                torch.testing.assert_close(page_unpack(getattr(pp,kind+'_indices')),getattr(pool,kind+'_indices'),atol=0,rtol=0)
+                for suffix in ('residual','residual_scale'):
+                    for got,expected in zip(getattr(pp,kind+'_'+suffix),getattr(pool,kind+'_'+suffix)):
+                        torch.testing.assert_close(page_unpack(got),expected,atol=0,rtol=0)
             sp=copy.copy(pool)
             for kind in ('k','v'):
                 res=torch.zeros_like(getattr(pool,kind+'_residual'))
@@ -258,6 +274,8 @@ def main():
                 'remapped_plain':lambda:PagedResidualAttention(pool,max_batch=batch,threads=256,compact=True,cooperative=False,waves=4,remapped=True,layout=False),
                 'rope_cg':lambda:PagedResidualAttention(pp,max_batch=batch,cooperative=False,cache_mode=1),
                 'stream_cg':lambda:PagedResidualAttention(pp,max_batch=batch,cooperative=False,cache_mode=2),
+                'triton_page':lambda:PagedTritonAttention(pp,max_batch=batch),
+                'triton_scalar':lambda:PagedTritonAttention(spp,max_batch=batch,scalar=True),
             }
             readers={name:factory() for name,factory in factories.items() if name in args.variants}
             for loop in args.loops:
@@ -266,6 +284,7 @@ def main():
                 k,v=materialize(pool,raw,loop,rope,loc,n)
                 torch.cuda.synchronize();materialize_ms=(time.perf_counter()-start)*1000
                 native=NativeAttention(k,v,q,ptr,loc)
+                native_serving=NativeAttention(k,v,q,ptr,loc,max_splits=8,dynamic=True)
                 ref=oracle(q,k,v,ptr,loc)
                 sk,sv=materialize(sp,raw,loop,rope,loc,n,scalar=True)
                 scalar_ref=oracle(q,sk,sv,ptr,loc)
@@ -274,14 +293,18 @@ def main():
                 calls={name:(lambda reader=reader:reader.forward(q,loop,ptr,loc,rope,128**-.5))
                        for name,reader in readers.items()}
                 if 'materialized' in args.variants:calls['materialized']=native
+                if 'materialized_serving' in args.variants:calls['materialized_serving']=native_serving
                 correctness={}
                 for name,fn in calls.items():
-                    got=fn();expected=scalar_ref if name in ('scalar_int4','staged_scalar') else ref
+                    got=fn();expected=scalar_ref if name in ('scalar_int4','staged_scalar','triton_scalar') else ref
                     torch.testing.assert_close(got,expected,atol=.002,rtol=.01)
                     correctness[name]=metrics(got,expected)
                 row=dict(layer=layer,loop=loop,batch=batch,length=n,correctness=correctness,
                     output_quality={'vqplus':metrics(ref,original_ref),'scalar_int4':metrics(scalar_ref,original_ref)},
-                    setup={'layout_conversion_ms':layout_ms,'materialization_ms':materialize_ms},
+                    setup={'token_pool_setup_ms':token_setup_ms,'direct_page_pool_setup_ms':page_setup_ms,
+                           'page_encoder_bitwise_parity':True,'materialization_ms':materialize_ms},
+                    native_controls={'materialized':'fixed48 diagnostic',
+                        'materialized_serving':{'max_splits':8,'actual_splits':native_serving.splits.cpu().tolist()}},
                     logical_bytes_per_token_head={'vqplus':208,'scalar_int4':144,'bf16':512})
                 if args.profile_one:
                     fn=calls[args.profile_one]
@@ -293,7 +316,7 @@ def main():
                 result['records'].append(row)
                 args.output.write_text(json.dumps(result,indent=2)+'\n')
                 print(json.dumps(row),flush=True)
-                del calls,native,k,v,sk,sv,rk,rv
+                del calls,native,native_serving,k,v,sk,sv,rk,rv
             del readers,factories,pool,pp,sp,spp,raw,queries
     result['passed']=True
     args.output.write_text(json.dumps(result,indent=2)+'\n')
