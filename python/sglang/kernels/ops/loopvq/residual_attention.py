@@ -97,6 +97,7 @@ class ResidualAttention:
         if group_size not in (0, 1, 2) or (group_size == 2 and implementation != 'cuda'):
             raise ValueError('Grouped VQ+ requires the CUDA implementation')
         self.group_size = group_size
+        self.layout = layout
         self.grouped = None
         if implementation == 'cuda' and group_size != 1 and max_batch >= 2:
             from .residual_attention_grouped_cuda import prepare_grouped
@@ -110,8 +111,9 @@ class ResidualAttention:
 
     def use_grouped(self, batch):
         # Capture-static dispatch, no GPU lengths copied to the host.
-        # R2 regresses short B4/B8; those shapes retain the R1 kernel.
-        return self.grouped is not None and (batch > 1 if self.group_size == 2 else batch == 2 or batch >= 16)
+        # Token pages retain their existing R2 policy. Head-local pages measured
+        # faster with R1 at large B, while B2 still benefits from R2 at long N.
+        return self.grouped is not None and (batch > 1 if self.group_size == 2 else batch == 2 or (not self.layout and batch >= 16))
 
     def forward(self, q, layer_id, kv_indptr, kv_indices, cos_sin_cache, sm_scale):
         pool, b = self.pool, q.shape[0]
