@@ -199,7 +199,10 @@ def main():
     ap.add_argument('--repeats',type=int,default=30)
     ap.add_argument('--inner',type=int,default=16)
     ap.add_argument('--correctness-only',action='store_true')
-    ap.add_argument('--profile-one',choices=['current','paged','scalar_int4','materialized'])
+    names=['current','old_r1','plain_reader','paged','scalar_int4','materialized',
+           'page_only','coop_only','compact','compact_plain']
+    ap.add_argument('--variants',nargs='+',choices=names,default=names)
+    ap.add_argument('--profile-one',choices=names)
     args=ap.parse_args()
     torch.backends.cuda.matmul.allow_tf32=False
     manifest=json.loads((args.snapshot/'manifest.json').read_text())
@@ -237,11 +240,18 @@ def main():
                 res[:,8:],scales[:,8:]=pack(raw[kind])
                 setattr(sp,kind+'_residual',res);setattr(sp,kind+'_residual_scale',scales)
             bind(sp); spp=transformed(sp)
-            old=ResidualAttention(pool,max_batch=batch,max_context_len=n,global_table=True)
-            old_r1=ResidualAttention(pool,max_batch=batch,max_context_len=n,global_table=True,group_size=1)
-            paged=PagedResidualAttention(pp,max_batch=batch)
-            plain=PagedResidualAttention(pool,max_batch=batch,layout=False,cooperative=False)
-            scalar=PagedResidualAttention(spp,max_batch=batch,scalar=True)
+            factories={
+                'current':lambda:ResidualAttention(pool,max_batch=batch,max_context_len=n,global_table=True),
+                'old_r1':lambda:ResidualAttention(pool,max_batch=batch,max_context_len=n,global_table=True,group_size=1),
+                'plain_reader':lambda:PagedResidualAttention(pool,max_batch=batch,layout=False,cooperative=False),
+                'paged':lambda:PagedResidualAttention(pp,max_batch=batch),
+                'scalar_int4':lambda:PagedResidualAttention(spp,max_batch=batch,scalar=True),
+                'page_only':lambda:PagedResidualAttention(pp,max_batch=batch,cooperative=False),
+                'coop_only':lambda:PagedResidualAttention(pool,max_batch=batch,layout=False),
+                'compact':lambda:PagedResidualAttention(pp,max_batch=batch,compact=True),
+                'compact_plain':lambda:PagedResidualAttention(pool,max_batch=batch,compact=True,layout=False,cooperative=False),
+            }
+            readers={name:factory() for name,factory in factories.items() if name in args.variants}
             for loop in args.loops:
                 q=queries[loop]
                 torch.cuda.synchronize();start=time.perf_counter()
@@ -253,12 +263,9 @@ def main():
                 scalar_ref=oracle(q,sk,sv,ptr,loc)
                 rk,rv=materialize(pool,raw,loop,rope,loc,n,original=True)
                 original_ref=oracle(q,rk,rv,ptr,loc)
-                calls={'current':lambda:old.forward(q,loop,ptr,loc,rope,128**-.5),
-                    'old_r1':lambda:old_r1.forward(q,loop,ptr,loc,rope,128**-.5),
-                    'plain_reader':lambda:plain.forward(q,loop,ptr,loc,rope,128**-.5),
-                    'paged':lambda:paged.forward(q,loop,ptr,loc,rope,128**-.5),
-                    'scalar_int4':lambda:scalar.forward(q,loop,ptr,loc,rope,128**-.5),
-                    'materialized':native}
+                calls={name:(lambda reader=reader:reader.forward(q,loop,ptr,loc,rope,128**-.5))
+                       for name,reader in readers.items()}
+                if 'materialized' in args.variants:calls['materialized']=native
                 correctness={}
                 for name,fn in calls.items():
                     got=fn();expected=scalar_ref if name=='scalar_int4' else ref
@@ -279,7 +286,7 @@ def main():
                 args.output.write_text(json.dumps(result,indent=2)+'\n')
                 print(json.dumps(row),flush=True)
                 del calls,native,k,v,sk,sv,rk,rv
-            del old,old_r1,paged,plain,scalar,pool,pp,sp,spp,raw,queries
+            del readers,factories,pool,pp,sp,spp,raw,queries
     result['passed']=True
     args.output.write_text(json.dumps(result,indent=2)+'\n')
 

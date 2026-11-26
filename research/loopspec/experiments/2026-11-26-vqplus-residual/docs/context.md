@@ -8,6 +8,8 @@ The user subsequently authorized a new maximum of 10 rounds: preserve existing t
 
 A10 GPU4/5 were verified idle A100-SXM4-80GB at initial inspection. X5 exec session90355/socket `/tmp/vqpage-20261126-x5.sock`; A10 session6622/socket `/tmp/vqpage-20261126-a10.sock`. A10 shell PID2497326, account ruoxi07; jump via the live X5 master. Reuse these handles and recheck liveness/resources. Target checkout `/homes/ruoxi07/repo/sglang-vqplus-kernel`, clean `loopspec-test`, baseline2eb4f0d38.
 
+Current execution host A12 after A10 became busy and A11 had resident tasks. A12 session24610/socket `/tmp/vqpage-20261126-a12.sock`, shell3411470, through live X5. Output `/homes/ruoxi07/experiments/loopvq/2026-11-26-vqpage`. Round1 c1ab6cb completed: all captures and four context timing runs exit0; page layout/cooperative reader regressed B16, rejected. NCU2026.3.1 fails ERR_NVGPUCTRPERM. New round2 compact streaming CTA implementation and boundary/LSE/graph harness prepared locally. Environment on A12 requires CC=/usr/bin/gcc-13 CXX=/usr/bin/g++-13, TORCH_CUDA_ARCH_LIST=8.0. Preserve task-owned extensions-a12. Read paged-record.md for next job IDs/results; recheck live state before acting.
+
 ## Original design-review scope and authorization
 
 The user requested a deep review of the linked LoopVQ chat and a more efficient VQ+ attention design, especially for large batch decode. This turn is analysis/planning only. No inference/training source changes, GPU runs, commits, pushes, or accuracy evaluation restarts were performed. Existing implementation budget remains 10/10; this design review does not reset it.

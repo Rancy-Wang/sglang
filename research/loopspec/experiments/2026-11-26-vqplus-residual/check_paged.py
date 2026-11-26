@@ -1,0 +1,75 @@
+"""Page reader boundaries and dynamic graph tests against a dense FP32 oracle."""
+import argparse
+import copy
+import json
+from pathlib import Path
+import subprocess
+
+import torch
+import check_residual as reference
+from sglang.kernels.ops.loopvq.residual_attention_paged_cuda import PagedResidualAttention, page_pack, page_unpack
+
+
+def packed_pool(original):
+    p=copy.copy(original)
+    for kind in ('k','v'):
+        setattr(p,kind+'_indices',page_pack(getattr(original,kind+'_indices')))
+        for suffix in ('residual','residual_scale'):
+            x=getattr(original,kind+'_'+suffix)
+            y=torch.stack([page_pack(t) for t in x])
+            torch.testing.assert_close(torch.stack([page_unpack(t) for t in y]),x,atol=0,rtol=0)
+            setattr(p,kind+'_'+suffix,y)
+    p.get_key_buffer=lambda layer:p.k_indices
+    p.get_value_buffer=lambda layer:p.v_indices
+    p.get_hp_key_buffer=lambda layer:p.hp_k[layer]
+    p.get_hp_value_buffer=lambda layer:p.hp_v[layer]
+    return p
+
+
+@torch.inference_mode()
+def main():
+    ap=argparse.ArgumentParser()
+    ap.add_argument('--output',type=Path,required=True)
+    ap.add_argument('--compact',action=argparse.BooleanOptionalAction,default=True)
+    args=ap.parse_args()
+    torch.manual_seed(20261126)
+    torch.backends.cuda.matmul.allow_tf32=False
+    original=reference.make_pool(direct=True)
+    pool=packed_pool(original)
+    attn=PagedResidualAttention(pool,max_batch=16,compact=args.compact)
+    theta=torch.arange(32768,device='cuda').float()[:,None]/(10000**(torch.arange(64,device='cuda').float()[None]/64))
+    rope=torch.cat((theta.cos(),theta.sin()),-1).contiguous()
+    result={'source_sha':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
+            'compact':args.compact,'cases':[]}
+    for b in (1,2,3,8,16):
+        for n in (0,1,7,8,63,64,71,72,79,80,127,128,1023,1024,1025,2048,4096,8192,16384,32768):
+            q=torch.randn(b,24,128,device='cuda').bfloat16()[:,:8]
+            lengths=[n if r%2==0 else n//3 for r in range(b)]
+            ptr,loc=reference.locations(lengths,pool.hp_global_offset,'page8')
+            attn.partial.fill_(float('nan'));attn.lse.fill_(float('nan'))
+            expected,lse=reference.oracle(q,original,ptr,loc,rope,return_lse=True)
+            got=attn.forward(q,0,ptr,loc,rope,128**-.5)
+            active=min(32,max(1,(2*attn.sm_count+b*8-1)//(b*8))) if args.compact else 32
+            torch.testing.assert_close(got,expected,atol=.002,rtol=.01)
+            torch.testing.assert_close(attn.lse[:b,:,:active].logsumexp(-1),lse,atol=2e-5,rtol=2e-5)
+            result['cases'].append({'batch':b,'length':n,'max_abs':(got.float()-expected.float()).abs().max().item()})
+        print('boundaries passed batch='+str(b),flush=True)
+    b=16
+    q=torch.randn(b,8,128,device='cuda').bfloat16()
+    ptr,loc=reference.locations([8192]*b,pool.hp_global_offset,'page8')
+    for _ in range(3):attn.forward(q,0,ptr,loc,rope,128**-.5)
+    graph=torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):got=attn.forward(q,0,ptr,loc,rope,128**-.5)
+    for n in (2048,1025,8,0,8192):
+        p2,l2=reference.locations([n if r%2==0 else n//2 for r in range(b)],pool.hp_global_offset,'page8')
+        ptr.copy_(p2);loc[:len(l2)].copy_(l2)
+        attn.partial.fill_(float('nan'));attn.lse.fill_(float('nan'));graph.replay()
+        torch.testing.assert_close(got,reference.oracle(q,original,ptr,loc,rope),atol=.002,rtol=.01)
+    loc.zero_();graph.replay();assert not got.any()
+    graph.reset()
+    result.update(graph_dynamic_and_padding=True,passed=True)
+    args.output.write_text(json.dumps(result,indent=2)+'\n')
+    print('all page boundary/LSE/graph checks passed',flush=True)
+
+
+if __name__=='__main__':main()

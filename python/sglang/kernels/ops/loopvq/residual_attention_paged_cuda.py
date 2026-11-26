@@ -73,11 +73,62 @@ _end = _BASE.index('__device__ __forceinline__ void copy_table', _start)
 _SRC = _BASE[:_start] + _ROW + '\n' + _BASE[_end:]
 _SRC = _SRC.replace('h, g, low);', 'h, g, low, true);').replace(
     'h, g + 16, high);', 'h, g + 16, high, true);')
+
+
+def _replace_once(source, before, after):
+    if source.count(before) != 1:
+        raise RuntimeError('Baseline CUDA source changed; re-audit compact transform')
+    return source.replace(before, after)
+
+
+_COMPACT = _replace_once(_SRC,
+    '''const int active = active_target ? min(SPLITS, max((length + CAP - 1) / CAP,
+        min(active_target, max(1, (length + 63) / 64)))) : SPLITS;''',
+    'const int active = gridDim.z;')
+_COMPACT = _replace_once(_COMPACT,
+    'const int start = split * per, count = max(0, min(per, length - start));',
+    'const int range_start = split * per, span = max(0, min(per, length - range_start));')
+_COMPACT = _replace_once(_COMPACT, 'CUDA_KERNEL_ASSERT(per <= CAP);', '')
+_COMPACT = _replace_once(_COMPACT, 'if (!count) {', 'if (!span) {')
+_COMPACT = _replace_once(_COMPACT,
+    '    #pragma unroll (UNROLL)\n    for (int n0 = warp * 2;',
+    '''    float running_max = -INFINITY, running_sum = 0.f, running_value = 0.f;
+    for (int tile = 0; tile < span; tile += CAP) {
+    const int start = range_start + tile, count = min(CAP, span - tile);
+    table = const_cast<__nv_bfloat16*>(KC + h * TABLE);
+    #pragma unroll (UNROLL)
+    for (int n0 = warp * 2;''')
+_COMPACT = _replace_once(_COMPACT,
+    'if (!lane) { stats[1] = sum; LSE[dst] = stats[0] + logf(sum); }',
+    'if (!lane) { stats[1] = sum; }')
+_COMPACT = _replace_once(_COMPACT,
+    '''        OUT[dst * 128 + tid] = total / stats[1];
+    }
+}
+
+void residual_init()''',
+    '''        const float next_max = fmaxf(running_max, stats[0]);
+        const float alpha = __expf(running_max - next_max);
+        const float beta = __expf(stats[0] - next_max);
+        running_value = running_value * alpha + total * beta;
+        running_sum = running_sum * alpha + stats[1] * beta;
+        running_max = next_max;
+    }
+    __syncthreads(); // no next-tile writer may race this tile's consumers
+    }
+    if (tid < 128) OUT[dst * 128 + tid] = running_value / running_sum;
+    if (!tid) LSE[dst] = running_max + logf(running_sum);
+}
+
+void residual_init()''')
+_COMPACT = _replace_once(_COMPACT,
+    'dim3 grid(q.size(0), q.size(1), SPLITS);',
+    'dim3 grid(q.size(0), q.size(1), std::min<int64_t>(SPLITS, target));')
 _EXT = {}
 
 
-def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False):
-    key = (threads, bool(layout), bool(cooperative), bool(scalar))
+def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False, compact=False):
+    key = (threads, bool(layout), bool(cooperative), bool(scalar), bool(compact))
     with torch.cuda.device(device):
         if torch.cuda.is_current_stream_capturing():
             raise RuntimeError('Prepare page VQ+ before graph capture')
@@ -88,10 +139,11 @@ def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False)
         if key not in _EXT:
             from torch.utils.cpp_extension import load_inline
             ext = load_inline(
-                name=f'loopvq_page_r1_t{threads}_l{int(layout)}_c{int(cooperative)}_s{int(scalar)}',
+                name=(f'loopvq_page_r{2 if compact else 1}_t{threads}_l{int(layout)}'
+                      f'_c{int(cooperative)}_s{int(scalar)}'),
                 cpp_sources='#include <torch/extension.h>\nvoid residual_init();\n'
                 'void residual_cuda(' + ','.join(['torch::Tensor'] * 16) + ',int64_t,double,int64_t);',
-                cuda_sources=_SRC, functions=['residual_init', 'residual_cuda'],
+                cuda_sources=_COMPACT if compact else _SRC, functions=['residual_init', 'residual_cuda'],
                 extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', '-Xptxas=-v',
                     f'-DVQPLUS_THREADS={threads}', '-DVQPLUS_UNROLL=1',
                     '-DVQPLUS_GLOBAL=1', '-DVQPLUS_ASYNC=0',
@@ -104,11 +156,12 @@ def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False)
 
 
 class PagedResidualAttention:
-    def __init__(self, pool, *, max_batch, threads=512, layout=True, cooperative=True, scalar=False):
+    def __init__(self, pool, *, max_batch, threads=512, layout=True, cooperative=True, scalar=False, compact=False):
         self.pool = pool
         self.splits = 32
+        self.compact = compact
         self.extension = prepare(pool.hp_k.device, threads=threads, layout=layout,
-                                 cooperative=cooperative, scalar=scalar)
+                                 cooperative=cooperative, scalar=scalar, compact=compact)
         self.sm_count = torch.cuda.get_device_properties(pool.hp_k.device).multi_processor_count
         self.partial = torch.empty((max_batch, pool.head_num, 32, 128), device=pool.hp_k.device)
         self.lse = torch.empty((max_batch, pool.head_num, 32), device=pool.hp_k.device)
@@ -118,11 +171,13 @@ class PagedResidualAttention:
         if q.dtype != torch.bfloat16 or q.shape[1:] != (p.head_num, 128) or b > self.partial.shape[0]:
             raise ValueError('Page VQ+ requires BF16 [B,H,128] within capacity')
         out = torch.empty_like(q)
+        active = min(32, max(1, (2 * self.sm_count + b * p.head_num - 1) // (b * p.head_num)))
         self.extension.residual_cuda(q, p.get_key_buffer(layer_id), p.get_value_buffer(layer_id),
             p.k_book.cb16[layer_id], p.v_book.cb16[layer_id],
             p.k_residual[layer_id], p.v_residual[layer_id],
             p.k_residual_scale[layer_id], p.v_residual_scale[layer_id],
             p.get_hp_key_buffer(layer_id), p.get_hp_value_buffer(layer_id),
             ptr, loc, rope, self.partial, self.lse, p.hp_global_offset, float(scale),
-            max(1, (2 * self.sm_count + b * p.head_num - 1) // (b * p.head_num)))
-        return official_reduce(self.partial[:b], self.lse[:b], out)
+            active)
+        valid_splits = active if self.compact else 32
+        return official_reduce(self.partial[:b, :, :valid_splits], self.lse[:b, :, :valid_splits], out)
