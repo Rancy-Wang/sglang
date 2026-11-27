@@ -342,7 +342,9 @@ class FullComponent(TreeComponent):
         root = self.tree_core.root_node
         cur = node
         cursor = 0
-        if params.context_skip_ranges:
+        # Native buffer anchors pin only Full and release without a receipt.
+        skip_ranges = params.context_skip_ranges if params is not None else ()
+        if skip_ranges:
             while cur is not root:
                 cursor += len(cur.key)
                 cur = cur.parent
@@ -350,8 +352,8 @@ class FullComponent(TreeComponent):
         while cur != root:
             cd = cur.component_data[ct]
             start = cursor - len(cur.key)
-            if params.context_skip_ranges and any(
-                a <= start and cursor <= b for a, b in params.context_skip_ranges
+            if skip_ranges and any(
+                a <= start and cursor <= b for a, b in skip_ranges
             ):
                 assert cur.context_path_ref > 0, "Context path lease released twice"
                 cur.context_path_ref -= 1

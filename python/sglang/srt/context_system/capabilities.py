@@ -8,6 +8,13 @@ from __future__ import annotations
 
 
 def validate_context_config(args, model_config, *, has_insert=False, cache_policy=None):
+    from sglang.srt.environ import envs
+
+    if envs.SGLANG_UNIFIED_RADIX_TREE_CORE_BACKEND.get() != "python":
+        raise ValueError(
+            "Context requires SGLANG_UNIFIED_RADIX_TREE_CORE_BACKEND=python; "
+            "the Rust tree core does not support Context operation keys"
+        )
     if args.page_size != 1:
         raise ValueError("Context Drop/Reposition requires page_size=1")
     architectures = model_config.hf_config.architectures or ()
