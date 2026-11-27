@@ -13,7 +13,18 @@ trap 'echo $? > "$vq_root/pipeline.exit"' EXIT
 [[ -z "$(nvidia-smi -i 2,3,4,5,6,7 --query-compute-apps=pid --format=csv,noheader)" ]]
 [[ "$(git branch --show-current)" == loopspec-test ]]
 [[ -z "$(git status --porcelain --untracked-files=no)" ]]
+vq_previous_sha=$(cat "$vq_root/pipeline.sha" 2>/dev/null || true)
+if [[ "${1:-}" == --resume-serving ]]; then
+    [[ -n "$vq_previous_sha" ]]
+    git diff --quiet "$vq_previous_sha" HEAD -- python "$vq_scripts/check_context.py"
+    [[ "$(cat "$vq_root/context-memcheck.exit")" == 0 ]]
+    "$LOOPVQ_PYTHON" -c 'import json,sys; assert all(json.load(open(p))["passed"] for p in sys.argv[1:])' "$vq_root/context-validation.json" "$vq_root/context-memcheck.json"
+    echo "Reusing unchanged context/memcheck evidence from $vq_previous_sha"
+else
+    [[ -z "${1:-}" ]]
+fi
 git rev-parse HEAD > "$vq_root/pipeline.sha"
+if [[ "${1:-}" != --resume-serving ]]; then
 printf 'context\n' > "$vq_root/pipeline.phase"
 CUDA_VISIBLE_DEVICES=6 "$LOOPVQ_PYTHON" -u "$vq_scripts/check_context.py" --write-reference "$vq_root/context-oracle.pt" --output "$vq_root/context-validation.json" > "$vq_root/context-r4.log" 2>&1
 printf 'memcheck\n' > "$vq_root/pipeline.phase"
@@ -23,6 +34,7 @@ vq_rc=$?
 set -e
 echo "$vq_rc" > "$vq_root/context-memcheck.exit"
 [[ "$vq_rc" == 0 ]]
+fi
 printf 'tp2-acceptance\n' > "$vq_root/pipeline.phase"
 "$LOOPVQ_PYTHON" -u "$vq_scripts/accept.py" --root "$vq_root" --model "$LOOPVQ_MODEL" --book "$LOOPVQ_TASK_ROOT/artifacts/ouro_2p6b_think_loopvq8b_g16_lvgqe2e" --gpus 6,7 > "$vq_root/acceptance.log" 2>&1
 printf 'greedy-accuracy\n' > "$vq_root/pipeline.phase"

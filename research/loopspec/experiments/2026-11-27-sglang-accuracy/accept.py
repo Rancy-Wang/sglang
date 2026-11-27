@@ -26,7 +26,9 @@ def main():
     try:
         for context in (32768,40960):
             assert not output(['nvidia-smi','-i',a.gpus,'--query-compute-apps=pid','--format=csv,noheader'])
-            with socket.socket() as sock: sock.bind(('127.0.0.1',a.port))
+            with socket.socket() as sock:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.bind(('127.0.0.1',a.port))
             cmd=server_command(a.model,a.book,True,a.port,context,1)
             (work/f'command-{context}.json').write_text(json.dumps(cmd))
             logpath=work/f'server-{context}.log'
