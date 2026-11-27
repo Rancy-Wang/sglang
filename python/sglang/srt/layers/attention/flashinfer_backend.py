@@ -953,6 +953,11 @@ class FlashInferAttnBackend(AttentionBackend):
         return layer.k_scale, layer.v_scale
 
     def init_forward_metadata(self, forward_batch: ForwardBatch):
+        if forward_batch.context_attention is not None:
+            # Context supplies occurrence metadata; gathering a raw-prefix
+            # table here would read holes before the feature branch executes.
+            self.forward_metadata = forward_batch
+            return
         swa_out_cache_loc = None
         if self.use_sliding_window_kv_pool and forward_batch.out_cache_loc is not None:
             swa_out_cache_loc = self.kv_index_translator.sliding_window_write_loc_for(
@@ -1046,6 +1051,15 @@ class FlashInferAttnBackend(AttentionBackend):
                 multi_item_params,
                 swa_out_cache_loc=swa_out_cache_loc,
             )
+
+    def context_decode_fits_graph(self, batch_size):
+        swa = self.dispatch_reason == WrapperDispatch.SLIDING_WINDOW
+        buffers = self.cuda_graph_kv_indices
+        return self.context_decode_registry.fits_graph(
+            batch_size, buffers[1 if swa else 0].numel(),
+            window=self.indices_updater_decode.sliding_window_size if swa else None,
+            window_capacity=buffers[0].numel() if swa else None,
+        )
 
     def init_cuda_graph_state(
         self,
@@ -1312,7 +1326,35 @@ class FlashInferAttnBackend(AttentionBackend):
         layer: RadixAttention,
         forward_batch: ForwardBatch,
         save_kv_cache=True,
+        sinks=None,
     ):
+        if getattr(self.forward_metadata, "context_attention", None) is not None:
+            from sglang.srt.layers.attention.context_backend import prepare_native_context
+
+            metadata, plan, query, k_pool, v_pool = prepare_native_context(
+                q, k, v, layer, self.forward_metadata, self.token_to_kv_pool,
+                self.kv_index_translator, save_kv_cache,
+            )
+            cpu_qo, cpu_kv, _, _, slots, _, _ = plan
+            window = layer.sliding_window_size if layer.sliding_window_size is not None else -1
+            key = ("flashinfer", window)
+            wrapper = metadata.native_plans.get(key)
+            if wrapper is None:
+                wrapper = BatchPrefillWithRaggedKVCacheWrapper(self.workspace_buffer, "NHD", backend="fa2")
+                wrapper.plan(cpu_qo, cpu_kv, layer.tp_q_head_num, layer.tp_k_head_num,
+                             layer.head_dim, causal=True, window_left=window,
+                             logits_soft_cap=layer.logit_cap or 0.0, sm_scale=layer.scaling,
+                             q_data_type=query.dtype, kv_data_type=k_pool.dtype)
+                metadata.native_plans[key] = wrapper
+            if sinks is None:
+                output = wrapper.run(query, k_pool[slots], v_pool[slots])
+            else:
+                output, lse = wrapper.run(query, k_pool[slots], v_pool[slots], return_lse=True)
+                # FlashInfer FA2 LSE is base two; sinks are natural-log logits.
+                output.mul_(torch.sigmoid(lse * 0.6931471805599453 - sinks.float()).unsqueeze(-1))
+            padded = q.new_empty((q.shape[0], layer.tp_q_head_num * layer.v_head_dim))
+            padded[:output.shape[0]].copy_(output.flatten(1))
+            return padded
         prefill_wrapper_paged = self.forward_metadata.prefill_wrappers[
             self._get_wrapper_idx(layer)
         ]
@@ -1364,7 +1406,8 @@ class FlashInferAttnBackend(AttentionBackend):
                 not layer.is_cross_attention
                 and layer.attn_type != AttentionType.ENCODER_ONLY
             )
-            o = prefill_wrapper_paged.forward(
+            prefill = prefill_wrapper_paged.forward if sinks is None else prefill_wrapper_paged.forward_return_lse
+            o = prefill(
                 q.view(-1, layer.tp_q_head_num, layer.head_dim),
                 kv_cache,
                 causal=causal,
@@ -1412,7 +1455,8 @@ class FlashInferAttnBackend(AttentionBackend):
                 # NOTE: FlashInfer currently has limitations with head_dim = 32 or other dimensions
                 # The FlashInfer head_dim limitation itself is tracked here:
                 # https://github.com/flashinfer-ai/flashinfer/issues/1048
-                o = self.prefill_wrapper_ragged.forward(
+                prefill = self.prefill_wrapper_ragged.forward if sinks is None else self.prefill_wrapper_ragged.forward_return_lse
+                o = prefill(
                     q.view(-1, layer.tp_q_head_num, layer.head_dim),
                     k.view(-1, layer.tp_k_head_num, layer.head_dim),
                     v.view(-1, layer.tp_v_head_num, layer.head_dim),
@@ -1451,7 +1495,9 @@ class FlashInferAttnBackend(AttentionBackend):
                     v_scale=layer.v_scale_float,
                 )
 
-                o, _ = _safe_merge_state(o1, s1, o2, s2)
+                o, lse = _safe_merge_state(o1, s1, o2, s2)
+                if sinks is not None:
+                    o = (o, lse)
 
             if save_kv_cache:
                 self.token_to_kv_pool.set_kv_buffer(
@@ -1462,6 +1508,9 @@ class FlashInferAttnBackend(AttentionBackend):
                     *self._kv_write_scales(layer),
                 )
 
+        if sinks is not None:
+            o, lse = o
+            o.mul_(torch.sigmoid(lse * 0.6931471805599453 - sinks.float()).unsqueeze(-1))
         return o.view(-1, layer.tp_q_head_num * layer.head_dim)
 
     @debug_kernel_api
@@ -1473,6 +1522,7 @@ class FlashInferAttnBackend(AttentionBackend):
         layer: RadixAttention,
         forward_batch: ForwardBatch,
         save_kv_cache=True,
+        sinks=None,
     ):
         decode_wrapper = self.forward_metadata.decode_wrappers[
             self._get_wrapper_idx(layer)
@@ -1511,7 +1561,8 @@ class FlashInferAttnBackend(AttentionBackend):
             kv_cache = self.token_to_kv_pool.get_kv_buffer(layer.layer_id)
 
         # Call the wrapped function
-        o = decode_wrapper.forward(
+        decode = decode_wrapper.forward if sinks is None else decode_wrapper.forward_return_lse
+        o = decode(
             q.contiguous().view(-1, layer.tp_q_head_num, layer.head_dim),
             kv_cache,
             sm_scale=layer.scaling,
@@ -1521,6 +1572,9 @@ class FlashInferAttnBackend(AttentionBackend):
             v_scale=layer.v_scale_float,
         )
 
+        if sinks is not None:
+            o, lse = o
+            o.mul_(torch.sigmoid(lse * 0.6931471805599453 - sinks.float()).unsqueeze(-1))
         return o.view(-1, layer.tp_q_head_num * layer.head_dim)
 
     def _get_wrapper_idx(self, layer: RadixAttention):
@@ -1638,6 +1692,11 @@ class FlashInferIndicesUpdaterDecode:
                     paged_kernel_lens_sum_tmp = seq_lens_cpu_tmp.sum().item()
                 else:
                     paged_kernel_lens_sum_tmp = paged_kernel_lens_tmp.sum().item()
+                registry = getattr(self.attn_backend, "context_decode_registry", None)
+                if registry is not None:
+                    seq_lens_cpu_tmp = registry.window_lengths_cpu(self.sliding_window_size, len(seq_lens))
+                    paged_kernel_lens_sum_tmp = int(seq_lens_cpu_tmp.sum())
+                    paged_kernel_lens_tmp = seq_lens_cpu_tmp.to(seq_lens.device, dtype=seq_lens.dtype, non_blocking=True)
                 kv_start_idx_tmp = seq_lens - paged_kernel_lens_tmp
             else:
                 # Full attention
@@ -1662,6 +1721,8 @@ class FlashInferIndicesUpdaterDecode:
                 fixed_split_size=fixed_split_size,
                 disable_split_kv=disable_split_kv,
                 req_pool_indices=req_pool_indices,
+                context_window=self.sliding_window_size if wrapper_id == 0 else -1,
+                context_full_lengths=seq_lens,
             )
 
     def update_cross_attention(
@@ -1718,6 +1779,8 @@ class FlashInferIndicesUpdaterDecode:
         disable_split_kv: Optional[bool] = None,
         *,
         req_pool_indices: torch.Tensor,
+        context_window: int = -1,
+        context_full_lengths: torch.Tensor | None = None,
     ):
         # Unified SWA wrapper-0: gather from the swa canonical directly -- its
         # entries are already swa-side kernel-facing ids, so the in-place
@@ -1737,15 +1800,24 @@ class FlashInferIndicesUpdaterDecode:
                     paged_kernel_lens_sum, dtype=torch.int32, device="cuda"
                 )
 
-            translator.fill_packed_read_stream(
-                req_pool_indices=req_pool_indices,
-                seq_lens=paged_kernel_lens,
-                indptr=kv_indptr,
-                total_tokens=paged_kernel_lens_sum,
-                out=kv_indices,
-                kv_start_idx=kv_start_idx,
-                sliding_window=use_swa_source,
-            )
+            registry = getattr(self.attn_backend, "context_decode_registry", None)
+            if registry is not None:
+                registry.fill(req_pool_indices, paged_kernel_lens, kv_indptr, kv_indices,
+                              starts=kv_start_idx, swa=use_sliding_window_kv_pool,
+                              window=context_window, full_lengths=context_full_lengths)
+                # Registry already returns the selected pool's physical IDs.
+                use_swa_source = use_sliding_window_kv_pool
+            else:
+                translator.fill_packed_read_stream(
+                    req_pool_indices=req_pool_indices,
+                    seq_lens=paged_kernel_lens,
+                    indptr=kv_indptr,
+                    total_tokens=paged_kernel_lens_sum,
+                    out=kv_indices,
+                    kv_start_idx=kv_start_idx,
+                    sliding_window=use_swa_source,
+                )
+
         else:
             kv_indptr, kv_indices = spec_info.kv_indptr, spec_info.kv_indices
             bs = kv_indptr.shape[0] - 1

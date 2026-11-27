@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Mapping, Optional, final
+from typing import Any, Dict, Iterable, List, Mapping, Optional, final
 
 from sglang.srt.entrypoints.openai.protocol import PromptTokensDetails, UsageInfo
 
@@ -13,6 +13,28 @@ class UsageProcessor:
     def _details_if_cached(count: int) -> Optional[PromptTokensDetails]:
         """Return PromptTokensDetails only when count > 0 (keeps JSON slim)."""
         return PromptTokensDetails(cached_tokens=count) if count > 0 else None
+
+    @staticmethod
+    def prompt_tokens_details(
+        meta_infos: Iterable[Mapping[str, Any]], enable_cache_report: bool = False
+    ) -> Optional[PromptTokensDetails]:
+        """Count each prompt once; Context counters retain P's accounting."""
+        cached = repos = skipped = 0
+        has_context = False
+        for meta in meta_infos:
+            context = meta.get("context_usage")
+            if context is not None:
+                has_context = True
+                cached += context["cached_tokens"]
+                repos += context["repos_tokens"]
+                skipped += context["drop_skipped_tokens"]
+            elif enable_cache_report:
+                cached += meta.get("cached_tokens", 0)
+        if has_context:
+            return PromptTokensDetails(
+                cached_tokens=cached, repos_tokens=repos, drop_skipped_tokens=skipped
+            )
+        return UsageProcessor._details_if_cached(cached)
 
     @staticmethod
     def calculate_response_usage(
@@ -36,13 +58,10 @@ class UsageProcessor:
             r["meta_info"].get("reasoning_tokens", 0) for r in responses
         )
 
-        cached_details = None
-        if enable_cache_report:
-            cached_total = sum(
-                responses[i]["meta_info"].get("cached_tokens", 0)
-                for i in range(0, len(responses), n_choices)
-            )
-            cached_details = UsageProcessor._details_if_cached(cached_total)
+        cached_details = UsageProcessor.prompt_tokens_details(
+            (responses[i]["meta_info"] for i in range(0, len(responses), n_choices)),
+            enable_cache_report,
+        )
 
         return UsageProcessor.calculate_token_usage(
             prompt_tokens=prompt_tokens,
@@ -65,6 +84,7 @@ class UsageProcessor:
         image_tokens: int = 0,
         audio_tokens: int = 0,
         video_tokens: int = 0,
+        context_usage: Optional[Mapping[int, Mapping[str, int]]] = None,
     ) -> UsageInfo:
         # index % n_choices == 0 marks the first choice of a prompt
         total_prompt_tokens = sum(
@@ -73,12 +93,16 @@ class UsageProcessor:
         total_reasoning_tokens = sum(reasoning_tokens.values())
         total_completion_tokens = sum(completion_tokens.values())
 
-        cached_details = (
-            UsageProcessor._details_if_cached(
-                sum(tok for idx, tok in cached_tokens.items() if idx % n_choices == 0)
-            )
-            if enable_cache_report
-            else None
+        cached_details = UsageProcessor.prompt_tokens_details(
+            (
+                {
+                    "cached_tokens": cached_tokens.get(idx, 0),
+                    "context_usage": (context_usage or {}).get(idx),
+                }
+                for idx in prompt_tokens
+                if idx % n_choices == 0
+            ),
+            enable_cache_report,
         )
 
         return UsageProcessor.calculate_token_usage(

@@ -86,6 +86,38 @@ struct PDRequestContext<'a> {
 struct BreakerOutcomesRecorded;
 
 impl PDRouter {
+    async fn route_chat_payload<T: Serialize + Clone>(
+        &self,
+        headers: Option<&HeaderMap>,
+        body: &ChatCompletionRequest,
+        payload: &T,
+        model_id: Option<&str>,
+    ) -> Response {
+        let is_stream = body.stream;
+        let return_logprob = body.logprobs;
+
+        let request_text = if self.policies_need_request_text() {
+            Self::build_chat_request_text(body)
+        } else {
+            None
+        };
+
+        // Calculate batch size
+        let batch_size = Self::get_chat_batch_size(body);
+
+        let context = PDRequestContext {
+            route: "/v1/chat/completions",
+            batch_size,
+            is_stream,
+            return_logprob,
+            request_text,
+            model_id,
+            headers: headers.cloned(),
+        };
+
+        self.execute_dual_dispatch(headers, payload, context).await
+    }
+
     fn worker_endpoint_url(worker: &dyn Worker, endpoint: &str) -> String {
         api_path(worker.base_url(), endpoint)
     }
@@ -1601,29 +1633,17 @@ impl RouterTrait for PDRouter {
         body: &ChatCompletionRequest,
         model_id: Option<&str>,
     ) -> Response {
-        let is_stream = body.stream;
-        let return_logprob = body.logprobs;
+        self.route_chat_payload(headers, body, body, model_id).await
+    }
 
-        let request_text = if self.policies_need_request_text() {
-            Self::build_chat_request_text(body)
-        } else {
-            None
-        };
-
-        // Calculate batch size
-        let batch_size = Self::get_chat_batch_size(body);
-
-        let context = PDRequestContext {
-            route: "/v1/chat/completions",
-            batch_size,
-            is_stream,
-            return_logprob,
-            request_text,
-            model_id,
-            headers: headers.cloned(),
-        };
-
-        self.execute_dual_dispatch(headers, body, context).await
+    async fn route_chat_with_extensions(
+        &self,
+        headers: Option<&HeaderMap>,
+        body: &crate::routers::ExtendedChatRequest,
+        model_id: Option<&str>,
+    ) -> Response {
+        self.route_chat_payload(headers, &body.request, body, model_id)
+            .await
     }
 
     async fn route_completion(

@@ -190,6 +190,9 @@ class PromptTokensDetails(BaseModel):
     """Details about prompt tokens."""
 
     cached_tokens: int = 0
+    # Present for Context requests, including zero-valued counters.
+    repos_tokens: Optional[int] = None
+    drop_skipped_tokens: Optional[int] = None
     # Multimodal prompt token counts (only populated when present in the prompt)
     image_tokens: Optional[int] = None
     audio_tokens: Optional[int] = None
@@ -198,9 +201,15 @@ class PromptTokensDetails(BaseModel):
     @model_serializer(mode="wrap")
     def _serialize(self, handler):
         data = handler(self)
-        # Drop multimodal fields when absent so text-only/cache-only responses
+        # Drop optional fields when absent so native text/cache-only responses
         # keep the original {"cached_tokens": N} shape.
-        for key in ("image_tokens", "audio_tokens", "video_tokens"):
+        for key in (
+            "image_tokens",
+            "audio_tokens",
+            "video_tokens",
+            "repos_tokens",
+            "drop_skipped_tokens",
+        ):
             if data.get(key) is None:
                 data.pop(key, None)
         return data
@@ -449,6 +458,8 @@ class SglExt(BaseModel):
     )
     input_ids: Optional[List[int]] = None
     output_ids: Optional[List[List[int]]] = None
+    context_message_indices: Optional[List[int]] = None
+    context_next_message_index: Optional[int] = None
 
     def split_ids(self) -> Tuple[Optional[SglExt], Optional[SglExt]]:
         """Split set fields into (non_ids, ids); a side with no set fields is None."""
@@ -713,6 +724,14 @@ _GENERIC_MESSAGE_ROLES: Tuple[str, ...] = get_args(_GenericMessageRole)
 
 
 class ChatCompletionMessageGenericParam(BaseModel):
+    index: Optional[Annotated[int, Field(strict=True)]] = None
+
+    @field_validator("index", mode="before")
+    @classmethod
+    def validate_index(cls, value):
+        if value is not None and type(value) is not int:
+            raise ValueError("message index must be an integer; omit the field for automatic numbering")
+        return value
     role: _GenericMessageRole
     content: Union[str, List[ChatCompletionMessageContentPart], None] = Field(
         default=None
@@ -747,6 +766,12 @@ class ChatCompletionMessageGenericParam(BaseModel):
 
 
 class ChatCompletionMessageUserParam(BaseModel):
+    index: Optional[Annotated[int, Field(strict=True)]] = None
+
+    @field_validator("index", mode="before")
+    @classmethod
+    def validate_index(cls, value):
+        return ChatCompletionMessageGenericParam.validate_index(value)
     role: Literal["user"]
     content: Union[str, List[ChatCompletionMessageContentPart]]
 
@@ -851,6 +876,42 @@ class ChatCompletionRequest(BaseModel):
     # Ordered by official OpenAI API documentation
     # https://platform.openai.com/docs/api-reference/chat/create
     messages: List[ChatCompletionMessageParam]
+    # Public message IDs retain their meaning through native template processing.
+    drop_message: Optional[Dict[str, Any]] = None
+    drop_rule: Optional[Union[Dict[str, Any], Literal["text_drop_with_pe", "message_drop_without_repos"]]] = None
+    insert: Optional[Dict[str, Annotated[int, Field(strict=True, lt=0)]]] = None
+    reposition: Optional[List[Annotated[int, Field(strict=True)]]] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_unknown_drop_alias(cls, values):
+        if isinstance(values, dict) and "drop_messages" in values:
+            raise ValueError("Use drop_message; drop_messages is not a request field")
+        return values
+
+    @model_validator(mode="after")
+    def validate_context_indices(self):
+        if self.insert is not None or any(m.index is not None for m in self.messages):
+            from sglang.srt.context_system.rules import InsertRule
+
+            messages = [m.model_dump() for m in self.messages]
+            if isinstance(self.drop_rule, dict) and self.drop_rule.get("type") == "keep_text_drop":
+                messages = self.drop_rule.get("full_messages", messages)
+            InsertRule.from_payload(self.insert, messages)
+        return self
+
+    def context_index_metadata(self):
+        if self.insert is None and not any(m.index is not None for m in self.messages):
+            return {}
+        from sglang.srt.context_system.rules import normalize_message_indices
+
+        messages = [m.model_dump() for m in self.messages]
+        if isinstance(self.drop_rule, dict) and self.drop_rule.get("type") == "keep_text_drop":
+            messages = self.drop_rule.get("full_messages", messages)
+        ids = normalize_message_indices(messages)
+        return {"context_message_indices": list(ids),
+                "context_next_message_index": sum(i >= 0 for i in ids)}
+
     model: str = Field(
         default=DEFAULT_MODEL_NAME,
         description="Model name. Supports LoRA adapters via 'base-model:adapter-name' syntax.",
@@ -2267,6 +2328,7 @@ class MessageProcessingResult:
     skip_special_tokens: bool = True
     require_reasoning: bool = False
     reasoning_end_token_ids: Optional[List[int]] = None
+    context_program: Optional[Dict[str, Any]] = None
 
 
 class ToolCallProcessingResult(NamedTuple):

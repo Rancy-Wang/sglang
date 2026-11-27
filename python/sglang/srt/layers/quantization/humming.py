@@ -964,6 +964,7 @@ class HummingLinearMethod(LinearMethodBase):
         # see https://github.com/inclusionAI/humming/blob/main/docs/config.md
         compute_config = {
             "use_f16_accum": envs.SGLANG_HUMMING_USE_F16_ACCUM.get(),
+            "use_batch_invariant": envs.SGLANG_HUMMING_USE_BATCH_INVARIANT.get(),
             "gemm_type": "dense",
         }
         self.compute_config = json.dumps(compute_config)

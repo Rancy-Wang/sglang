@@ -71,6 +71,7 @@ from sglang.srt.utils.common import ceil_align, is_pin_memory_available
 
 if TYPE_CHECKING:
     from sglang.srt.configs.model_config import ModelConfig
+    from sglang.srt.layers.attention.context_backend import ContextForwardMetadata
     from sglang.srt.layers.cp.base import BaseContextParallelMetadata
     from sglang.srt.layers.dcp.metadata import DecodeContextParallelMetadata
     from sglang.srt.layers.layer_boundary.residual.stream import ResidualStream
@@ -511,6 +512,10 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
     # "Borrowed" into a dedicated "Forward-resolved snapshot" group.
     # The original sequence length without being chunked. Qwen-1M related.
     orig_seq_lens: Optional[torch.Tensor] = None
+
+    # Physical occurrence mappings, owned until this forward's stream completes.
+    # None preserves the native no-feature path, including graph replay.
+    context_attention: ContextForwardMetadata | None = None
 
     # The write loc before `rebind_write_loc` replaced it with kernel-facing
     # ids; a backend re-derives from it into its capture-stable buffer.
@@ -1022,6 +1027,50 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
             spec_info=batch.spec_info,
         )
 
+        if batch.context_prefill_input is not None:
+            if not ret.forward_mode.is_extend() or ret.spec_info is not None:
+                raise ValueError("Context prefill metadata requires ordinary extend")
+            ret.context_attention = batch.context_prefill_input.bind(model_runner)
+            ret.positions = ret.context_attention.full.query_positions
+
+        if ret.forward_mode.is_decode():
+            registry = getattr(model_runner, "context_decode_registry", None)
+            has_context = any(req.context_program is not None for req in batch.reqs)
+            if has_context:
+                from sglang.srt.layers.attention.context_backend import ContextDecodeRegistry
+
+                if ret.spec_info is not None or seq_lens_cpu is None:
+                    raise ValueError("Context decode needs native non-spec CPU length metadata")
+                if registry is None:
+                    if model_runner.decode_attention_backend_str not in {"triton", "flashinfer", "fa3", "fa4"}:
+                        raise ValueError("Context decode requires a supported native attention backend")
+                    registry = ContextDecodeRegistry(
+                        model_runner.kv_index_translator, model_runner.token_to_kv_pool,
+                        model_runner.req_to_token_pool,
+                    )
+                    model_runner.context_decode_registry = registry
+                (
+                    ret.seq_lens_cpu, ret.seq_lens, ret.positions, ret.context_decode_refs,
+                ) = registry.bind_batch(batch.reqs, seq_lens_cpu, ret.req_pool_indices)
+                ret.seq_lens_sum = int(ret.seq_lens_cpu.sum())
+            if registry is not None:
+                # The registry remains allocated, but ordinary batches use the
+                # original gather and upload no Context rows. Metadata graphs
+                # capture that branch, so invalidate prep when it changes.
+                active = registry if has_context else None
+                backends = [model_runner.attn_backend, model_runner.decode_attn_backend]
+                backends.extend(model_runner.decode_attn_backend_group or [])
+                changed = False
+                for backend in backends:
+                    if backend is not None:
+                        changed |= getattr(backend, "context_decode_registry", None) is not active
+                        backend.context_decode_registry = active
+                if changed:
+                    graph = model_runner.decode_cuda_graph_runner
+                    glue = getattr(graph, "_metadata_glue", None)
+                    if glue is not None:
+                        glue.reset()
+
         ret._maybe_init_non_generation_fields(batch)
 
         device = model_runner.device
@@ -1137,6 +1186,13 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
 
         if model_runner.model_config.model_is_mrope:
             if (
+                ret.context_attention is not None
+                or any(req.context_program is not None for req in batch.reqs)
+            ):
+                # Context is text-only. Its positions describe births/repositions,
+                # not raw history length or the compact Full-attention KV count.
+                ret.mrope_positions = ret.positions.to(torch.int64).unsqueeze(0).repeat(3, 1)
+            elif (
                 ret.spec_info is not None
                 and getattr(ret.spec_info, "positions", None) is not None
             ):

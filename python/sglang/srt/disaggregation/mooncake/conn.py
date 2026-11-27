@@ -12,6 +12,7 @@ from typing import List, Optional, Set, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
+import torch
 import zmq
 from prometheus_client import Counter
 
@@ -97,6 +98,7 @@ class TransferInfo:
     is_dummy: bool
     decode_prefix_len: Optional[int] = None
     dst_device_kv_indices: Optional[npt.NDArray[np.int32]] = None
+    context_reuse_mask: Optional[npt.NDArray[np.bool_]] = None
     # Note: always put the optional staging field at the final (it will be set through 'STAGING_RSP' pkg when needed)
     staging: Optional[StagingTransferInfo] = None
 
@@ -112,6 +114,12 @@ class TransferInfo:
             dst_aux_index = int(msg[5].decode("ascii"))
             dst_state_indices = unpack_int_lists(msg[6], "i")
             is_dummy = False
+        reuse_mask = None
+        if len(msg) > 10 and msg[10]:
+            bits = np.frombuffer(msg[10], dtype=np.uint8)
+            if len(bits) != len(dst_kv_indices) or np.any(bits > 1):
+                raise ValueError("Context reuse bitmap must cover destination pages")
+            reuse_mask = bits.view(np.bool_)
         return cls(
             room=int(msg[0].decode("ascii")),
             endpoint=msg[1].decode("ascii"),
@@ -122,6 +130,7 @@ class TransferInfo:
             dst_state_indices=dst_state_indices,
             required_dst_info_num=int(msg[7].decode("ascii")),
             is_dummy=is_dummy,
+            context_reuse_mask=reuse_mask,
             decode_prefix_len=(
                 int(msg[8].decode("ascii")) if len(msg) > 8 and msg[8] != b"" else None
             ),
@@ -267,15 +276,16 @@ class MooncakeKVManager(StagingManagerMixin, CommonKVManager):
                 f"The environment variable SGLANG_DISAGGREGATION_THREAD_POOL_SIZE={transfer_thread_pool_size} must be "
                 f"greater than or equal to SGLANG_DISAGGREGATION_QUEUE_SIZE={transfer_queue_size}."
             )
-            self.executors = [
-                concurrent.futures.ThreadPoolExecutor(
-                    transfer_thread_pool_size // transfer_queue_size
-                )
-                for _ in range(transfer_queue_size)
-            ]
             self.enable_custom_mem_pool, self.custom_mem_pool_type = (
                 check_mooncake_custom_mem_pool_enabled()
             )
+            self.executors = [
+                concurrent.futures.ThreadPoolExecutor(
+                    transfer_thread_pool_size // transfer_queue_size,
+                    initializer=self.init_transfer_thread_device,
+                )
+                for _ in range(transfer_queue_size)
+            ]
             self._staging_ctx = PrefillStagingContext() if self.enable_staging else None
             if self.enable_staging:
                 self._init_staging_buffers(len(self.transfer_queues))
@@ -757,10 +767,29 @@ class MooncakeKVManager(StagingManagerMixin, CommonKVManager):
         if not transfer_blocks:
             return 0
 
-        src_addrs, dst_addrs, lengths = zip(*transfer_blocks)
-        return self.engine.batch_transfer_sync(
-            mooncake_session_id, list(src_addrs), list(dst_addrs), list(lengths)
-        )
+        # Drop/reposition can leave many discontiguous page-1 ranges. Bound
+        # descriptors, not token indices: each range expands across all layers.
+        # Mooncake 0.3.13 TCP has 1024 queued + 1024 pending slots per peer.
+        # Same-peer chunks use one transfer worker; completing each bounded
+        # batch keeps that queue below capacity without retrying partial writes.
+        # Contiguous transfers retain one all-layer call, regardless of bytes.
+        max_blocks = 1024
+        if len(transfer_blocks) <= max_blocks:
+            src_addrs, dst_addrs, lengths = zip(*transfer_blocks)
+            return self.engine.batch_transfer_sync(
+                mooncake_session_id, list(src_addrs), list(dst_addrs), list(lengths)
+            )
+
+        for start in range(0, len(transfer_blocks), max_blocks):
+            src_addrs, dst_addrs, lengths = zip(
+                *transfer_blocks[start : start + max_blocks]
+            )
+            ret = self.engine.batch_transfer_sync(
+                mooncake_session_id, list(src_addrs), list(dst_addrs), list(lengths)
+            )
+            if ret != 0:
+                return ret
+        return 0
 
     def _send_kvcache_generic(
         self,
@@ -2077,6 +2106,16 @@ class MooncakeKVManager(StagingManagerMixin, CommonKVManager):
 
         return self._transfer_data(req.mooncake_session_id, transfer_blocks)
 
+    def init_transfer_thread_device(self):
+        # CUDA's current device is thread-local. Mooncake creates source-device
+        # streams but restores the caller device before opening IPC mappings.
+        # Bind every NVLink transfer thread before its first native operation.
+        if (
+            self.enable_custom_mem_pool
+            and self.custom_mem_pool_type == "INTRA_NODE_NVLINK"
+        ):
+            torch.cuda.set_device(self.kv_args.gpu_id)
+
     def transfer_worker(
         self,
         queue: FastQueue,
@@ -2084,6 +2123,7 @@ class MooncakeKVManager(StagingManagerMixin, CommonKVManager):
         staging_buffer=None,
         worker_index=0,
     ):
+        self.init_transfer_thread_device()
         staging_strategy = None
         if self.enable_trace:
             trace_set_thread_info(
@@ -2128,7 +2168,12 @@ class MooncakeKVManager(StagingManagerMixin, CommonKVManager):
                             MooncakeRequestStage.MOONCAKE_WORKER_SEND.level,
                             thread_finish_flag=True,
                         )
-                    self._staging_outstanding.pop(kv_chunk.room, None)
+                    # Other workers may still be writing this same room.
+                    # Retire only this chunk; clearing the whole count would
+                    # allow abort notification/page reuse before those writes.
+                    self._staging_outstanding[kv_chunk.room] -= 1
+                    if self._staging_outstanding[kv_chunk.room] <= 0:
+                        self._staging_outstanding.pop(kv_chunk.room, None)
                     if self.enable_deferred_decode_kv_release:
                         # Skipped => nothing written for this aborted room; ack.
                         self._maybe_ack_drained_abort(kv_chunk.room)
@@ -2214,8 +2259,18 @@ class MooncakeKVManager(StagingManagerMixin, CommonKVManager):
                         skip_kv, skip_state = self._get_dsa_cache_transfer_skip_flags(
                             target_rank_registration_info
                         )
+                        source_indices = kv_chunk.prefill_kv_indices
+                        if req.context_reuse_mask is not None:
+                            if is_dcp_transfer or self.enable_staging or chunked_dst_device_kv_indice is not None:
+                                raise ValueError("Context sparse transfer requires direct page-1 KV")
+                            from sglang.srt.disaggregation.context_transfer import select_missing_transfer
+
+                            source_indices, chunked_dst_kv_indice = select_missing_transfer(
+                                source_indices, chunked_dst_kv_indice,
+                                req.context_reuse_mask[kv_chunk.index_slice],
+                            )
                         if (
-                            len(kv_chunk.prefill_kv_indices) == 0
+                            len(source_indices) == 0
                             or not self.kv_args.kv_data_ptrs
                             or skip_kv
                         ):
@@ -2258,7 +2313,7 @@ class MooncakeKVManager(StagingManagerMixin, CommonKVManager):
                         ):
                             ret = self.send_kvcache(
                                 req.mooncake_session_id,
-                                kv_chunk.prefill_kv_indices,
+                                source_indices,
                                 target_rank_registration_info.dst_kv_ptrs,
                                 chunked_dst_kv_indice,
                                 executor,
@@ -2292,7 +2347,7 @@ class MooncakeKVManager(StagingManagerMixin, CommonKVManager):
                         else:
                             ret = self.send_kvcache_slice(
                                 req.mooncake_session_id,
-                                kv_chunk.prefill_kv_indices,
+                                source_indices,
                                 target_rank_registration_info.dst_kv_ptrs,
                                 chunked_dst_kv_indice,
                                 target_rank_registration_info.dst_tp_rank,
@@ -2972,6 +3027,7 @@ class MooncakeKVReceiver(MooncakeFailureExceptionMixin, CommonKVReceiver):
         state_indices: Optional[List] = None,
         decode_prefix_len: Optional[int] = None,
         device_kv_indices: Optional[npt.NDArray[np.int32]] = None,
+        context_reuse_mask: Optional[npt.NDArray[np.bool_]] = None,
     ):
         if self.bootstrap_infos is None:
             self.kv_mgr.record_failure(
@@ -3013,6 +3069,11 @@ class MooncakeKVReceiver(MooncakeFailureExceptionMixin, CommonKVReceiver):
                             (
                                 np.asarray(device_kv_indices, dtype=np.int32).tobytes()
                                 if not is_dummy and device_kv_indices is not None
+                                else b""
+                            ),
+                            (
+                                np.asarray(context_reuse_mask, dtype=np.uint8).tobytes()
+                                if not is_dummy and context_reuse_mask is not None
                                 else b""
                             ),
                         ]

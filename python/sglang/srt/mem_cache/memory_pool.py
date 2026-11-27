@@ -38,6 +38,12 @@ import torch
 import triton
 import triton.language as tl
 
+from sglang.srt.context_system.request_storage import (
+    prepare_request_row,
+    release_request_row,
+    write_request_slots,
+)
+
 from sglang.kernels.ops.attention.dsa.quant_k_cache import (
     quantize_k_cache,
     quantize_k_cache_separate,
@@ -307,9 +313,14 @@ class ReqToTokenPool:
         self.free_slots = list(range(1, self._alloc_size))
         self.req_generation = torch.zeros(self._alloc_size, dtype=torch.int64)
         self._aux_cache: Any = None
+        self._context_rows = None
+        self._context_row_pointers = None
 
     def write(self, indices, values):
-        self.req_to_token[indices] = values
+        if self._context_rows:
+            write_request_slots(self, indices, values)
+        else:
+            self.req_to_token[indices] = values
 
     def available_size(self):
         return len(self.free_slots)
@@ -330,6 +341,8 @@ class ReqToTokenPool:
             if not r.kv.holds_kv:
                 r.kv.req_pool_idx = select_index[offset]
                 offset += 1
+            if getattr(r, "context_program", None) is not None:
+                prepare_request_row(self, r)
         return [r.kv.req_pool_idx for r in reqs]
 
     def alloc_rows(self, need_size: int) -> Optional[List[int]]:
@@ -355,6 +368,9 @@ class ReqToTokenPool:
         if self._aux_cache is not None:
             for index in indices:
                 self._aux_cache.free(index)
+        if self._context_rows:
+            for index in indices:
+                release_request_row(self, index)
         self.free_slots.extend(indices)
 
     def free(self, req: Req):
@@ -363,6 +379,9 @@ class ReqToTokenPool:
         req.kv.req_pool_idx = None
 
     def clear(self):
+        if self._context_rows:
+            for index in tuple(self._context_rows):
+                release_request_row(self, index)
         self.free_slots = list(range(1, self._alloc_size))
         self.req_generation.zero_()
         if self._aux_cache is not None:

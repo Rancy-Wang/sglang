@@ -18,6 +18,8 @@ from typing import (
 
 import torch
 
+from sglang.srt.context_system.request_storage import request_row
+
 from sglang.srt.mem_cache.allocator import BaseTokenToKVPoolAllocator
 from sglang.srt.mem_cache.events import KVCacheEventRecorder
 from sglang.srt.mem_cache.memory_pool import ReqToTokenPool
@@ -70,6 +72,14 @@ class MatchPrefixParams:
     # Mamba specific
     cow_mamba: bool = False
     req: Optional[Req] = None
+    # Context-only longest compatible source selection. Returned positions must
+    # be reconciled with target occurrences before attention consumes the KV.
+    context_retry: bool = False
+    # Exact-only policies still need hole, source-position and SWA metadata.
+    need_context_metadata: bool = False
+    # Rebind an already inserted chunk, whose future SWA demand may be beyond
+    # this short prefix. This is not admission of a new request for decode.
+    context_cache_publication: bool = False
 
 
 @dataclasses.dataclass
@@ -78,6 +88,10 @@ class InsertParams:
 
     key: Optional[RadixKey] = None
     value: Optional[torch.Tensor] = None
+    # CPU raw-token residency; absent pages have no allocation to adopt/free.
+    context_resident: torch.Tensor | None = None
+    # Context repair can interleave private copies with borrowed prefix pages.
+    context_owned: torch.Tensor | None = None
 
     # Mamba specific
     mamba_value: Optional[torch.Tensor] = None
@@ -179,6 +193,8 @@ class IncLockRefResult:
     delta: Optional[int] = None
     node_id: Optional[int] = None
     skipped_lock_components: tuple[ComponentType, ...] = ()
+    # Raw-token intervals whose KV ref was replaced by a tree-path ref.
+    context_skip_ranges: tuple[tuple[int, int], ...] = ()
     component_lock_uuids: dict[ComponentType, Optional[int]] = dataclasses.field(
         default_factory=dict
     )
@@ -205,6 +221,7 @@ class IncLockRefResult:
             skipped_lock_components=tuple(self.skipped_lock_components),
             component_lock_uuids=dict(self.component_lock_uuids),
             component_host_lock_uuids=dict(self.component_host_lock_uuids),
+            context_skip_ranges=self.context_skip_ranges,
         )
 
 
@@ -220,6 +237,7 @@ class DecLockRefParams:
 
     node_id: Optional[int] = None
     skipped_lock_components: tuple[ComponentType, ...] = ()
+    context_skip_ranges: tuple[tuple[int, int], ...] = ()
     component_lock_uuids: dict[ComponentType, Optional[int]] = dataclasses.field(
         default_factory=dict
     )
@@ -298,6 +316,10 @@ class MatchResult(NamedTuple):
     full_kv_hit_length: int = 0
     # Actions the Controller applies: CacheActions itself, ComponentActions routed to the owning component.
     cache_actions: Sequence[CacheAction | ComponentAction] = ()
+    context_source_positions: torch.Tensor | None = None
+    context_exact_prefix_len: int = 0
+    context_retry: bool = False
+    context_resident: torch.Tensor | None = None
 
 
 def zero_match_result(
@@ -319,6 +341,10 @@ def zero_match_result(
         swa_branching_seqlen=None,
         mamba_host_hit_length=0,
         full_kv_hit_length=0,
+        context_source_positions=None,
+        context_exact_prefix_len=0,
+        context_retry=False,
+        context_resident=None,
     )
 
 
@@ -472,7 +498,7 @@ class BasePrefixCache(ABC, PrefixCacheTrait):
         from sglang.srt.mem_cache.common import coalesce_ranges, free_kv_row_segments
 
         allocator = self.token_to_kv_pool_allocator
-        row = self.req_to_token_pool.req_to_token[kv.req_pool_idx]
+        row = request_row(self.req_to_token_pool, kv.req_pool_idx)
         # Adjacent pieces whose seam falls inside one (DCP-widened) page would
         # free that page twice; the allocator rejects that, so merge them first.
         free_kv_row_segments(

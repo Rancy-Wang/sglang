@@ -115,6 +115,13 @@ class UnifiedTreeNode:
         # Plain dict (not defaultdict): a missing-key read must raise, never
         # silently mint an unregistered node outside the TreeCore arena.
         self.children: dict[Any, UnifiedTreeNode] = {}
+        self.context_retry_index = None
+        self.context_descendant_bound = 0
+        self.context_path_ref = 0
+        self.context_drop_eligible = False
+        # Whole-edge holes retain structured keys and a -1 device table. Edges
+        # are split at demand boundaries; no per-token lock work is needed.
+        self.context_hole = False
         self.parent: UnifiedTreeNode | None = None
         self.key: Optional[RadixKey] = None
         self.component_types = tree_components
@@ -157,6 +164,11 @@ class UnifiedTreeNode:
 
     def component(self, component_type: ComponentType) -> ComponentData:
         return self.component_data[component_type]
+
+    @property
+    def full_page_count(self) -> int:
+        value = self.component_data[ComponentType.FULL].value
+        return 0 if value is None or self.context_hole else len(value)
 
     @property
     def backuped(self) -> bool:
@@ -484,6 +496,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         self._pending_internal_evictions: dict[ComponentType, NodeId] = {}
         # Maintains the NodeId -> active tree node mapping.
         self._node_arena: dict[NodeId, UnifiedTreeNode] = {}
+        self.context_eviction_candidates = None
 
         # The single in-flight resumable insert, if suspended at a barrier.
         self._ongoing_insert_walk_state: Optional[_InsertWalkState] = None
@@ -662,6 +675,202 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
     def _unregister_node(self, node: UnifiedTreeNode) -> None:
         """Drop a tree node from the arena."""
         self._node_arena.pop(node.id, None)
+        if self.context_eviction_candidates is not None:
+            self.context_eviction_candidates.update(node, None)
+
+    def configure_context_drop_lock(self, node_id, receipt, required_raw):
+        """Replace proven-unread KV refs with path refs on an acquired lease.
+
+        Call before dispatch, or only after all previous readers of this lease
+        have completed. A live lease can release more KV but cannot reacquire
+        an earlier skipped span. Source proof comes from its actual matched
+        keys, never from a future Drop in the requesting prompt.
+        """
+        import numpy as np
+        from sglang.srt.context_system.recovery import (
+            DropEvictionCandidates,
+            mask_ranges,
+            proven_skip_ranges,
+        )
+
+        if (
+            self.page_size != 1
+            or self.enable_hicache
+            or self.enable_session_radix_cache
+            or self.is_eagle
+            or self.enable_storage
+            or self.enable_external_cache_linker
+        ):
+            raise ValueError(
+                "Context Drop leases require page_size=1 device-only Python Radix"
+            )
+        if set(self.component_types) - {
+            ComponentType.FULL, ComponentType.MAMBA
+        }:
+            raise ValueError("Context Drop leases require shared Full/SWA pages or Full/Mamba")
+        # Only Full references below are released. The native Mamba state lock
+        # stays on its endpoint; Drop never changes the live recurrent state.
+        anchor = self.node_by_id(node_id)
+        self._assert_receipt_anchor(anchor, receipt)
+        if (
+            receipt.node_id is None
+            or BASE_COMPONENT_TYPE in receipt.skipped_lock_components
+        ):
+            raise ValueError("Context Drop lease requires an acquired Full KV receipt")
+        path, records, cursor = [], [], 0
+        node = anchor
+        while node is not self.root_node:
+            path.append(node)
+            node = node.parent
+        for node in reversed(path):
+            key = node.key
+            if key.context is None:
+                plain = np.zeros((len(key), 3), dtype=np.int64)
+                # Only kind and Delta ranges matter to the proof.
+                records.append(plain)
+            else:
+                start, end = key.context.record_span(key.context_start, len(key))
+                records.append(
+                    np.frombuffer(key.context.records, dtype=np.int32).reshape(-1, 3)[
+                        start:end
+                    ]
+                )
+            cursor += len(key)
+        if (
+            required_raw.device.type != "cpu"
+            or required_raw.dtype != torch.bool
+            or required_raw.shape != (cursor,)
+        ):
+            raise ValueError("Context Drop demand must cover the CPU raw matched prefix")
+        if not records:
+            return receipt
+        matched_records = torch.from_numpy(np.concatenate(records))
+        key_skips = proven_skip_ranges(matched_records, required_raw)
+        record_skip = np.zeros(len(matched_records), dtype=bool)
+        for start, end in key_skips:
+            record_skip[start:end] = True
+        raw_skip = record_skip[matched_records.numpy()[:, 0] == 0]
+        spans = tuple(mask_ranges(raw_skip))
+        for start, end in receipt.context_skip_ranges:
+            if not np.all(raw_skip[start:end]):
+                raise ValueError("A live Context lease cannot reacquire skipped KV")
+        if not spans:
+            return receipt
+        if self.context_eviction_candidates is None:
+            self.context_eviction_candidates = DropEvictionCandidates()
+            for leaf in self.evictable_device_leaves:
+                self._update_context_candidate(leaf)
+        # Split only at newly needed boundaries. IDs stay stable for receipts;
+        # split parents inherit both the KV and path references.
+        boundaries = sorted({p for span in spans for p in span})
+        node = anchor
+        while node is not self.root_node:
+            start = cursor - len(node.key)
+            for boundary in boundaries:
+                if start < boundary < cursor:
+                    _, action = self._split_node(node.key, node, boundary - start)
+                    assert action is None
+                    start = boundary
+            cursor -= len(node.key)
+            node = node.parent
+        cursor = len(required_raw)
+        node = anchor
+        while node is not self.root_node:
+            start = cursor - len(node.key)
+            skipped = any(a <= start and cursor <= b for a, b in spans)
+            was_skipped = any(
+                a <= start and cursor <= b for a, b in receipt.context_skip_ranges
+            )
+            if skipped and not was_skipped:
+                cd = node.component_data[BASE_COMPONENT_TYPE]
+                assert cd.lock_ref > 0
+                if cd.lock_ref == 1:
+                    n = node.full_page_count
+                    self.component_protected_size_[BASE_COMPONENT_TYPE] -= n
+                    self.component_evictable_size_[BASE_COMPONENT_TYPE] += n
+                cd.lock_ref -= 1
+                node.context_path_ref += 1
+                node.context_drop_eligible = True
+                self._update_evictable_leaf_sets(node)
+            cursor, node = start, node.parent
+        receipt.context_skip_ranges = spans
+        return receipt
+
+
+    def _update_context_candidate(self, node):
+        candidates = self.context_eviction_candidates
+        if candidates is None:
+            return
+        kind = None
+        if (
+            node is not self.root_node
+            and node.context_drop_eligible
+            and node.full_page_count
+            and not node.backuped
+            and not any(
+                node.component_data[ct].lock_ref or node.component_data[ct].host_lock_ref
+                for ct in (ComponentType.FULL, ComponentType.SWA)
+                if ct in self.component_types
+            )
+        ):
+            # B can read historical dropped text again on its next reprefill.
+            # Do not discard a hot B edge ahead of every cold ordinary leaf.
+            context = node.key.context
+            kind = 2 if context is not None and context.cache_policy == 2 else 1
+        elif node in self.evictable_device_leaves:
+            kind = 0
+        full = self.components_by_type[BASE_COMPONENT_TYPE]
+        full._ensure_eviction_strategy()
+        candidates.update(
+            node,
+            kind,
+            full.session_ref_eviction_strategy(node) if kind is not None else None,
+        )
+
+    def evict_context_pages(self, node, tracker, device_frees, host_frees):
+        """Evict unread attention KV, preserving independent recurrent states."""
+        assert node.context_drop_eligible and node.full_page_count
+        assert not node.backuped and not any(
+            node.component_data[ct].lock_ref or node.component_data[ct].host_lock_ref
+            for ct in (ComponentType.FULL, ComponentType.SWA)
+            if ct in self.component_types
+        )
+        value = node.component_data[BASE_COMPONENT_TYPE].value
+        for component in self.components:
+            if component.component_type == ComponentType.MAMBA:
+                continue
+            self._evict_component_and_detach_lru(
+                node,
+                component,
+                device_frees,
+                host_frees,
+                tracker=tracker,
+            )
+        node.context_hole = True
+        node.component_data[BASE_COMPONENT_TYPE].value = torch.full_like(value, -1)
+        self._update_evictable_leaf_sets(node)
+        # Drop candidates can also be leaves. Do not strand an unleased hole
+        # that would prevent its parent from becoming an evictable leaf.
+        self._prune_context_holes(node)
+
+    def _prune_context_holes(self, node):
+        while (
+            node is not self.root_node
+            and node.context_hole
+            and not node.children
+            and not node.context_path_ref
+            and not any(cd.lock_ref or cd.host_lock_ref for cd in node.component_data)
+            and not any(
+                cd.value is not None or cd.host_value is not None
+                for ct, cd in enumerate(node.component_data)
+                if ct != BASE_COMPONENT_TYPE
+            )
+        ):
+            parent = node.parent
+            self.evictable_device_leaves.discard(node)
+            self._remove_leaf_from_parent(node)
+            self._update_evictable_leaf_sets(parent)
+            node = parent
 
     def inc_lock_ref(
         self, node_id: NodeId, skip_lock_components: Sequence[ComponentType] = ()
@@ -728,6 +937,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         # lower-priority components it dropped are already released.
         self._release_components(node, params, skip_swa_and_below=skip_swa)
         self._update_evictable_leaf_sets(node)
+        self._prune_context_holes(node)
         # TODO: delta is not aggregated from components; no caller uses it yet.
         return DecLockRefResult()
 
@@ -817,8 +1027,35 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         self._update_evictable_leaf_sets(node)
         return DecLockRefResult()
 
+    def _validate_context_key(self, key: RadixKey) -> None:
+        if ComponentType.SWA in self.components_by_type:
+            raise ValueError("Context requires --disable-hybrid-swa-memory")
+        if self.page_size != 1:
+            raise ValueError("Context Radix requires page_size=1")
+        # Storage hash/export and non-attention component state do not yet carry
+        # Context records. Reject before a split, lock, allocation, or insertion.
+        if (
+            self.enable_hicache
+            or self.enable_storage
+            or self.enable_external_cache_linker
+            or self.kv_events.enabled
+            or self.is_eagle
+            or any(
+                ct not in (ComponentType.FULL, ComponentType.MAMBA)
+                for ct in self.component_types
+            )
+        ):
+            raise ValueError(
+                "Context Radix currently requires device-only shared-page Full/Mamba cache, "
+                "without speculative decoding or KV cache event export"
+            )
+
     def match_prefix(self, params: MatchPrefixParams) -> MatchResult:
         key = params.key
+        if key.context is not None:
+            self._validate_context_key(key)
+            if params.context_retry or params.need_context_metadata:
+                return self._match_context_retry(params)
         key, _ = key.maybe_to_bigram_view(self.is_eagle)
         if len(key) == 0:
             return self._empty_match_result
@@ -842,6 +1079,108 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             best_match_device_value_len,
             full_kv_hit_length,
             action,
+        )
+
+    def _match_context_retry(self, params: MatchPrefixParams) -> MatchResult:
+        from sglang.srt.context_system.retry import (
+            RetrySelection,
+            longest_compatible_prefix,
+        )
+
+        key = params.key.page_aligned(self.page_size)
+        if not len(key):
+            return self._empty_match_result
+        swa = self.components_by_type.get(ComponentType.SWA)
+        mamba = self.components_by_type.get(ComponentType.MAMBA)
+
+        if swa is not None:
+            raise ValueError("Context requires --disable-hybrid-swa-memory")
+
+        def advance(node, length, suffix):
+            if node.evicted:
+                return None
+            if mamba is not None and not params.context_cache_publication:
+                # Preserve native hybrid prefix admission: a partial edge has no
+                # state at its new boundary. Do not COW a later state into it.
+                # Context never rewinds or transforms the selected linear state.
+                if length != len(node.key) or node.component_data[ComponentType.MAMBA].value is None:
+                    return False, suffix
+            return True, suffix
+
+        # Seed with the longest exact source, but keep selection read-only. An
+        # equally long Retry candidate must not displace this no-COW choice.
+        node, cursor, suffix = self.root_node, 0, float("inf")
+        exact = RetrySelection(node, 0, 0)
+        while cursor < len(key):
+            child = node.children.get(key.child_key_at(cursor, self.page_size))
+            if child is None:
+                break
+            length = child.key.match_at(key, cursor, self.page_size)
+            if not length:
+                break
+            validity = advance(child, length, suffix)
+            if validity is None:
+                break
+            valid, suffix = validity
+            cursor += length
+            if valid:
+                exact = RetrySelection(child, length, cursor)
+            if length < len(child.key):
+                break
+            node = child
+
+        selected = (longest_compatible_prefix(
+            self.root_node, key, self.page_size, advance, initial=exact
+        ) if params.context_retry and key.context.cache_policy != 2 else exact)
+        if not selected.matched_length:
+            return self._empty_match_result
+        winner = selected.node
+        action = None
+        if selected.edge_length < len(winner.key):
+            winner, action = self._split_node(winner.key, winner, selected.edge_length)
+        path = []
+        node = winner
+        while node is not self.root_node:
+            path.append(node)
+            node = node.parent
+        path.reverse()
+        values, positions, residency = [], [], []
+        cursor = exact_source_length = 0
+        for node in path:
+            values.append(node.component_data[BASE_COMPONENT_TYPE].value)
+            residency.append(
+                torch.full((len(node.key),), not node.context_hole, dtype=torch.bool)
+            )
+            source = node.key
+            if exact_source_length == cursor:
+                exact_source_length += source.match_at(key, cursor, self.page_size)
+            if source.context is None:
+                positions.append(
+                    torch.arange(cursor, cursor + len(source), dtype=torch.int32)
+                )
+            else:
+                start = source.context_start
+                positions.append(
+                    torch.frombuffer(
+                        source.context.positions,
+                        dtype=torch.int32,
+                        count=len(source),
+                        offset=start * 4,
+                    )
+                )
+            cursor += len(source)
+        result = self._match_post_processor(
+            params, values, winner, winner, len(values), selected.matched_length, action
+        )
+        source_positions = torch.cat(positions)
+        return result._replace(
+            context_source_positions=source_positions,
+            # This boundary belongs to the selected source, not to a shorter
+            # exact candidate in another branch. Even same-position Retry KV
+            # after this point needs independent ownership before target insert.
+            context_exact_prefix_len=exact_source_length,
+            context_retry=exact_source_length < selected.matched_length,
+            context_resident=torch.cat(residency),
         )
 
     def _match_prefix_helper(
@@ -905,7 +1244,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             child = node.children[child_key]
 
             # HiCache: dead node (evicted + not backuped) — stop traversal
-            if child.evicted and not child.backuped:
+            if child.context_hole or (child.evicted and not child.backuped):
                 break
 
             prefix_len = child.key.match_at(key, key_offset, page_size=self.page_size)
@@ -947,7 +1286,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             if child is None:
                 break
             value = child.component_data[BASE_COMPONENT_TYPE].value
-            if value is None:
+            if value is None or child.context_hole:
                 break
             prefix_len = child.key.match(key, page_size=self.page_size)
             if prefix_len == 0:
@@ -979,6 +1318,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         cur_time = get_and_increase_time_counter()
         while node_update:
             node_update.last_access_time = cur_time
+            self._update_context_candidate(node_update)
             cur_time -= 0.00001
             node_update = node_update.parent
 
@@ -1047,6 +1387,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
 
     def _touch_node(self, node: UnifiedTreeNode):
         node.last_access_time = get_and_increase_time_counter()
+        self._update_context_candidate(node)
         if node != self.root_node:
             for comp in self.components:
                 if comp.component_type == BASE_COMPONENT_TYPE:
@@ -1087,6 +1428,18 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             raise RuntimeError("concurrent insert walks")
         key = params.key
         value = params.value
+        if key.context is not None:
+            self._validate_context_key(key)
+        if params.context_resident is not None:
+            self._validate_context_insert_residency(params)
+        if params.context_owned is not None and (
+            key.context is None
+            or params.context_owned.device.type != "cpu"
+            or params.context_owned.dtype != torch.bool
+            or params.context_owned.ndim != 1
+            or len(params.context_owned) < len(key)
+        ):
+            raise ValueError("Context insert ownership must cover the CPU raw key")
         key, value = key.maybe_to_bigram_view(self.is_eagle, value)
         key = key.page_aligned(self.page_size)
         if value is not None:
@@ -1136,6 +1489,35 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             ),
         )
         return self._advance_insert()
+
+    def _validate_context_insert_residency(self, params):
+        """Reject unproven holes before insert can split or adopt any pages."""
+        import numpy as np
+        from sglang.srt.context_system.recovery import proven_skip_ranges
+
+        key, resident = params.key, params.context_resident
+        if key.context is None or key.context_start != 0:
+            raise ValueError("Context hole insertion requires a full structured key")
+        if (
+            resident.device.type != "cpu"
+            or resident.dtype != torch.bool
+            or resident.ndim != 1
+            or len(resident) < len(key)
+        ):
+            raise ValueError("Context insert residency must cover the CPU raw key")
+        if not len(key):
+            return
+        first, last = key.context.record_span(0, len(key))
+        records = torch.from_numpy(
+            np.frombuffer(key.context.records, dtype=np.int32).reshape(-1, 3)[first:last]
+        )
+        proven = np.zeros(len(records), dtype=bool)
+        for start, end in proven_skip_ranges(records, resident[: len(key)]):
+            proven[start:end] = True
+        real = records.numpy()[:, 0] == 0
+        if not np.all(resident[: len(key)].numpy() | proven[real]):
+            raise ValueError("Context insert hole has no Drop proof on the inserted path")
+
 
     def _rotation_conflict(
         self, key: RadixKey, rotation_base: int
@@ -1242,13 +1624,37 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         node = state.node.children[child_key]
         self._touch_node(node)
         prefix_len = node.key.match(key, page_size=self.page_size)
+        incoming_present = True
+        resident = state.params.context_resident
+        if (
+            resident is not None
+            or state.params.context_owned is not None
+        ):
+            for component_resident in (
+                resident, state.params.context_owned
+            ):
+                if component_resident is None:
+                    continue
+                import numpy as np
+
+                offset = state.total_prefix_length
+                span = component_resident.numpy()[offset : offset + prefix_len]
+                if component_resident is resident:
+                    incoming_present = bool(span[0])
+                changes = np.flatnonzero(span[1:] != span[:-1])
+                if len(changes):
+                    prefix_len = int(changes[0]) + 1
         if prefix_len < len(node.key):
             node, action = self._split_node(node.key, node, prefix_len)
             if action is not None:
                 step_actions.append(action)
         node.priority = max(node.priority, state.priority)
 
-        if node.evicted:
+        if not incoming_present:
+            # No allocation exists for this input span. Keep any resident tree
+            # pages, or retain an existing hole; never send -1 to native frees.
+            pass
+        elif node.evicted or node.context_hole:
             self._unevict_node_on_insert(
                 node,
                 state.value[:prefix_len],
@@ -1273,6 +1679,12 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                     result=state.result,
                     cache_actions=step_actions,
                 )
+        elif state.params.context_owned is not None and not bool(
+            state.params.context_owned[state.total_prefix_length]
+        ):
+            # This exact target page is leased from the tree already. It must
+            # not be treated as a duplicate allocation or an SWA replacement.
+            pass
         else:
             value_slice = state.value[:prefix_len]
             consumed_from = prefix_len
@@ -1289,7 +1701,10 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                 )
                 consumed_from = min(consumed_from, comp_consumed_from)
 
-            dup_start = max(0, state.params.prev_prefix_len - state.total_prefix_length)
+            dup_start = (
+                0 if state.params.context_owned is not None
+                else max(0, state.params.prev_prefix_len - state.total_prefix_length)
+            )
             if dup_start < consumed_from:
                 # The duplicate slice may straddle this request's own eviction
                 # floor; below it only the full side is still ours to release.
@@ -1316,6 +1731,11 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
 
     def _insert_commit_step(self, state: _InsertWalkState) -> None:
         """Create the tail leaf and run the component commit hooks."""
+        if (
+            state.params.context_resident is not None
+        ) and len(state.key):
+            self._insert_context_tail(state)
+            return
         # Create new leaf for remaining suffix. A leaf survives on its Full
         # value alone; auxiliary components (SWA, Mamba) may legitimately hold
         # only a tombstone for this span (e.g. the whole leaf is outside the SWA
@@ -1352,6 +1772,75 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                 result=state.result,
                 cache_actions=state.pending_actions,
             )
+        state.phase = _InsertPhase.TAIL
+
+    def _insert_context_tail(self, state):
+        """Adopt resident runs and retain proven holes without allocating KV."""
+        import numpy as np
+
+        base = state.total_prefix_length
+        full = state.params.context_resident
+        resident = (
+            full.numpy()[base : base + len(state.key)]
+            if full is not None
+            else np.ones(len(state.key), dtype=np.bool_)
+        )
+        if self.context_eviction_candidates is None and not np.all(resident):
+            from sglang.srt.context_system.recovery import DropEvictionCandidates
+
+            self.context_eviction_candidates = DropEvictionCandidates()
+            for leaf in self.evictable_device_leaves:
+                self._update_context_candidate(leaf)
+        changes = resident[1:] != resident[:-1]
+        bounds = [0, *(np.flatnonzero(changes) + 1), len(resident)]
+        node = state.node
+        for start, end in zip(bounds[:-1], bounds[1:]):
+            start, end = int(start), int(end)
+            node = self._add_new_node(
+                node,
+                state.key[start:end],
+                state.value[start:end],
+                priority=state.priority,
+                session_id=state.params.session_id,
+            )
+            if not resident[start]:
+                node.context_hole = True
+                node.context_drop_eligible = True
+                self.component_evictable_size_[BASE_COMPONENT_TYPE] -= end - start
+                self._update_evictable_leaf_sets(node)
+                continue
+            state.result.record_adopted_range(
+                BASE_COMPONENT_TYPE, base + start, base + end
+            )
+            # Native SWA hooks address this new edge using result.prefix_len.
+            # Restore the insertion's original matched prefix after the loop.
+            state.result.prefix_len = base + start
+            for component in self.components:
+                if component.component_type == ComponentType.MAMBA:
+                    continue
+                component.commit_insert_component_data(
+                    node=node,
+                    is_new_leaf=True,
+                    params=state.params,
+                    result=state.result,
+                    cache_actions=state.pending_actions,
+                )
+        # Unlike per-token Full/SWA KV, one recurrent state belongs only to
+        # the complete prefix endpoint. Sharing it across resident runs would
+        # invent earlier states and donate/free the same slot more than once.
+        mamba = self.components_by_type.get(ComponentType.MAMBA)
+        if mamba is not None:
+            mamba.commit_insert_component_data(
+                node=node,
+                is_new_leaf=True,
+                params=state.params,
+                result=state.result,
+                cache_actions=state.pending_actions,
+            )
+        state.target_node = node
+        state.is_new_leaf = True
+        state.result.prefix_len = base
+        state.result.last_device_node = node.id
         state.phase = _InsertPhase.TAIL
 
     def _needs_incremental_component_backup(self, node: UnifiedTreeNode) -> bool:
@@ -1395,6 +1884,18 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                 self._build_backup_kv_action(state.target_node)
             )
 
+    @staticmethod
+    def _context_note_child_link(
+        parent: UnifiedTreeNode, exact_key, child: UnifiedTreeNode
+    ):
+        if parent.context_retry_index is not None:
+            parent.context_retry_index.link(exact_key, child)
+        bound = len(child.key) + child.context_descendant_bound
+        while parent is not None and bound > parent.context_descendant_bound:
+            parent.context_descendant_bound = bound
+            bound += len(parent.key)
+            parent = parent.parent
+
     def _split_node(
         self, key: RadixKey, child: UnifiedTreeNode, split_len: int
     ) -> tuple[UnifiedTreeNode, Optional[CacheAction | ComponentAction]]:
@@ -1418,6 +1919,9 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         # The rotation base is constant along a chain (position-page P keeps
         # owner (b + P) % N on both sides of the split).
         new_node.rotation_base = child.rotation_base
+        new_node.context_path_ref = child.context_path_ref
+        new_node.context_drop_eligible = child.context_drop_eligible
+        new_node.context_hole = child.context_hole
 
         child.parent = new_node
         child.key = child.key[split_len:]
@@ -1431,6 +1935,12 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         for component in self.components:
             component.redistribute_on_node_split(new_parent=new_node, child=child)
         new_node.parent.children[key.child_key(self.page_size)] = new_node
+        self._context_note_child_link(
+            new_node, child.key.child_key(self.page_size), child
+        )
+        self._context_note_child_link(
+            new_node.parent, key.child_key(self.page_size), new_node
+        )
 
         # A split of a backuped node tells the cache to fix its publish list.
         action: Optional[CacheAction | ComponentAction] = None
@@ -1480,6 +1990,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         new_node.rotation_base = rotation_base
         new_node.component_data[BASE_COMPONENT_TYPE].value = value.clone()
         parent.children[key.child_key(self.page_size)] = new_node
+        self._context_note_child_link(parent, key.child_key(self.page_size), new_node)
         self.component_evictable_size_[BASE_COMPONENT_TYPE] += len(value)
         if self.enable_storage or self.enable_external_cache_linker:
             new_node.hash_value = compute_node_hash_values(new_node, self.page_size)
@@ -1499,8 +2010,9 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         during insert."""
         ct = BASE_COMPONENT_TYPE
         cd = node.component_data[ct]
-        assert cd.value is None
+        assert cd.value is None or node.context_hole
         n = len(fresh_value)
+        node.context_hole = False
         cd.value = fresh_value.clone()
         if cd.lock_ref > 0:
             self.component_protected_size_[ct] += n
@@ -1528,6 +2040,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             self.evictable_host_leaves.add(node)
         else:
             self.evictable_host_leaves.discard(node)
+        self._update_context_candidate(node)
 
     def _update_duplicate_tracking(self, node: UnifiedTreeNode) -> None:
         """Register where duplicates are born (acks, split, unevict);
@@ -1825,6 +2338,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         self._iteratively_delete_tombstone_leaf(
             node, tracker, device_frees=device_frees, host_frees=host_frees
         )
+        self._prune_context_holes(parent)
 
     def drive_host_eviction(
         self, component_type: ComponentType, num_tokens: int
@@ -2085,12 +2599,15 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         return True
 
     def _remove_leaf_from_parent(self, node: UnifiedTreeNode):
+        assert node.context_path_ref == 0, "Cannot remove a leased Context path"
         for component in self.components:
             component.discard_deleted_session_leaf(node)
 
         key = node.key.child_key(self.page_size)
         v = node.parent.children.pop(key, None)
         assert v == node
+        if node.parent.context_retry_index is not None:
+            node.parent.context_retry_index.unlink(key)
         # Deleted nodes must not linger in duplicate tracking as ghosts.
         self.full_host_duplicates.pop(node.id, None)
         self._unregister_node(node)
@@ -2161,6 +2678,8 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         """Delete childless tombstone ancestors until a live or locked node is reached."""
         ct = BASE_COMPONENT_TYPE
         while cur != self.root_node and len(cur.children) == 0:
+            if cur.context_path_ref or cur.context_hole:
+                break
             if any(
                 cd.lock_ref > 0 or cd.host_lock_ref > 0 for cd in cur.component_data
             ):
@@ -2218,6 +2737,14 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             return False
         if any(cd.lock_ref > 0 for cd in node.component_data):
             return False
+        if node.context_hole:
+            # Drop-only eviction retains a checkpoint-only edge. If ordinary
+            # LRU eviction later removes this entire unused branch, it must be
+            # able to walk through that edge (zero Full pages) to its parent.
+            # Otherwise the Full ledger advertises ancestors as evictable but
+            # the allocator can never reclaim them. Live path/state leases
+            # still protect the checkpoint; Drop-first eviction never deletes it.
+            return not node.children and not node.context_path_ref
         if any(
             child.component_data[ct].value is not None
             for child in node.children.values()
@@ -2320,6 +2847,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         new_node.hash_value = hash_value
         new_node.component_data[BASE_COMPONENT_TYPE].host_value = host_value.clone()
         node.children[child_key] = new_node
+        self._context_note_child_link(node, child_key, new_node)
         self._update_evictable_leaf_sets(new_node)
         self._update_evictable_leaf_sets(node)
         result.inserted_host_node = new_node.id
@@ -2865,6 +3393,18 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             nid = node.id
             full_dev = node.component_data[FCT].value is not None
             full_hst = node.component_data[FCT].host_value is not None
+            if node.context_path_ref < 0:
+                E(f"node {nid} negative Context path refs")
+            if node.context_hole:
+                if not node.context_drop_eligible or not full_dev or full_hst:
+                    E(f"node {nid} invalid Context hole state")
+                elif not torch.all(node.component_data[FCT].value == -1):
+                    E(f"node {nid} Context hole contains a physical page")
+                # Full holes may retain an independent raw-prefix recurrent
+                # checkpoint. Attention components must still release their KV.
+                if any(node.component_data[ct].value is not None for ct in self.component_types
+                       if ct not in (FCT, ComponentType.MAMBA)):
+                    E(f"node {nid} Context hole still owns auxiliary attention pages")
 
             # Full is the tree backbone, so aux data requires Full data.
             for ct in self.component_types:
@@ -2900,7 +3440,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                     E(f"node {nid} {ct} lock_ref={cd.lock_ref}")
                 if cd.host_lock_ref < 0:
                     E(f"node {nid} {ct} host_lock_ref={cd.host_lock_ref}")
-                if ct != FCT and fl < cd.lock_ref:
+                if ct != FCT and fl + node.context_path_ref < cd.lock_ref:
                     E(f"node {nid} full_lock={fl} < {ct}_lock={cd.lock_ref}")
                 # Locked tombstones are legal: segment locks count every
                 # node in [start, boundary], data-bearing or not.
@@ -3025,7 +3565,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                     continue
                 cd = n.component_data[ct]
                 if cd.value is not None:
-                    toks = len(cd.value)
+                    toks = n.full_page_count if ct == FCT else len(cd.value)
                     if cd.lock_ref > 0:
                         protected += toks
                     else:
@@ -3184,7 +3724,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             node = stack.pop()
             full_value = node.component_data[BASE_COMPONENT_TYPE].value
             if full_value is not None:
-                total_size += len(full_value)
+                total_size += node.full_page_count
             for ct in self.component_types:
                 if ct == BASE_COMPONENT_TYPE:
                     continue
@@ -3208,7 +3748,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             value = node.component_data[BASE_COMPONENT_TYPE].value
             node_slots = value.tolist() if isinstance(value, torch.Tensor) else []
 
-            emit = node is not self.root_node
+            emit = node is not self.root_node and not node.context_hole
             if unlocked_only:
                 # Unified SWA owns an independent component lock. A node can still
                 # hold Full KV for a running request while its SWA slots are unused.
@@ -3247,7 +3787,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         def _dfs(node: UnifiedTreeNode):
             for child in node.children.values():
                 v = child.component_data[BASE_COMPONENT_TYPE].value
-                if v is not None:
+                if v is not None and not child.context_hole:
                     values.append(v)
                 _dfs(child)
 

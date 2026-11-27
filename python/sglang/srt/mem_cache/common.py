@@ -315,7 +315,13 @@ def release_kv_cache(req: Req, tree_cache: BasePrefixCache, is_insert: bool = Tr
     if is_insert:
         tree_cache.insert_req(req, up_to=owned_kv_len)
     # The protected prefix is not this req's to free.
-    tree_cache.free_kv_row(req.kv, [(req.kv.cache_protected_len, owned_kv_len)])
+    if getattr(req, "context_state", None) is not None:
+        # Context rows include absent Drop slots and borrowed source versions.
+        # On abort, private rotated pages can precede the native prefix boundary.
+        start = req.kv.cache_protected_len if is_insert else 0
+        tree_cache._free_context_kv_row(req, [(start, owned_kv_len)])
+    else:
+        tree_cache.free_kv_row(req.kv, [(req.kv.cache_protected_len, owned_kv_len)])
     tree_cache.unpin(req)
     _release_overallocated_kv_indices(
         req, owned_kv_len, req.kv.kv_allocated_len, tree_cache

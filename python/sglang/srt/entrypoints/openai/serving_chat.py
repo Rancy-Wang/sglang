@@ -10,7 +10,7 @@ from collections import OrderedDict
 from collections.abc import AsyncGenerator
 from enum import Enum
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from sglang.srt.runtime_context import get_model, get_serving
 
@@ -98,6 +98,7 @@ from sglang.srt.function_call.utils import (
 )
 from sglang.srt.managers.io_struct import GenerateReqInput
 from sglang.srt.parser.conversation import generate_chat_conv
+from sglang.srt.parser.harmony_chat_parser import HarmonyChatParser
 from sglang.srt.parser.hunyuan_reasoning import (
     normalize_hunyuan_reasoning_effort,
     uses_hunyuan_reasoning_effort,
@@ -791,12 +792,10 @@ class OpenAIServingChat(OpenAIServingBase):
         return request.return_output_ids_in_sglext or get_serving().return_output_ids
 
     def _continuous_usage_cached_details(
-        self, content: dict[str, Any]
-    ) -> PromptTokensDetails | None:
-        if not get_serving().enable_cache_report:
-            return None
-        return UsageProcessor._details_if_cached(
-            content["meta_info"].get("cached_tokens", 0)
+        self, content: Dict[str, Any]
+    ) -> Optional[PromptTokensDetails]:
+        return UsageProcessor.prompt_tokens_details(
+            [content["meta_info"]], get_serving().enable_cache_report
         )
 
     def _reported_prompt_tokens(self, meta_info: dict[str, Any]) -> int:
@@ -867,6 +866,82 @@ class OpenAIServingChat(OpenAIServingBase):
             canonical.extend(cls._sort_tool_message_run(run, tool_calls))
         return canonical
 
+    def _uses_harmony_chat_parser(self, request: ChatCompletionRequest) -> bool:
+        # GPT-OSS structural-tag constraints also produce native Harmony.
+        return (
+            self.is_gpt_oss is True
+            and (
+                self.reasoning_parser == "gpt-oss" or self.tool_call_parser == "gpt-oss"
+            )
+            and (request.separate_reasoning or self._tool_call_parsing_active(request))
+        )
+
+    def _new_harmony_chat_parser(self, request):
+        tools = (
+            self._effective_tools(request)
+            if self._tool_call_parsing_active(request)
+            else []
+        )
+        return HarmonyChatParser([tool.model_dump() for tool in tools])
+
+    async def _generate_harmony_stream_content(
+        self,
+        content,
+        index,
+        request,
+        parser_dict,
+        has_tool_calls,
+        choice_logprobs,
+        finish_reason_type,
+        continuous_usage_stats,
+    ):
+        if index not in parser_dict:
+            parser_dict[index] = self._new_harmony_chat_parser(request)
+        parser = parser_dict[index]
+        piece = parser.feed_output(
+            content.get("output_ids"),
+            incremental=get_serving().incremental_streaming_output,
+            completion_tokens=content["meta_info"].get("completion_tokens"),
+        )
+        if finish_reason_type is not None:
+            piece = parser._join([piece, parser.finish(finish_reason_type)])
+        tool_calls = [ToolCall(**call) for call in piece.tool_calls]
+        if tool_calls:
+            has_tool_calls[index] = True
+        reasoning = piece.reasoning_content if request.separate_reasoning else None
+        text = (
+            piece.content
+            if request.separate_reasoning
+            else piece.reasoning_content + piece.content
+        )
+        if not (text or reasoning or tool_calls or choice_logprobs is not None):
+            return
+        chunk = ChatCompletionStreamResponse(
+            id=content["meta_info"]["id"],
+            created=int(time.time()),
+            model=request.model,
+            choices=[
+                ChatCompletionResponseStreamChoice(
+                    index=index,
+                    delta=DeltaMessage(
+                        content=text or None,
+                        reasoning_content=reasoning or None,
+                        tool_calls=tool_calls or None,
+                    ),
+                    logprobs=choice_logprobs,
+                    finish_reason=None,
+                )
+            ],
+        )
+        if continuous_usage_stats:
+            chunk.usage = UsageProcessor.calculate_token_usage(
+                prompt_tokens=self._reported_prompt_tokens(content["meta_info"]),
+                completion_tokens=content["meta_info"].get("completion_tokens", 0),
+                reasoning_tokens=content["meta_info"].get("reasoning_tokens", 0),
+                cached_tokens=self._continuous_usage_cached_details(content),
+            )
+        yield f"data: {chunk.model_dump_json()}\n\n"
+
     async def _generate_stream_content(
         self,
         content: dict[str, Any],
@@ -884,6 +959,19 @@ class OpenAIServingChat(OpenAIServingBase):
         completion_tokens: dict[int, int],
     ) -> AsyncGenerator[str, None]:
         """Generate SSE chunks for streaming content."""
+        if self._uses_harmony_chat_parser(request):
+            async for chunk in self._generate_harmony_stream_content(
+                content,
+                index,
+                request,
+                parser_dict,
+                has_tool_calls,
+                choice_logprobs,
+                finish_reason_type,
+                continuous_usage_stats,
+            ):
+                yield chunk
+            return
         offset = stream_offsets.get(index, 0)
         if get_serving().incremental_streaming_output:
             delta = content["text"]
@@ -1244,6 +1332,7 @@ class OpenAIServingChat(OpenAIServingBase):
         )
         adapted_request = GenerateReqInput(
             **prompt_kwargs,
+            context_program=processed_messages.context_program,
             image_data=processed_messages.image_data,
             video_data=processed_messages.video_data,
             audio_data=processed_messages.audio_data,
@@ -1298,6 +1387,55 @@ class OpenAIServingChat(OpenAIServingBase):
         self, request: ChatCompletionRequest, is_multimodal: bool
     ) -> MessageProcessingResult:
         """Process chat messages and apply chat template"""
+        context_rule = None
+        has_context = bool(
+            request.model_fields_set & {"drop_message", "drop_rule", "reposition", "insert"}
+        )
+        if has_context:
+            from sglang.srt.arg_groups.overrides import resolving_view
+            from sglang.srt.context_system.capabilities import validate_context_config
+
+            validate_context_config(
+                resolving_view(self.tokenizer_manager.server_args),
+                self.tokenizer_manager.model_config,
+                has_insert=bool(request.insert),
+                cache_policy=request.drop_rule if isinstance(request.drop_rule, str) else None,
+            )
+            warmup_error = getattr(self.tokenizer_manager, "context_warmup_error", None)
+            if isinstance(warmup_error, str):
+                raise ValueError(f"Context compiler is unavailable: {warmup_error}")
+            from sglang.srt.context_system.rules import (
+                KeepTextDropRule,
+                parse_drop_rule,
+            )
+
+            if is_multimodal or request.input_ids is not None:
+                raise ValueError(
+                    "Drop/Reposition requires text messages with template provenance"
+                )
+            if self.chat_encoding_spec is not None:
+                raise ValueError(
+                    "Drop/Reposition requires the model's native Jinja template"
+                )
+            context_rule = parse_drop_rule(
+                request.drop_rule,
+                [message.model_dump() for message in request.messages],
+                legacy_drop_message=request.drop_message,
+            )
+            if (getattr(context_rule, "type", None) == "message_drop_without_repos"
+                    and request.reposition):
+                raise ValueError("message_drop_without_repos does not accept reposition")
+            if isinstance(context_rule, KeepTextDropRule):
+                # Apply the same native validation and template processing to the
+                # full history; the public kept projection is only a selection.
+                full = ChatCompletionRequest.model_validate(
+                    {"messages": list(context_rule.full_messages), "insert": request.insert}
+                ).messages
+                request = request.model_copy(update={"messages": full})
+                if context_rule.use_visible_as_full:
+                    # Preserve the explicit feature request as an empty program,
+                    # using the actual fallback prompt and the same P accounting.
+                    context_rule = None
         if self.default_chat_template_kwargs:
             ctk = dict(request.chat_template_kwargs or {})
             for k, v in self.default_chat_template_kwargs.items():
@@ -1415,9 +1553,17 @@ class OpenAIServingChat(OpenAIServingBase):
                 stop=request.stop or [],
             )
         elif self.template_manager.chat_template_name is None:
-            result = self._apply_jinja_template(request, tools, is_multimodal)
+            result = self._apply_jinja_template(
+                request,
+                tools,
+                is_multimodal,
+                context_rule=context_rule,
+                has_context=has_context,
+            )
         else:
-            result = self._apply_conversation_template(request, is_multimodal)
+            result = self._apply_conversation_template(
+                request, is_multimodal, context_rule=context_rule, has_context=has_context
+            )
 
         if tool_call_stop is not None:
             if isinstance(result.stop, str):
@@ -1464,8 +1610,55 @@ class OpenAIServingChat(OpenAIServingBase):
         request: ChatCompletionRequest,
         tools: list[dict] | None,
         is_multimodal: bool,
+        *,
+        context_rule=None,
+        has_context: bool = False,
     ) -> MessageProcessingResult:
         """Apply Jinja chat template"""
+        if self.is_gpt_oss is True:
+            from sglang.srt.parser.gpt_oss_encoding import HarmonyEncoder
+
+            if is_multimodal or request.continue_final_message:
+                raise ValueError("GPT-OSS Harmony requires text completion messages")
+            kwargs = request.chat_template_kwargs or {}
+            if kwargs.get("chat_template") is not None:
+                raise ValueError(
+                    "GPT-OSS uses native Harmony, not a custom Jinja template"
+                )
+            messages = [
+                message.model_dump(exclude_none=True) for message in request.messages
+            ]
+            encoder = HarmonyEncoder(
+                kwargs.get("reasoning_effort", request.reasoning_effort),
+                preserve_thinking=(
+                    kwargs.get("preserve_thinking_history") is True
+                    or getattr(context_rule, "type", None) == "thinking_drop"
+                ),
+            )
+            ids, owners, _ = encoder.render_tokens(
+                [{k: v for k, v in m.items() if k != "index"} for m in messages],
+                tools, enable_thinking=kwargs.get("enable_thinking")
+            )
+            program = None
+            if has_context:
+                from sglang.srt.context_system.planner import compile_chat_program
+
+                trace = encoder._build_harmony_provenance(ids, owners)
+                compiled = compile_chat_program(
+                    messages, trace, context_rule, request.reposition, request.insert
+                )
+                ids = compiled.input_ids
+                program = compiled.to_wire()
+            return MessageProcessingResult(
+                prompt="",
+                prompt_ids=ids,
+                stop=request.stop,
+                image_data=None,
+                audio_data=None,
+                video_data=None,
+                modalities=[],
+                context_program=program,
+            )
         prompt = ""
         prompt_ids = []
         decoded_prompt = None
@@ -1485,6 +1678,9 @@ class OpenAIServingChat(OpenAIServingBase):
             ThinkingMode.THINKING if thinking_requested else ThinkingMode.CHAT
         )
         messages = [msg.model_dump() for msg in request.messages]
+        context_messages = messages if has_context else None
+        context_trace = [] if has_context else None
+        messages = [{k: v for k, v in m.items() if k != "index"} for m in messages]
         for message in messages:
             normalize_assistant_tool_call_arguments(
                 message, strict=self.chat_encoding_spec != "kimi_k3"
@@ -1657,6 +1853,9 @@ class OpenAIServingChat(OpenAIServingBase):
             if request.chat_template_kwargs:
                 extra_template_kwargs.update(request.chat_template_kwargs)
 
+            if getattr(context_rule, "type", None) == "thinking_drop":
+                extra_template_kwargs["preserve_thinking_history"] = True
+
             rc = self.template_manager.reasoning_config
             if rc is not None and rc.effort_kwarg is not None:
                 if request.reasoning_effort == "low":
@@ -1686,6 +1885,7 @@ class OpenAIServingChat(OpenAIServingBase):
                     template_kwargs=extra_template_kwargs,
                     encode_kwargs=encode_kwargs,
                     use_cache=is_multimodal,
+                    context_trace=context_trace,
                 )
             except Exception:
                 # If the first attempt fails, try with flat function-only format.
@@ -1702,6 +1902,7 @@ class OpenAIServingChat(OpenAIServingBase):
                         template_kwargs=extra_template_kwargs,
                         encode_kwargs=encode_kwargs,
                         use_cache=is_multimodal,
+                        context_trace=context_trace,
                     )
                 except _CHAT_TEMPLATE_CLIENT_ERRORS as template_error:
                     # Template errors (e.g., from raise_exception in Jinja templates)
@@ -1711,9 +1912,22 @@ class OpenAIServingChat(OpenAIServingBase):
 
             # Append assistant prefix if continue_final_message is enabled
             if assistant_prefix:
-                prompt_ids = self._append_assistant_prefix_to_prompt_ids(
-                    prompt_ids, assistant_prefix
-                )
+                if context_trace is not None:
+                    from sglang.srt.context_system.provenance import (
+                        append_assistant_prefix,
+                    )
+
+                    context_trace[0] = append_assistant_prefix(
+                        context_trace[0],
+                        self.tokenizer_manager.tokenizer,
+                        assistant_prefix,
+                        owner=len(context_messages) - 1,
+                    )
+                    prompt_ids = context_trace[0].input_ids
+                else:
+                    prompt_ids = self._append_assistant_prefix_to_prompt_ids(
+                        prompt_ids, assistant_prefix
+                    )
                 # The cached decode corresponds to prompt_ids before the prefix.
                 decoded_prompt = None
 
@@ -1729,6 +1943,19 @@ class OpenAIServingChat(OpenAIServingBase):
         audio_data = audio_data if audio_data else None
         video_data = video_data if video_data else None
         modalities = modalities if modalities else []
+        context_program = None
+        if context_trace is not None:
+            from sglang.srt.context_system.planner import compile_chat_program
+
+            if len(context_trace) != 1:
+                raise ValueError(
+                    "Context request has no unique canonical template trace"
+                )
+            compiled = compile_chat_program(
+                context_messages, context_trace[0], context_rule, request.reposition, request.insert
+            )
+            prompt_ids = compiled.input_ids
+            context_program = compiled.to_wire()
         return MessageProcessingResult(
             prompt=prompt,
             prompt_ids=prompt_ids,
@@ -1737,6 +1964,7 @@ class OpenAIServingChat(OpenAIServingBase):
             audio_data=audio_data,
             modalities=modalities,
             stop=stop,
+            context_program=context_program,
         )
 
     def _render_and_encode_chat_template(
@@ -1747,8 +1975,33 @@ class OpenAIServingChat(OpenAIServingBase):
         template_kwargs: Dict[str, Any],
         encode_kwargs: Dict[str, Any],
         use_cache: bool,
+        context_trace: Optional[List] = None,
     ) -> tuple[List[int], Optional[str]]:
+        if context_trace is not None:
+            from sglang.srt.context_system.provenance import (
+                build_template_token_provenance,
+            )
+
+            trace = build_template_token_provenance(
+                self.tokenizer_manager.tokenizer,
+                messages,
+                tools=tools,
+                add_generation_prompt=True,
+                enable_thinking=None,
+                chat_template=template_kwargs.get("chat_template"),
+                template_kwargs=template_kwargs,
+            )
+            context_trace[:] = [trace]
+            return trace.input_ids, None
         cache_key = None
+        if template_kwargs.get("preserve_thinking_history", False):
+            from sglang.srt.context_system.thinking_template import (
+                prepare_thinking_history,
+            )
+
+            messages, template_kwargs = prepare_thinking_history(
+                self.tokenizer_manager.tokenizer, messages, tools, template_kwargs
+            )
         if use_cache:
             try:
                 # Key order is part of the key: templates render dicts in their given order.
@@ -1814,6 +2067,9 @@ class OpenAIServingChat(OpenAIServingBase):
         self,
         request: ChatCompletionRequest,
         is_multimodal: bool,
+        *,
+        context_rule=None,
+        has_context: bool = False,
     ) -> MessageProcessingResult:
         """Apply conversation template"""
         prompt = ""
@@ -1863,12 +2119,28 @@ class OpenAIServingChat(OpenAIServingBase):
             else:
                 stop.extend(request.stop)
 
-        if not is_multimodal:
+        context_program = None
+        if has_context:
+            from sglang.srt.context_system.provenance import build_conversation_token_provenance
+            from sglang.srt.context_system.planner import compile_chat_program
+
+            messages = [message.model_dump() for message in request.messages]
+            trace = build_conversation_token_provenance(
+                self.tokenizer_manager.tokenizer, conv, messages, prompt
+            )
+            prompt_ids = trace.input_ids
+            compiled = compile_chat_program(
+                messages, trace, context_rule, request.reposition, request.insert
+            )
+            prompt_ids = compiled.input_ids
+            context_program = compiled.to_wire()
+        elif not is_multimodal:
             prompt_ids = self.tokenizer_manager.tokenizer.encode(prompt)
 
         return MessageProcessingResult(
             prompt=prompt,
             prompt_ids=prompt_ids,
+            context_program=context_program,
             image_data=image_data,
             video_data=video_data,
             audio_data=audio_data,
@@ -1934,6 +2206,7 @@ class OpenAIServingChat(OpenAIServingBase):
         image_tokens = {}
         audio_tokens = {}
         video_tokens = {}
+        context_usage = {}
         input_ids: list[int] | None = None
         output_ids: dict[int, list[int]] = {}
 
@@ -1980,6 +2253,8 @@ class OpenAIServingChat(OpenAIServingBase):
                 image_tokens[index] = content["meta_info"].get("image_tokens", 0)
                 audio_tokens[index] = content["meta_info"].get("audio_tokens", 0)
                 video_tokens[index] = content["meta_info"].get("video_tokens", 0)
+                if content["meta_info"].get("context_usage") is not None:
+                    context_usage[index] = content["meta_info"]["context_usage"]
 
                 finish_reason = content["meta_info"].get("finish_reason", None)
                 finish_reason_type = finish_reason["type"] if finish_reason else None
@@ -2155,6 +2430,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 ]
 
             sglext_full = SglExt(
+                **request.context_index_metadata(),
                 routed_experts=sglext_routed,
                 cached_tokens_details=sglext_cached_tokens_details,
                 spec_tokens_details=sglext_spec_tokens_details,
@@ -2195,7 +2471,7 @@ class OpenAIServingChat(OpenAIServingBase):
                 yield f"data: {sglext_chunk.model_dump_json()}\n\n"
 
             # Additional usage chunk
-            if include_usage:
+            if include_usage or context_usage:
                 # Multimodal tokens are per-prompt (input side), so aggregate
                 # once per prompt (first choice), matching prompt/cached semantics.
                 total_image_tokens = sum(
@@ -2217,6 +2493,7 @@ class OpenAIServingChat(OpenAIServingBase):
                     image_tokens=total_image_tokens,
                     audio_tokens=total_audio_tokens,
                     video_tokens=total_video_tokens,
+                    context_usage=context_usage,
                 )
                 usage_chunk = ChatCompletionStreamResponse(
                     id=content["meta_info"]["id"],
@@ -2318,8 +2595,11 @@ class OpenAIServingChat(OpenAIServingBase):
             or spec_tokens_details
             or input_ids is not None
             or output_ids is not None
+            or request.insert is not None
+            or any(m.index is not None for m in request.messages)
         ):
             response_sglext = SglExt(
+                **request.context_index_metadata(),
                 routed_experts=routed_experts,
                 cached_tokens_details=cached_tokens_details,
                 spec_tokens_details=spec_tokens_details,
@@ -2342,43 +2622,65 @@ class OpenAIServingChat(OpenAIServingBase):
             if isinstance(text, ErrorResponse):
                 return ORJSONResponse(content=text.model_dump(), status_code=text.code)
 
-            # Handle reasoning content
-            reasoning_text = None
-            if self.reasoning_parser and request.separate_reasoning:
-                force_reasoning = (
-                    self.template_manager.force_reasoning
-                    or self._get_reasoning_from_request(request)
+            if self._uses_harmony_chat_parser(request):
+                parser = self._new_harmony_chat_parser(request)
+                piece = parser._join(
+                    [
+                        parser.feed_output(ret_item.get("output_ids")),
+                        parser.finish(finish_reason["type"]),
+                    ]
                 )
-                try:
-                    parser = ReasoningParser(
-                        model_type=self.reasoning_parser,
-                        stream_reasoning=False,
-                        force_reasoning=force_reasoning,
-                        request=request,
-                        tokenizer=self.tokenizer_manager.tokenizer,
-                        tool_call_parser_active=self._tool_call_parsing_active(request),
+                reasoning_text = (
+                    piece.reasoning_content if request.separate_reasoning else None
+                )
+                text = (
+                    piece.content
+                    if request.separate_reasoning
+                    else piece.reasoning_content + piece.content
+                )
+                tool_calls = [ToolCall(**call) for call in piece.tool_calls] or None
+                if tool_calls and finish_reason["type"] == "stop":
+                    finish_reason = {**finish_reason, "type": "tool_calls"}
+            else:
+                # Handle reasoning content
+                reasoning_text = None
+                if self.reasoning_parser and request.separate_reasoning:
+                    force_reasoning = (
+                        self.template_manager.force_reasoning
+                        or self._get_reasoning_from_request(request)
                     )
-                    reasoning_text, text = parser.parse_non_stream(text)
-                except Exception as e:
-                    logger.error(f"Reasoning parsing error: {e}")
-                    return self.create_error_response(
-                        "Failed to parse reasoning content",
-                        err_type="InternalServerError",
-                        status_code=500,
-                    )
+                    try:
+                        parser = ReasoningParser(
+                            model_type=self.reasoning_parser,
+                            stream_reasoning=False,
+                            force_reasoning=force_reasoning,
+                            request=request,
+                            tokenizer=self.tokenizer_manager.tokenizer,
+                            tool_call_parser_active=self._tool_call_parsing_active(
+                                request
+                            ),
+                        )
+                        reasoning_text, text = parser.parse_non_stream(text)
+                    except Exception as e:
+                        logger.error(f"Reasoning parsing error: {e}")
+                        return self.create_error_response(
+                            "Failed to parse reasoning content",
+                            err_type="InternalServerError",
+                            status_code=500,
+                        )
 
-            # Handle tool calls
-            tool_calls = None
-            effective_tools = self._effective_tools(request)
-            if self._tool_call_parsing_active(request):
-                history_tool_calls_cnt = self._get_history_tool_calls_cnt(request)
-                tool_calls, text, finish_reason = self._process_tool_calls(
-                    text,
-                    effective_tools,
-                    finish_reason,
-                    request.tool_choice,
-                    history_tool_calls_cnt,
-                )
+                # Handle tool calls
+                tool_calls = None
+                effective_tools = self._effective_tools(request)
+                if self._tool_call_parsing_active(request):
+                    history_tool_calls_cnt = self._get_history_tool_calls_cnt(request)
+                    tool_calls, text, finish_reason = self._process_tool_calls(
+                        text,
+                        effective_tools,
+                        finish_reason,
+                        request.tool_choice,
+                        history_tool_calls_cnt,
+                    )
 
             # Extract prompt_token_ids if requested
             choice_prompt_token_ids = (
