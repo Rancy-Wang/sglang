@@ -1,3 +1,5 @@
+> Continuation status: all20 rounds are now consumed; R19/R20 failed full-model wide greedy and default dispatch was restored to R13. See [R14–R20 review](continuation-review.md) and [current plan](plan.md) for the latest validation status. The text below records the earlier R13 stage.
+
 # VQ+ attention 设计复审
 
 状态：第13/20轮微基准与普通正确性验证完成，memcheck零错误通过，完整VQ+服务验收与同机BF16对照均完成。这里区分已测结果、源码事实和待验证解释；最终接受还需要同机完整 serving。

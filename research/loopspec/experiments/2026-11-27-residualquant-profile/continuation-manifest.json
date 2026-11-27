@@ -1,0 +1,58 @@
+{
+  "evidence/r14-refresh.tar.gz": {
+    "bytes": 312949,
+    "sha256": "05f550f74eb848926406993e67829145ed044c12fd5b9065f1200748c83d9da9"
+  },
+  "evidence/r15.tar.gz": {
+    "bytes": 180411,
+    "sha256": "e289d6688bb8ee7603737f3cf31c7c9cc414ed208eae52f0d28559b80b761f86"
+  },
+  "evidence/r16.tar.gz": {
+    "bytes": 166569,
+    "sha256": "3c53a58e561c36da48110e700ea0dcdc275858cf5b2e008431cc18f39264d494"
+  },
+  "evidence/r17-refresh.tar.gz": {
+    "bytes": 404805,
+    "sha256": "cef5ccf859d280b9bc166e7178fa05c32deb0f6afeb109eddbc2549372999d44"
+  },
+  "evidence/r18-wide.tar.gz": {
+    "bytes": 982895,
+    "sha256": "2a03c8842861c4fc0e8cc3e5f5f7fa0d9395df3d23aa0c4a95fb317db48622d7"
+  },
+  "evidence/r19-kernels.tar.gz": {
+    "bytes": 227853,
+    "sha256": "038a51188f3957de957bf4d083c630c44ba71aee773d2721a07fa12612de3b7e"
+  },
+  "evidence/r19-r20-final-kernels.tar.gz": {
+    "bytes": 2074009,
+    "sha256": "d7dc4ab416cdccb31e7097898a16815f2a4b2795a52ea606264eede71a5cfdc4"
+  },
+  "evidence/r13-wide.tar.gz": {
+    "bytes": 997587,
+    "sha256": "52842c4cfa2b3be1d4405fc8dcf54163768e82f1aa437dd53181d4400a650f11"
+  },
+  "evidence/serving-failed-and-repeat.tar.gz": {
+    "bytes": 70059,
+    "sha256": "eef8fd947a2fcf06f9b209843659c8bb78aa494c0c7642029ea0c9357b2f3c28"
+  },
+  "evidence/serving-retained-wide-final.tar.gz": {
+    "bytes": 1915792,
+    "sha256": "531803da72603b091800128484e778c04d3a28823d5c8551d599bc79244faad0"
+  },
+  "evidence/serving-capacity-final.tar.gz": {
+    "bytes": 770953,
+    "sha256": "3a38019305a589cd029b1fb2657e2901e89d176e306e2cc0fcf8b8578383fbea"
+  },
+  "continuation-results.json": {
+    "bytes": 35478,
+    "sha256": "1fa42c3eec80deeaa75ccc18a0b2c5cfa4c951dc8f5e60fe213cd15d3f8e30cb"
+  },
+  "evidence/wide-greedy-comparison.json": {
+    "bytes": 7566,
+    "sha256": "7d58c87f34dd724bfc85b7f1b91468ed3afbb16c85dc7a1f887534a814e02733"
+  },
+  "evidence/retained/cleanup.txt": {
+    "bytes": 88,
+    "sha256": "3cd7bd6f0533dbecce92691bdc933c9ca0a3de18e1224543695224d72c92e80e"
+  }
+}

@@ -1,0 +1,1204 @@
+{
+  "status": "all20_rounds_consumed; R19/R20 rejected; R13 default restored and validated; performance/generalization objective not achieved",
+  "runtime_revision": "dedf55fffd40e96d4de714942f9e6eaafc7fc476",
+  "retained_control": "4743e9430",
+  "hardware": "InfiniAI-BUS-2, NVIDIA A800-SXM4-80GB SM80, same GPU2/3 for service",
+  "metric": "full_batch_client_decode_tokens_s; common completion-token barrier; excludes prefill and first decode; unprofiled",
+  "rounds": {
+    "19": {
+      "revision": "7edc08898",
+      "real_kernel_cases_passed": 68,
+      "boundary_cases_passed": 100,
+      "memcheck_errors": 0,
+      "lifecycle": "pass",
+      "wide_greedy": "fail B32/N1024",
+      "accepted": false
+    },
+    "20": {
+      "revision": "b2cdf7a63",
+      "real_kernel_cases_passed": 68,
+      "boundary_cases_passed": 100,
+      "memcheck_errors": 0,
+      "lifecycle": "pass",
+      "wide_greedy": "fail B32/N1024",
+      "accepted": false
+    }
+  },
+  "timing": {
+    "serving-r13-wide/n2k": {
+      "config": {
+        "model_path": "/dev/shm/wangruoxi-vqrq-20261127/model",
+        "tp_size": 2,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "context_length": 32768,
+        "page_size": 8,
+        "max_total_tokens": 65536,
+        "max_running_requests": 64,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 64,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32,
+              64
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "loopvq_codebook_dir": "/dev/shm/wangruoxi-vqrq-20261127/books",
+        "loopvq_residual_bits": 4,
+        "ouro_decode_profile": "optimized",
+        "loopvq_prefix_tokens": 8,
+        "loopvq_recent_tokens": 64,
+        "sampling_backend": "pytorch",
+        "loopvq_residual_layout": "page-head",
+        "loopvq_residual_page_kernel": "cuda",
+        "triton_attention_num_kv_splits": 48
+      },
+      "batches": {
+        "1": {
+          "samples": [
+            49.15020220861585,
+            49.16235318029316,
+            49.15719883553998
+          ],
+          "median": 49.15719883553998,
+          "range_percent": 0.024718600663068344
+        },
+        "2": {
+          "samples": [
+            85.63682332915113,
+            85.63336228104919,
+            85.63411764724648
+          ],
+          "median": 85.63411764724648,
+          "range_percent": 0.004041669602058673
+        },
+        "4": {
+          "samples": [
+            168.67097592121,
+            168.650506225254,
+            168.6731275947144
+          ],
+          "median": 168.67097592121,
+          "range_percent": 0.01341153647618472
+        },
+        "8": {
+          "samples": [
+            264.7931173905931,
+            264.76892126888396,
+            264.77143229439827
+          ],
+          "median": 264.77143229439827,
+          "range_percent": 0.009138494096396135
+        },
+        "16": {
+          "samples": [
+            371.90578521203014,
+            371.9213627514721,
+            371.93154179089936
+          ],
+          "median": 371.9213627514721,
+          "range_percent": 0.006925275461101085
+        }
+      },
+      "evidence": "evidence/serving-r13-wide/n2k/summary.json"
+    },
+    "serving-r13-wide/n1k": {
+      "config": {
+        "model_path": "/dev/shm/wangruoxi-vqrq-20261127/model",
+        "tp_size": 2,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "context_length": 32768,
+        "page_size": 8,
+        "max_total_tokens": 65536,
+        "max_running_requests": 64,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 64,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32,
+              64
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "loopvq_codebook_dir": "/dev/shm/wangruoxi-vqrq-20261127/books",
+        "loopvq_residual_bits": 4,
+        "ouro_decode_profile": "optimized",
+        "loopvq_prefix_tokens": 8,
+        "loopvq_recent_tokens": 64,
+        "sampling_backend": "pytorch",
+        "loopvq_residual_layout": "page-head",
+        "loopvq_residual_page_kernel": "cuda",
+        "triton_attention_num_kv_splits": 48
+      },
+      "batches": {
+        "1": {
+          "samples": [
+            51.379266191466066,
+            51.381542190788785,
+            51.38923649887277
+          ],
+          "median": 51.381542190788785,
+          "range_percent": 0.01940445339239169
+        },
+        "4": {
+          "samples": [
+            188.25479217968171,
+            188.23106441803375,
+            188.23228271930716
+          ],
+          "median": 188.23228271930716,
+          "range_percent": 0.01260557504014579
+        },
+        "16": {
+          "samples": [
+            472.1413790694337,
+            472.117647033575,
+            472.02388319303657
+          ],
+          "median": 472.117647033575,
+          "range_percent": 0.024886991014926665
+        },
+        "32": {
+          "samples": [
+            542.7870773670411,
+            542.7559311014395,
+            542.8117600031642
+          ],
+          "median": 542.7870773670411,
+          "range_percent": 0.010285598912099434
+        }
+      },
+      "evidence": "evidence/serving-r13-wide/n1k/summary.json"
+    },
+    "serving-r13-wide/n512": {
+      "config": {
+        "model_path": "/dev/shm/wangruoxi-vqrq-20261127/model",
+        "tp_size": 2,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "context_length": 32768,
+        "page_size": 8,
+        "max_total_tokens": 65536,
+        "max_running_requests": 64,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 64,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32,
+              64
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "loopvq_codebook_dir": "/dev/shm/wangruoxi-vqrq-20261127/books",
+        "loopvq_residual_bits": 4,
+        "ouro_decode_profile": "optimized",
+        "loopvq_prefix_tokens": 8,
+        "loopvq_recent_tokens": 64,
+        "sampling_backend": "pytorch",
+        "loopvq_residual_layout": "page-head",
+        "loopvq_residual_page_kernel": "cuda",
+        "triton_attention_num_kv_splits": 48
+      },
+      "batches": {
+        "64": {
+          "samples": [
+            926.5764909288204,
+            926.3734821956459,
+            926.3322126297724
+          ],
+          "median": 926.3734821956459,
+          "range_percent": 0.026369310406967692
+        }
+      },
+      "evidence": "evidence/serving-r13-wide/n512/summary.json"
+    },
+    "serving-r13-wide/n8k": {
+      "config": {
+        "model_path": "/dev/shm/wangruoxi-vqrq-20261127/model",
+        "tp_size": 2,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "context_length": 32768,
+        "page_size": 8,
+        "max_total_tokens": 65536,
+        "max_running_requests": 64,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 64,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32,
+              64
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "loopvq_codebook_dir": "/dev/shm/wangruoxi-vqrq-20261127/books",
+        "loopvq_residual_bits": 4,
+        "ouro_decode_profile": "optimized",
+        "loopvq_prefix_tokens": 8,
+        "loopvq_recent_tokens": 64,
+        "sampling_backend": "pytorch",
+        "loopvq_residual_layout": "page-head",
+        "loopvq_residual_page_kernel": "cuda",
+        "triton_attention_num_kv_splits": 48
+      },
+      "batches": {
+        "1": {
+          "samples": [
+            38.96800369299638,
+            38.969588759437485,
+            38.97959016834515
+          ],
+          "median": 38.969588759437485,
+          "range_percent": 0.029732095507315977
+        },
+        "4": {
+          "samples": [
+            103.7873040451551,
+            103.809346217375,
+            103.76571102253874
+          ],
+          "median": 103.7873040451551,
+          "range_percent": 0.04204290229686586
+        }
+      },
+      "evidence": "evidence/serving-r13-wide/n8k/summary.json"
+    },
+    "serving-bf16-wide/n1k": {
+      "config": {
+        "model_path": "/dev/shm/wangruoxi-vqrq-20261127/model",
+        "tp_size": 2,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "context_length": 32768,
+        "page_size": 8,
+        "max_total_tokens": 65536,
+        "max_running_requests": 64,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 64,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32,
+              64
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "loopvq_codebook_dir": null,
+        "loopvq_residual_bits": 0,
+        "ouro_decode_profile": "optimized",
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "sampling_backend": "pytorch",
+        "loopvq_residual_layout": "token",
+        "loopvq_residual_page_kernel": "cuda",
+        "triton_attention_num_kv_splits": 8
+      },
+      "batches": {
+        "1": {
+          "samples": [
+            51.74374955529314,
+            51.74475965564166,
+            51.749085326015745
+          ],
+          "median": 51.74475965564166,
+          "range_percent": 0.010311712254751899
+        },
+        "4": {
+          "samples": [
+            194.1342346520532,
+            194.27104686881611,
+            194.32091360269766
+          ],
+          "median": 194.27104686881611,
+          "range_percent": 0.09609200838378469
+        },
+        "16": {
+          "samples": [
+            524.4864974726783,
+            526.4942678145868,
+            526.1297763608356
+          ],
+          "median": 526.1297763608356,
+          "range_percent": 0.3816112358810052
+        },
+        "32": {
+          "samples": [
+            774.4401621941943,
+            777.5689191038578,
+            776.3220125197047
+          ],
+          "median": 776.3220125197047,
+          "range_percent": 0.4030230831029109
+        }
+      },
+      "evidence": "evidence/serving-bf16-wide/n1k/summary.json"
+    },
+    "serving-bf16-wide/n512": {
+      "config": {
+        "model_path": "/dev/shm/wangruoxi-vqrq-20261127/model",
+        "tp_size": 2,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "context_length": 32768,
+        "page_size": 8,
+        "max_total_tokens": 65536,
+        "max_running_requests": 64,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 64,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32,
+              64
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "loopvq_codebook_dir": null,
+        "loopvq_residual_bits": 0,
+        "ouro_decode_profile": "optimized",
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "sampling_backend": "pytorch",
+        "loopvq_residual_layout": "token",
+        "loopvq_residual_page_kernel": "cuda",
+        "triton_attention_num_kv_splits": 8
+      },
+      "batches": {
+        "64": {
+          "samples": [
+            1444.304485387427,
+            1445.8518502499983,
+            1446.3999493332533
+          ],
+          "median": 1445.8518502499983,
+          "range_percent": 0.14492936779546775
+        }
+      },
+      "evidence": "evidence/serving-bf16-wide/n512/summary.json"
+    },
+    "serving-bf16-wide/n8k": {
+      "config": {
+        "model_path": "/dev/shm/wangruoxi-vqrq-20261127/model",
+        "tp_size": 2,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "context_length": 32768,
+        "page_size": 8,
+        "max_total_tokens": 65536,
+        "max_running_requests": 64,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 64,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32,
+              64
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "loopvq_codebook_dir": null,
+        "loopvq_residual_bits": 0,
+        "ouro_decode_profile": "optimized",
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "sampling_backend": "pytorch",
+        "loopvq_residual_layout": "token",
+        "loopvq_residual_page_kernel": "cuda",
+        "triton_attention_num_kv_splits": 8
+      },
+      "batches": {
+        "1": {
+          "samples": [
+            31.61974035558288,
+            31.6234578592936,
+            31.622241812471376
+          ],
+          "median": 31.622241812471376,
+          "range_percent": 0.011755977747456766
+        },
+        "4": {
+          "samples": [
+            106.11887244351577,
+            106.22391365153834,
+            106.16165686757641
+          ],
+          "median": 106.16165686757641,
+          "range_percent": 0.09894458236799727
+        }
+      },
+      "evidence": "evidence/serving-bf16-wide/n8k/summary.json"
+    },
+    "serving-bf16-wide-2k/n2k": {
+      "config": {
+        "model_path": "/dev/shm/wangruoxi-vqrq-20261127/model",
+        "tp_size": 2,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "context_length": 32768,
+        "page_size": 8,
+        "max_total_tokens": 65536,
+        "max_running_requests": 64,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 64,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32,
+              64
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "loopvq_codebook_dir": null,
+        "loopvq_residual_bits": 0,
+        "ouro_decode_profile": "optimized",
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "sampling_backend": "pytorch",
+        "loopvq_residual_layout": "token",
+        "loopvq_residual_page_kernel": "cuda",
+        "triton_attention_num_kv_splits": 8
+      },
+      "batches": {
+        "1": {
+          "samples": [
+            47.3970989380867,
+            47.42992286764633,
+            47.43091935853042
+          ],
+          "median": 47.42992286764633,
+          "range_percent": 0.07130608358376166
+        },
+        "2": {
+          "samples": [
+            90.54384747755104,
+            90.65827956580907,
+            90.70339898314448
+          ],
+          "median": 90.65827956580907,
+          "range_percent": 0.175992205408688
+        },
+        "4": {
+          "samples": [
+            170.37640089557496,
+            170.8063065482639,
+            170.6383854880674
+          ],
+          "median": 170.6383854880674,
+          "range_percent": 0.25193959229004037
+        },
+        "8": {
+          "samples": [
+            264.37830134200436,
+            263.4232880319841,
+            264.1323990958574
+          ],
+          "median": 264.1323990958574,
+          "range_percent": 0.3615661362594427
+        },
+        "16": {
+          "samples": [
+            420.34056777345955,
+            419.87970682299454,
+            418.92817647031217
+          ],
+          "median": 419.87970682299454,
+          "range_percent": 0.3363799869810804
+        }
+      },
+      "evidence": "evidence/serving-bf16-wide-2k/n2k/summary.json"
+    },
+    "serving-retained-wide/n2k": {
+      "config": {
+        "model_path": "/dev/shm/wangruoxi-vqrq-20261127/model",
+        "tp_size": 2,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "context_length": 32768,
+        "page_size": 8,
+        "max_total_tokens": 65536,
+        "max_running_requests": 64,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 64,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32,
+              64
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "loopvq_codebook_dir": "/dev/shm/wangruoxi-vqrq-20261127/books",
+        "loopvq_residual_bits": 4,
+        "ouro_decode_profile": "optimized",
+        "loopvq_prefix_tokens": 8,
+        "loopvq_recent_tokens": 64,
+        "sampling_backend": "pytorch",
+        "loopvq_residual_layout": "page-head",
+        "loopvq_residual_page_kernel": "cuda",
+        "triton_attention_num_kv_splits": 48
+      },
+      "batches": {
+        "16": {
+          "samples": [
+            372.0076325601003,
+            371.97923901639024,
+            372.00310679299207
+          ],
+          "median": 372.00310679299207,
+          "range_percent": 0.007632609295889821
+        }
+      },
+      "evidence": "evidence/serving-retained-wide/n2k/summary.json"
+    },
+    "serving-retained-small/output32": {
+      "config": {
+        "model_path": "/dev/shm/wangruoxi-vqrq-20261127/model",
+        "tp_size": 2,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "context_length": 16384,
+        "page_size": 8,
+        "max_total_tokens": 32768,
+        "max_running_requests": 16,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 16,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "loopvq_codebook_dir": "/dev/shm/wangruoxi-vqrq-20261127/books",
+        "loopvq_residual_bits": 4,
+        "ouro_decode_profile": "optimized",
+        "loopvq_prefix_tokens": 8,
+        "loopvq_recent_tokens": 64,
+        "sampling_backend": "pytorch",
+        "loopvq_residual_layout": "page-head",
+        "loopvq_residual_page_kernel": "cuda",
+        "triton_attention_num_kv_splits": 48
+      },
+      "batches": {
+        "16": {
+          "samples": [
+            476.71745951975686,
+            476.77005377274514,
+            476.6162725735841
+          ],
+          "median": 476.71745951975686,
+          "range_percent": 0.03225835263427009
+        }
+      },
+      "evidence": "evidence/serving-retained-small/output32/summary.json"
+    },
+    "serving-retained-small/output128": {
+      "config": {
+        "model_path": "/dev/shm/wangruoxi-vqrq-20261127/model",
+        "tp_size": 2,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "context_length": 16384,
+        "page_size": 8,
+        "max_total_tokens": 32768,
+        "max_running_requests": 16,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 16,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "loopvq_codebook_dir": "/dev/shm/wangruoxi-vqrq-20261127/books",
+        "loopvq_residual_bits": 4,
+        "ouro_decode_profile": "optimized",
+        "loopvq_prefix_tokens": 8,
+        "loopvq_recent_tokens": 64,
+        "sampling_backend": "pytorch",
+        "loopvq_residual_layout": "page-head",
+        "loopvq_residual_page_kernel": "cuda",
+        "triton_attention_num_kv_splits": 48
+      },
+      "batches": {
+        "1": {
+          "samples": [
+            51.30979113433542,
+            51.310896142312984,
+            51.304402684023636
+          ],
+          "median": 51.30979113433542,
+          "range_percent": 0.012655398016234115
+        },
+        "4": {
+          "samples": [
+            188.6695319263939,
+            188.66704243664594,
+            188.65288553508387
+          ],
+          "median": 188.66704243664594,
+          "range_percent": 0.00882315803281254
+        },
+        "16": {
+          "samples": [
+            472.21785301681103,
+            472.2118362773104,
+            472.1580929356173
+          ],
+          "median": 472.2118362773104,
+          "range_percent": 0.012655354356400245
+        }
+      },
+      "evidence": "evidence/serving-retained-small/output128/summary.json"
+    },
+    "serving-retained-small/output256": {
+      "config": {
+        "model_path": "/dev/shm/wangruoxi-vqrq-20261127/model",
+        "tp_size": 2,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "context_length": 16384,
+        "page_size": 8,
+        "max_total_tokens": 32768,
+        "max_running_requests": 16,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 16,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "loopvq_codebook_dir": "/dev/shm/wangruoxi-vqrq-20261127/books",
+        "loopvq_residual_bits": 4,
+        "ouro_decode_profile": "optimized",
+        "loopvq_prefix_tokens": 8,
+        "loopvq_recent_tokens": 64,
+        "sampling_backend": "pytorch",
+        "loopvq_residual_layout": "page-head",
+        "loopvq_residual_page_kernel": "cuda",
+        "triton_attention_num_kv_splits": 48
+      },
+      "batches": {
+        "16": {
+          "samples": [
+            463.1679399993689,
+            463.14306807396855,
+            463.179779131045
+          ],
+          "median": 463.1679399993689,
+          "range_percent": 0.007926079053851462
+        }
+      },
+      "evidence": "evidence/serving-retained-small/output256/summary.json"
+    },
+    "serving-bf16-small/output32": {
+      "config": {
+        "model_path": "/dev/shm/wangruoxi-vqrq-20261127/model",
+        "tp_size": 2,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "context_length": 16384,
+        "page_size": 8,
+        "max_total_tokens": 32768,
+        "max_running_requests": 16,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 16,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "loopvq_codebook_dir": null,
+        "loopvq_residual_bits": 0,
+        "ouro_decode_profile": "optimized",
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "sampling_backend": "pytorch",
+        "loopvq_residual_layout": "token",
+        "loopvq_residual_page_kernel": "cuda",
+        "triton_attention_num_kv_splits": 8
+      },
+      "batches": {
+        "16": {
+          "samples": [
+            545.5778294993169,
+            544.679952162152,
+            545.1543137354852
+          ],
+          "median": 545.1543137354852,
+          "range_percent": 0.16470150094062613
+        }
+      },
+      "evidence": "evidence/serving-bf16-small/output32/summary.json"
+    },
+    "serving-bf16-small/output128": {
+      "config": {
+        "model_path": "/dev/shm/wangruoxi-vqrq-20261127/model",
+        "tp_size": 2,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "context_length": 16384,
+        "page_size": 8,
+        "max_total_tokens": 32768,
+        "max_running_requests": 16,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 16,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "loopvq_codebook_dir": null,
+        "loopvq_residual_bits": 0,
+        "ouro_decode_profile": "optimized",
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "sampling_backend": "pytorch",
+        "loopvq_residual_layout": "token",
+        "loopvq_residual_page_kernel": "cuda",
+        "triton_attention_num_kv_splits": 8
+      },
+      "batches": {
+        "1": {
+          "samples": [
+            51.784023090813434,
+            51.78922490811944,
+            51.79100015919712
+          ],
+          "median": 51.78922490811944,
+          "range_percent": 0.013472046349528899
+        },
+        "4": {
+          "samples": [
+            193.3073731271939,
+            193.807086982747,
+            193.70726378884285
+          ],
+          "median": 193.70726378884285,
+          "range_percent": 0.25797373096851267
+        },
+        "16": {
+          "samples": [
+            525.1140848277132,
+            525.2474108615104,
+            524.4833235343489
+          ],
+          "median": 525.1140848277132,
+          "range_percent": 0.14550882355635378
+        }
+      },
+      "evidence": "evidence/serving-bf16-small/output128/summary.json"
+    },
+    "serving-bf16-small/output256": {
+      "config": {
+        "model_path": "/dev/shm/wangruoxi-vqrq-20261127/model",
+        "tp_size": 2,
+        "dp_size": 1,
+        "dtype": "bfloat16",
+        "context_length": 16384,
+        "page_size": 8,
+        "max_total_tokens": 32768,
+        "max_running_requests": 16,
+        "cuda_graph_config": {
+          "decode": {
+            "backend": "full",
+            "max_bs": 16,
+            "bs": [
+              1,
+              2,
+              4,
+              8,
+              16
+            ],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          },
+          "prefill": {
+            "backend": "disabled",
+            "max_bs": -1,
+            "bs": [],
+            "tc_compiler": "eager",
+            "max_context_size": null,
+            "full_prefill_max_req": null,
+            "full_prefill_prefix_chunk_tokens": null,
+            "max_seq_len": null
+          }
+        },
+        "loopvq_codebook_dir": null,
+        "loopvq_residual_bits": 0,
+        "ouro_decode_profile": "optimized",
+        "loopvq_prefix_tokens": 64,
+        "loopvq_recent_tokens": 256,
+        "sampling_backend": "pytorch",
+        "loopvq_residual_layout": "token",
+        "loopvq_residual_page_kernel": "cuda",
+        "triton_attention_num_kv_splits": 8
+      },
+      "batches": {
+        "16": {
+          "samples": [
+            515.758634346706,
+            515.5691432314558,
+            515.8771492407786
+          ],
+          "median": 515.758634346706,
+          "range_percent": 0.05971902142036022
+        }
+      },
+      "evidence": "evidence/serving-bf16-small/output256/summary.json"
+    }
+  },
+  "limitations": [
+    "No valid NCU counter report",
+    "No GPU other than A800 validated",
+    "Retained default still has historical SM80/108SM/shape guard",
+    "No relaxed codec, numerics or greedy acceptance",
+    "Large batch kernel fixtures repeat16 verified unique requests; full serving repeats a benchmark prompt"
+  ],
+  "retained_vs_bf16_b16_percent": -11.402456287363616,
+  "small_capacity_comparison": [
+    {
+      "batch": 16,
+      "input_tokens": 1024,
+      "output_tokens": 32,
+      "vq_tokens_s": 476.71745951975686,
+      "bf16_tokens_s": 545.1543137354852,
+      "vq_delta_percent": -12.553666455794499
+    },
+    {
+      "batch": 1,
+      "input_tokens": 1024,
+      "output_tokens": 128,
+      "vq_tokens_s": 51.30979113433542,
+      "bf16_tokens_s": 51.78922490811944,
+      "vq_delta_percent": -0.9257403922043439
+    },
+    {
+      "batch": 4,
+      "input_tokens": 1024,
+      "output_tokens": 128,
+      "vq_tokens_s": 188.66704243664594,
+      "bf16_tokens_s": 193.70726378884285,
+      "vq_delta_percent": -2.601978497662938
+    },
+    {
+      "batch": 16,
+      "input_tokens": 1024,
+      "output_tokens": 128,
+      "vq_tokens_s": 472.2118362773104,
+      "bf16_tokens_s": 525.1140848277132,
+      "vq_delta_percent": -10.074429553295971
+    },
+    {
+      "batch": 16,
+      "input_tokens": 1024,
+      "output_tokens": 256,
+      "vq_tokens_s": 463.1679399993689,
+      "bf16_tokens_s": 515.758634346706,
+      "vq_delta_percent": -10.196764696717475
+    }
+  ],
+  "final_validation": {
+    "boundaries": 100,
+    "lifecycle": "pass",
+    "wide_greedy": "pass B32/N1K B64/N512 unevenB32",
+    "small_capacity_lifecycle": "pass",
+    "small_capacity_timing": "all3 output budgets passed",
+    "cupti_payload_calls_per_rank": 1920,
+    "cupti_adaptive_calls": 0,
+    "servers_stopped": true,
+    "gpu_compute_process_list": "empty",
+    "port_30664": "released"
+  }
+}

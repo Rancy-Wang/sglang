@@ -1,3 +1,39 @@
+# R14–R20 final disposition and follow-up plan
+
+All20 optimization rounds have been used. R19/R20 passed kernel tests but failed the predeclared wide full-model greedy gate. Default dispatch was restored in `dedf55fff` to accepted R13; experimental adaptive code remains explicit opt-in. No R21 is authorized. [Continuation review](continuation-review.md) supersedes the historical status below. Restoration validation, all matched resource/output-budget scenarios, evidence archival and own-service cleanup are complete. The performance/generalization objective remains unmet; no new optimization is authorized.
+
+## Completed validation sequence
+
+1. Frozen R13 A/B/A wide greedy against its saved reference: completed, all cases pass.
+2. R20 original lifecycle: pass; wide B32/N1024: fail. Save failed outputs; do not run it as an accepted throughput candidate.
+3. Rollback source: compare retained payload/encoder bytes to R13, check disabled adaptive default; run unchanged `run_isolated.py check_paged.py --layout 2 --group-size 0` and fresh full-server lifecycle/wide greedy. Run B16/2K timing only after GPU boundary checks finish.
+4. Match BF16 maxrunning64/KV65536/context32768 for the 2K reference. Earlier R13/BF16 wide1K/B32,512/B64,8K/B1/4 completed.
+5. Smaller capacity: KV32768/context16384/maxrunning16/graphs1,2,4,8,16, same GPU2/3, VQ retained vs BF16. Existing `check_serving.py --suite timing --input-length 1024 --batches 1 4 16 --output-length 128`, then B16 with `--output-length 32` and `256`; three repeats each. Existing lifecycle check first. No profiler or other GPU jobs during pure timing.
+6. Archive source identities, raw SSE, batch/Graph evidence, failures, sanitizer/resources/SASS and summaries. Stop only own test services; retain persistent SSH. Commit only task source/docs on loopspec-test, never promote formal loopspec.
+
+## First future experiment (requires a new optimization budget)
+
+Use an explicit logical reduction topology while varying physical CTA size. Candidate location: `python/sglang/kernels/ops/loopvq/residual_attention_adaptive_cuda.py::source_for/prepare`; retained control: `residual_attention_payload_cuda.py` and original fallback in `ResidualAttention.forward`. Preserve each accumulator's token order, logical warp reduction and split merge order. Start with256 physical threads emulating the512-thread control's logical groups. Resource-derived physical scheduling must not silently redefine floating-point grouping. Performance is unknown; extra logical-state storage can erase occupancy benefits.
+
+Before performance, add task-local bit-pattern diagnostics against frozen R13 for output/LSE and partials with identical logical splits. Keep independent tolerance/finite checks unchanged. Existing real-input harness commands from the target repository (RUN is the existing remote `/dev/shm/wangruoxi-vqrq-20261127`, TASK is this task's absolute directory):
+
+```sh
+CUDA_VISIBLE_DEVICES=0 "$RUN/serve-env/bin/python" "$TASK/integration_probe.py" \
+  --snapshot "$RUN/2k" --book "$RUN/books" --output "$RUN/future-topology-2k.json" \
+  --batches 16 --loops 0 1 2 3
+CUDA_VISIBLE_DEVICES=0 "$RUN/serve-env/bin/python" "$TASK/integration_probe.py" \
+  --snapshot "$RUN/1024" --book "$RUN/books" --output "$RUN/future-topology-1k.json" \
+  --batches 32 --loops 0 --repeat-requests
+```
+
+These harnesses exist; the new topology and bit-pattern diagnostic are proposed, not implemented. Follow with derived2080, all existing boundary/uneven/Graph/padding/memcheck checks, then unchanged full-service lifecycle and `wide_greedy.py --reference "$RUN/serving-r13-wide/wide-greedy"`. Reject any contract failure before acceptance timing. Final promotion still needs ≥5%B16 full-serving gain and ≤5% regression across matched validated scenarios, using complete service decode throughput,3repeats/warmup and original scheduler proof. Expand other GPUs only after compiling/querying their actual resources and validating complete backend support; synthetic occupancy invariants cannot stand in for hardware validation.
+
+Essential unknowns: exact logit-level cause of R19/R20 greedy divergence; whether topology-preserving physical remapping saves enough resources; real performance on any GPU other than A800; hardware cache/warp counters currently unavailable. NCU is helpful but not a prerequisite for the proposed controlled experiment. Post-RoPE retraining, altered rounding, and relaxed accumulation are outside the current contract.
+
+---
+
+The following is the historical plan and R13 acceptance record, retained for provenance.
+
 # Generalization requirement (user steering during R17/R18)
 
 No final B16/108-SM-only policy. Fixed splits are ablations. Select geometry/splits from actual device resources and shape; preserve unverified-device fallback. Validate B1/2/3/4/8/16/32/64, short/long and uneven lengths, graph padding, and capacity limits where memory permits. B>16 fixtures explicitly repeat verified captured requests. Extend matched full-service scenarios to B32/N1K and B64/N512 with matching max-running/graph/KV limits. Cross-GPU portability is a design requirement; performance remains unverified without hardware measurement. Current accessible measured hardware is A800/SM80. No relaxed trained or numerical contract.

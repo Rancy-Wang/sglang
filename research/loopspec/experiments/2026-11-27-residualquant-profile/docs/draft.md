@@ -1,3 +1,5 @@
+> Continuation status: all20 rounds are now consumed; R19/R20 failed full-model wide greedy and default dispatch was restored to R13. See [R14–R20 review](continuation-review.md) and [current plan](plan.md) for the latest validation status. The text below records the earlier R13 stage.
+
 # ResidualQuant / VQ+ investigation
 
 Date: 2026-11-27. New user authorization: up to 20 additional implementation/validation rounds. Earlier completed 10-round records remain unchanged. No global-optimum claim is possible from a bounded search.
