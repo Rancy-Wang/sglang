@@ -46,7 +46,7 @@ def main():
                 subprocess.run(base+['--suite','profile','--out',str(work/'boundary-profile'),
                     '--input-length','32760','--output-length','128','--batches','4'],env=env,check=True)
                 subprocess.run(base+['--suite','timing','--out',str(work/'near40k'),
-                    '--input-length','40928','--output-length','32','--batches','1','--repeats','1'],env=env,check=True)
+                    '--input-length','40920','--output-length','32','--batches','1','--repeats','1'],env=env,check=True)
             stop(server);server=None
             deadline=time.time()+120
             while output(['nvidia-smi','-i',a.gpus,'--query-compute-apps=pid','--format=csv,noheader']):

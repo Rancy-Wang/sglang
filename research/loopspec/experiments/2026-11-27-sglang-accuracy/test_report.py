@@ -27,7 +27,7 @@ class EvidenceTests(unittest.TestCase):
             responses=cell/'http/responses';responses.mkdir(parents=True)
             for i in range(30):
                 save(responses/f'{i}.json',{'payload':{'temperature':0.,'top_p':1.,'max_tokens':32768,'seed':0,'chat_template_kwargs':{'enable_thinking':True}},
-                    'input_token_ids':[i], 'response':{'usage':{'prompt_tokens':1},'choices':[{'finish_reason':'length' if i==0 else 'stop'}]}})
+                    'input_token_ids':[i], 'response':{'usage':{'prompt_tokens':1,'completion_tokens':32768},'choices':[{'finish_reason':'length' if i==0 else 'stop'}]}})
             scores=collect_cell(cell,stem,'aime24',30)
             save(cell/'complete.json',{'audit':False,'exit_code':0,'method':'bf16','benchmark':'aime24','seed':0,'scores':scores})
             save(root/'recipe.json',{'temperature':0.,'top_p':1.,'max_tokens':32768,'tokenizer_files':{},'sources':{},'packages':{},

@@ -42,8 +42,10 @@ def checked(path, arm, bench, collect_cell):
         assert payload['temperature'] == 0 and payload['top_p'] == 1 and payload['max_tokens'] == 32768
         assert payload['seed'] == 0 and payload['chat_template_kwargs']['enable_thinking'] is True
         assert body['usage']['prompt_tokens'] == len(r['input_token_ids'])
-        assert len(r['input_token_ids']) + 32768 <= 40960
-        truncated += body['choices'][0]['finish_reason'] == 'length'
+        assert len(r['input_token_ids']) + 32768 <= 40958
+        if body['choices'][0]['finish_reason'] == 'length':
+            assert body['usage']['completion_tokens'] == 32768, 'Output budget was shortened'
+            truncated += 1
         identities.append((r['input_token_ids'], payload.get('stop')))
     identities.sort(key=lambda x: json.dumps(x))
     shared = {k: recipe[k] for k in ('tokenizer_files', 'sources', 'packages')}
