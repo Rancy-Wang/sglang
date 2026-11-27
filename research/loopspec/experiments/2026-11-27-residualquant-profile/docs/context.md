@@ -1,3 +1,7 @@
+# Active continuation checkpoint
+
+User explicitly requires finishingremaining7rounds14–20 withoutwaitingNCU; samecontract/fullservingacceptance. CurrentR14compact-gridplan recordedbeforeedits. NewBUS2session20202/socket/tmp/vqrq-r14-bus2.sock (oldsession/socketgone); samehost/RUN/environments/model,8GPUsidleverified. BaselineR13worktree4743e9430 retained. Currentlocal/remote main02b14ef71 beforeR14. Sourceonlylocal/Gitsync; no subagents. Historicalcheckpointbelow describes completedR1–13.
+
 # Final task context
 
 Completed13 of maximum20 newly authorized rounds; earlier budgets immutable. Retained runtime source4743e9430 on local/fork loopspec-test. Analysis/results commit777c5bb1a is pushed and synchronized to remote main; production code is unchanged from4743e9430. No formal loopspec promotion. No subagents. All candidate plans/results in ../record.md; detailed conclusions in design-review.md; reproducible acceptance in plan.md.

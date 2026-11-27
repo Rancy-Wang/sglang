@@ -202,3 +202,17 @@ R13 full-serving acceptance: source4743e9430 vs original-production56fbb58de, sa
 
 
 Final R13 BF16 reference: sameGPU2/3/environment/model/seed/input, TP2/R4, noVQflags/nativeKVsplit8. Lifecycle/timing/profile all exit0. B1/2/4/8/16 medians47.368/90.435/170.092/262.932/419.645 token/s. CandidateB16 remains11.41% belowBF16, B4/B8nearparity. BF16trace stage1meanTP0/1=103.910/103.568us,1920calls each; candidate127.557/127.834us. All15samples/method verified full targetbatch+CUDA Graph; identicalinputfixtures checked locally. BothVQservinggreedyIDsidentical. Alltaskservers stopped cleanly; GPUcomputeprocesslist empty,port30664released. Round13acceptedbestmeasured undercurrentcodec,notglobaloptimum. Analysis-only analyze_serving.py added to reproduce tables/tracegrouping withoutaltering evaluator. Completeevidence archivedlocally; formalbranchunchanged.
+
+
+## Continuation authorization — finish rounds14–20
+
+User explicitly requests using all remaining7 rounds, focusing B16 versus BF16, preserving numerical/training contract and accepting by full-serving throughput. NCU is not a prerequisite. R13/source4743e9430 is frozen retained baseline. Previous rounds/budgets remain immutable. Recovered BUS2 persistent session after old handle/socket disappeared; host/model/environments unchanged, all8GPUs idle. New session20202/socket/tmp/vqrq-r14-bus2.sock.
+
+## Round14/20 — compact split grid (before edits)
+
+1. Purpose: isolate excess CTA launch/empty-partial overhead in fixed32-split R13. B16×H8 launches4096CTAs although typicalactive=5 requires640. This is source-derived, not measured stall attribution.
+2. Steps: experimental source transformation loops split=blockIdx.z;split<32;split+=gridDim.z withgrid8/16/32. Keep original active partition policy, elementwise math, dot/reduction ordering, all32partial/LSEwrites. Add CTA barrier after completed activeiteration to protect reused sharedmemory; emptyiteration continue uniform acrossCTA. Compareloopgrid32 toR13 toidentifyloop overhead. Refreshsamehost R13 full-serving baseline whilelocalimplementationproceeds; useCUDA13/int64micro toalign productiontoolchain.
+3. Scope: newtaskcontinuation_source.py andcontinuation_probe.py only; productioncodeunchanged. Probe usesexistingreal snapshots/oracle/pairedtimer; optionalprefixlength2080from4096snapshot is explicitly a derived cache-prefix fixture (queryretainedfromsource), not an actual2080decode capture. Preservefullmatrix/fullservingharness.
+4. Success: unchangedoutput.002/.01,LSE2e-5,all32partialoverwrite; zero spills; materialpairedgainoverR13 (>3%screening) and≥5%B16full-servingimprovementbeforepromotion, withsmallbatchguard/no>5%regression. BF16parity remainsobjective,notpromised.
+5. Risks: shared-memoryreusebarrier, extra loopregisters/spills, longcontextsrequiremultipleactiveiterationsandcanloseparallelism, graphpadding. Anyfailurefixcountsnextnewround.
+6. Validation:sourceanchor/syntaxchecks,Gitpush/pull,CUDA13realB16N2048/derived2080/8192,int64LOC,all4loopsat2K; unchangedindependentoracle/LSE/NaNpartials,30pairedgraphs×32inner. Resource/SASSinspection. Broaderboundary/memcheck/fullservingneededforretainedimplementation. No NCU dependence.

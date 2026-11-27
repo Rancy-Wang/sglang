@@ -1,3 +1,7 @@
+# Continuation plan: rounds14–20
+
+User requests all remaining7 rounds, targeting B16’s11.4%full-serving deficit toBF16. Current round14 compact-grid experiment is specified in record.md. KeepR13/source4743e9430 as immutable comparison, preserve trainedpre-RoPE/INT4/FP32/BF16contract. No NCU prerequisite. Screen with CUDA13/int64 real-input matched ablations, reject failures before performance; reserve final integration/guard and fullservingvalidation withinround20. Adaptive nextcandidate depends onmeasuredresults; eachsource/test/behaviorchangegetsnextnumberand six-partplan. Full-servinggo/no-go usesunchangedcheck_serving.py lifecycle/tokenIDs andB1/2/4/8/16 timing, sameGPU2/3/model/input/seed/environment. Historicalcompletedplanbelowisretainedasevidence, notcurrentstoppingrule.
+
 # Executable plan and acceptance record
 
 Status: **complete for the retained R13 implementation**, after 13 of the newly authorized maximum20 rounds. Runtime source `4743e9430`; original-production control `56fbb58de`. Earlier budgets and rejected candidates remain in `../record.md`. The best measured candidate passes the agreed kernel and full-serving gates; it is not a global-optimum claim and B16 throughput remains below native BF16.

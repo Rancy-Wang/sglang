@@ -40,3 +40,6 @@ RQ prepare.cuh::rotate_queries does use Tensor Cores: shared FP16 rotation weigh
 ## Hardware
 
 User-named BUS hosts are A800-SXM4-80GB, driver535.161.08. InfiniAI-BUS-2 currently has all eight GPUs idle; sudo authenticated and root identity verified. CUDA12.2/NCU2023.2.2 installed. Root counter probes on all three user-named hosts returned ERR_NVGPUCTRPERM; container capabilities omit SYS_ADMIN. No hardware counter report exists. Use a compatible task environment and remeasure every baseline on this host. Do not alter system driver settings or touch other jobs.
+
+
+Continuation: user requires rounds14–20; no counter-access wait. First hypothesis is fixed32-grid empty CTA overhead; follow with measured QK/PV instruction and scheduling ablations, then full-serving acceptance against frozen R13 and native BF16. Runtime/compiler/inputs were revalidated on BUS2.
