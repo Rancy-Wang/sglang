@@ -11,6 +11,20 @@ import check_residual as ref
 from check_paged import packed_pool
 
 
+def bounded_oracle(q, pool, ptr, loc, rope, return_lse=False):
+    # Keep sanitizer reference temporaries bounded without changing the tested
+    # full-batch kernel, request data, oracle mathematics or assertions.
+    outputs, lses = [], []
+    for b in range(q.shape[0]):
+        lo, hi = int(ptr[b]), int(ptr[b + 1])
+        p = ptr[b:b+2] - lo
+        out, lse = ref.oracle(q[b:b+1], pool, p, loc[lo:hi], rope, return_lse=True)
+        outputs.append(out[0]); lses.append(lse[0])
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+    return (torch.stack(outputs), torch.stack(lses)) if return_lse else torch.stack(outputs)
+
+
 @torch.inference_mode()
 def main():
     ap = argparse.ArgumentParser()
@@ -36,7 +50,7 @@ def main():
                                      pool.hp_global_offset, 'page8')
             new.partial.fill_(float('nan')); new.lse.fill_(float('nan'))
             new.group_partial.fill_(float('nan')); new.group_lse.fill_(float('nan'))
-            expected, lse = ref.oracle(q, original, ptr, loc, rope, return_lse=True)
+            expected, lse = bounded_oracle(q, original, ptr, loc, rope, return_lse=True)
             got = new.forward(q, 0, ptr, loc, rope, 128 ** -.5)
             torch.testing.assert_close(got, expected, atol=.002, rtol=.01)
             scratch = new.group_lse if new.use_grouped(batch) else new.lse
@@ -60,7 +74,7 @@ def main():
         ptr.copy_(p); loc[:len(l)].copy_(l)
         new.partial.fill_(float('nan')); new.lse.fill_(float('nan'))
         graph.replay()
-        torch.testing.assert_close(got, ref.oracle(q, original, ptr, loc, rope), atol=.002, rtol=.01)
+        torch.testing.assert_close(got, bounded_oracle(q, original, ptr, loc, rope), atol=.002, rtol=.01)
     loc.zero_(); graph.replay(); assert not got.any()
     graph.reset()
     args.output.write_text(json.dumps({'passed': True, 'capacity': new.payload_capacity,

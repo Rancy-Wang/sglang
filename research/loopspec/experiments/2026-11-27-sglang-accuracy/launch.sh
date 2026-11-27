@@ -15,7 +15,7 @@ trap 'echo $? > "$vq_root/pipeline.exit"' EXIT
 [[ -z "$(git status --porcelain --untracked-files=no)" ]]
 git rev-parse HEAD > "$vq_root/pipeline.sha"
 printf 'context\n' > "$vq_root/pipeline.phase"
-CUDA_VISIBLE_DEVICES=6 "$LOOPVQ_PYTHON" -u "$vq_scripts/check_context.py" --output "$vq_root/context-validation.json" > "$vq_root/context-r2.log" 2>&1
+CUDA_VISIBLE_DEVICES=6 "$LOOPVQ_PYTHON" -u "$vq_scripts/check_context.py" --output "$vq_root/context-validation.json" > "$vq_root/context-r3.log" 2>&1
 printf 'memcheck\n' > "$vq_root/pipeline.phase"
 set +e
 CUDA_VISIBLE_DEVICES=6 compute-sanitizer --tool memcheck --error-exitcode 97 "$LOOPVQ_PYTHON" -u "$vq_scripts/check_context.py" --output "$vq_root/context-memcheck.json" > "$vq_root/context-memcheck.log" 2>&1
