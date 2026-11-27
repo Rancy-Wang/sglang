@@ -45,6 +45,18 @@ def source_for(min_blocks):
                            "int64_t offset, double scale, int64_t target, torch::Tensor policy) {")
     source = _replace_once(source, "q.stride(1), scale, target)",
                            "q.stride(1), scale, target, policy.data_ptr<uint8_t>())")
+    helper = r'''
+__device__ __forceinline__ float signed_nibble_float(unsigned word, int shift) {
+    const unsigned nibble = ((word >> shift) & 15u) ^ 8u;
+    return __fsub_rn(__uint_as_float(0x4b000000u | nibble), 8388616.0f);
+}
+'''
+    source = _replace_once(source, '__device__ __forceinline__ void pair8(',
+                           helper + '\n__device__ __forceinline__ void pair8(')
+    for name, word in (('r0', 'z0'), ('r1', 'z1'), ('r', 'z')):
+        source = _replace_once(source,
+            f'const int {name} = (int)({word} << (28 - j * 4)) >> 28;',
+            f'const float {name} = signed_nibble_float({word}, j * 4);')
     return source.replace("payload_stage1", "adaptive_stage1")
 
 
@@ -86,7 +98,7 @@ def prepare(device, max_batch, heads):
             if key not in _EXTENSIONS:
                 from torch.utils.cpp_extension import load_inline
                 _EXTENSIONS[key] = load_inline(
-                    name=f"loopvq_adaptive_r1_sm{arch}_t{threads}_b{blocks}",
+                    name=f"loopvq_adaptive_r2_sm{arch}_t{threads}_b{blocks}",
                     cpp_sources="#include <torch/extension.h>\nvoid residual_init();\n"
                         "int64_t residual_capacity();\nvoid residual_cuda(" +
                         ",".join(["torch::Tensor"] * 16) +

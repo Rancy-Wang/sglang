@@ -1,6 +1,7 @@
 """Actual production dispatch: paired original/payload/native real-input replay."""
 import argparse
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import subprocess
@@ -23,6 +24,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--batches", type=int, nargs="+", default=[1, 2, 3, 4, 5, 8, 15, 16])
     parser.add_argument("--loops", type=int, nargs="+", default=[0])
+    parser.add_argument("--control-root", type=Path)
     parser.add_argument("--repeat-requests", action="store_true")
     parser.add_argument("--loc-bits", type=int, choices=[32, 64], default=64)
     parser.add_argument("--length", type=int)
@@ -48,6 +50,14 @@ def main():
         assert args.repeat_requests
         rows = (rows * ((max(args.batches) + unique_requests - 1) // unique_requests))[:max(args.batches)]
     assert len(rows) == max(args.batches)
+    control_module = None
+    control_sha = None
+    if args.control_root:
+        control_path = args.control_root / 'python/sglang/kernels/ops/loopvq/residual_attention_adaptive_cuda.py'
+        spec = importlib.util.spec_from_file_location('sglang.kernels.ops.loopvq._frozen_control', control_path)
+        control_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(control_module)
+        control_sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=args.control_root, text=True).strip()
     tables = {}
     for kind, name in (("k", "codebook.pt"), ("v", "vq_v_codebook.pt")):
         path = args.book / name
@@ -58,7 +68,7 @@ def main():
         del blob
     rope = torch.load(args.snapshot / "rope.pt", weights_only=True)[:n].cuda()
     result = dict(source_sha=subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-                  manifest=manifest, length=n, derived_prefix=bool(args.length),
+                  control_sha=control_sha, manifest=manifest, length=n, derived_prefix=bool(args.length),
                   unique_requests=unique_requests, repeated_requests=args.repeat_requests,
                   loc_bits=args.loc_bits, layer=args.layer, torch=torch.__version__,
                   gpu=torch.cuda.get_device_name(), cases=[], passed=False)
@@ -72,6 +82,10 @@ def main():
                                     global_table=True, layout=2, payload=enabled, adaptive=name == "payload")
             for name, enabled in (("original", False), ("r13", True), ("payload", True))
         }
+        if control_module:
+            readers['r19'] = ResidualAttention(page, max_batch=b, max_context_len=32768,
+                                              global_table=True, layout=2, adaptive=False)
+            readers['r19'].adaptive_extension = control_module.prepare(page.hp_k.device, b, page.head_num)
         for loop in args.loops:
             q = queries[loop]
             k, v = reference.materialize(pool, raw, loop, rope, loc, n)
