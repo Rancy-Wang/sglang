@@ -25,6 +25,7 @@ def main():
     parser.add_argument('--batches', type=int, nargs='+', default=[16])
     parser.add_argument('--loops', type=int, nargs='+', default=[0])
     parser.add_argument('--modes', nargs='+', default=['grid8', 'grid16', 'grid32'])
+    parser.add_argument('--targets', type=int, nargs='+')
     parser.add_argument('--length', type=int)
     parser.add_argument('--layer', type=int, default=23)
     parser.add_argument('--repeats', type=int, default=30)
@@ -34,6 +35,9 @@ def main():
     manifest = json.loads((args.snapshot / 'manifest.json').read_text())
     n = args.length or manifest['length']
     assert 80 <= n <= manifest['length'] and n % 8 == 0
+    assert args.targets is None or all(1 <= t <= 32 for t in args.targets)
+    variants = {f'{mode}_s{target}': (mode, target) for mode in args.modes
+                for target in args.targets} if args.targets else {mode: (mode, None) for mode in args.modes}
     rows = []
     for item in sorted((x for x in manifest['files'] if x['layer'] == args.layer),
                        key=lambda x: x['request'])[:max(args.batches)]:
@@ -61,7 +65,7 @@ def main():
                                                      text=True).strip(),
                   manifest=manifest, length=n, derived_prefix=bool(args.length),
                   loc_bits=args.loc_bits, torch=torch.__version__, cuda=torch.version.cuda,
-                  modes=args.modes, capacities={m: e.residual_capacity() for m,e in extensions.items()},
+                  modes=args.modes, targets=args.targets, capacities={m: e.residual_capacity() for m,e in extensions.items()},
                   cases=[], passed=False)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     for b in args.batches:
@@ -70,10 +74,11 @@ def main():
         loc = loc.long() if args.loc_bits == 64 else loc
         readers = {mode: ResidualAttention(page, max_batch=b, max_context_len=32768,
                                           global_table=True, layout=2)
-                   for mode in ['r13', *args.modes]}
-        for mode in args.modes:
-            readers[mode].payload_extension = extensions[mode]
-            readers[mode].payload_capacity = 324
+                   for mode in ['r13', *variants]}
+        for name, (mode, target) in variants.items():
+            readers[name].payload_extension = extensions[mode]
+            # Experimental explicit target; forward negates this field.
+            readers[name].payload_capacity = -target if target is not None else 324
         for loop in args.loops:
             q = queries[loop]
             k,v = reference.materialize(pool, raw, loop, rope, loc, n)

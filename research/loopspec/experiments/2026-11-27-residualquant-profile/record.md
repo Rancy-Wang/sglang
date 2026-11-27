@@ -252,3 +252,14 @@ R15 final2f314d68e:all2Kfourloops/derived2080/8K output/LSE/partialchecks pass. 
 4. Success: unchangedoutput.002/.01,LSE2e-5,allpartialwrites;zero-spillcandidate,>3%pairedgain,≥5%B16full-servinggainbeforepromotion. Recordactualoccupancy ratherthanassuminglaunchboundsachieved.
 5. Risks: sharedloadinstructioncost/bankconflicts, compilerlivenesselsewhere,b4spill;PV8changesassociationwithsameexistingtolerancesandfullgreedyrequirement. NoNCUstallclaims.
 6. Validation:localAST/sourceanchorchecks,Gitpush/pull,unchangedCUDA13/int64real2Kfourloops/derived2080/8K paired30×32timingandindependentoracle;compiledresources/SASS. Retainedcandidate receivesboundary/Graph/memcheck/fullservingchecks.
+
+R16 final4a9042594:all2Kfourloops/derived2080/8Kcorrectness/LSE/partialchecks pass. 2Kloop0R13=128.166,pv8=136.236,pv8_pack=135.817,pv8_b4=127.546us;2080R13=128.715,b4=128.453;8KR13=438.081,b4=421.874. pv8/pack40regs0stackbothwidths; b4int64=32regs0stack,int32=32regs16Bstack; capacity432forb4. No standalonepromotion:targetservinglengthbenefit<1%,int32spills. Retainb4as schedulingcontrol. R15SASSstaticF2FPcounts(twoinstantiations):R13=80,QK72,PV64,both56;PV/bothLDL10/STL6. Staticcountsnotdynamictraffic.
+
+## Round18/20 — match CTA geometry and split count (before edits)
+
+1. Purpose: testwavepackingafterregisterreduction. R13has640activeCTAsatB16N2K butcapacity324;256threadswith40registersmayfit648CTAs. R16PV8b4capacity432retainsoldtarget5. Measuredcapacity,notlaunchbounds,willvalidateexpectation.
+2. Steps: newgeometrymodesgeom_pv16_t256_b6,geom_pv16_t128_b12,geom_pv8_t256_b8 plusretainedpv8_b4. Probeexplicit targets3/5/10/20,minimumceilN1024stillenforced. KeepR13dynamiccontrol/nativeBF16samecallset. Runtimepositive-targetviaexperimentreader.payload_capacity=-target avoidsrecompilingeachschedule. OptionalR17candidatecanparticipatewithoutchangingitsalreadyrecordedsource. No datadependenthostlengthcopy.
+3. Scope: taskcontinuation_source.py geometry/compilerflagsandcontinuation_probe.py --targets only. Independentoracle/timing/evaluatorunchanged. Generatedcodepreservespayloadmath;threads/partitionschangeFP32reductionassociationunderexistingcontract. No productionedits.
+4. Success:unchangedoutput.002/.01,LSE2e-5,fullpartialwrites;zero-spillretainedpath,>3%pairedmicroimprovement,≥5%B16full-servingimprovementwithsmallbatchpreservationbeforepromotion. Reportallvariants/resources,notjustwinner.
+5. Risks:smallerCTAcanincreaseperthreadworkorunderfillSM;morepartials/mergecost;longcontextbesttargetdiffers;int32and64allocationdiffers. B16microselectionmustnotbeassumedvalidforotherbatches.
+6. Validation:localAST/sourceanchors,Git-onlysyncafterR17finishes;CUDA13/int64real2Kallloops/derived2080/8K,30pairedsamples×32inner;actualoccupancyandresources. Broadenbestcandidateotherlengths/widths andexistingboundary/Graph/memcheck plusfullservingbeforeacceptance. BF16refreshisfrozenR13codecheckout,unmodifiedevaluator.

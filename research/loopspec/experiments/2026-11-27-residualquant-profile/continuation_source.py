@@ -42,7 +42,14 @@ __device__ __forceinline__ void pv8(const uint8_t* idx, const __nv_bfloat16* tab
 
 def source_for(mode):
     source = _SOURCE
-    if mode in ('qshared', 'pv8_qshared', 'pv8_qshared_b4'):
+    if mode.startswith('geom_'):
+        _, pv, threads, blocks = mode.split('_')
+        assert pv in ('pv16', 'pv8') and int(threads[1:]) in (128, 256)
+        if pv == 'pv8':
+            source = source_for('pv8')
+        source = replace_once(source, '__launch_bounds__(THREADS, 3)',
+            f'__launch_bounds__(THREADS, {int(blocks[1:])})')
+    elif mode in ('qshared', 'pv8_qshared', 'pv8_qshared_b4'):
         if mode.startswith('pv8'):
             source = source_for('pv8_b4' if mode.endswith('b4') else 'pv8')
         source = replace_once(source,
@@ -134,7 +141,8 @@ def source_for(mode):
 
 def prepare(mode):
     from torch.utils.cpp_extension import load_inline
-    round_id = 17 if 'qshared' in mode else 16 if mode.startswith('pv8') else 14 if mode.startswith('grid') else 15
+    threads = int(mode.split('_')[2][1:]) if mode.startswith('geom_') else 512
+    round_id = 18 if mode.startswith('geom_') else 17 if 'qshared' in mode else 16 if mode.startswith('pv8') else 14 if mode.startswith('grid') else 15
     extension = load_inline(
         name=f'vqrq_cont_r{round_id}_{mode}',
         cpp_sources='#include <torch/extension.h>\nvoid residual_init();\n'
@@ -143,7 +151,7 @@ def prepare(mode):
         cuda_sources=source_for(mode),
         functions=['residual_init', 'residual_capacity', 'residual_cuda'],
         extra_cuda_cflags=['-O3', '-lineinfo', '--fmad=false', '-Xptxas=-v',
-            '-DVQPLUS_THREADS=512', '-DVQPLUS_UNROLL=1', '-DVQPLUS_GLOBAL=1',
+            f'-DVQPLUS_THREADS={threads}', '-DVQPLUS_UNROLL=1', '-DVQPLUS_GLOBAL=1',
             '-DVQPLUS_ASYNC=0', '-DVQPAGE_LAYOUT=2', '-DVQPAGE_COOP=0',
             '-DVQPAGE_SCALAR=0', '-gencode=arch=compute_80,code=sm_80'])
     extension.residual_init()
