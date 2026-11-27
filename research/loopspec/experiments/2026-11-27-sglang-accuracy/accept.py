@@ -17,7 +17,7 @@ def main():
     ap.add_argument('--model',type=Path,required=True);ap.add_argument('--book',type=Path,required=True)
     ap.add_argument('--gpus',required=True);ap.add_argument('--port',type=int,default=30946)
     a=ap.parse_args();assert os.environ.get('TMUX')
-    assert json.loads((a.root/'context-r1-gcc13.json').read_text())['passed']
+    assert json.loads((a.root/'context-validation.json').read_text())['passed']
     assert (a.root/'context-memcheck.exit').read_text().strip()=='0'
     work=a.root/'acceptance';work.mkdir(exist_ok=False)
     env=serving_env(a.gpus);url=f'http://127.0.0.1:{a.port}'

@@ -79,7 +79,7 @@ def main():
     root=args.root; job=root/'workers'/args.worker; job.mkdir(parents=True,exist_ok=True)
     lock=(job/'worker.lock').open('a'); fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
     if not args.audit_only:
-        assert json.loads((root/'context-r1-gcc13.json').read_text())['passed']
+        assert json.loads((root/'context-validation.json').read_text())['passed']
         assert (root/'context-memcheck.exit').read_text().strip()=='0'
         assert json.loads((root/'acceptance.json').read_text())['passed']
     sha=output(['git','-C',str(REPO),'rev-parse','HEAD'])
