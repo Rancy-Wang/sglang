@@ -141,14 +141,14 @@ _SOURCE = _replace_once(_SOURCE,
 _SOURCE += r'''
 int64_t residual_capacity() {
     int device = 0, blocks32 = 0, blocks64 = 0;
-    cudaDeviceProp props;
+    int sm_count = 0;
     C10_CUDA_CHECK(cudaGetDevice(&device));
-    C10_CUDA_CHECK(cudaGetDeviceProperties(&props, device));
+    C10_CUDA_CHECK(cudaDeviceGetAttribute(&sm_count, cudaDevAttrMultiProcessorCount, device));
     C10_CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &blocks32, stage1<int>, THREADS, SMEM));
     C10_CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &blocks64, stage1<int64_t>, THREADS, SMEM));
-    return std::min(blocks32, blocks64) * props.multiProcessorCount;
+    return std::min(blocks32, blocks64) * sm_count;
 }
 '''
 _SOURCE = _replace_once(_SOURCE, 'void stage1(', 'void payload_stage1(')
@@ -169,7 +169,7 @@ def prepare(device, max_context_len=32768):
         if key not in _EXT:
             from torch.utils.cpp_extension import load_inline
             _EXT[key] = load_inline(
-                name="loopvq_payload_r2_t512_l2" + context_suffix(max_context_len),
+                name="loopvq_payload_r2_t512_l2_smattr" + context_suffix(max_context_len),
                 cpp_sources="#include <torch/extension.h>\nvoid residual_init();\n"
                     "int64_t residual_capacity();\nvoid residual_cuda(" +
                     ",".join(["torch::Tensor"] * 16) + ",int64_t,double,int64_t);",
