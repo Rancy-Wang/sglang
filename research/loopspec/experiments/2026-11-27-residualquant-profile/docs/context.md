@@ -1,10 +1,12 @@
-# Active continuation checkpoint (R16 running)
+# Active continuation checkpoint (R18 launch pending)
 
-User requires finishing rounds14–20, preserving codec/numerics and accepting by full-serving throughput; NCU is not a prerequisite. R14 compact grids and R15 paired conversions failed performance/resource gates; all numerical checks passed. R16 source4a9042594 is pushed and remote-synced, tests running wrapper2640465 onGPU0: pv8/pv8_pack/pv8_b4 at2K(allloops),derived2080,8K. Production remainsR13.
+Latest user requires generalization acrossGPU,bs,maxtokens. No final B16/108SM-only policy. Fixedtargets are diagnostic; finalselection mustuseactualdevicecapacity andshape,withfallback/explicitunverifiedstatusforotherGPUs. ExpandfullservingB32/N1K,B64/N512withinmatchedKV/graphlimits. Preservetrained/numericalcontract. Finishremainingrounds18–20;14–17done,noNCUwait.
 
-BUS2 exec20202/socket/tmp/vqrq-r14-bus2.sock/master82096. Main /share/wangruoxi/repo/sglang-vqplus-kernel, RUN /dev/shm/wangruoxi-vqrq-20261127. CUDA13/int64 probes use serve-env and serve-extensions. Strict local Git daemon82709/port39437 and reverseforward currently OPEN; close only these after final sync, preservemaster. Source only local+Git. No subagents.
+R17 b0afc5752 allcorrectnesspassedbut2Kqshared135.765,pv8qshared142.510,b4130.0usvsR13128.082; reject. b432regs0stackbothwidths,othermodes40/38regs0stack. R18source3ee08a534 pushed; remoteff-onlypullinprogress. PlanrecordedbeforeGPU. Fourgeometries×targets3/5/10/20; probeexplicitrepeatedrequestprovenanceallowsB32/64andproperactualgroupedcontrolbuffers. No productionchange yet.
 
-FrozenR13 worktree /share/wangruoxi/repo/sglang-vqplus-r13@4743e9430; server wrapper2638844 resident/idle onGPU2/3 port30664. Refresh lifecycle passed original greedyreference; timing medians49.124/85.504/168.741/264.438/371.713token/s. RUN/serving-r13-refresh. Stop only verifiedtaskserver before candidate/BF16launch. R14evidence+refresh archivedlocally; R15archive download underway. R16 results pending. Next inspect resources/timing, recordR16outcome, planR17beforeediting. Finishthrough20andfull-servingacceptance; do notstopatmicrobenchmarks. Historicalcontextbelow is superseded where contradictory.
+BUS2 exec20202/socket/tmp/vqrq-r14-bus2.sock/master82096. Main /share/wangruoxi/repo/sglang-vqplus-kernel; RUN /dev/shm/wangruoxi-vqrq-20261127. CUDA13/int64 probes serve-env/serve-extensions. TemporaryGitdaemon82709/39437 +reverseforwardOPEN;closeonlyafterfinalsync. Sourceonlylocal+Git,noagents.
+
+R13refreshserver2638845 stopped; lifecycleandtimingpassed, B16=371.713token/s. FrozenR13 worktree/share/wangruoxi/repo/sglang-vqplus-r13@4743e9430. BF16refreshserverwrapper2640803 currentlyidleGPU2/3 port30664; lifecycle/timingexit0, B16median419.653647. Client2641396done. AllR17microjobsdone. R14/R15/R16 archivedlocally;R17andBF16refreshneedarchive. NextlaunchR18,adaptR19integrationtowell-supportedgeneralpolicy,completeR20andfullserving. Historicalcontextbelowissuperseded.
 
 # Final task context
 

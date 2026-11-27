@@ -69,7 +69,7 @@ def _stage1(Q, KI, VI, KC, VC, KR, VR, KS, VS, HK, HV, PTR, LOC, ROPE, OUT, LSE,
 
 
 class ResidualAttention:
-    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda", threads=512, dynamic_splits=True, unroll=1, group_size=0, async_table=None, global_table=False, layout=0, payload=True):
+    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda", threads=512, dynamic_splits=True, unroll=1, group_size=0, async_table=None, global_table=False, layout=0, payload=True, adaptive=True):
         if layout not in (0, 2) or (layout and (implementation != 'cuda' or not global_table or threads != 512 or unroll != 1)):
             raise ValueError('Head pages require the standard SM80 global CUDA kernels')
         if implementation not in ("cuda", "triton"):
@@ -117,6 +117,10 @@ class ResidualAttention:
             extension, capacity = prepare(pool.hp_k.device)
             if capacity == 324:
                 self.payload_extension, self.payload_capacity = extension, capacity
+        self.adaptive_extension = None
+        if payload and adaptive and layout == 2 and group_size == 0 and dynamic_splits:
+            from .residual_attention_adaptive_cuda import prepare
+            self.adaptive_extension = prepare(pool.hp_k.device, max_batch, pool.head_num)
 
     def use_grouped(self, batch):
         # Capture-static dispatch, no GPU lengths copied to the host.
@@ -126,6 +130,10 @@ class ResidualAttention:
 
     def use_payload(self, batch):
         return self.payload_extension is not None and 4 <= batch <= 16
+
+    def use_adaptive(self, batch):
+        return (self.adaptive_extension is not None and not self.use_grouped(batch)
+                and self.adaptive_extension.supports(batch))
 
     def forward(self, q, layer_id, kv_indptr, kv_indices, cos_sin_cache, sm_scale):
         pool, b = self.pool, q.shape[0]
@@ -138,7 +146,10 @@ class ResidualAttention:
             partial, lse = (self.group_partial, self.group_lse) if grouped else (self.partial, self.lse)
             groups = (b + 1) // 2 if grouped else b
             target = max(1, (2 * self.sm_count + groups * pool.head_num - 1) // (groups * pool.head_num)) if self.dynamic_splits else (64 if grouped else 0)
-            if self.use_payload(b):
+            if self.use_adaptive(b):
+                launch = self.adaptive_extension.residual_cuda
+                target = -self.adaptive_extension.capacity_for(b)
+            elif self.use_payload(b):
                 launch = self.payload_extension.residual_cuda
                 # Lengths remain on the device, including during graph replay.
                 target = -self.payload_capacity

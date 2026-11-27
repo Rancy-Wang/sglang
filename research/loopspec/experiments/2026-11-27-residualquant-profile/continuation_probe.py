@@ -80,7 +80,7 @@ def main():
         page, _, _, _, _ = reference.make_pool(rows[:b], tables, paged=2)
         loc = loc.long() if args.loc_bits == 64 else loc
         readers = {mode: ResidualAttention(page, max_batch=b, max_context_len=32768,
-                                          global_table=True, layout=2)
+                                          global_table=True, layout=2, adaptive=False)
                    for mode in ['r13', *variants]}
         for name, (mode, target) in variants.items():
             readers[name].payload_extension = extensions[mode]

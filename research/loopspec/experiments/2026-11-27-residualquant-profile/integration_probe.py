@@ -23,17 +23,30 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--batches", type=int, nargs="+", default=[1, 2, 3, 4, 5, 8, 15, 16])
     parser.add_argument("--loops", type=int, nargs="+", default=[0])
+    parser.add_argument("--repeat-requests", action="store_true")
+    parser.add_argument("--loc-bits", type=int, choices=[32, 64], default=64)
+    parser.add_argument("--length", type=int)
     parser.add_argument("--layer", type=int, default=23)
     parser.add_argument("--repeats", type=int, default=30)
     args = parser.parse_args()
     torch.backends.cuda.matmul.allow_tf32 = False
     manifest = json.loads((args.snapshot / "manifest.json").read_text())
-    n = manifest["length"]
+    n = args.length or manifest["length"]
+    assert 80 <= n <= manifest["length"] and n % 8 == 0
     rows = []
     for item in sorted((r for r in manifest["files"] if r["layer"] == args.layer), key=lambda r: r["request"])[:max(args.batches)]:
         path = args.snapshot / item["path"]
         assert hashlib.sha256(path.read_bytes()).hexdigest() == item["sha256"]
-        rows.append(torch.load(path, map_location="cpu", weights_only=True))
+        row = torch.load(path, map_location="cpu", weights_only=True)
+        if args.length:
+            row = dict(row)
+            for kind in ("k", "v"):
+                row[kind] = row[kind][:, :n].contiguous()
+        rows.append(row)
+    unique_requests = len(rows)
+    if unique_requests < max(args.batches):
+        assert args.repeat_requests
+        rows = (rows * ((max(args.batches) + unique_requests - 1) // unique_requests))[:max(args.batches)]
     assert len(rows) == max(args.batches)
     tables = {}
     for kind, name in (("k", "codebook.pt"), ("v", "vq_v_codebook.pt")):
@@ -43,18 +56,21 @@ def main():
         h0 = manifest["tp_rank"] * 8
         tables[kind] = reference.build_coupled_codebook(blob["codebooks"], 48, 4, 4, 4, 16, 128)[args.layer, h0:h0 + 8].contiguous()
         del blob
-    rope = torch.load(args.snapshot / "rope.pt", weights_only=True).cuda()
+    rope = torch.load(args.snapshot / "rope.pt", weights_only=True)[:n].cuda()
     result = dict(source_sha=subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-                  manifest=manifest, layer=args.layer, torch=torch.__version__,
+                  manifest=manifest, length=n, derived_prefix=bool(args.length),
+                  unique_requests=unique_requests, repeated_requests=args.repeat_requests,
+                  loc_bits=args.loc_bits, layer=args.layer, torch=torch.__version__,
                   gpu=torch.cuda.get_device_name(), cases=[], passed=False)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     for b in args.batches:
         pool, raw, queries, ptr, loc = reference.make_pool(rows[:b], tables)
+        loc = loc.long() if args.loc_bits == 64 else loc
         page, _, _, _, _ = reference.make_pool(rows[:b], tables, paged=2)
         readers = {
             name: ResidualAttention(page, max_batch=b, max_context_len=32768,
-                                    global_table=True, layout=2, payload=enabled)
-            for name, enabled in (("original", False), ("payload", True))
+                                    global_table=True, layout=2, payload=enabled, adaptive=name == "payload")
+            for name, enabled in (("original", False), ("r13", True), ("payload", True))
         }
         for loop in args.loops:
             q = queries[loop]
@@ -75,12 +91,15 @@ def main():
                 lse.fill_(float("nan"))
                 got = fn()
                 torch.testing.assert_close(got, expected, atol=.002, rtol=.01)
+                assert torch.isfinite(partial[:b]).all()
                 actual_lse = lse[:b].logsumexp(-1)
                 torch.testing.assert_close(actual_lse, expected_lse, atol=2e-5, rtol=2e-5)
                 checks[name] = dict(output=reference.metrics(got, expected),
                                     lse_max_abs=float((actual_lse - expected_lse).abs().max()),
                                     grouped=reader.use_grouped(b), payload=reader.use_payload(b),
-                                    resident_capacity=reader.payload_capacity)
+                                    resident_capacity=reader.payload_capacity,
+                                    adaptive=reader.use_adaptive(b),
+                                    adaptive_capacities=reader.adaptive_extension.capacities if reader.adaptive_extension else {})
                 calls[name] = fn
             native = reference.NativeAttention(k, v, q, ptr, loc, max_splits=8, dynamic=True)
             torch.testing.assert_close(native(), expected, atol=.002, rtol=.01)
