@@ -50,6 +50,7 @@ def checked(path, arm, bench, collect_cell):
     identities.sort(key=lambda x: json.dumps(x))
     shared = {k: recipe[k] for k in ('tokenizer_files', 'sources', 'packages')}
     shared['model_sha256'] = server['model_sha256']
+    shared['serving_revision'] = server['sglang_git_sha']
     shared['data'] = {k: protocol[k] for k in ('dataset_documents_sha256', 'dataset_hash', 'task_ids') if k in protocol}
     assert shared['data']
     return {**scores, 'correct': int(correct), 'length_finishes': truncated}, shared, identities
@@ -63,9 +64,13 @@ def main():
     from evaluation_io import atomic_json
     with (args.root/'report.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
+        plan=json.loads(Path(__file__).with_name('plan.json').read_text())
+        selected=plan['arms']; assert selected == ['bf16','loopvq','residual-ft']
+        labels=[LABELS[list(ARMS).index(a)] for a in selected]
+        total_cells=len(selected)*len(BENCHES); total_samples=len(selected)*sum(n for _,n in BENCHES.values())
         results={}; baselines={}; inputs={}
         for bench in BENCHES:
-            for arm in ARMS:
+            for arm in selected:
                 p=args.root/'done'/f'{arm}__{bench}__0.json'
                 if not p.exists(): continue
                 score, shared, ids = checked(p,arm,bench,collect_cell)
@@ -77,17 +82,17 @@ def main():
         lines=['# Greedy accuracy — Ouro-2.6B-Thinking', '',
                'TP=2，完整 4 loops；temperature=0、top_p=1；新增输出上限 32768，总上下文 40960。每题只生成一次，保留 EOS/原评分器停止条件。',
                '数值仅包含完整 benchmark；未完成不以部分样本估计。HumanEval+/MBPP+ 使用 plus pass@1。', '',
-               '| Benchmark | '+ ' | '.join(LABELS)+' |', '| --- | '+' | '.join(['---']*5)+' |']
+               '| Benchmark | '+ ' | '.join(labels)+' |', '| --- | '+' | '.join(['---']*len(selected))+' |']
         for b,(label,n) in BENCHES.items():
             cells=[]
-            for a in ARMS:
+            for a in selected:
                 r=results.get(f'{a}/{b}'); cells.append(f"{r['accuracy_percent']:.2f}% ({r['correct']}/{n})" if r else '待完成')
             lines.append('| '+label+' | '+' | '.join(cells)+' |')
-        lines+=['', f'已验收 {len(results)}/25 个单元，{sum(r["n"] for r in results.values())}/4000 个评分样本。', '',
+        lines+=['', f'已验收 {len(results)}/{total_cells} 个单元，{sum(r["n"] for r in results.values())}/{total_samples} 个评分样本。', '',
                 '| Benchmark | 方法 | 达到输出长度上限 |', '| --- | --- | --- |']
         for key,r in results.items():
             a,b=key.split('/'); lines.append(f'| {BENCHES[b][0]} | {LABELS[list(ARMS).index(a)]} | {r["length_finishes"]}/{r["n"]} |')
-        atomic_json(args.root/'accuracy.json',{'complete':len(results)==25,'decoding':'greedy','results':results})
+        atomic_json(args.root/'accuracy.json',{'complete':len(results)==total_cells,'selected_arms':selected,'selection':plan,'decoding':'greedy','results':results})
         temp=args.root/'accuracy.md.tmp';temp.write_text('\n'.join(lines)+'\n');temp.replace(args.root/'accuracy.md')
 
 

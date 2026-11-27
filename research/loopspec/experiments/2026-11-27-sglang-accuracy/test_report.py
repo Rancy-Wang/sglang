@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import subprocess
 import unittest
 
 HERE=Path(__file__).resolve().parent
@@ -15,6 +16,19 @@ from run_evaluation import collect_cell, summarize
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_selected_report_excludes_cancelled_arm(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);(root/'done').mkdir()
+            (root/'done/residual__aime24__0.json').write_text('cancelled evidence, excluded')
+            cmd=[sys.executable,str(HERE/'report.py'),'--root',str(root),'--loopvq',str(LOOPVQ)]
+            subprocess.run(cmd,check=True)
+            result=json.loads((root/'accuracy.json').read_text())
+            self.assertEqual(result['selected_arms'],['bf16','loopvq','residual-ft'])
+            self.assertIn('0/2400',(root/'accuracy.md').read_text())
+            self.assertNotIn('原码本＋INT4',(root/'accuracy.md').read_text())
+            (root/'done/bf16__aime24__0.json').write_text('invalid selected evidence')
+            self.assertNotEqual(subprocess.run(cmd,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode,0)
+
     def test_greedy_complete_score_and_rejection(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);cell=root/'full/aime24/0';cell.mkdir(parents=True)
@@ -31,7 +45,7 @@ class EvidenceTests(unittest.TestCase):
             scores=collect_cell(cell,stem,'aime24',30)
             save(cell/'complete.json',{'audit':False,'exit_code':0,'method':'bf16','benchmark':'aime24','seed':0,'scores':scores})
             save(root/'recipe.json',{'temperature':0.,'top_p':1.,'max_tokens':32768,'tokenizer_files':{},'sources':{},'packages':{},
-                'server':{'tp':2,'total_ut_steps':4,'context_length':40960,'implementation':'sglang','decoding':'greedy','model_sha256':'fixture'}})
+                'server':{'tp':2,'total_ut_steps':4,'context_length':40960,'implementation':'sglang','decoding':'greedy','model_sha256':'fixture','sglang_git_sha':'fixture'}})
             done=root/'done.json';save(done,{'arm':'bf16','benchmark':'aime24','seed':0,'cell':str(cell),'recipe':str(root/'recipe.json'),'scores':scores})
             score,_,_=checked(done,'bf16','aime24',collect_cell)
             self.assertEqual(score['accuracy_percent'],50.)

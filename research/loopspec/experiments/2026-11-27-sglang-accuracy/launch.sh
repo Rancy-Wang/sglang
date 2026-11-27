@@ -40,14 +40,14 @@ printf 'tp2-acceptance\n' > "$vq_root/pipeline.phase"
 printf 'greedy-accuracy\n' > "$vq_root/pipeline.phase"
 export VQ_ACCURACY_ROOT="$vq_root" VQ_ACCURACY_SCRIPTS="$vq_scripts"
 "$LOOPVQ_PYTHON" - <<'PY'
-import os, shlex, subprocess
+import os, shlex, subprocess, json
 from pathlib import Path
 r=Path(os.environ['VQ_ACCURACY_ROOT']);s=Path(os.environ['VQ_ACCURACY_SCRIPTS'])
 common=['--root',str(r),'--loopvq','/homes/ruoxi07/repo/LoopVQ','--original-root',os.environ['LOOPVQ_TASK_ROOT'],
         '--training-root',str(r.parent/'2026-11-26-residual'),'--model',os.environ['LOOPVQ_MODEL'],
         '--eval-python','/homes/ruoxi07/anaconda3/envs/loopvq-eval/bin/python']
-for name,gpus,port,arms in [('bf16','2,3','30942',['bf16']),('plain','4,5','30944',['loopvq','plain-continued']),('residual','6,7','30946',['residual','residual-ft'])]:
-    cmd=[os.environ['LOOPVQ_PYTHON'],'-u',str(s/'worker.py')]+common+['--worker',name,'--gpus',gpus,'--port',port,'--arms']+arms
+for name,gpus,port,arms in [('bf16','2,3','30942',['bf16']),('plain','4,5','30944',['loopvq']),('best-kl','6,7','30946',['residual-ft'])]:
+    cmd=[os.environ['LOOPVQ_PYTHON'],'-u',str(s/'worker.py')]+common+['--worker',name,'--gpus',gpus,'--port',port,'--serving-revision',json.loads((r/'acceptance.json').read_text())['sglang_sha'],'--arms']+arms
     # tmux server environments do not inherit exports made in this pane.
     env={k:v for k,v in os.environ.items() if k in ('PATH','PYTHONPATH','LD_LIBRARY_PATH','VIRTUAL_ENV','CUDA_HOME','CC','CXX','TORCH_EXTENSIONS_DIR','TORCH_CUDA_ARCH_LIST','MAX_JOBS','OMP_NUM_THREADS','TMPDIR','HF_HOME','XDG_CACHE_HOME','SGLANG_CACHE_DIR','SGLANG_JIT_CACHE_DIR','TRITON_CACHE_DIR','WANDB_DIR','WANDB_BASE_URL')}
     command=shlex.join(['env']+[f'{k}={v}' for k,v in env.items()]+cmd)+' > '+shlex.quote(str(r/(name+'-full.log')))+' 2>&1; echo $? > '+shlex.quote(str(r/(name+'-full.exit')))

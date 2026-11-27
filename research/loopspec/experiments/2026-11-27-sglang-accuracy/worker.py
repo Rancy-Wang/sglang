@@ -65,7 +65,10 @@ def main():
     ap.add_argument('--port',type=int,required=True)
     ap.add_argument('--arms',nargs='+',choices=ARMS,required=True)
     ap.add_argument('--audit-only',action='store_true')
+    ap.add_argument('--serving-revision', help='Preserve recipe when only orchestration changed')
     args=ap.parse_args()
+    plan=json.loads((HERE/'plan.json').read_text())
+    assert set(args.arms) <= set(plan['arms']), 'Unselected method requested'
     sys.path.insert(0,str(args.loopvq/'experiments/loopvq_reproduction'))
     from evaluation_io import atomic_json, file_hash, digest
     from run_evaluation import collect_cell, COUNTS
@@ -82,7 +85,11 @@ def main():
         assert json.loads((root/'context-validation.json').read_text())['passed']
         assert (root/'context-memcheck.exit').read_text().strip()=='0'
         assert json.loads((root/'acceptance.json').read_text())['passed']
-    sha=output(['git','-C',str(REPO),'rev-parse','HEAD'])
+    orchestration_sha=output(['git','-C',str(REPO),'rev-parse','HEAD'])
+    sha=args.serving_revision or orchestration_sha
+    if args.serving_revision:
+        subprocess.run(['git','-C',str(REPO),'diff','--exit-code',sha,'HEAD','--','python'],check=True,stdout=subprocess.DEVNULL)
+        assert json.loads((root/'acceptance.json').read_text())['sglang_sha']==sha
     model_files=sorted(p for p in args.model.iterdir() if p.is_file() and p.suffix in ('.json','.py','.safetensors','.model'))
     with (root/'hashes.lock').open('a') as hlock:
         fcntl.flock(hlock,fcntl.LOCK_EX)
@@ -92,7 +99,7 @@ def main():
             hashes=json.loads(hp.read_text()); assert hashes['stat']==stat
         else:
             hashes={'stat':stat,'files':{p.name:file_hash(p) for p in model_files}}; atomic_json(hp,hashes)
-    state={'worker':args.worker,'host':platform.node(),'gpus':args.gpus,'source':sha,'status':'starting'}
+    state={'worker':args.worker,'host':platform.node(),'gpus':args.gpus,'source':sha,'orchestration_source':orchestration_sha,'status':'starting'}
     server=client=None; current=None; common=None; env=None
     def persist(**kw):
         state.update(kw,updated_unix=time.time()); atomic_json(job/'state.json',state)

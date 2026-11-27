@@ -1,0 +1,21 @@
+{
+  "arms": [
+    "bf16",
+    "loopvq",
+    "residual-ft"
+  ],
+  "seed": 0,
+  "decoding": "greedy",
+  "max_new_tokens": 32768,
+  "serving_revision": "38389faabc9f88508f09f60235d5b4d9cb1a686a",
+  "best_finetune": "residual-ft",
+  "held_out_best_kl": {
+    "residual-ft": 0.003168791386997327,
+    "plain-continued": 0.0432494948618114
+  },
+  "export_recheck_kl_rounded": {
+    "residual-ft": 0.0043,
+    "plain-continued": 0.0432
+  },
+  "selection_basis": "same original held-out KL recipe; best validation checkpoint, not benchmark accuracy"
+}
