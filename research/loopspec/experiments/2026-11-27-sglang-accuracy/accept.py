@@ -30,6 +30,9 @@ def main():
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 sock.bind(('127.0.0.1',a.port))
             cmd=server_command(a.model,a.book,True,a.port,context,1)
+            # Four long prompts need <132K resident tokens; reserve workspace
+            # for dense prefill instead of an unused 262K decode KV arena.
+            cmd[cmd.index('--max-total-tokens') + 1] = '163840'
             (work/f'command-{context}.json').write_text(json.dumps(cmd))
             logpath=work/f'server-{context}.log'
             with logpath.open('w') as log:server=subprocess.Popen(cmd,env=env,cwd=REPO,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
