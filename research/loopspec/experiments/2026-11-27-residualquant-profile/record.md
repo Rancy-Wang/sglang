@@ -228,3 +228,18 @@ R14 preliminary resource result: allgrid8/16/32 compileandcapacity324, but bothL
 4. Success: unchangedoracle/LSE/fullpartialchecks,zerospills, reducedF2FPinstructioncount; >3%pairedmicrogainforfurtherconsideration and≥5%B16full-servinggainforpromotion. Intrinsicroundingremainsround-to-nearest-even;FP32accumulationandtrainedcodecunchanged.
 5. Risks: compilerre-scalarization,extraoperandlifetime/registerspills,packedcomponentordering;conversioninstructioncountaloneisnotperformanceproof.
 6. Validation:localanchors/syntax,Git-onlysync,CUDA13/int64 B16N2K/all4loops/derived2080/8K withunchangedindependentoracleandpairedtimer;resources/SASS. Retainedcandidatewillreceiveexisting100boundary/Graph/memcheckandfull-servinggreedy/lifecycle/timingacceptance.
+
+
+R14 final9af43a968:all2Kfourloops/derived2080/8K output/LSE/fullpartialchecks pass,exit0. 2Kloop0R13=128.157us,grid8=144.150,grid16=145.395,grid32=152.897;2080R13=128.736,grid8=145.159;8KR13=437.941,grid8=489.493/grid16=487.189/grid32=487.155us. Allvariants32Bstackandregress; reject. Same-sourcegrid32loopcostexceeds savedemptyCTAoverhead; thisdoesnotestablishallcompactmappingsarebad. PreserveR13.
+
+
+R15 final2f314d68e:all2Kfourloops/derived2080/8K output/LSE/partialchecks pass. 2Kloop0R13=128.106us,QKpack127.647,PVpack133.957,both133.313;2080R13=128.735,QK128.345,PV135.169,both134.571;8KR13=437.968,QK436.437,PV460.384,both457.706. QKpack40regs/0stackbenefit~0.3%immaterial;PV/both40regs/16Bstackregress. Rejectpromotion. Fewerconversioninstructionsalone do notremove thedominantcost.
+
+## Round16/20 — eight-accumulator PV ownership (before edits)
+
+1. Purpose: address persistentregisterpressure directly. R13PVowns16FP32accumulators/thread; pairedPVconversioninR15spills. HalvingaccumulatorscouldpermitmoreCTAswithoutlowerprecision.
+2. Steps: fromR13, replacePV16withPV8:16lanes/token,2tokens/warp,8channels/lane; packed2indices/8nibbles/1scale,2centroidloads. Two-lanegroupwarpmergeinstead of4groups, sameFP32type. Comparepv8,pairedroundingpv8_pack,andpv8_b4(min4CTA/SM forcing32registertarget). QK/splitpolicyunchanged.
+3. Scope: taskcontinuation_source.py newhelper/mappings/modes; unchangedprobe/oracleandproduction. OriginaltrainedformatandRoPEremainunchanged.
+4. Success: output.002/.01,LSE2e-5,all32partialswritten,zero-spillcandidate; >3%pairedscreeninggainandfullserving≥5%overR13beforepromotion. SameFP32accumulationcontract; ownershipchangesassociation andmustpassgreedyfullmodelchecks.
+5. Risks: lessper-threadreuse, twiceas manyPVloopiterations, shuffle/sharedstoreaddresserrors, QKmayremainregisterlimiter; b4canforceQKspill. Do notrelax numericalchecksor claimoccupancygainfromlaunchboundalone.
+6. Validation:localanchors/braces/syntax,Git-onlysyncafterR15done,CUDA13/int64B16N2Kfourloops/derived2080/8K unchangedprobe,resource/SASSandactualoccupancyqueries. Broadenretainedcandidatewithboundaries/Graph/memcheckandfullserving.
