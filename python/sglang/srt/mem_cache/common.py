@@ -312,10 +312,17 @@ def release_kv_cache(req: Req, tree_cache: BasePrefixCache, is_insert: bool = Tr
 
     owned_kv_len = req.owned_kv_len()
     is_insert = is_insert and not req.skip_radix_cache_insert
+    context_state = getattr(req, "context_state", None)
+    if is_insert and context_state is not None:
+        from sglang.srt.context_system.staged import has_unpublished_stage
+
+        # A retracted intermediate stage cannot publish final-position keys.
+        # Keep this decision local: resumed requests may publish later stages.
+        is_insert = not has_unpublished_stage(req)
     if is_insert:
         tree_cache.insert_req(req, up_to=owned_kv_len)
     # The protected prefix is not this req's to free.
-    if getattr(req, "context_state", None) is not None:
+    if context_state is not None:
         # Context rows include absent Drop slots and borrowed source versions.
         # On abort, private rotated pages can precede the native prefix boundary.
         start = req.kv.cache_protected_len if is_insert else 0

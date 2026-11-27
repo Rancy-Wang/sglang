@@ -1065,10 +1065,6 @@ class UnifiedRadixCache(BasePrefixCache):
 
     def claim_kv_row(self, req: Req) -> bool:
         if getattr(req, "context_state", None) is not None:
-            from sglang.srt.context_system.staged import has_unpublished_stage
-
-            if has_unpublished_stage(req):
-                req.skip_radix_cache_insert = True
             self._prepare_context_cache_row(req, retain_source=False)
             return False
         # Retraction also enters here: retain its ticket until actual finish.
