@@ -69,7 +69,7 @@ def _stage1(Q, KI, VI, KC, VC, KR, VR, KS, VS, HK, HV, PTR, LOC, ROPE, OUT, LSE,
 
 
 class ResidualAttention:
-    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda", threads=512, dynamic_splits=True, unroll=1, group_size=0, async_table=None, global_table=False, layout=0, payload=True, adaptive=True):
+    def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda", threads=512, dynamic_splits=True, unroll=1, group_size=0, async_table=None, global_table=False, layout=0, payload=True, adaptive=False):
         if layout not in (0, 2) or (layout and (implementation != 'cuda' or not global_table or threads != 512 or unroll != 1)):
             raise ValueError('Head pages require the standard SM80 global CUDA kernels')
         if implementation not in ("cuda", "triton"):
