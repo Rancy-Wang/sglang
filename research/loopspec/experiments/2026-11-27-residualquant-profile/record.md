@@ -243,3 +243,12 @@ R15 final2f314d68e:all2Kfourloops/derived2080/8K output/LSE/partialchecks pass. 
 4. Success: output.002/.01,LSE2e-5,all32partialswritten,zero-spillcandidate; >3%pairedscreeninggainandfullserving≥5%overR13beforepromotion. SameFP32accumulationcontract; ownershipchangesassociation andmustpassgreedyfullmodelchecks.
 5. Risks: lessper-threadreuse, twiceas manyPVloopiterations, shuffle/sharedstoreaddresserrors, QKmayremainregisterlimiter; b4canforceQKspill. Do notrelax numericalchecksor claimoccupancygainfromlaunchboundalone.
 6. Validation:localanchors/braces/syntax,Git-onlysyncafterR15done,CUDA13/int64B16N2Kfourloops/derived2080/8K unchangedprobe,resource/SASSandactualoccupancyqueries. Broadenretainedcandidatewithboundaries/Graph/memcheckandfullserving.
+
+## Round17/20 — shorten QK query live ranges (before edits)
+
+1. Purpose: R16PV8still40registers/zerostack (timingpending); testQK's eightcachedqueryFP32values as registerpressure source, independentofPVownership.
+2. Steps: replaceqlo/qhiarrays andpreloads withvolatileaccess toexistinginitializedsharedquery insidechanneliteration. Preserveidenticalquerybits,QKdot/FMAassociation,RoPErounding. Compareqshared(PV16control),pv8_qshared,pv8_qshared_b4. Volatile prevents compilerhoisting, trading8sharedloads/tokenfor shorterregisterlifetimes.
+3. Scope: taskcontinuation_source.py only; probe/oraclesandproductionunchanged. LocalworkmayoverlapR16frozenremoteexecution; syncafterallR16casesfinish.
+4. Success: unchangedoutput.002/.01,LSE2e-5,allpartialwrites;zero-spillcandidate,>3%pairedgain,≥5%B16full-servinggainbeforepromotion. Recordactualoccupancy ratherthanassuminglaunchboundsachieved.
+5. Risks: sharedloadinstructioncost/bankconflicts, compilerlivenesselsewhere,b4spill;PV8changesassociationwithsameexistingtolerancesandfullgreedyrequirement. NoNCUstallclaims.
+6. Validation:localAST/sourceanchorchecks,Gitpush/pull,unchangedCUDA13/int64real2Kfourloops/derived2080/8K paired30×32timingandindependentoracle;compiledresources/SASS. Retainedcandidate receivesboundary/Graph/memcheck/fullservingchecks.

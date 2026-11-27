@@ -42,7 +42,17 @@ __device__ __forceinline__ void pv8(const uint8_t* idx, const __nv_bfloat16* tab
 
 def source_for(mode):
     source = _SOURCE
-    if mode.startswith('pv8'):
+    if mode in ('qshared', 'pv8_qshared', 'pv8_qshared_b4'):
+        if mode.startswith('pv8'):
+            source = source_for('pv8_b4' if mode.endswith('b4') else 'pv8')
+        source = replace_once(source,
+            '''    float qlo[4], qhi[4];
+#pragma unroll
+    for (int j = 0; j < 4; ++j) { qlo[j] = query[g * 4 + j]; qhi[j] = query[64 + g * 4 + j]; }''',
+            '    volatile float* query_live = query;')
+        source = replace_once(source, 'dot += fmaf(kl, qlo[j], kh * qhi[j]);',
+            'dot += fmaf(kl, query_live[g * 4 + j], kh * query_live[64 + g * 4 + j]);')
+    elif mode.startswith('pv8'):
         assert mode in ('pv8', 'pv8_pack', 'pv8_b4')
         begin = source.index('__device__ __forceinline__ void pv16(')
         end = source.index('__device__ __forceinline__ void copy_table', begin)
@@ -124,7 +134,7 @@ def source_for(mode):
 
 def prepare(mode):
     from torch.utils.cpp_extension import load_inline
-    round_id = 16 if mode.startswith('pv8') else 14 if mode.startswith('grid') else 15
+    round_id = 17 if 'qshared' in mode else 16 if mode.startswith('pv8') else 14 if mode.startswith('grid') else 15
     extension = load_inline(
         name=f'vqrq_cont_r{round_id}_{mode}',
         cpp_sources='#include <torch/extension.h>\nvoid residual_init();\n'
