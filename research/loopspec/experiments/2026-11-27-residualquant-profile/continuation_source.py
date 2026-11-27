@@ -28,6 +28,31 @@ def source_for(mode):
             '    __syncthreads();\n    }\n}')
         source = replace_once(source, 'dim3 grid(q.size(0), q.size(1), SPLITS);',
                               f'dim3 grid(q.size(0), q.size(1), {grid});')
+    elif mode in ('pack_qk', 'pack_pv', 'pack_both'):
+        if mode in ('pack_qk', 'pack_both'):
+            source = replace_once(source,
+                '''                float kl = bf(low[j] * c[j] - high[j] * s[j]);
+                float kh = bf(high[j] * c[j] + low[j] * s[j]);
+                dot += fmaf(kl, qlo[j], kh * qhi[j]);''',
+                '''                const float2 kv = __bfloat1622float2(__floats2bfloat162_rn(
+                    low[j] * c[j] - high[j] * s[j], high[j] * c[j] + low[j] * s[j]));
+                dot += fmaf(kv.x, qlo[j], kv.y * qhi[j]);''')
+        if mode in ('pack_pv', 'pack_both'):
+            source = replace_once(source,
+                '''            for (int j = 0; j < 4; ++j) {
+                const int r = (int)(z << (28 - j * 4)) >> 28;
+                const float value = fmaf(scale, (float)r, __bfloat162float(cv[j]));
+                acc[group * 4 + j] = fmaf(p, bf(value), acc[group * 4 + j]);
+            }''',
+                '''            for (int j = 0; j < 4; j += 2) {
+                const int r0 = (int)(z << (28 - j * 4)) >> 28;
+                const int r1 = (int)(z << (24 - j * 4)) >> 28;
+                const float v0 = fmaf(scale, (float)r0, __bfloat162float(cv[j]));
+                const float v1 = fmaf(scale, (float)r1, __bfloat162float(cv[j + 1]));
+                const float2 value = __bfloat1622float2(__floats2bfloat162_rn(v0, v1));
+                acc[group * 4 + j] = fmaf(p, value.x, acc[group * 4 + j]);
+                acc[group * 4 + j + 1] = fmaf(p, value.y, acc[group * 4 + j + 1]);
+            }''')
     else:
         raise ValueError(mode)
     return source
@@ -35,8 +60,9 @@ def source_for(mode):
 
 def prepare(mode):
     from torch.utils.cpp_extension import load_inline
+    round_id = 14 if mode.startswith('grid') else 15
     extension = load_inline(
-        name=f'vqrq_cont_r14_{mode}',
+        name=f'vqrq_cont_r{round_id}_{mode}',
         cpp_sources='#include <torch/extension.h>\nvoid residual_init();\n'
             'int64_t residual_capacity();\nvoid residual_cuda(' +
             ','.join(['torch::Tensor'] * 16) + ',int64_t,double,int64_t);',

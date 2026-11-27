@@ -216,3 +216,15 @@ User explicitly requests using all remaining7 rounds, focusing B16 versus BF16, 
 4. Success: unchangedoutput.002/.01,LSE2e-5,all32partialoverwrite; zero spills; materialpairedgainoverR13 (>3%screening) and≥5%B16full-servingimprovementbeforepromotion, withsmallbatchguard/no>5%regression. BF16parity remainsobjective,notpromised.
 5. Risks: shared-memoryreusebarrier, extra loopregisters/spills, longcontextsrequiremultipleactiveiterationsandcanloseparallelism, graphpadding. Anyfailurefixcountsnextnewround.
 6. Validation:sourceanchor/syntaxchecks,Gitpush/pull,CUDA13realB16N2048/derived2080/8192,int64LOC,all4loopsat2K; unchangedindependentoracle/LSE/NaNpartials,30pairedgraphs×32inner. Resource/SASSinspection. Broaderboundary/memcheck/fullservingneededforretainedimplementation. No NCU dependence.
+
+
+R14 preliminary resource result: allgrid8/16/32 compileandcapacity324, but bothLOCwidths40regs/32Bstack. Thisfailszero-spillpromotiongate; numerical/timingrunscontinueforattribution. FreshR13full-servinglifecyclewithoriginalreferencepassed; timingB16median371.713token/s, consistentwithprevious371.748. Source9af43a968.
+
+## Round15/20 — paired BF16 rounding (before edits)
+
+1. Purpose: remove wastedhalf of conversioninstructions whilepreservingexactrounding. R13CUDA13SASS containsF2FP.BF16.PACK_AB withoneRZoperand forindividualQK/PVvalues; installedcuda_bf16.h/.hppdefines__floats2bfloat162_rn.
+2. Steps: separateQK-only,PV-only,andcombinedcontrols fromunchangedR13. QKroundsonekl/khpairwith__floats2bfloat162_rn thenexactBF16→FP32 float2 conversion; dot/FMAassociationunchanged. PVroundstwoadjacentreconstructedvalues together, retainsseparateoriginalFP32accumulatorFMAs. NoHPchanges, no newgrid/schedule.
+3. Scope: taskcontinuation_source.py adds pack_qk/pack_pv/pack_both; existingR14probeunchanged. Productionreaderunchanged. LocalauthoringmayoverlapfrozenremoteR14tests;do notpullnewSHAuntilR14allplannedcasesfinish.
+4. Success: unchangedoracle/LSE/fullpartialchecks,zerospills, reducedF2FPinstructioncount; >3%pairedmicrogainforfurtherconsideration and≥5%B16full-servinggainforpromotion. Intrinsicroundingremainsround-to-nearest-even;FP32accumulationandtrainedcodecunchanged.
+5. Risks: compilerre-scalarization,extraoperandlifetime/registerspills,packedcomponentordering;conversioninstructioncountaloneisnotperformanceproof.
+6. Validation:localanchors/syntax,Git-onlysync,CUDA13/int64 B16N2K/all4loops/derived2080/8K withunchangedindependentoracleandpairedtimer;resources/SASS. Retainedcandidatewillreceiveexisting100boundary/Graph/memcheckandfull-servinggreedy/lifecycle/timingacceptance.
