@@ -217,10 +217,13 @@ _EXT = {}
 _READY = set()
 
 
-def prepare_grouped(device, async_table=False, global_table=False, *, layout=0):
+def prepare_grouped(device, async_table=False, global_table=False, *, layout=0, max_context_len=32768):
     if layout not in (0, 2) or (layout and (async_table or not global_table)):
         raise ValueError('Head pages require global, non-staged centroids')
-    variant = (bool(async_table), bool(global_table), layout)
+    from .residual_context import context_source, context_suffix
+    if max_context_len > 32768 and (layout != 2 or async_table or not global_table):
+        raise ValueError("40K context requires the accepted page-head global reader")
+    variant = (bool(async_table), bool(global_table), layout, max_context_len > 32768)
     device = torch.device(device)
     with torch.cuda.device(device):
         if torch.cuda.is_current_stream_capturing():
@@ -239,6 +242,8 @@ def prepare_grouped(device, async_table=False, global_table=False, *, layout=0):
                 source = source[:start] + _ROW + '\n' + source[end:]
                 suffix = f'_l{layout}'
                 page_flags = [f'-DVQPAGE_LAYOUT={layout}', '-DVQPAGE_COOP=0', '-DVQPAGE_SCALAR=0']
+            source = context_source(source, max_context_len, grouped=True)
+            suffix += context_suffix(max_context_len)
             _EXT[variant] = load_inline(
                 name=f'loopvq_residual_int4_grouped_r2_t512_a{int(async_table)}_g{int(global_table)}_v4{suffix}',
                 cpp_sources='#include <torch/extension.h>\nvoid grouped_init();\n'

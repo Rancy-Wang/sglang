@@ -1,0 +1,16 @@
+# Optimized SGLang five-arm accuracy evaluation
+
+User resumed accuracy testing after optimization, then explicitly selected: preserve 32768 newly generated tokens and extend/validate the kernel context limit first. Previous cancelled HF evaluation remains cancelled at10/10; optimization remains closed at20/20. This evaluation integration and length-extension task starts1/10 under the repository default budget. It does not resume optimization or enable rejected adaptive kernels.
+
+Base:6bc482390 on loopspec-test, accepted runtime dedf55fff/R13. LoopVQ scorer source dc3af341ba4593f580272470da803a5db839a423, test branch. Preserve all untracked evidence and the user's modified LoopVQ record.
+
+## Six-part plan — candidate1/10
+
+1. Purpose: run BF16, original0.5bit, frozen-original+INT4, ordinary-KL-continuation, residual-aware-continuation through accepted SGLang, with unchanged original temperature1/top-p0.7, explicit seeds0/1/2 and32768 output tokens.
+2. Steps: extend total context to40960; keep32K deployment source/compilation unchanged. For40K page-head global readers enlarge probability scratch per split1024→1280 (R1/payload),512→640(R2), retaining the old split-selection denominator and reduction geometry. Validate old-range agreement, independent oracle/LSE through40K, graph transitions, memcheck and real TP2 lifecycle. Then audit the unchanged official clients and launch resumable full cells in tmux.
+3. Scope: residual_context.py(source transform), page/grouped/payload prepare caches, ResidualAttention and argument guard; new task-local boundary/worker/report scripts. No training, codebook, encoder, rounding, sampling, or adaptive-policy changes. Forty-K support is restricted to the accepted global page-head CUDA route.
+4. Success: old source identical at context<=32768; output .002/.01 and LSE2e-5 unchanged through40960; short full-model greedy/lifecycle agreement with accepted baseline; HTTP audit seed/prompt/stop identity; complete75cells and12000 scored samples, mean/sampleSD per method/benchmark, saved length finishes and failures. No partial/audit score in final table.
+5. Risks: scratch size and compiler occupancy, long-history indexing/RoPE bounds, full32768 generation plus input, shared filesystem cell ownership, scorer/environment changes, lengthy runs. Verify every prompt fits context with original output budget; fail rather than silently shorten it. No fabricated ETA or accuracy.
+6. Validation: local source/CPU checks and Git-only synchronization; A13 three initially idle pairs2/3,4/5,6/7. A10 all GPUs occupied; A11 resident process on all GPUs; A12 all GPUs occupied. A13GPU0 occupied; GPU1 alone cannot form a free adjacent pair. Recheck before launches. Validate math then TP2/native Thinking/full4loops/HP8+64/CUDAgraph. Original official exact-match and EvalPlus+ scorers, expected counts30/30/198/164/378 perseed. Aggregate-only W&B, durable raw responses outsideGit.
+
+Connections: X5exec87821/master /tmp/vqacc-final-20261127-x5.sock; A10exec71208,A11exec86587,A12exec80120,A13exec49419 via sameX5. Verified /homes/ruoxi07 shared repo/model/env/artifacts onA13; SGLang checkout currently7833b357a and clean, will Git-sync to candidate. No GPU task launched at plan time.

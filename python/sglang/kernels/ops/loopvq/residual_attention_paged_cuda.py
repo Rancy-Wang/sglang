@@ -150,8 +150,11 @@ _REMAPPED = _COMPACT[:_pv_start] + r'''
 _EXT = {}
 
 
-def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False, compact=False, staged=False, remapped=False, cache_mode=0):
-    key = (threads, int(layout), bool(cooperative), bool(scalar), bool(compact), bool(staged), bool(remapped), cache_mode)
+def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False, compact=False, staged=False, remapped=False, cache_mode=0, max_context_len=32768):
+    from .residual_context import context_source, context_suffix
+    if max_context_len > 32768 and (layout != 2 or compact or staged or remapped or cooperative or scalar or cache_mode):
+        raise ValueError("40K context requires the accepted page-head global reader")
+    key = (threads, int(layout), bool(cooperative), bool(scalar), bool(compact), bool(staged), bool(remapped), cache_mode, max_context_len > 32768)
     if int(layout) not in (0, 1, 2):
         raise ValueError('Unknown packed reader layout')
     with torch.cuda.device(device):
@@ -178,7 +181,8 @@ def prepare(device, *, threads=512, layout=True, cooperative=True, scalar=False,
                     raise ValueError('Cache policy requires a direct reader and mode1/2')
                 from .residual_attention_cache_source import cache_source
                 source = cache_source(source, cache_mode, _replace_once)
-            suffix = f'_m{cache_mode}' if cache_mode else ''
+            suffix = (f'_m{cache_mode}' if cache_mode else '') + context_suffix(max_context_len)
+            source = context_source(source, max_context_len)
             ext = load_inline(
                 name=(f'loopvq_page_r{4 if remapped else 3 if staged else 2 if compact else 1}_t{threads}_l{int(layout)}'
                       f'_c{int(cooperative)}_s{int(scalar)}{suffix}'),

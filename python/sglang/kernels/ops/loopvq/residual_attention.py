@@ -72,6 +72,8 @@ class ResidualAttention:
     def __init__(self, pool, *, max_batch, max_context_len, splits=None, block=32, implementation="cuda", threads=512, dynamic_splits=True, unroll=1, group_size=0, async_table=None, global_table=False, layout=0, payload=True, adaptive=False):
         if layout not in (0, 2) or (layout and (implementation != 'cuda' or not global_table or threads != 512 or unroll != 1)):
             raise ValueError('Head pages require the standard SM80 global CUDA kernels')
+        if max_context_len > 32768 and (layout != 2 or adaptive):
+            raise ValueError("40K VQ+ requires accepted page-head CUDA without adaptive dispatch")
         if implementation not in ("cuda", "triton"):
             raise ValueError("Unknown residual attention implementation")
         if splits is None:
@@ -82,11 +84,11 @@ class ResidualAttention:
         self.r2_async = False if async_table is None else bool(async_table)
         self.extension = None
         if implementation == "cuda":
-            if splits != 32 or not 0 < max_context_len <= 32768:
-                raise ValueError("VQ+ shared CUDA requires 32 splits and context <= 32768")
+            if splits != 32 or not 0 < max_context_len <= 40960:
+                raise ValueError("VQ+ CUDA requires 32 splits and context <= 40960")
             if layout:
                 from .residual_attention_paged_cuda import prepare
-                self.extension = prepare(pool.hp_k.device, layout=layout, cooperative=False)
+                self.extension = prepare(pool.hp_k.device, layout=layout, cooperative=False, max_context_len=max_context_len)
             else:
                 from .residual_attention_cuda import prepare
                 self.extension = prepare(pool.hp_k.device, threads, unroll, self.r1_async, global_table)
@@ -101,7 +103,7 @@ class ResidualAttention:
         self.grouped = None
         if implementation == 'cuda' and group_size != 1 and max_batch >= 2:
             from .residual_attention_grouped_cuda import prepare_grouped
-            self.grouped = prepare_grouped(pool.hp_k.device, self.r2_async, global_table, layout=layout)
+            self.grouped = prepare_grouped(pool.hp_k.device, self.r2_async, global_table, layout=layout, max_context_len=max_context_len)
             self.group_partial = torch.empty((max_batch, pool.head_num, 64, 128), dtype=torch.float32, device=pool.hp_k.device)
             self.group_lse = torch.empty((max_batch, pool.head_num, 64), dtype=torch.float32, device=pool.hp_k.device)
         self.pool, self.splits, self.block = pool, splits, block
@@ -114,7 +116,7 @@ class ResidualAttention:
         if (payload and layout == 2 and group_size == 0 and dynamic_splits
                 and max_batch >= 4 and pool.head_num == 8 and self.sm_count == 108):
             from .residual_attention_payload_cuda import prepare
-            extension, capacity = prepare(pool.hp_k.device)
+            extension, capacity = prepare(pool.hp_k.device, max_context_len=max_context_len)
             if capacity == 324:
                 self.payload_extension, self.payload_capacity = extension, capacity
         self.adaptive_extension = None

@@ -153,33 +153,35 @@ int64_t residual_capacity() {
 '''
 _SOURCE = _replace_once(_SOURCE, 'void stage1(', 'void payload_stage1(')
 _SOURCE = _SOURCE.replace('stage1<', 'payload_stage1<')
-_EXT = None
+_EXT = {}
 _READY = {}
 
 
-def prepare(device):
-    global _EXT
+def prepare(device, max_context_len=32768):
+    from .residual_context import context_source, context_suffix
+    key = max_context_len > 32768
+    source = context_source(_SOURCE, max_context_len)
     with torch.cuda.device(device):
         if torch.cuda.is_current_stream_capturing():
             raise RuntimeError("Prepare payload VQ+ before graph capture")
         if torch.cuda.get_device_capability(device) != (8, 0):
             raise ValueError("Payload VQ+ currently targets SM80")
-        if _EXT is None:
+        if key not in _EXT:
             from torch.utils.cpp_extension import load_inline
-            _EXT = load_inline(
-                name="loopvq_payload_r2_t512_l2",
+            _EXT[key] = load_inline(
+                name="loopvq_payload_r2_t512_l2" + context_suffix(max_context_len),
                 cpp_sources="#include <torch/extension.h>\nvoid residual_init();\n"
                     "int64_t residual_capacity();\nvoid residual_cuda(" +
                     ",".join(["torch::Tensor"] * 16) + ",int64_t,double,int64_t);",
-                cuda_sources=_SOURCE,
+                cuda_sources=source,
                 functions=["residual_init", "residual_capacity", "residual_cuda"],
                 extra_cuda_cflags=["-O3", "-lineinfo", "--fmad=false", "-Xptxas=-v",
                     "-DVQPLUS_THREADS=512", "-DVQPLUS_UNROLL=1", "-DVQPLUS_GLOBAL=1",
                     "-DVQPLUS_ASYNC=0", "-DVQPAGE_LAYOUT=2", "-DVQPAGE_COOP=0",
                     "-DVQPAGE_SCALAR=0", "-gencode=arch=compute_80,code=sm_80"],
             )
-        index = torch.cuda.current_device()
+        index = (key, torch.cuda.current_device())
         if index not in _READY:
-            _EXT.residual_init()
-            _READY[index] = _EXT.residual_capacity()
-        return _EXT, _READY[index]
+            _EXT[key].residual_init()
+            _READY[index] = _EXT[key].residual_capacity()
+        return _EXT[key], _READY[index]
