@@ -1,3 +1,7 @@
+# Generalization requirement (user steering during R17/R18)
+
+No final B16/108-SM-only policy. Fixed splits are ablations. Select geometry/splits from actual device resources and shape; preserve unverified-device fallback. Validate B1/2/3/4/8/16/32/64, short/long and uneven lengths, graph padding, and capacity limits where memory permits. B>16 fixtures explicitly repeat verified captured requests. Extend matched full-service scenarios to B32/N1K and B64/N512 with matching max-running/graph/KV limits. Cross-GPU portability is a design requirement; performance remains unverified without hardware measurement. Current accessible measured hardware is A800/SM80. No relaxed trained or numerical contract.
+
 # Continuation plan: rounds14–20
 
 User requests all remaining7 rounds, targeting B16’s11.4%full-serving deficit toBF16. Current round14 compact-grid experiment is specified in record.md. KeepR13/source4743e9430 as immutable comparison, preserve trainedpre-RoPE/INT4/FP32/BF16contract. No NCU prerequisite. Screen with CUDA13/int64 real-input matched ablations, reject failures before performance; reserve final integration/guard and fullservingvalidation withinround20. Adaptive nextcandidate depends onmeasuredresults; eachsource/test/behaviorchangegetsnextnumberand six-partplan. Full-servinggo/no-go usesunchangedcheck_serving.py lifecycle/tokenIDs andB1/2/4/8/16 timing, sameGPU2/3/model/input/seed/environment. Historicalcompletedplanbelowisretainedasevidence, notcurrentstoppingrule.
@@ -45,7 +49,7 @@ First obtain a host/container with working GPU performance counters. Root probes
 CUDA_VISIBLE_DEVICES=0 ncu --kernel-name-base function \
   --kernel-name 'regex:payload_stage1' --launch-count 1 --set full \
   --export "$RUN/payload-full" \
-  "$RUN/env/bin/python" "$TASK/run_isolated.py" integration_probe.py \
+  "$RUN/env/bin/python" "$TASK/integration_probe.py" \
   --snapshot "$RUN/2k" --book "$RUN/books" \
   --output "$RUN/payload-ncu-harness.json" --batches 16 --loops 0 --repeats 1
 ```

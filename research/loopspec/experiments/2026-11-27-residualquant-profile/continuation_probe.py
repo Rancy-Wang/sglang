@@ -25,6 +25,7 @@ def main():
     parser.add_argument('--batches', type=int, nargs='+', default=[16])
     parser.add_argument('--loops', type=int, nargs='+', default=[0])
     parser.add_argument('--modes', nargs='+', default=['grid8', 'grid16', 'grid32'])
+    parser.add_argument('--repeat-requests', action='store_true')
     parser.add_argument('--targets', type=int, nargs='+')
     parser.add_argument('--length', type=int)
     parser.add_argument('--layer', type=int, default=23)
@@ -49,7 +50,12 @@ def main():
             for kind in ('k', 'v'):
                 row[kind] = row[kind][:, :n].contiguous()
         rows.append(row)
+    unique_requests = len(rows)
+    if unique_requests < max(args.batches):
+        assert args.repeat_requests, 'Explicit --repeat-requests required beyond captured requests'
+        rows = (rows * ((max(args.batches) + unique_requests - 1) // unique_requests))[:max(args.batches)]
     assert len(rows) == max(args.batches)
+    assert args.targets or all(4 <= b <= 16 for b in args.batches)
     tables = {}
     for kind, name in (('k', 'codebook.pt'), ('v', 'vq_v_codebook.pt')):
         path = args.book / name
@@ -64,6 +70,7 @@ def main():
     result = dict(source_sha=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT,
                                                      text=True).strip(),
                   manifest=manifest, length=n, derived_prefix=bool(args.length),
+                  unique_requests=unique_requests, repeated_requests=args.repeat_requests,
                   loc_bits=args.loc_bits, torch=torch.__version__, cuda=torch.version.cuda,
                   modes=args.modes, targets=args.targets, capacities={m: e.residual_capacity() for m,e in extensions.items()},
                   cases=[], passed=False)
@@ -77,6 +84,8 @@ def main():
                    for mode in ['r13', *variants]}
         for name, (mode, target) in variants.items():
             readers[name].payload_extension = extensions[mode]
+            readers[name].use_payload = lambda batch: True
+            readers[name].use_grouped = lambda batch: False
             # Experimental explicit target; forward negates this field.
             readers[name].payload_capacity = -target if target is not None else 324
         for loop in args.loops:
@@ -92,14 +101,16 @@ def main():
             calls, checks = {}, {}
             for mode, reader in readers.items():
                 fn = lambda reader=reader: reader.forward(q, loop, ptr, loc, rope, 128**-.5)
-                reader.partial.fill_(float('nan')); reader.lse.fill_(float('nan'))
+                partial = reader.group_partial if reader.use_grouped(b) else reader.partial
+                lse = reader.group_lse if reader.use_grouped(b) else reader.lse
+                partial.fill_(float('nan')); lse.fill_(float('nan'))
                 got = fn()
                 torch.testing.assert_close(got, expected, atol=.002, rtol=.01)
-                torch.testing.assert_close(reader.lse[:b].logsumexp(-1), expected_lse,
+                torch.testing.assert_close(lse[:b].logsumexp(-1), expected_lse,
                                            atol=2e-5, rtol=2e-5)
-                assert torch.isfinite(reader.partial[:b]).all()
+                assert torch.isfinite(partial[:b]).all()
                 checks[mode] = dict(output=reference.metrics(got, expected),
-                                    max_lse_error=float((reader.lse[:b].logsumexp(-1)-expected_lse).abs().max()))
+                                    max_lse_error=float((lse[:b].logsumexp(-1)-expected_lse).abs().max()))
                 calls[mode] = fn
             native = reference.NativeAttention(k,v,q,ptr,loc,max_splits=8,dynamic=True)
             torch.testing.assert_close(native(), expected, atol=.002, rtol=.01)
